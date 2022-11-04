@@ -19,15 +19,16 @@ succeeded_examples=""
 mpi_exec="${MIRGE_MPI_EXEC}"
 mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
 
-# if [[ $(hostname) == "porter" ]]; then
-#    mpi_launcher="bash $examples_dir/scripts/run_gpus_generic.sh"
-#elif [[ $(hostname) == "lassen"* ]]; then
-#    export PYOPENCL_CTX="port:tesla"
-#    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-#    mpi_exec="jsrun -g 1 -a 1"
-#fi
-
+examples=""
 for example in $examples_dir/*.py
+do
+    example_file=$(basename $example)
+    examples="$examples $example_file"
+done
+
+cd $examples_dir
+
+for example in $examples
 do
     date
     printf "***\n***\n"
@@ -69,7 +70,8 @@ do
         echo "*** Example $example failed."
         failed_examples="$failed_examples $example"
     fi
-    rm -rf *vtu *sqlite *pkl *-journal restart_data
+    # FIXME: This could delete data from other runs
+    # rm -rf *vtu *sqlite *pkl *-journal restart_data
 done
 ((numtests=numsuccess+numfail))
 echo "*** Done running examples!"

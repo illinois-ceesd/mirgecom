@@ -9,6 +9,7 @@ Viscous Flux Calculation
 .. autofunction:: conductive_heat_flux
 .. autofunction:: diffusive_heat_flux
 .. autofunction:: viscous_facial_flux_central
+.. autofunction:: viscous_facial_flux_harmonic
 .. autofunction:: viscous_flux_on_element_boundary
 
 Viscous Time Step Computation
@@ -44,6 +45,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from grudge.trace_pair import TracePair
 from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
@@ -340,6 +342,88 @@ def viscous_facial_flux_central(dcoll, state_pair, grad_cv_pair, grad_t_pair,
     return num_flux_central(f_int, f_ext)@normal
 
 
+def viscous_facial_flux_harmonic(dcoll, state_pair, grad_cv_pair, grad_t_pair,
+                                 gas_model=None):
+    r"""
+    Return a central facial flux w/ harmonic mean coefs for the divergence operator.
+
+    The flux is defined as:
+
+    .. math::
+
+        f_{\text{face}} =
+            \frac{1}{2}\left(\mathbf{f}_v(\tilde{k},\mathbf{q}^+,\ldots^+)
+            + \mathbf{f}_v(\tilde{k},\mathbf{q}^-,\ldots^-)\right)
+            \cdot\hat{\mathbf{n}},
+
+    with viscous fluxes ($\mathbf{f}_v$), the outward pointing face normal
+    ($\hat{\mathbf{n}}$), and thermal conductivity
+
+    .. math::
+
+        \tilde{k} =  2\frac{k^- k^+}{k^- + k^+}.
+
+    Parameters
+    ----------
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
+
+        The discretization collection to use
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+        The physical model for the gas. Unused for this numerical flux function.
+
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` with the full fluid
+        conserved and thermal state on the faces
+
+    grad_cv_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
+        fluid solution on the faces
+
+    grad_t_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of temperature gradient on the faces.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        The viscous transport flux in the face-normal direction on "all_faces" or
+        local to the sub-discretization depending on *local* input parameter
+    """
+    from mirgecom.flux import num_flux_central
+    actx = state_pair.int.array_context
+    normal = actx.thaw(dcoll.normal(state_pair.dd))
+
+    def harmonic_mean(x, y):
+        x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+        return 2*x*y/x_plus_y
+
+    # TODO: Do this for other coefficients too?
+    def replace_coefs(state, *, kappa):
+        from dataclasses import replace
+        new_tv = replace(state.tv, thermal_conductivity=kappa)
+        return replace(state, tv=new_tv)
+
+    kappa_harmonic_mean = harmonic_mean(
+        state_pair.int.tv.thermal_conductivity,
+        state_pair.ext.tv.thermal_conductivity)
+
+    state_pair_with_harmonic_mean_coefs = TracePair(
+        state_pair.dd,
+        interior=replace_coefs(state_pair.int, kappa=kappa_harmonic_mean),
+        exterior=replace_coefs(state_pair.ext, kappa=kappa_harmonic_mean))
+
+    f_int = viscous_flux(
+        state_pair_with_harmonic_mean_coefs.int, grad_cv_pair.int, grad_t_pair.int)
+    f_ext = viscous_flux(
+        state_pair_with_harmonic_mean_coefs.ext, grad_cv_pair.ext, grad_t_pair.ext)
+
+    return num_flux_central(f_int, f_ext)@normal
+
+
 def viscous_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, grad_cv, interior_grad_cv_pairs,
@@ -457,11 +541,24 @@ def viscous_flux_on_element_boundary(
 
 
 def get_viscous_timestep(dcoll, state, *, dd=DD_VOLUME_ALL):
-    """Routine returns the the node-local maximum stable viscous timestep.
+    r"""Routine returns the the node-local maximum stable viscous timestep.
+
+    The locally required timestep $\delta{t}_l$ is calculated from the fluid
+    local wavespeed $s_f$, fluid viscosity $\mu$, fluid density $\rho$, and
+    species diffusivities $d_\alpha$ as:
+
+    .. math::
+        \delta{t}_l =  \frac{\Delta{x}_l}{s_l + \left(\frac{\mu}{\rho} +
+        \mathbf{\text{max}}_\alpha(d_\alpha)\right)\left(\Delta{x}_l\right)^{-1}},
+
+    where $\Delta{x}_l$ is given by
+    :func:`grudge.dt_utils.characteristic_lengthscales`, and the rest are
+    fluid state-dependent quantities. For non-mixture states, species
+    diffusivities $d_\alpha=0$.
 
     Parameters
     ----------
-    dcoll: grudge.discretization.DiscretizationCollection
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
         the discretization collection to use
 

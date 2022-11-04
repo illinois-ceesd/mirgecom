@@ -45,7 +45,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    AdiabaticNoslipMovingBoundary
+    AdiabaticNoslipWallBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -87,6 +87,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=None):
     """Drive the example."""
+    if actx_class is None:
+        raise RuntimeError("Array context class missing.")
+
     cl_ctx = ctx_factory()
 
     if casename is None:
@@ -246,8 +249,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         BoundaryDomainTag("+1"):
             PrescribedFluidBoundary(
                 boundary_state_func=_boundary_solution),
-        BoundaryDomainTag("-2"): AdiabaticNoslipMovingBoundary(),
-        BoundaryDomainTag("+2"): AdiabaticNoslipMovingBoundary()}
+        BoundaryDomainTag("-2"): AdiabaticNoslipWallBoundary(),
+        BoundaryDomainTag("+2"): AdiabaticNoslipWallBoundary()}
 
     if rst_filename:
         current_t = restart_data["t"]

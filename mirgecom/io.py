@@ -3,6 +3,7 @@
 .. autofunction:: make_status_message
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
+.. autofunction:: read_and_distribute_yaml_data
 """
 
 __copyright__ = """
@@ -38,7 +39,8 @@ from grudge.dof_desc import DD_VOLUME_ALL
 def make_init_message(*, dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
                       initname, eosname, casename,
-                      nelements=0, global_nelements=0):
+                      nelements=0, global_nelements=0,
+                      t_initial=0):
     """Create a summary of some general simulation parameters and inputs."""
     return (
         f"Initialization for Case({casename})\n"
@@ -46,6 +48,7 @@ def make_init_message(*, dim, order, dt, t_final,
         f"Num {dim}d order-{order} elements: {nelements}\n"
         f"Num global elements: {global_nelements}\n"
         f"Timestep:        {dt}\n"
+        f"Initial time:    {t_initial}\n"
         f"Final time:      {t_final}\n"
         f"CFL:             {cfl}\n"
         f"Constant CFL:    {constant_cfl}\n"
@@ -77,3 +80,16 @@ def make_rank_fname(basename, rank=0, step=0, t=0):
 def make_par_fname(basename, step=0, t=0):
     r"""Make parallel visualization filename."""
     return f"{basename}-{step:06d}.pvtu"
+
+
+def read_and_distribute_yaml_data(mpi_comm, file_path):
+    """Read a YAML file on one rank, broadcast result to world."""
+    import yaml
+    rank = mpi_comm.Get_rank()
+    if rank == 0:
+        with open(file_path) as f:
+            input_data = yaml.load(f, Loader=yaml.FullLoader)
+    else:
+        input_data = None
+    mpi_comm.bcast(input_data, root=0)
+    return input_data

@@ -2,6 +2,7 @@ r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyromethe
 
 .. autofunction:: get_pyrometheus_wrapper_class
 .. autofunction:: get_pyrometheus_wrapper_class_from_cantera
+.. autofunction:: get_thermochemistry_class_by_mechanism_name
 """
 
 __copyright__ = """
@@ -29,7 +30,7 @@ THE SOFTWARE.
 """
 
 
-def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5):
+def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Dynamically creates a class that inherits from a
@@ -49,6 +50,8 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5):
         Pyro thermochemical mechanism to wrap
     temperature_niter: int
         Number of Newton iterations in `get_temperature` (default=5)
+    zero_level: float
+        Squash concentrations below this level to 0. (default=0.)
     """
 
     class PyroWrapper(pyro_class):
@@ -61,7 +64,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5):
             # ensure non-negative concentrations
             zero = self._pyro_zeros_like(concs[0])
             for i in range(self.num_species):
-                concs[i] = self.usr_np.where(self.usr_np.less(concs[i], 0),
+                concs[i] = self.usr_np.where(self.usr_np.less(concs[i], zero_level),
                                              zero, concs[i])
             return concs
 
@@ -108,7 +111,8 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5):
     return PyroWrapper
 
 
-def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5):
+def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5,
+                                               zero_level=0.):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Cantera-based interface that creates a Pyrometheus mechanism
@@ -121,27 +125,43 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
         Cantera solution from which to create the thermochemical mechanism
     temperature_niter: int
         Number of Newton iterations in `get_temperature` (default=5)
+    zero_level: float
+        Squash concentrations below this level to 0. (default=0.)
     """
     import pyrometheus as pyro
     pyro_class = pyro.get_thermochem_class(cantera_soln)
     return get_pyrometheus_wrapper_class(pyro_class,
-                                         temperature_niter=temperature_niter)
+                                         temperature_niter=temperature_niter,
+                                         zero_level=zero_level)
+
+
+def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
+                                                temperature_niter=5):
+    """Grab a pyrometheus mechanism class from the mech name."""
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input_source = get_mechanism_input(mechanism_name)
+    from cantera import Solution
+    cantera_soln = Solution(name="gas", yaml=mech_input_source)
+    return \
+        get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter)
 
 
 # backwards compat
-def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5):
+def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5,
+                                     zero_level=0.):
     """Deprecate this interface to get_pyrometheus_mechanism_class."""
     from warnings import warn
     warn("make_pyrometheus_mechanism_class is deprecated."
          " use get_pyrometheus_wrapper_class_from_cantera.")
     return get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=temperature_niter)
+        cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level)
 
 
-def make_pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5):
+def make_pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5,
+                                       zero_level=0.):
     """Deprecate this interface to pyro_wrapper_class_from_cantera."""
     from warnings import warn
     warn("make_pyrometheus_mechanism is deprecated."
          " use get_pyrometheus_wrapper_class_from_cantera.")
     return get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=temperature_niter)
+        cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level)

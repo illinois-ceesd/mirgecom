@@ -17,11 +17,25 @@ Diagnostic utilities
 .. autofunction:: max_component_norm
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
+.. autofunction:: boundary_report
 
 Mesh utilities
 --------------
 
-.. autofunction:: generate_and_distribute_mesh
+.. autofunction:: distribute_mesh
+.. autofunction:: geometric_mesh_partitioner
+
+Simulation support utilities
+----------------------------
+
+.. autofunction:: limit_species_mass_fractions
+.. autofunction:: species_fraction_anomaly_relaxation
+.. autofunction:: configurate
+
+Lazy eval utilities
+-------------------
+
+.. autofunction:: force_evaluation
 
 File comparison utilities
 -------------------------
@@ -56,17 +70,18 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import grudge.op as op
-
-from arraycontext import map_array_container, flatten
-
 from functools import partial
 
+import grudge.op as op
+# from grudge.op import nodal_min, elementwise_min
+from arraycontext import map_array_container, flatten
 from meshmode.dof_array import DOFArray
+from mirgecom.viscous import get_viscous_timestep
 
 from typing import List, Dict
-from grudge.discretization import DiscretizationCollection
+from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
+from mirgecom.utils import normalize_boundaries
 
 logger = logging.getLogger(__name__)
 
@@ -93,26 +108,48 @@ def check_step(step, interval):
 
 
 def get_sim_timestep(
-        dcoll, state, t, dt, cfl, t_final, constant_cfl=False,
-        fluid_dd=DD_VOLUME_ALL):
-    """Return the maximum stable timestep for a typical fluid simulation.
+        dcoll, state, t, dt, cfl, t_final=0.0, constant_cfl=False,
+        local_dt=False, fluid_dd=DD_VOLUME_ALL):
+    r"""Return the maximum stable timestep for a typical fluid simulation.
 
-    This routine returns *dt*, the users defined constant timestep, or *max_dt*, the
-    maximum domain-wide stability-limited timestep for a fluid simulation.
+    This routine returns a constraint-limited timestep size for a fluid
+    simulation.  The returned timestep will be constrained by the specified
+    Courant-Friedrichs-Lewy number, *cfl*, and the simulation max simulated time
+    limit, *t_final*, and subject to the user's optional settings.
+
+    The local fluid timestep, $\delta{t}_l$, is computed by
+    :func:`~mirgecom.viscous.get_viscous_timestep`.  Users are referred to that
+    routine for the details of the local timestep.
+
+    With the remaining simulation time $\Delta{t}_r =
+    \left(\mathit{t\_final}-\mathit{t}\right)$, three modes are supported
+    for the returned timestep, $\delta{t}$:
+
+    - "Constant DT" mode (default): $\delta{t} = \mathbf{\text{min}}
+      \left(\textit{dt},~\Delta{t}_r\right)$
+    - "Constant CFL" mode (constant_cfl=True): $\delta{t} =
+      \mathbf{\text{min}}\left(\mathbf{\text{global\_min}}\left(\delta{t}\_l\right)
+      ,~\Delta{t}_r\right)$
+    - "Local DT" mode (local_dt=True): $\delta{t} = \mathbf{\text{cell\_local\_min}}
+      \left(\delta{t}_l\right)$
+
+    Note that for "Local DT" mode, *t_final* is ignored, and a
+    :class:`~meshmode.dof_array.DOFArray` containing the local *cfl*-limited
+    timestep, where $\mathbf{\text{cell\_local\_min}}\left(\delta{t}\_l\right)$ is
+    defined as the minimum over the cell collocation points. This mode is useful for
+    stepping to convergence of steady-state solutions.
 
     .. important::
-        This routine calls the collective: :func:`~grudge.op.nodal_min` on the inside
-        which makes it domain-wide regardless of parallel domain decomposition. Thus
-        this routine must be called *collectively* (i.e. by all ranks).
-
-    Two modes are supported:
-        - Constant DT mode: returns the minimum of (t_final-t, dt)
-        - Constant CFL mode: returns (cfl * max_dt)
+        For "Constant CFL" mode, this routine calls the collective
+        :func:`~grudge.op.nodal_min` on the inside which involves MPI collective
+        functions.  Thus all MPI ranks on the
+        :class:`~grudge.discretization.DiscretizationCollection` must call this
+        routine collectively when using "Constant CFL" mode.
 
     Parameters
     ----------
-    dcoll: grudge.discretization.DiscretizationCollection
-        The discretization collection to use
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
+        The DG discretization collection to use
     state: :class:`~mirgecom.gas_model.FluidState`
         The full fluid conserved and thermal state
     t: float
@@ -125,25 +162,39 @@ def get_sim_timestep(
         The current CFL number
     constant_cfl: bool
         True if running constant CFL mode
+    local_dt: bool
+        True if running local DT mode. False by default.
     fluid_dd: grudge.dof_desc.DOFDesc
         the DOF descriptor of the discretization on which *state* lives. Must be a
         volume on the base discretization.
 
     Returns
     -------
-    float
-        The maximum stable DT based on a viscous fluid.
+    float or :class:`~meshmode.dof_array.DOFArray`
+        The global maximum stable DT based on a viscous fluid.
     """
+    if local_dt:
+        actx = state.array_context
+        data_shape = (state.cv.mass[0]).shape
+        if actx.supports_nonscalar_broadcasting:
+            return cfl * actx.np.broadcast_to(
+                op.elementwise_min(
+                    dcoll, fluid_dd,
+                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
+                data_shape)
+        else:
+            return cfl * op.elementwise_min(
+                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
+
+    my_dt = dt
     t_remaining = max(0, t_final - t)
-    mydt = dt
     if constant_cfl:
-        from mirgecom.viscous import get_viscous_timestep
-        from grudge.op import nodal_min
-        mydt = state.array_context.to_numpy(
-            cfl * nodal_min(
+        my_dt = state.array_context.to_numpy(
+            cfl * op.nodal_min(
                 dcoll, fluid_dd,
-                get_viscous_timestep(dcoll=dcoll, state=state)))[()]
-    return min(t_remaining, mydt)
+                get_viscous_timestep(dcoll=dcoll, state=state, dd=fluid_dd)))[()]
+
+    return min(t_remaining, my_dt)
 
 
 def write_visfile(dcoll, io_fields, visualizer, vizname,
@@ -382,7 +433,319 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
         componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
-def generate_and_distribute_mesh(comm, generate_mesh):
+def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
+                               nranks_per_axis=None, auto_balance=False,
+                               imbalance_tolerance=.01, debug=False):
+    """Partition a mesh uniformly along the X coordinate axis.
+
+    The intent is to partition the mesh uniformly along user-specified
+    directions. In this current interation, the capability is demonstrated
+    by splitting along the X axis.
+
+    Parameters
+    ----------
+    mesh: :class:`meshmode.mesh.Mesh`
+        The serial mesh to partition
+    num_ranks: int
+        The number of partitions to make
+    tag_to_elements:
+        Maps volume tags to elements.  Currently unused.
+    nranks_per_axis: numpy.ndarray
+        How many partitions per specified axis.  Currently unused.
+    auto_balance: bool
+        Indicates whether to perform automatic balancing.  If true, the
+        partitioner will try to balance the number of elements over
+        the partitions.
+    imbalance_tolerance: float
+        If *auto_balance* is True, this parameter indicates the acceptable
+        relative difference to the average number of elements per partition.
+        It defaults to balance within 1%.
+    debug: bool
+        En/disable debugging/diagnostic print reporting.
+
+    Returns
+    -------
+    elem_to_rank: numpy.ndarray
+        Array indicating the MPI rank for each element
+    """
+    mesh_dimension = mesh.dim
+    if nranks_per_axis is None:
+        nranks_per_axis = np.ones(mesh_dimension)
+        nranks_per_axis[0] = num_ranks
+    if len(nranks_per_axis) != mesh_dimension:
+        raise ValueError("nranks_per_axis must match mesh dimension.")
+    nranks_test = 1
+    for i in range(mesh_dimension):
+        nranks_test = nranks_test * nranks_per_axis[i]
+    if nranks_test != num_ranks:
+        raise ValueError("nranks_per_axis must match num_ranks.")
+
+    mesh_groups, = mesh.groups
+    mesh_verts = mesh.vertices
+    mesh_x = mesh_verts[0]
+
+    x_min = np.min(mesh_x)
+    x_max = np.max(mesh_x)
+    x_interval = x_max - x_min
+    part_loc = np.linspace(x_min, x_max, num_ranks+1)
+
+    part_interval = x_interval / nranks_per_axis[0]
+    elem_x = mesh_verts[0, mesh_groups.vertex_indices]
+    elem_centroids = np.sum(elem_x, axis=1)/elem_x.shape[1]
+    global_nelements = len(elem_centroids)
+    aver_part_nelem = global_nelements / num_ranks
+
+    if debug:
+        print(f"Partitioning {global_nelements} elements in"
+              f" [{x_min},{x_max}]/{num_ranks}")
+        print(f"Average nelem/part: {aver_part_nelem}")
+        print(f"Initial part locs: {part_loc=}")
+
+    # Create geometrically even partitions
+    elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
+
+    # map partition id to list of elements in that partition
+    part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
+                        for r in range(num_ranks)}
+    # make an array of the geometrically even partition sizes
+    # avoids calling "len" over and over on the element sets
+    nelem_part = [len(part_to_elements[r]) for r in range(num_ranks)]
+
+    if debug:
+        print(f"Initial: {nelem_part=}")
+
+    # Automatic load-balancing
+    if auto_balance:
+
+        for r in range(num_ranks-1):
+
+            # find the element reservoir (next part with elements in it)
+            adv_part = r + 1
+            while nelem_part[adv_part] == 0:
+                adv_part = adv_part + 1
+
+            num_elem_needed = aver_part_nelem - nelem_part[r]
+            part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
+
+            if debug:
+                print(f"Processing part({r=})")
+                print(f"{part_loc[r]=}, {adv_part=}")
+                print(f"{num_elem_needed=}, {part_imbalance=}")
+                print(f"{nelem_part=}")
+
+            niter = 0
+            total_change = 0
+            moved_elements = set()
+
+            while ((part_imbalance > imbalance_tolerance)
+                   and (adv_part < num_ranks)):
+                # This partition needs to keep changing in size until it meets the
+                # specified imbalance tolerance, or gives up trying
+
+                # seek out the element reservoir
+                while nelem_part[adv_part] == 0:
+                    adv_part = adv_part + 1
+                    if adv_part >= num_ranks:
+                        raise ValueError("Ran out of elements to partition.")
+
+                if debug:
+                    print(f"-{nelem_part[r]=}, adv_part({adv_part}),"
+                          f" {nelem_part[adv_part]=}")
+                    print(f"-{part_loc[r+1]=},{part_loc[adv_part+1]=}")
+                    print(f"-{num_elem_needed=},{part_imbalance=}")
+
+                if niter > 100:
+                    raise ValueError("Detected too many iterations in partitioning.")
+
+                # The purpose of the next block is to populate the "moved_elements"
+                # data structure. Then those elements will be moved between the
+                # current partition being processed and the "reservoir,"
+                # *and* to adjust the position of the "right" side of the current
+                # partition boundary.
+                moved_elements = set()
+                num_elements_added = 0
+
+                if num_elem_needed > 0:
+
+                    # Partition is SMALLER than it should be, grab elements from
+                    # the reservoir
+                    if debug:
+                        print(f"-Grabbing elements from reservoir({adv_part})"
+                              f", {nelem_part[adv_part]=}")
+
+                    portion_needed = (float(abs(num_elem_needed))
+                                      / float(nelem_part[adv_part]))
+                    portion_needed = min(portion_needed, 1.0)
+
+                    if debug:
+                        print(f"--Chomping {portion_needed*100}% of"
+                              f" reservoir({adv_part}) [by nelem].")
+
+                    if portion_needed == 1.0:  # Chomp
+                        new_loc = part_loc[adv_part+1]
+                        moved_elements.update(part_to_elements[adv_part])
+
+                    else:  # Bite
+                        # This is the spatial size of the reservoir
+                        reserv_interval = part_loc[adv_part+1] - part_loc[r+1]
+
+                        # Find what portion of the reservoir to grab spatially
+                        # This part is needed because the elements are not
+                        # distributed uniformly in space.
+                        fine_tuned = False
+                        trial_portion_needed = portion_needed
+                        while not fine_tuned:
+                            pos_update = trial_portion_needed*reserv_interval
+                            new_loc = part_loc[r+1] + pos_update
+
+                            moved_elements = set()
+                            num_elem_mv = 0
+                            for e in part_to_elements[adv_part]:
+                                if elem_centroids[e] <= new_loc:
+                                    moved_elements.add(e)
+                                    num_elem_mv = num_elem_mv + 1
+                            if num_elem_mv < num_elem_needed:
+                                fine_tuned = True
+                            else:
+                                ovrsht = (num_elem_mv - num_elem_needed)
+                                rel_ovrsht = ovrsht/float(num_elem_needed)
+                                if rel_ovrsht > 0.8:
+                                    # bisect the space grabbed and try again
+                                    trial_portion_needed = trial_portion_needed/2.0
+                                else:
+                                    fine_tuned = True
+
+                        portion_needed = trial_portion_needed
+                        new_loc = part_loc[r+1] + pos_update
+                        if debug:
+                            print(f"--Tuned: {portion_needed=} [by spatial volume]")
+                            print(f"--Advancing part({r}) by +{pos_update}")
+
+                    num_elements_added = len(moved_elements)
+                    if debug:
+                        print(f"--Adding {num_elements_added} to part({r}).")
+
+                else:
+
+                    # Partition is LARGER than it should be
+                    # Grab the spatial size of the current partition
+                    # to estimate the portion we need to shave off
+                    # assuming uniform element density
+                    part_interval = part_loc[r+1] - part_loc[r]
+                    num_to_move = -num_elem_needed
+                    portion_needed = num_to_move/float(nelem_part[r])
+
+                    if debug:
+                        print(f"--Shaving off {portion_needed*100}% of"
+                              f" partition({r}) [by nelem].")
+
+                    # Tune the shaved portion to account for
+                    # non-uniform element density
+                    fine_tuned = False
+                    while not fine_tuned:
+                        pos_update = portion_needed*part_interval
+                        new_pos = part_loc[r+1] - pos_update
+                        moved_elements = set()
+                        num_elem_mv = 0
+                        for e in part_to_elements[r]:
+                            if elem_centroids[e] > new_pos:
+                                moved_elements.add(e)
+                                num_elem_mv = num_elem_mv + 1
+                        if num_elem_mv < num_to_move:
+                            fine_tuned = True
+                        else:
+                            ovrsht = (num_elem_mv - num_to_move)
+                            rel_ovrsht = ovrsht/float(num_to_move)
+                            if rel_ovrsht > 0.8:
+                                # bisect and try again
+                                portion_needed = portion_needed/2.0
+                            else:
+                                fine_tuned = True
+
+                    # new "right" wall location of shranken part
+                    # and negative num_elements_added for removal
+                    new_loc = new_pos
+                    num_elements_added = -len(moved_elements)
+                    if debug:
+                        print(f"--Reducing partition size by {portion_needed*100}%"
+                              " [by nelem].")
+                        print(f"--Removing {-num_elements_added} from part({r}).")
+
+                # Now "moved_elements", "num_elements_added", and "new_loc"
+                # are computed.  Update the partition, and reservoir.
+                if debug:
+                    print(f"--Number of elements to ADD: {num_elements_added}.")
+
+                if num_elements_added > 0:
+                    part_to_elements[r].update(moved_elements)
+                    part_to_elements[adv_part].difference_update(
+                        moved_elements)
+                    for e in moved_elements:
+                        elem_to_rank[e] = r
+                else:
+                    part_to_elements[r].difference_update(moved_elements)
+                    part_to_elements[adv_part].update(moved_elements)
+                    for e in moved_elements:
+                        elem_to_rank[e] = adv_part
+
+                total_change = total_change + num_elements_added
+                part_loc[r+1] = new_loc
+                if debug:
+                    print(f"--Before: {nelem_part=}")
+                nelem_part[r] = nelem_part[r] + num_elements_added
+                nelem_part[adv_part] = nelem_part[adv_part] - num_elements_added
+                if debug:
+                    print(f"--After: {nelem_part=}")
+
+                # Compute new nelem_needed and part_imbalance
+                num_elem_needed = num_elem_needed - num_elements_added
+                part_imbalance = \
+                    np.abs(num_elem_needed) / float(aver_part_nelem)
+                niter = niter + 1
+
+            # Summarize the total change and state of the partition
+            # and reservoir
+            if debug:
+                print(f"-Part({r}): {total_change=}")
+                print(f"-Part({r=}): {nelem_part[r]=}, {part_imbalance=}")
+                print(f"-Part({adv_part}): {nelem_part[adv_part]=}")
+
+    # Validate the partitioning before returning
+    total_partitioned_elements = sum([len(part_to_elements[r])
+                                      for r in range(num_ranks)])
+    total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
+
+    if debug:
+        print("Validating mesh parts.")
+
+    if total_partitioned_elements != total_nelem_part:
+        raise ValueError("Validator: parted element counts dont match")
+    if total_partitioned_elements != global_nelements:
+        raise ValueError("Validator: global element counts dont match.")
+    if len(elem_to_rank) != global_nelements:
+        raise ValueError("Validator: elem-to-rank wrong size.")
+    if np.any(nelem_part) <= 0:
+        raise ValueError("Validator: empty partitions.")
+
+    for e in range(global_nelements):
+        part = elem_to_rank[e]
+        if e not in part_to_elements[part]:
+            raise ValueError("Validator: part/element/part map mismatch.")
+
+    part_counts = np.zeros(global_nelements)
+    for part_elements in part_to_elements.values():
+        for element in part_elements:
+            part_counts[element] = part_counts[element] + 1
+
+    if np.any(part_counts > 1):
+        raise ValueError("Validator: degenerate elements")
+    if np.any(part_counts < 1):
+        raise ValueError("Validator: orphaned elements")
+
+    return elem_to_rank
+
+
+def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     """Generate a mesh and distribute it among all ranks in *comm*.
 
     Generate the mesh with the user-supplied mesh generation function
@@ -407,37 +770,325 @@ def generate_and_distribute_mesh(comm, generate_mesh):
     global_nelements : :class:`int`
         The number of elements in the serial mesh
     """
-    from meshmode.distributed import (
-        MPIMeshDistributor,
-        get_partition_by_pymetis,
-    )
-    num_parts = comm.Get_size()
-    mesh_dist = MPIMeshDistributor(comm)
-    global_nelements = 0
+    from warnings import warn
+    warn(
+        "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
+        "Use distribute_mesh instead.", DeprecationWarning, stacklevel=2)
+    return distribute_mesh(comm, generate_mesh, **kwargs)
 
-    if mesh_dist.is_mananger_rank():
 
-        mesh = generate_mesh()
+def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
+    r"""Distribute a mesh among all ranks in *comm*.
 
-        global_nelements = mesh.nelements
+    Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
+    partition the mesh, and distribute it to every rank in the provided MPI
+    communicator *comm*.
 
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-        del mesh
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+
+    Parameters
+    ----------
+    comm:
+        MPI communicator over which to partition the mesh
+    get_mesh_data:
+        Callable of zero arguments returning *mesh* or
+        *(mesh, tag_to_elements, volume_to_tags)*, where *mesh* is a
+        :class:`meshmode.mesh.Mesh`, *tag_to_elements* is a
+        :class:`dict` mapping mesh volume tags to :class:`numpy.ndarray`\ s of
+        element numbers, and *volume_to_tags* is a :class:`dict` that maps volumes
+        in the resulting distributed mesh to volume tags in *tag_to_elements*.
+    partition_generator_func:
+        Optional callable that takes *mesh*, *tag_to_elements*, and *comm*'s size,
+        and returns a :class:`numpy.ndarray` indicating to which rank each element
+        belongs.
+
+    Returns
+    -------
+    local_mesh_data: :class:`meshmode.mesh.Mesh` or :class:`dict`
+        If the result of calling *get_mesh_data* specifies a single volume,
+        *local_mesh_data* is the local mesh.  If it specifies multiple volumes,
+        *local_mesh_data* will be a :class:`dict` mapping volume tags to
+        corresponding local meshes.
+    global_nelements: :class:`int`
+        The number of elements in the global mesh
+    """
+    from meshmode.distributed import mpi_distribute
+
+    num_ranks = comm.Get_size()
+
+    if partition_generator_func is None:
+        def partition_generator_func(mesh, tag_to_elements, num_ranks):
+            from meshmode.distributed import get_partition_by_pymetis
+            return get_partition_by_pymetis(mesh, num_ranks)
+
+    if comm.Get_rank() == 0:
+        global_data = get_mesh_data()
+
+        from meshmode.mesh import Mesh
+        if isinstance(global_data, Mesh):
+            mesh = global_data
+            tag_to_elements = None
+            volume_to_tags = None
+        elif isinstance(global_data, tuple) and len(global_data) == 3:
+            mesh, tag_to_elements, volume_to_tags = global_data
+        else:
+            raise TypeError("Unexpected result from get_mesh_data")
+
+        from meshmode.mesh.processing import partition_mesh
+
+        rank_per_element = partition_generator_func(mesh, tag_to_elements, num_ranks)
+
+        if tag_to_elements is None:
+            rank_to_elements = {
+                rank: np.where(rank_per_element == rank)[0]
+                for rank in range(num_ranks)}
+
+            rank_to_mesh_data = partition_mesh(mesh, rank_to_elements)
+
+        else:
+            tag_to_volume = {
+                tag: vol
+                for vol, tags in volume_to_tags.items()
+                for tag in tags}
+
+            volumes = list(volume_to_tags.keys())
+
+            volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
+            for tag, elements in tag_to_elements.items():
+                volume_index_per_element[elements] = volumes.index(
+                    tag_to_volume[tag])
+
+            if np.any(volume_index_per_element < 0):
+                raise ValueError("Missing volume specification for some elements.")
+
+            part_id_to_elements = {
+                PartID(volumes[vol_idx], rank):
+                    np.where(
+                        (volume_index_per_element == vol_idx)
+                        & (rank_per_element == rank))[0]
+                for vol_idx in range(len(volumes))
+                for rank in range(num_ranks)}
+
+            # FIXME: Find a better way to do this
+            part_id_to_part_index = {
+                part_id: part_index
+                for part_index, part_id in enumerate(part_id_to_elements.keys())}
+            from meshmode.mesh.processing import _compute_global_elem_to_part_elem
+            global_elem_to_part_elem = _compute_global_elem_to_part_elem(
+                mesh.nelements, part_id_to_elements, part_id_to_part_index,
+                mesh.element_id_dtype)
+
+            tag_to_global_to_part = {
+                tag: global_elem_to_part_elem[elements, :]
+                for tag, elements in tag_to_elements.items()}
+
+            part_id_to_tag_to_elements = {}
+            for part_id in part_id_to_elements.keys():
+                part_idx = part_id_to_part_index[part_id]
+                part_tag_to_elements = {}
+                for tag, global_to_part in tag_to_global_to_part.items():
+                    part_tag_to_elements[tag] = global_to_part[
+                        global_to_part[:, 0] == part_idx, 1]
+                part_id_to_tag_to_elements[part_id] = part_tag_to_elements
+
+            part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
+
+            rank_to_mesh_data = {
+                rank: {
+                    vol: (
+                        part_id_to_mesh[PartID(vol, rank)],
+                        part_id_to_tag_to_elements[PartID(vol, rank)])
+                    for vol in volumes}
+                for rank in range(num_ranks)}
+
+        local_mesh_data = mpi_distribute(
+            comm, source_rank=0, source_data=rank_to_mesh_data)
+
+        global_nelements = comm.bcast(mesh.nelements, root=0)
 
     else:
-        local_mesh = mesh_dist.receive_mesh_part()
+        local_mesh_data = mpi_distribute(comm, source_rank=0)
 
-    return local_mesh, global_nelements
+        global_nelements = comm.bcast(None, root=0)
+
+    return local_mesh_data, global_nelements
 
 
-def create_parallel_grid(comm, generate_grid):
-    """Generate and distribute mesh compatibility interface."""
-    from warnings import warn
-    warn("Do not call create_parallel_grid; use generate_and_distribute_mesh "
-         "instead. This function will disappear August 1, 2021",
-         DeprecationWarning, stacklevel=2)
-    return generate_and_distribute_mesh(comm=comm, generate_mesh=generate_grid)
+def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
+                    mesh=None):
+    """Generate a report of the grid boundaries."""
+    boundaries = normalize_boundaries(boundaries)
+
+    comm = dcoll.mpi_communicator
+    nproc = 1
+    rank = 0
+    if comm is not None:
+        nproc = comm.Get_size()
+        rank = comm.Get_rank()
+
+    if mesh is not None:
+        nelem = 0
+        for grp in mesh.groups:
+            nelem = nelem + grp.nelements
+        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}\n"
+    else:
+        local_header = f"nproc: {nproc}\nrank: {rank}\n"
+
+    from io import StringIO
+    local_report = StringIO(local_header)
+    local_report.seek(0, 2)
+
+    for bdtag in boundaries:
+        boundary_discr = dcoll.discr_from_dd(bdtag)
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        local_report.write(f"{bdtag}: {nnodes}\n")
+
+    from meshmode.mesh import BTAG_PARTITION
+    from meshmode.distributed import get_connected_parts
+    connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
+    local_report.write(f"num_nbr_parts: {len(connected_part_ids)}\n")
+    local_report.write(f"connected_part_ids: {connected_part_ids}\n")
+    part_nodes = []
+    for connected_part_id in connected_part_ids:
+        boundary_discr = dcoll.discr_from_dd(
+            dd.trace(BTAG_PARTITION(connected_part_id)))
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        part_nodes.append(nnodes)
+    if part_nodes:
+        local_report.write(f"nnodes_pb: {part_nodes}\n")
+
+    local_report.write("-----\n")
+    local_report.seek(0)
+
+    for irank in range(nproc):
+        if irank == rank:
+            f = open(outfile_name, "a+")
+            f.write(local_report.read())
+            f.close()
+        if comm is not None:
+            comm.barrier()
+
+
+def limit_species_mass_fractions(cv):
+    """Keep the species mass fractions from going negative."""
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
+        actx = cv.array_context
+        new_y = 1.*y
+        zero = 0 * y[0]
+        one = zero + 1.
+
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 1e-14),
+                                     zero, new_y[i])
+            new_y[i] = actx.np.where(actx.np.greater(new_y[i], 1.),
+                                     one, new_y[i])
+        new_rho_y = cv.mass*new_y
+
+        for i in range(cv.nspecies):
+            new_rho_y[i] = actx.np.where(actx.np.less(new_rho_y[i], 1e-16),
+                                         zero, new_rho_y[i])
+            new_rho_y[i] = actx.np.where(actx.np.greater(new_rho_y[i], 1.),
+                                         one, new_rho_y[i])
+
+        return make_conserved(dim=cv.dim, mass=cv.mass,
+                              momentum=cv.momentum, energy=cv.energy,
+                              species_mass=new_rho_y)
+    return cv
+
+
+def species_fraction_anomaly_relaxation(cv, alpha=1.):
+    """Pull negative species fractions back towards 0 with a RHS contribution."""
+    from mirgecom.fluid import make_conserved
+    if cv.nspecies > 0:
+        y = cv.species_mass_fractions
+        actx = cv.array_context
+        new_y = 1.*y
+        zero = 0. * y[0]
+        for i in range(cv.nspecies):
+            new_y[i] = actx.np.where(actx.np.less(new_y[i], 0.),
+                                     -new_y[i], zero)
+            # y_spec = actx.np.where(y_spec > 1., y_spec-1., zero)
+        return make_conserved(dim=cv.dim, mass=0.*cv.mass,
+                              momentum=0.*cv.momentum, energy=0.*cv.energy,
+                              species_mass=alpha*cv.mass*new_y)
+    return 0.*cv
+
+
+def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
+    r"""
+    Create a mesh containing a subset of another mesh's volumes.
+
+    Parameters
+    ----------
+    mesh: :class:`meshmode.mesh.Mesh`
+        The original mesh.
+    tag_to_elements:
+        A :class:`dict` mapping mesh volume tags to :class:`numpy.ndarray`\ s
+        of element numbers in *mesh*.
+    selected_tags:
+        A sequence of tags in *tag_to_elements* representing the subset of volumes
+        to be included.
+    boundary_tag:
+        Tag to assign to the boundary that was previously the interface between
+        included/excluded volumes.
+
+    Returns
+    -------
+    in_mesh: :class:`meshmode.mesh.Mesh`
+        The resulting mesh.
+    tag_to_in_elements:
+        A :class:`dict` mapping the tags from *selected_tags* to
+        :class:`numpy.ndarray`\ s of element numbers in *in_mesh*.
+    """
+    is_in_element = np.full(mesh.nelements, False)
+    for tag, elements in tag_to_elements.items():
+        if tag in selected_tags:
+            is_in_element[elements] = True
+
+    from meshmode.mesh.processing import partition_mesh
+    in_mesh = partition_mesh(mesh, {
+        "_in": np.where(is_in_element)[0],
+        "_out": np.where(~is_in_element)[0]})["_in"]
+
+    # partition_mesh creates a partition boundary for "_out"; replace with a
+    # normal boundary
+    new_facial_adjacency_groups = []
+    from meshmode.mesh import InterPartAdjacencyGroup, BoundaryAdjacencyGroup
+    for grp_list in in_mesh.facial_adjacency_groups:
+        new_grp_list = []
+        for fagrp in grp_list:
+            if (
+                    isinstance(fagrp, InterPartAdjacencyGroup)
+                    and fagrp.part_id == "_out"):
+                new_fagrp = BoundaryAdjacencyGroup(
+                    igroup=fagrp.igroup,
+                    boundary_tag=boundary_tag,
+                    elements=fagrp.elements,
+                    element_faces=fagrp.element_faces)
+            else:
+                new_fagrp = fagrp
+            new_grp_list.append(new_fagrp)
+        new_facial_adjacency_groups.append(new_grp_list)
+    in_mesh = in_mesh.copy(facial_adjacency_groups=new_facial_adjacency_groups)
+
+    element_to_in_element = np.where(
+        is_in_element,
+        np.cumsum(is_in_element) - 1,
+        np.full(mesh.nelements, -1))
+
+    tag_to_in_elements = {
+        tag: element_to_in_element[tag_to_elements[tag]]
+        for tag in selected_tags}
+
+    return in_mesh, tag_to_in_elements
+
+
+def force_evaluation(actx, expn):
+    """Wrap freeze/thaw forcing evaluation of expressions."""
+    return actx.thaw(actx.freeze(expn))
 
 
 def get_reasonable_memory_pool(ctx, queue):
@@ -451,7 +1102,6 @@ def get_reasonable_memory_pool(ctx, queue):
             ctx, alignment=0, queue=queue))
     else:
         from warnings import warn
-
         if not has_coarse_grain_buffer_svm(queue.device):
             warn(f"No SVM support on {queue.device}, returning a CL buffer-based "
                   "memory pool. If you are running with PoCL-cuda, please update "
