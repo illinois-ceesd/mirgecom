@@ -8,4 +8,4 @@ elif [[ -n "$MPI_LOCALRANKID" ]]; then
     export CUDA_VISIBLE_DEVICES=$MPI_LOCALRANKID
 fi
 
-"\$@"
+"$@"
