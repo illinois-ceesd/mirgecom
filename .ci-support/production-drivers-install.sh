@@ -22,6 +22,7 @@ do
     PRODUCTION_DRIVER_REPO=$(printf "$production_driver_string" | cut -d "@" -f 1)
     PRODUCTION_DRIVER_NAME=$(printf "$PRODUCTION_DRIVER_REPO" | cut -d "/" -f 2)
     PRODUCTION_DRIVER_DIR="production_driver_$PRODUCTION_DRIVER_NAME"
+    rm -rf $PRODUCTION_DRIVER_DIR
     git clone -b "$PRODUCTION_DRIVER_BRANCH" https\://github.com/"$PRODUCTION_DRIVER_REPO" "$PRODUCTION_DRIVER_DIR"
 done
 IFS="$OIFS"

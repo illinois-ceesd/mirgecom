@@ -11,7 +11,6 @@ DRIVERS_HOME=$(pwd)
 
 printf "DRIVERS_HOME: ${DRIVERS_HOME}\n"
 
-export MIRGE_MPI_EXEC="mpiexec"
 rm -rf parallel_spawner.sh mirge_testing_resource.sh
 
 if [[ $(hostname) == "porter" ]]; then
@@ -46,15 +45,37 @@ export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
 export MIRGE_MPI_EXEC="jsrun -g 1 -a 1"
 export MIRGE_PARALLEL_SPAWNER="bash ${DRIVERS_HOME}/parallel_spawner.sh"
 EOF
-    
+else
+    cat <<EOF > mirge_testing_resource.sh
+export MIRGE_MPI_EXEC="mpiexec"
+EOF
 fi
 
-chmod +x parallel_spawner.sh
+if [[ -f "parallel_spawner.sh" ]]; then
+    chmod +x parallel_spawner.sh
+fi
+
 testing_resource="${DRIVERS_HOME}/mirge_testing_resource.sh"
+printf "Testing Resources:\n"
+if [[ -f "mirge_testing_resource.sh" ]]; then
+    cat $testing_resource
+else
+    printf "None\n"
+fi
 
 for production_driver in $(ls | grep "production_driver_");
 do
-    . ${production_driver}/scripts/smoke_test.sh "${testing_resource}"
+    driver_path="${DRIVERS_HOME}/${production_driver}"
+    . ${production_driver}/scripts/smoke_test.sh "${testing_resource}" "${driver_path}"
+    test_result=$?
+
+    if [[ $test_result -eq 0 ]]; then
+        printf "${production_driver} tests passed."
+    else
+        printf "${production_driver} tests failed."
+    fi
+
 done
+
 cd -
 set +x
