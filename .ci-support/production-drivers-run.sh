@@ -9,11 +9,13 @@ DRIVERS_HOME=${1:-"."}
 cd ${DRIVERS_HOME}
 DRIVERS_HOME=$(pwd)
 
+printf "DRIVERS_HOME: ${DRIVERS_HOME}\n"
+
 export MIRGE_MPI_EXEC="mpiexec"
+rm -rf parallel_spawner.sh mirge_testing_resource.sh
 
 if [[ $(hostname) == "porter" ]]; then
-    rm -rf run_gpus_generic.sh
-    cat <<EOF > run_gpus_generic.sh
+    cat <<EOF > parallel_spawner.sh
 if [[ -n "\$OMPI_COMM_WORLD_NODE_RANK" ]]; then
     # Open MPI
     export CUDA_VISIBLE_DEVICES=\$OMPI_COMM_WORLD_LOCAL_RANK
@@ -24,21 +26,35 @@ fi
 
 "\$@"
 EOF
-    chmod +x run_gpus_generic.sh
-    export MIRGE_PARALLEL_SPAWNER="bash ${DRIVERS_HOME}/run_gpus_generic.sh"
+    cat <<EOF > mirge_testing_resource.sh
+export PYOPENCL_TEST="port:nv"
+export PYOPENCL_CTX="port:nv"
+export MIRGE_MPI_EXEC="mpiexec"
+export MIRGE_PARALLEL_SPAWNER="bash ${DRIVERS_HOME}/parallel_spawner.sh"
+EOF
 
-    # Assumes POCL
-    export PYOPENCL_TEST="port:nv"
-    export PYOPENCL_CTX="port:nv"
 elif [[ $(hostname) == "lassen"* ]]; then
-    export PYOPENCL_CTX="port:tesla"
-    export PYOPENCL_TEST="port:tesla"
-    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-    export MIRGE_MPI_EXEC="jsrun -g 1 -a 1"
+
+    cat <<EOF > parallel_spawner.sh
+export POCL_CACHE_DIR=\$POCL_CACHE_DIR_ROOT/\$\$
+"\$@"
+EOF
+    cat <<EOF > mirge_testing_resource.sh
+export PYOPENCL_CTX="port:tesla"
+export PYOPENCL_TEST="port:tesla"
+export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
+export MIRGE_MPI_EXEC="jsrun -g 1 -a 1"
+export MIRGE_PARALLEL_SPAWNER="bash ${DRIVERS_HOME}/parallel_spawner.sh"
+EOF
+    
 fi
+
+chmod +x parallel_spawner.sh
+testing_resource="${DRIVERS_HOME}/mirge_testing_resource.sh"
 
 for production_driver in $(ls | grep "production_driver_");
 do
-    . ${production_driver}/scripts/smoke_test.sh "${MIRGE_MPI_EXEC}" "${MIRGE_PARALLEL_SPAWN}"
+    . ${production_driver}/scripts/smoke_test.sh "${testing_resource}"
 done
 cd -
+set +x
