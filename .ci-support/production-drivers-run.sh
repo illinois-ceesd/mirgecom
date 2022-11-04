@@ -7,9 +7,9 @@ set -x
 # a test driver in "production_driver_*/smoke_test/driver.py".
 DRIVERS_HOME=${1:-"."}
 cd ${DRIVERS_HOME}
+DRIVERS_HOME=$(pwd)
 
-mpi_exec="mpiexec"
-mpi_launcher=""
+export MIRGE_MPI_EXEC="mpiexec"
 
 if [[ $(hostname) == "porter" ]]; then
     rm -rf run_gpus_generic.sh
@@ -25,7 +25,7 @@ fi
 "\$@"
 EOF
     chmod +x run_gpus_generic.sh
-    mpi_launcher="bash ../../run_gpus_generic.sh"
+    export MIRGE_PARALLEL_SPAWNER="bash ${DRIVERS_HOME}/run_gpus_generic.sh"
 
     # Assumes POCL
     export PYOPENCL_TEST="port:nv"
@@ -34,13 +34,11 @@ elif [[ $(hostname) == "lassen"* ]]; then
     export PYOPENCL_CTX="port:tesla"
     export PYOPENCL_TEST="port:tesla"
     export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-    mpi_exec="jsrun -g 1 -a 1"
+    export MIRGE_MPI_EXEC="jsrun -g 1 -a 1"
 fi
 
 for production_driver in $(ls | grep "production_driver_");
 do
-    cd "$production_driver"/smoke_test
-    ${mpi_exec} -n 2 ${mpi_launcher} python -m mpi4py ./driver.py -i run_params.yaml --log --lazy
-    cd ../../
+    . ${production_driver}/scripts/smoke_test.sh "${MIRGE_MPI_EXEC}" "${MIRGE_PARALLEL_SPAWN}"
 done
 cd -

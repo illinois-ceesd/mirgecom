@@ -12,7 +12,7 @@
 # The default values result in an install of the Y1 nozzle driver and
 # Wyatt Hagen's isolator driver that work with current MIRGE-Com 
 # production branch: mirgecom@y1-production.
-PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y2-prediction@main:illinois-ceesd/drivers_y2-isolator@main:illinois-ceesd/drivers_flame1d@main"}
+PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y2-prediction@testing"}
 # Loop over the production drivers, clone them, and prepare for execution
 set -x
 OIFS="$IFS"
@@ -23,13 +23,6 @@ do
     PRODUCTION_DRIVER_NAME=$(printf "$PRODUCTION_DRIVER_REPO" | cut -d "/" -f 2)
     PRODUCTION_DRIVER_DIR="production_driver_$PRODUCTION_DRIVER_NAME"
     git clone -b "$PRODUCTION_DRIVER_BRANCH" https\://github.com/"$PRODUCTION_DRIVER_REPO" "$PRODUCTION_DRIVER_DIR"
-    cd "$PRODUCTION_DRIVER_DIR"/smoke_test
-    if [ -f prediction.py ]; then
-        ln -s prediction.py driver.py
-    else
-        ln -s *.py driver.py  #  name the driver generically
-    fi
-    cd ../..
 done
 IFS="$OIFS"
 set +x
