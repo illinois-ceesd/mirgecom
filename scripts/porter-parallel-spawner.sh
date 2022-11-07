@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Adapted from the original `run_gpus_generic.sh`, designed
+# to wrap the spawning of parallel mirgecom drivers on Porter.
 
 if [[ -n "$OMPI_COMM_WORLD_NODE_RANK" ]]; then
     # Open MPI
