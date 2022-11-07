@@ -83,5 +83,6 @@ else
     echo "*** Failed tests: ($numfail/$numtests): $failed_examples"
 fi
 echo "*** Successful tests: ($numsuccess/$numtests): $succeeded_examples"
+
 exit $numfail
 #rm -f examples/*.vtu
