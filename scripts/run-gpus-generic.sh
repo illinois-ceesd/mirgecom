@@ -11,9 +11,6 @@
 #
 # Run it like this:
 #   mpiexec -n 2 bash run-gpus-generic.sh python -m mpi4py pulse-mpi.py --lazy
-#
-# Adapted from the original `run_gpus_generic.sh` to unify
-# scripting.
 
 if [[ -n "$OMPI_COMM_WORLD_NODE_RANK" ]]; then
     # Open MPI
