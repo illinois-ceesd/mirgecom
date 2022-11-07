@@ -164,7 +164,7 @@ jobs:
         runs-on: ${{ matrix.os }}
         strategy:
           matrix:
-            os: [ubuntu-latest, macos-latest]
+            os: [ubuntu-latest, macos-latest, porter]
 
         steps:
         - uses: actions/checkout@v2
@@ -172,14 +172,19 @@ jobs:
             fetch-depth: '0'
         - name: Prepare production environment
           run: |
-            [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             MIRGEDIR=$(pwd)
             cat .ci-support/production-testing-env.sh
             . .ci-support/production-testing-env.sh
             cd ..
-            git clone https://github.com/illinois-ceesd/emirge emirge.y1
-            cd emirge.y1
+            date
+            printf "Removing stale install ..."
+            rm -rf emirge.prod emirge.y1
+            printf "done.\n"
+            date
+            git clone https://github.com/illinois-ceesd/emirge emirge.prod
+            cd emirge.prod
             . ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
             source ${MIRGEDIR}/../config/activate_env.sh
             . ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
