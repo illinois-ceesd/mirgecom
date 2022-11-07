@@ -16,7 +16,7 @@ PYOPENCL_TEST=""
 PYOPENCL_CTX=""
 
 if [[ $(hostname) == "porter" ]]; then
-    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/porter-parallel-spawner.sh"
+    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/run-gpus-generic.sh"
     PYOPENCL_TEST="port:nv"
     PYOPENCL_CTX="port:nv"
 
