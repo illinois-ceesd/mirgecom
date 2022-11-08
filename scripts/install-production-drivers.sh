@@ -13,7 +13,8 @@ cd ${MIRGE_HOME}
 MIRGE_HOME=$(pwd)
 cd -
 
-PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y2-prediction@overhaul-testing"}
+PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y2-prediction@main"}
+
 # Loop over the production drivers, clone them, and prepare for execution
 # set -x
 OIFS="$IFS"
