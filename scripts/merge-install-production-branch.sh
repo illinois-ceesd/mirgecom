@@ -2,13 +2,10 @@
 set -x
 #
 # This script is designed to patch the CEESD production capability into
-# a proposed change to illinois-ceesd/mirgecom@main. The script reads the
-# environment config file `.ci-support/production-testing-env.sh`, that
-# should set up the expected control variables.
+# a proposed change to illinois-ceesd/mirgecom@main.  It takes 1 input
+# argument which is the file path to the mirgecom installation directory.
 #
-# The production capability to test against may be specified outright, or
-# patched by the incoming development. The following vars control the
-# production environment:
+# The following vars control the production environment:
 #
 # PRODUCTION_BRANCH = The production branch (default=production)
 # PRODUCTION_FORK = The production fork (default=illinois-ceesd)
@@ -39,4 +36,5 @@ git fetch production
 git merge production/${PRODUCTION_BRANCH} --no-edit
 # Pick up any requirements.txt
 pip install -r requirements.txt
+
 cd -
