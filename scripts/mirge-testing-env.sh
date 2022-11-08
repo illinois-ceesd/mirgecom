@@ -12,6 +12,7 @@ cd -
 MIRGE_PARALLEL_SPAWNER=""
 MIRGE_MPI_EXEC="mpiexec"
 XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
+POCL_CACHE_ROOT="/tmp/$USER/pocl-scratch"
 PYOPENCL_TEST=""
 PYOPENCL_CTX=""
 
@@ -24,13 +25,14 @@ elif [[ $(hostname) == "lassen"* ]]; then
     MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/lassen-parallel-spawner.sh"
     PYOPENCL_TEST="port:tesla"
     PYOPENCL_CTX="port:tesla"
-    MIRGE_MPI_EXEC="jsrun -g 1 -a 1"    
+    MIRGE_MPI_EXEC="jsrun -g 1 -a 1"
 fi
 
 export MIRGE_HOME
 export MIRGE_PARALLEL_SPAWNER
 export MIRGE_MPI_EXEC
 export XDG_CACHE_HOME
+export POCL_CACHE_ROOT
 export PYOPENCL_TEST
 export PYOPENCL_CTX
 
