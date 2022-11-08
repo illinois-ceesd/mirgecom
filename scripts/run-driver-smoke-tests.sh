@@ -1,12 +1,19 @@
 #!/bin/bash
 
 #set -x
-
-# This script is designed to run the CEESD "production" drivers after
-# they have been prepared by an external helper script called
-# production-drivers-install.sh. The drivers are each expected to be
-# in a directory called "production_driver_*" and are expected to have
-# a test driver in "production_driver_*/smoke_test/driver.py".
+#
+# Usage: run-driver-smoke-tests.sh [path_to_mirgecom] [driver_name_root]
+#
+# This script is designed to run the smoke tests for a collection of
+# drivers. The drivers are each expected to be in the path:
+# /path_to_mirgecom/driver_name_root_<driver_name>
+#
+# Each driver to test is expected to have a smoke test defined in:
+# /driver_name_root_<driver_name>/scripts/smoke_test.sh
+#
+# See https://github.com/illinois-ceesd/drivers_y2-prediction/scripts/smoke_test.sh
+# for an example `smoke_test.sh`.
+#
 origin=$(pwd)
 MIRGE_HOME=${1:-"."}
 cd ${MIRGE_HOME}

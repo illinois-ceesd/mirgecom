@@ -16,9 +16,6 @@ succeeded_examples=""
 
 . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
 
-mpi_exec="${MIRGE_MPI_EXEC}"
-mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
-
 examples=""
 for example in $examples_dir/*.py
 do
