@@ -450,7 +450,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dcoll, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
-            operator_states_quad=operator_states_quad)
+            operator_states_quad=operator_states_quad, comm_tag=comm_tag)
 
     # Communicate grad(CV) and put it on the quadrature domain
     grad_cv_interior_pairs = [
@@ -470,7 +470,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dcoll, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
-            operator_states_quad=operator_states_quad)
+            operator_states_quad=operator_states_quad, comm_tag=comm_tag)
 
     # Create the interior face trace pairs, perform MPI exchange, interp to quad
     grad_t_interior_pairs = [
