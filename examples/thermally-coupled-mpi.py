@@ -74,7 +74,6 @@ from mirgecom.logging_quantities import (
 )
 
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_grad_t_operator,
     coupled_ns_heat_operator,
 )
 
@@ -378,43 +377,32 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     construct_fluid_state = actx.compile(_construct_fluid_state)
 
-    def _construct_grad_t(t, fluid_state, wall_temperature):
-        fluid_grad_t, wall_grad_t = coupled_grad_t_operator(
-            dcoll,
-            gas_model,
-            dd_vol_fluid, dd_vol_wall,
-            fluid_boundaries, wall_boundaries,
-            fluid_state, wall_kappa, wall_temperature,
-            time=t,
-            quadrature_tag=quadrature_tag)
-        return make_obj_array([fluid_grad_t, wall_grad_t])
-
-    construct_grad_t = actx.compile(_construct_grad_t)
-
-    def my_write_viz(step, t, state, fluid_state=None, rhs=None):
+    def my_write_viz(step, t, state, fluid_state=None):
         cv = state[0]
         wall_temperature = state[1]
         if fluid_state is None:
             fluid_state = construct_fluid_state(cv)
-        if rhs is None:
-            rhs = construct_rhs(t, state)
         dv = fluid_state.dv
 
-        grad_temperature = construct_grad_t(t, fluid_state, wall_temperature)
-        fluid_grad_temperature = grad_temperature[0]
-        wall_grad_temperature = grad_temperature[1]
+        (
+            fluid_rhs, wall_rhs, grad_cv, fluid_grad_temperature,
+            wall_grad_temperature) = construct_rhs_and_gradients(t, state)
 
         fluid_viz_fields = [
             ("cv", cv),
             ("dv", dv),
+            ("grad_cv_mass", grad_cv.mass),
+            ("grad_cv_energy", grad_cv.energy),
+            ("grad_cv_momentum_x", grad_cv.momentum[0]),
+            ("grad_cv_momentum_y", grad_cv.momentum[1]),
             ("grad_t", fluid_grad_temperature),
-            ("rhs", rhs[0]),
+            ("rhs", fluid_rhs),
             ("kappa", fluid_state.thermal_conductivity),
         ]
         wall_viz_fields = [
             ("temperature", wall_temperature),
             ("grad_t", wall_grad_temperature),
-            ("rhs", rhs[1]),
+            ("rhs", wall_rhs),
             ("kappa", wall_kappa),
         ]
         from mirgecom.simutil import write_visfile
@@ -519,17 +507,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     fluid_nodes = actx.thaw(dcoll.nodes(dd_vol_fluid))
 
-    def my_rhs(t, state):
+    def my_rhs(t, state, return_gradients=False):
         fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
         wall_temperature = state[1]
-        fluid_rhs, wall_energy_rhs = coupled_ns_heat_operator(
+        ns_heat_result = coupled_ns_heat_operator(
             dcoll,
             gas_model,
             dd_vol_fluid, dd_vol_wall,
             fluid_boundaries, wall_boundaries,
             fluid_state,
             wall_kappa, wall_temperature,
-            time=t, quadrature_tag=quadrature_tag)
+            time=t,
+            return_gradients=return_gradients,
+            quadrature_tag=quadrature_tag)
+
+        if return_gradients:
+            (
+                fluid_rhs, wall_energy_rhs, fluid_grad_cv, fluid_grad_temperature,
+                wall_grad_temperature) = ns_heat_result
+        else:
+            fluid_rhs, wall_energy_rhs = ns_heat_result
+
         wall_rhs = (
             wall_time_scale
             * wall_energy_rhs/(wall_density * wall_heat_capacity))
@@ -541,9 +539,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 * actx.np.exp(
                     -(fluid_nodes[0]**2+(fluid_nodes[1]-0.005)**2)/0.004**2)
                 * actx.np.exp(-t/5e-6)))
-        return make_obj_array([fluid_rhs, wall_rhs])
 
-    construct_rhs = actx.compile(my_rhs)
+        if return_gradients:
+            return make_obj_array([
+                fluid_rhs, wall_rhs, fluid_grad_cv, fluid_grad_temperature,
+                wall_grad_temperature])
+        else:
+            return make_obj_array([fluid_rhs, wall_rhs])
+
+    def my_rhs_and_gradients(t, state):
+        return my_rhs(t, state, return_gradients=True)
+
+    construct_rhs_and_gradients = actx.compile(my_rhs_and_gradients)
 
     current_dt = my_get_timestep(step=current_step, t=current_t, state=current_state)
 
