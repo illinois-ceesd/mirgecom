@@ -805,6 +805,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
 
     Returns
     -------
+    # FIXME: dict entries are not just the mesh, but the tag mapping too
     local_mesh_data: :class:`meshmode.mesh.Mesh` or :class:`dict`
         If the result of calling *get_mesh_data* specifies a single volume,
         *local_mesh_data* is the local mesh.  If it specifies multiple volumes,
