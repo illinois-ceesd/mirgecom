@@ -170,8 +170,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             mpi_communicator=comm)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.0
 
@@ -309,8 +308,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         else:
             rst_cv = restart_data["cv"]
             old_dcoll = \
-                create_discretization_collection(actx, local_mesh, order=rst_order,
-                                                 mpi_communicator=comm)
+                create_discretization_collection(actx, local_mesh, order=rst_order)
             from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_dcoll.discr_from_dd("vol"))

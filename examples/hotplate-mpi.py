@@ -31,7 +31,7 @@ from functools import partial
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DTAG_BOUNDARY
+from grudge.dof_desc import BoundaryDomainTag
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
@@ -168,9 +168,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    dcoll = create_discretization_collection(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     if logmgr:
@@ -221,21 +219,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     exact = initializer(x_vec=nodes, eos=gas_model.eos)
 
-    def _boundary_state(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
-    boundaries = {DTAG_BOUNDARY("-1"):
-                  PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-                  DTAG_BOUNDARY("+1"):
-                  PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-                  DTAG_BOUNDARY("-2"): IsothermalNoSlipBoundary(
-                      wall_temperature=bottom_boundary_temperature),
-                  DTAG_BOUNDARY("+2"): IsothermalNoSlipBoundary(
-                      wall_temperature=top_boundary_temperature)}
+    boundaries = {
+        BoundaryDomainTag("-1"): PrescribedFluidBoundary(
+            boundary_state_func=_boundary_state),
+        BoundaryDomainTag("+1"): PrescribedFluidBoundary(
+            boundary_state_func=_boundary_state),
+        BoundaryDomainTag("-2"): IsothermalNoSlipBoundary(
+            wall_temperature=bottom_boundary_temperature),
+        BoundaryDomainTag("+2"): IsothermalNoSlipBoundary(
+            wall_temperature=top_boundary_temperature)}
 
     if rst_filename:
         current_t = restart_data["t"]

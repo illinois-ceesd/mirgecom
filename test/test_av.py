@@ -35,6 +35,7 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests
 )
 from meshmode.mesh import BTAG_ALL
+from meshmode.discretization.connection import FACE_RESTR_ALL
 import grudge.op as op
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
@@ -205,29 +206,28 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     nodes = actx.thaw(dcoll.nodes())
 
     class TestBoundary:
-
-        def cv_gradient_flux(self, dcoll, btag, state_minus, gas_model, **kwargs):
+        def cv_gradient_flux(self, dcoll, dd_bdry, state_minus, gas_model, **kwargs):
             cv_int = state_minus.cv
             from grudge.trace_pair import TracePair
-            bnd_pair = TracePair(btag,
+            bnd_pair = TracePair(dd_bdry,
                                  interior=cv_int,
                                  exterior=cv_int)
-            nhat = actx.thaw(dcoll.normal(btag))
+            nhat = actx.thaw(dcoll.normal(dd_bdry))
             from mirgecom.flux import num_flux_central
             from arraycontext import outer
             # Do not project to "all_faces" as now we use built-in grad_cv_operator
             return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 
-        def av_flux(self, dcoll, btag, diffusion, **kwargs):
-            nhat = actx.thaw(dcoll.normal(btag))
-            diffusion_minus = op.project(dcoll, "vol", btag, diffusion)
+        def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
+            nhat = actx.thaw(dcoll.normal(dd_bdry))
+            diffusion_minus = op.project(dcoll, "vol", dd_bdry, diffusion)
             diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
-            bnd_grad_pair = TracePair(btag, interior=diffusion_minus,
+            bnd_grad_pair = TracePair(dd_bdry, interior=diffusion_minus,
                                       exterior=diffusion_plus)
             from mirgecom.flux import num_flux_central
             flux_weak = num_flux_central(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
-            return op.project(dcoll, btag, "all_faces", flux_weak)
+            return op.project(dcoll, dd_bdry, "all_faces", flux_weak)
 
     boundaries = {BTAG_ALL: TestBoundary()}
 
@@ -402,9 +402,9 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=transport_model)
 
-    def _boundary_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
+    def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(prescribed_soln(r=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
@@ -444,11 +444,11 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     # Prescribed boundaries are used for inflow/outflow-type boundaries
     # where we expect to _preserve_ the soln gradient
     from grudge.dof_desc import as_dofdesc
-    dd_bnd = as_dofdesc(BTAG_ALL)
-    all_faces_dd = dd_bnd.with_dtag("all_faces")
+    dd_bdry = as_dofdesc(BTAG_ALL)
+    dd_allfaces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
     expected_av_flux_prescribed_boundary = av_diffusion_boundary@boundary_nhat
     print(f"{expected_av_flux_prescribed_boundary=}")
-    exp_av_flux = op.project(dcoll, dd_bnd, all_faces_dd,
+    exp_av_flux = op.project(dcoll, dd_bdry, dd_allfaces,
                                 expected_av_flux_prescribed_boundary)
     print(f"{exp_av_flux=}")
 
