@@ -796,10 +796,10 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
         print(f"distribute_mesh partitioning done: {time.ctime(time.time())}")
         print(f"distribute_mesh: mesh data struct start: {time.ctime(time.time())}")
 
-        from pyinstrument import Profiler
+        # from pyinstrument import Profiler
 
-        profiler = Profiler()
-        profiler.start()
+        # profiler = Profiler()
+        # profiler.start()
 
         if tag_to_elements is None:
             rank_to_elements = {
@@ -865,8 +865,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                     for vol in volumes}
                 for rank in range(num_ranks)}
 
-        profiler.stop()
-        profiler.print()
+        # profiler.stop()
+        # profiler.print()
 
         print(f"distribute_mesh: mesh data struct done: {time.ctime(time.time())}")
 
