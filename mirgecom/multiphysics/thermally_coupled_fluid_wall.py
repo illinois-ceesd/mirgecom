@@ -596,6 +596,7 @@ def coupled_ns_heat_operator(
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         use_av=False,
         av_kwargs=None,
+        return_gradients=False,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE):
     # FIXME: Incomplete docs
@@ -673,12 +674,18 @@ def coupled_ns_heat_operator(
     wall_all_boundaries.update(wall_boundaries)
     wall_all_boundaries.update(wall_interface_boundaries)
 
-    fluid_rhs = ns_operator(
+    ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
+        return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
+
+    if return_gradients:
+        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
+    else:
+        fluid_rhs = ns_result
 
     if use_av:
         if av_kwargs is None:
@@ -687,9 +694,20 @@ def coupled_ns_heat_operator(
             dcoll, fluid_all_boundaries, fluid_state, quadrature_tag=quadrature_tag,
             dd=fluid_dd, **av_kwargs)
 
-    wall_rhs = diffusion_operator(
+    diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
-        penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_WallOperatorTag)
+        return_grad_u=return_gradients, penalty_amount=wall_penalty_amount,
+        quadrature_tag=quadrature_tag, dd=wall_dd, grad_u=wall_grad_temperature,
+        comm_tag=_WallOperatorTag)
 
-    return fluid_rhs, wall_rhs
+    if return_gradients:
+        wall_rhs, wall_grad_temperature = diffusion_result
+    else:
+        wall_rhs = diffusion_result
+
+    if return_gradients:
+        return (
+            fluid_rhs, wall_rhs, fluid_grad_cv, fluid_grad_temperature,
+            wall_grad_temperature)
+    else:
+        return fluid_rhs, wall_rhs
