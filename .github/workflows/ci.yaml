@@ -175,8 +175,8 @@ jobs:
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             MIRGEDIR=$(pwd)
-            cat .ci-support/production-testing-env.sh
-            . .ci-support/production-testing-env.sh
+            cat scripts/production-testing-env.sh
+            . scripts/production-testing-env.sh
             cd ..
             date
             printf "Removing stale install ..."
@@ -185,12 +185,12 @@ jobs:
             date
             git clone https://github.com/illinois-ceesd/emirge emirge.prod
             cd emirge.prod
-            . ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
+            . ../mirgecom/scripts/install-mirge-from-source.sh ${MIRGEDIR}/..
             source ${MIRGEDIR}/../config/activate_env.sh
-            . ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
+            . ../mirgecom/scripts/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
-            . .ci-support/production-testing-env.sh
+            . scripts/production-testing-env.sh
             source ../config/activate_env.sh
-            . .ci-support/production-drivers-install.sh .
-            . .ci-support/production-drivers-run.sh .
+            . scripts/install-production-drivers.sh .
+            . scripts/run-driver-smoke-tests.sh . production_driver

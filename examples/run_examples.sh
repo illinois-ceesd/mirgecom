@@ -14,15 +14,10 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
 
-mpi_exec="mpiexec"
-mpi_launcher=""
-if [[ $(hostname) == "porter" ]]; then
-    mpi_launcher="bash scripts/run_gpus_generic.sh"
-elif [[ $(hostname) == "lassen"* ]]; then
-    export PYOPENCL_CTX="port:tesla"
-    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-    mpi_exec="jsrun -g 1 -a 1"
-fi
+. ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
+
+mpi_exec="${MIRGE_MPI_EXEC}"
+mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
 
 examples=""
 for example in $examples_dir/*.py
