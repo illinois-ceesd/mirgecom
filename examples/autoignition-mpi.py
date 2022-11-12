@@ -87,7 +87,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     nproc = comm.Get_size()
-    1/0
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
