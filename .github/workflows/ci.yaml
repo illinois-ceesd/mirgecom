@@ -85,7 +85,7 @@ jobs:
         runs-on: ${{ matrix.os }}
         strategy:
           matrix:
-            os: [ubuntu-latest, porter]
+            os: [ubuntu-latest]
 
         steps:
         - uses: actions/checkout@v2
@@ -99,7 +99,8 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             conda install vtk  # needed for the accuracy comparison
             export XDG_CACHE_HOME=/tmp
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda && export POCL_DEBUG=cuda
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
+            # && export POCL_DEBUG=cuda
             cd examples && ./test_lazy_accuracy.sh
 
         - name: Run examples
@@ -107,7 +108,8 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda && export POCL_DEBUG=cuda
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
+            # && export POCL_DEBUG=cuda
             examples/run_examples.sh ./examples
 
     doc:
