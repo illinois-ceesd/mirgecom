@@ -11,8 +11,8 @@ cd -
 
 MIRGE_PARALLEL_SPAWNER=""
 MIRGE_MPI_EXEC="mpiexec"
-XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-POCL_CACHE_ROOT="/tmp/$USER/pocl-scratch"
+# XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
+# POCL_CACHE_ROOT="/tmp/$USER/pocl-scratch"
 PYOPENCL_TEST=""
 PYOPENCL_CTX=""
 
