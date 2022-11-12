@@ -12,10 +12,6 @@
 # Run it like this:
 #   mpiexec -n 2 bash run-gpus-generic.sh python -m mpi4py pulse-mpi.py --lazy
 
-export XDG_CACHE_HOME=${XDG_CACHE_HOME:-"/tmp/$USER/xdg-scratch"}
-POCL_CACHE_ROOT=${POCL_CACHE_ROOT:-"/tmp/$USER/pocl-scratch"}
-export POCL_CACHE_DIR="${POCL_CACHE_ROOT}/$$"
-
 if [[ -n "$OMPI_COMM_WORLD_NODE_RANK" ]]; then
     # Open MPI
     export CUDA_VISIBLE_DEVICES=$OMPI_COMM_WORLD_LOCAL_RANK
