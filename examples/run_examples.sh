@@ -14,7 +14,9 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
 
-. ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
+if [[ -z "${MIRGE_PARALLEL_SPAWNER}" ]];then
+    . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
+fi
 
 mpi_exec="${MIRGE_MPI_EXEC}"
 mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"

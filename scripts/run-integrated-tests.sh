@@ -16,25 +16,22 @@
 # See https://github.com/illinois-ceesd/drivers_y2-prediction/scripts/smoke_test.sh
 # for an example `smoke_test.sh`.
 #
-origin=$(pwd)
-MIRGE_HOME=${1:-"."}
-cd ${MIRGE_HOME}
-MIRGE_HOME=$(pwd)
-cd -
-
-testing_env="${MIRGE_HOME}/scripts/mirge-testing-env.sh"
-
-declare -i numfail=0
-declare -i numsuccess=0
-
 do_examples=false
 do_lazy_accuracy=false
 do_production_tests=false
 do_batch_job=false
 
+all_args="$@"
+
 NONOPT_ARGS=()
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -a|--all)
+            do_examples=true
+            do_lazy_accuracy=true
+            do_production_tests=true
+            shift
+            ;;
         -e|--examples)
             do_examples=true
             shift
@@ -64,6 +61,23 @@ done
 
 set -- "${NONOPT_ARGS[@]}"
 
+origin=$(pwd)
+MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+if [[ -z "${MIRGE_HOME}" ]]; then
+    . scripts/mirge-testing-env.sh
+fi
+
+printf "Running integrated tests.  MIRGE_HOME=${MIRGE_HOME}\n"
+
+testing_env="${MIRGE_HOME}/scripts/mirge-testing-env.sh"
+if [[ -z "$MIRGE_PARALLEL_SPAWNER" ]]; then
+    printf "Loading MIRGE testing env: ${testing_env}\n"
+    . ${testing_env}
+fi
+
+declare -i numfail=0
+declare -i numsuccess=0
+
 date
 
 echo "Running tests in ${MIRGE_HOME} ..."
@@ -75,17 +89,17 @@ if [[ "${do_examples}" = "true" ]]; then
 
     date
     printf "\- Running Examples.\n"
-    . ${MIRGE_HOME}/examples/run_examples.sh ${MIRGE_HOME}/examples
+    ${MIRGE_HOME}/examples/run_examples.sh ${MIRGE_HOME}/examples
     test_result=$?
     date
     if [[ $test_result -eq 0 ]]; then
         ((numsuccess=numsuccess+1))
         printf "\-\- Example tests passed."
-        succeeded_tests="${succeeded_drivers} Examples"
+        succeeded_tests="${succeeded_tests} Examples"
     else
         ((numfail=numfail+1))
         printf "\-\- Example tests failed."
-        failed_tests="${failed_drivers} Examples"
+        failed_tests="${failed_tests} Examples"
     fi
 fi
 
@@ -93,36 +107,38 @@ if [[ "${do_lazy_accuracy}" = "true" ]]; then
 
     date
     printf "\- Testing Lazy Accuracy.\n"
-    . ${MIRGE_HOME}/examples/test_lazy_accuracy.sh
+    cd ${MIRGE_HOME}/examples
+    ${MIRGE_HOME}/examples/test_lazy_accuracy.sh
     test_result=$?
     date
+    cd -
     if [[ $test_result -eq 0 ]]; then
         ((numsuccess=numsuccess+1))
         printf "\-\- Lazy accuracy tests passed."
-        succeeded_tests="${succeeded_drivers} LazyAccuracy"
+        succeeded_tests="${succeeded_tests} LazyAccuracy"
     else
         ((numfail=numfail+1))
         printf "\-\- Lazy accuracy tests failed."
-        failed_tests="${failed_drivers} LazyAccuracy"
+        failed_tests="${failed_tests} LazyAccuracy"
     fi
 fi
 
 if [[ "${do_production_tests}" = "true" ]]; then
 
     date
-    printf "\- Production testing (soon).\n"
-    # . ${MIRGE_HOME}/scripts/run-production-tests.sh ${MIRGE_HOME}
-    # test_result=$?
+    printf "\- Testing production drivers.\n"
+    ${MIRGE_HOME}/scripts/run-production-tests.sh ${MIRGE_HOME}
+    test_result=$?
     date
-    # if [[ $test_result -eq 0 ]]; then
-    #     ((numsuccess=numsuccess+1))
-    #     printf "\-\- Lazy accuracy tests passed."
-    #     succeeded_tests="${succeeded_drivers} LazyAccuracy"
-    # else
-    #    ((numfail=numfail+1))
-    #    printf "\-\- Lazy accuracy tests failed."
-    #    failed_drivers="${failed_drivers} LazyAccuracy"
-    #fi
+    if [[ $test_result -eq 0 ]]; then
+        ((numsuccess=numsuccess+1))
+        printf "\-\- Production tests passed."
+        succeeded_tests="${succeeded_tests} Production"
+    else
+        ((numfail=numfail+1))
+        printf "\-\- Production tests failed."
+        failed_tests="${failed_tests} Production"
+    fi
 fi
 
 if [[ $numfail -eq 0 ]]
@@ -134,5 +150,5 @@ fi
 
 echo "Successful tests(${numsuccess}): ${succeeded_tests}"
 
-return $numfail
+exit $numfail
 

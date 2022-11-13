@@ -15,10 +15,10 @@
 # for an example `smoke_test.sh`.
 #
 origin=$(pwd)
-MIRGE_HOME=${1:-"."}
-cd ${MIRGE_HOME}
-MIRGE_HOME=$(pwd)
-cd -
+MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+if [[ -z "${MIRGE_HOME}" ]]; then
+    . scripts/mirge-testing-env.sh
+fi
 
 DRIVER_ROOT=${2:-"production_driver"}
 
@@ -67,5 +67,5 @@ fi
 
 echo "Successful drivers(${numsuccess}): ${succeeded_drivers}"
 
-return $numfail
+exit $numfail
 

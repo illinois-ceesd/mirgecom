@@ -4,9 +4,14 @@
 # variables to make it more convenient to exercise parallel
 # mirgecom applications on various platforms.
 
-MIRGE_HOME=${1:-"."}
+# set -x
+
+MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+if [[ -z "${MIRGE_HOME}" ]]; then
+    MIRGE_HOME="."
+fi
 cd ${MIRGE_HOME}
-MIRGE_HOME=$(pwd)
+MIRGE_HOME="$(pwd)"
 cd -
 
 MIRGE_PARALLEL_SPAWNER=""
