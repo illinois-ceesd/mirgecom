@@ -8,12 +8,14 @@
 # PRODUCTION_DRIVERS = ':' delimited list "fork/repo@branch"
 # (See the example default value below)
 #
-MIRGE_HOME=${1:-"."}
-cd ${MIRGE_HOME}
-MIRGE_HOME=$(pwd)
-cd -
+MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+if [[ -z "${MIRGE_HOME}" ]]; then
+    . scripts/mirge-testing-env.sh
+fi
 
-PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y2-prediction@main"}
+if [[ -z "${PRODUCTION_DRIVERS}" ]]; then
+    source ${MIRGE_HOME}/scripts/production-testing-env.sh
+fi
 
 # Loop over the production drivers, clone them, and prepare for execution
 # set -x

@@ -101,8 +101,8 @@ jobs:
             export XDG_CACHE_HOME=/tmp
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
             # && export POCL_DEBUG=cuda
-            cd examples && ./test_lazy_accuracy.sh
-
+            #cd examples && ./test_lazy_accuracy.sh
+            scripts/run-integrated-tests.sh --lazy-accuracy
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
@@ -110,7 +110,8 @@ jobs:
             export XDG_CACHE_HOME=/tmp
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
             # && export POCL_DEBUG=cuda
-            examples/run_examples.sh ./examples
+            # examples/run_examples.sh ./examples
+            scripts/run-integrated-tests.sh --examples
 
     doc:
         name: Documentation
@@ -188,11 +189,12 @@ jobs:
             git clone https://github.com/illinois-ceesd/emirge emirge.prod
             cd emirge.prod
             . ../mirgecom/scripts/install-mirge-from-source.sh ${MIRGEDIR}/..
-            source ${MIRGEDIR}/../config/activate_env.sh
-            . ../mirgecom/scripts/merge-install-production-branch.sh ${MIRGEDIR}
+            # source ${MIRGEDIR}/../config/activate_env.sh
+            # . ../mirgecom/scripts/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
-            . scripts/production-testing-env.sh
+            # . scripts/production-testing-env.sh
             source ../config/activate_env.sh
-            . scripts/install-production-drivers.sh .
-            . scripts/run-driver-smoke-tests.sh . production_driver
+            # . scripts/install-production-drivers.sh .
+            # scripts/run-driver-smoke-tests.sh . production_driver
+            scripts/run-integrated-tests.sh --production
