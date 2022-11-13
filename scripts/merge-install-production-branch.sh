@@ -26,7 +26,9 @@ echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 cd ${MIRGE_HOME}
 
 git status
+
 set -x
+
 # This junk is needed to be able to execute git commands properly
 GIT_USER="$(git config user.name)"
 if [[ -z "${GIT_USER}" ]]; then
@@ -35,7 +37,8 @@ if [[ -z "${GIT_USER}" ]]; then
 fi
 
 # Making a dedicated production remote adds production forks
-if git config remote.production.url > /dev/null; then 
+PROD_URL="$(git config remote.production.url)"
+if [[ ! -z "${PROD_URL}" ]]; then
     git remote remove production
 fi
 
