@@ -25,12 +25,17 @@ if [[ -z "${MIRGE_PARALLEL_SPAWNER}" ]]; then
 fi
 
 cd ${MIRGE_HOME}
+
 date
+
 printf "Running production tests in ${MIRGE_HOME} ...\n"
 
-printf "... Installing production branch ...\n"
-. scripts/merge-install-production-branch.sh
-date
+if [[ -z "${MIRGE_PRODUCTION_INSTALL}" ]]; then
+    
+    printf "... Installing production branch ...\n"
+    . scripts/merge-install-production-branch.sh
+    date
+fi
 
 printf "... Installing production drivers ...\n" 
 . scripts/install-production-drivers.sh

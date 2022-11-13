@@ -48,4 +48,6 @@ git merge production/${PRODUCTION_BRANCH} --no-edit
 # Pick up any requirements.txt
 pip install -r requirements.txt
 
+export MIRGE_PRODUCTION_INSTALL="${PRODUCTION_FORK}/mirgecom@${PRODUCTION_BRANCH}"
+
 cd -
