@@ -28,7 +28,7 @@ cd ${MIRGE_HOME}
 git status
 
 # This junk is needed to be able to execute git commands properly
-GIT_USER="$(git config --list user.name)"
+GIT_USER="$(git config user.name)"
 if [[ -z "${GIT_USER}" ]]; then
     git config user.email "ci-runner@ci.machine.com"
     git config user.name "CI Runner"
