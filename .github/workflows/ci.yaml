@@ -101,7 +101,6 @@ jobs:
             export XDG_CACHE_HOME=/tmp
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
             # && export POCL_DEBUG=cuda
-            #cd examples && ./test_lazy_accuracy.sh
             scripts/run-integrated-tests.sh --lazy-accuracy
         - name: Run examples
           run: |
@@ -188,8 +187,6 @@ jobs:
             git clone https://github.com/illinois-ceesd/emirge emirge.prod
             cd emirge.prod
             . ../mirgecom/scripts/install-mirge-from-source.sh ${MIRGEDIR}/..
-            # source ../config/activate_env.sh
-            # . ../mirgecom/scripts/merge-install-production-branch.sh ${MIRGEDIR}
         - name: Run production test
           run: |
             source ../config/activate_env.sh
