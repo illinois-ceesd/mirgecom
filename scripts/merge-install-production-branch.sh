@@ -26,7 +26,7 @@ echo "PRODUCTION_BRANCH=$PRODUCTION_BRANCH"
 cd ${MIRGE_HOME}
 
 git status
-
+set -x
 # This junk is needed to be able to execute git commands properly
 GIT_USER="$(git config user.name)"
 if [[ -z "${GIT_USER}" ]]; then
@@ -47,6 +47,8 @@ git merge production/${PRODUCTION_BRANCH} --no-edit
 
 # Pick up any requirements.txt
 pip install -r requirements.txt
+
+set +x
 
 export MIRGE_PRODUCTION_INSTALL="${PRODUCTION_FORK}/mirgecom@${PRODUCTION_BRANCH}"
 
