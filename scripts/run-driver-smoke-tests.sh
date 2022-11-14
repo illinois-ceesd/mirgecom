@@ -15,7 +15,7 @@
 # for an example `smoke_test.sh`.
 #
 origin=$(pwd)
-MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+MIRGE_HOME=${1:-"${MIRGE_HOME:-}"}
 if [[ -z "${MIRGE_HOME}" ]]; then
     . scripts/mirge-testing-env.sh
 fi

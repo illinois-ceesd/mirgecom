@@ -20,7 +20,7 @@ if [[ -z "${MIRGE_HOME}" ]]; then
     . scripts/mirge-testing-env.sh
 fi
 
-if [[ -z "${MIRGE_PARALLEL_SPAWNER}" ]]; then
+if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]]; then
     source ${MIRGE_HOME}/scripts/mirge-testing-env.sh
 fi
 
@@ -30,7 +30,7 @@ date
 
 printf "Running production tests in ${MIRGE_HOME} ...\n"
 
-if [[ -z "${MIRGE_PRODUCTION_INSTALL}" ]]; then
+if [[ -z "${MIRGE_PRODUCTION_INSTALL:-}" ]]; then
     
     printf "... Installing production branch ...\n"
     . scripts/merge-install-production-branch.sh
