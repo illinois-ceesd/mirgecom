@@ -8,12 +8,12 @@
 # PRODUCTION_DRIVERS = ':' delimited list "fork/repo@branch"
 # (See the example default value below)
 #
-MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+MIRGE_HOME=${1:-"${MIRGE_HOME:-}"}
 if [[ -z "${MIRGE_HOME}" ]]; then
     . scripts/mirge-testing-env.sh
 fi
 
-if [[ -z "${PRODUCTION_DRIVERS}" ]]; then
+if [[ -z "${PRODUCTION_DRIVERS:-}" ]]; then
     source ${MIRGE_HOME}/scripts/production-testing-env.sh
 fi
 
