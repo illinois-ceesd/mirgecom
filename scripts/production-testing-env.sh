@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+# set -x
 #
 # This script is designed to help customize the production environment
 # under which CEESD production capability is tested under a proposed change
@@ -20,3 +20,6 @@ set -x
 #
 # Example:
 # PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
+PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"production"}
+PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
+PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y2-prediction@main"}
