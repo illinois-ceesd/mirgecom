@@ -10,12 +10,12 @@
 # PRODUCTION_BRANCH = The production branch (default=production)
 # PRODUCTION_FORK = The production fork (default=illinois-ceesd)
 #
-MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+MIRGE_HOME=${1:-"${MIRGE_HOME:-}"}
 if [[ -z "${MIRGE_HOME}" ]]; then
     . scripts/mirge-testing-env.sh
 fi
 
-if [[ -z "${PRODUCTION_BRANCH}" ]]; then
+if [[ -z "${PRODUCTION_BRANCH:-}" ]]; then
     . ${MIRGE_HOME}/scripts/production-testing-env.sh
 fi
 
