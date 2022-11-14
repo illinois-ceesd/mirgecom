@@ -14,7 +14,9 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
 
-. ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
+if [[ -z "${MIRGE_PARALLEL_SPAWNER}" ]];then
+    . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
+fi
 
 mpi_exec="${MIRGE_MPI_EXEC}"
 mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
@@ -74,6 +76,8 @@ do
     # rm -rf *vtu *sqlite *pkl *-journal restart_data
 done
 ((numtests=numsuccess+numfail))
+
+cd ${origin}
 echo "*** Done running examples!"
 if [[ $numfail -eq 0 ]]
 then
@@ -83,5 +87,6 @@ else
     echo "*** Failed tests: ($numfail/$numtests): $failed_examples"
 fi
 echo "*** Successful tests: ($numsuccess/$numtests): $succeeded_examples"
+
 exit $numfail
 #rm -f examples/*.vtu
