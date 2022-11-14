@@ -14,7 +14,7 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
 
-if [[ -z "${MIRGE_PARALLEL_SPAWNER}" ]];then
+if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
     . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
 fi
 
