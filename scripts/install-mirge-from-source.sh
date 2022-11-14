@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+# set -x
 #
 # This script is intended to install mirgecom from an uninstalled
 # mirgecom source gotten from a fresh clone.
