@@ -62,7 +62,7 @@ done
 set -- "${NONOPT_ARGS[@]}"
 
 origin=$(pwd)
-MIRGE_HOME=${1:-"${MIRGE_HOME}"}
+MIRGE_HOME=${1:-"${MIRGE_HOME:-}"}
 if [[ -z "${MIRGE_HOME}" ]]; then
     . scripts/mirge-testing-env.sh
 fi
@@ -70,7 +70,7 @@ fi
 printf "Running integrated tests.  MIRGE_HOME=${MIRGE_HOME}\n"
 
 testing_env="${MIRGE_HOME}/scripts/mirge-testing-env.sh"
-if [[ -z "$MIRGE_PARALLEL_SPAWNER" ]]; then
+if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]]; then
     printf "Loading MIRGE testing env: ${testing_env}\n"
     . ${testing_env}
 fi
