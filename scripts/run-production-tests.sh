@@ -15,10 +15,12 @@
 # for an example `smoke_test.sh`.
 #
 origin=$(pwd)
+echo "rpt entry: MIRGE_HOME=${MIRGE_HOME}"
 MIRGE_HOME=${1:-"${MIRGE_HOME}"}
 if [[ -z "${MIRGE_HOME}" ]]; then
     . scripts/mirge-testing-env.sh
 fi
+echo "rpt reset 1: MIRGE_HOME=${MIRGE_HOME}"
 
 if [[ -z "${MIRGE_PARALLEL_SPAWNER}" ]]; then
     source ${MIRGE_HOME}/scripts/mirge-testing-env.sh
@@ -36,6 +38,7 @@ if [[ -z "${MIRGE_PRODUCTION_INSTALL}" ]]; then
     . scripts/merge-install-production-branch.sh
     date
 fi
+echo "rpt reset 2: MIRGE_HOME=${MIRGE_HOME}"
 
 printf "... Installing production drivers ...\n" 
 . scripts/install-production-drivers.sh
