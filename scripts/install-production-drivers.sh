@@ -8,12 +8,10 @@
 # PRODUCTION_DRIVERS = ':' delimited list "fork/repo@branch"
 # (See the example default value below)
 #
-printf "ipd entry: MIRGE_HOME=${MIRGE_HOME}\n"
 MIRGE_HOME=${1:-"${MIRGE_HOME}"}
 if [[ -z "${MIRGE_HOME}" ]]; then
     . scripts/mirge-testing-env.sh
 fi
-printf "ipd reset: MIRGE_HOME=${MIRGE_HOME}\n"
 
 if [[ -z "${PRODUCTION_DRIVERS}" ]]; then
     source ${MIRGE_HOME}/scripts/production-testing-env.sh
