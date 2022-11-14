@@ -94,11 +94,11 @@ if [[ "${do_examples}" = "true" ]]; then
     date
     if [[ $test_result -eq 0 ]]; then
         ((numsuccess=numsuccess+1))
-        printf "\-\- Example tests passed."
+        printf "\-\- Example tests passed.\n"
         succeeded_tests="${succeeded_tests} Examples"
     else
         ((numfail=numfail+1))
-        printf "\-\- Example tests failed."
+        printf "\-\- Example tests failed.\n"
         failed_tests="${failed_tests} Examples"
     fi
 fi
@@ -114,11 +114,11 @@ if [[ "${do_lazy_accuracy}" = "true" ]]; then
     cd -
     if [[ $test_result -eq 0 ]]; then
         ((numsuccess=numsuccess+1))
-        printf "\-\- Lazy accuracy tests passed."
+        printf "\-\- Lazy accuracy tests passed.\n"
         succeeded_tests="${succeeded_tests} LazyAccuracy"
     else
         ((numfail=numfail+1))
-        printf "\-\- Lazy accuracy tests failed."
+        printf "\-\- Lazy accuracy tests failed.\n"
         failed_tests="${failed_tests} LazyAccuracy"
     fi
 fi
@@ -132,11 +132,11 @@ if [[ "${do_production_tests}" = "true" ]]; then
     date
     if [[ $test_result -eq 0 ]]; then
         ((numsuccess=numsuccess+1))
-        printf "\-\- Production tests passed."
+        printf "\-\- Production tests passed.\n"
         succeeded_tests="${succeeded_tests} Production"
     else
         ((numfail=numfail+1))
-        printf "\-\- Production tests failed."
+        printf "\-\- Production tests failed.\n"
         failed_tests="${failed_tests} Production"
     fi
 fi
