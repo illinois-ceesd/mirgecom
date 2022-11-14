@@ -45,12 +45,14 @@ fi
 git remote add production https://github.com/${PRODUCTION_FORK}/mirgecom
 git fetch production
 
+set -e
 # Merge the production branch for testing the production drivers
 git merge production/${PRODUCTION_BRANCH} --no-edit
 
 # Pick up any requirements.txt
 pip install -r requirements.txt
 
+set +e
 set +x
 
 export MIRGE_PRODUCTION_INSTALL="${PRODUCTION_FORK}/mirgecom@${PRODUCTION_BRANCH}"

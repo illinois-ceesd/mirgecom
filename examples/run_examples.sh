@@ -76,6 +76,8 @@ do
     # rm -rf *vtu *sqlite *pkl *-journal restart_data
 done
 ((numtests=numsuccess+numfail))
+
+cd ${origin}
 echo "*** Done running examples!"
 if [[ $numfail -eq 0 ]]
 then
@@ -85,5 +87,6 @@ else
     echo "*** Failed tests: ($numfail/$numtests): $failed_examples"
 fi
 echo "*** Successful tests: ($numsuccess/$numtests): $succeeded_examples"
+
 exit $numfail
 #rm -f examples/*.vtu
