@@ -40,7 +40,7 @@ THE SOFTWARE.
 """
 import numpy as np  # noqa
 from meshmode.dof_array import DOFArray  # noqa
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, field
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
@@ -227,7 +227,8 @@ class ConservedVars:
     mass: DOFArray
     energy: DOFArray
     momentum: np.ndarray
-    species_mass: np.ndarray = np.empty((0,), dtype=object)  # empty = immutable
+    species_mass: np.ndarray = field(
+        default_factory=lambda: np.empty((0,), dtype=object))  # empty = immutable
 
     @property
     def array_context(self):
