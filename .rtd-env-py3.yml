@@ -4,7 +4,7 @@ channels:
 - conda-forge
 - nodefaults
 dependencies:
-- python=3.9
+- python=3.11
 - mpi4py
 - islpy
 - pip
