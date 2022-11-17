@@ -205,7 +205,10 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
     sol = cantera.Solution(name="gas", yaml=mech_input)
-    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    from mirgecom.thermochemistry import (
+        make_pyrometheus_mechanism_class,
+        get_pyrometheus_wrapper_class_from_cantera
+    )
     prometheus_mechanism = make_pyrometheus_mechanism_class(sol)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
@@ -253,6 +256,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         internal_energy = eos.get_internal_energy(temperature=tin,
                                                   species_mass_fractions=yin)
         y = cv.species_mass_fractions
+        rho = cv.mass
 
         print(f"pyro_y = {y}")
         print(f"pyro_eos.p = {p}")
@@ -267,6 +271,24 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         assert inf_norm((temperature - pyro_t) / pyro_t) < tol
         assert inf_norm((internal_energy - pyro_e) / pyro_e) < tol
         assert inf_norm((p - pyro_p) / pyro_p) < tol
+
+        # Test the concetrations zero level
+        y = -1.0*y
+        print(f"{y=}")
+        conc = prometheus_mechanism.get_concentrations(rho, y)
+        print(f"{conc=}")
+        for spec in range(nspecies):
+            assert max(conc[spec]).all() >= 0
+        zlev = 1e-3
+        test_mech = \
+            get_pyrometheus_wrapper_class_from_cantera(sol, zero_level=zlev)(actx.np)
+
+        y = 0*y + zlev
+        print(f"{y=}")
+        conc = test_mech.get_concentrations(rho, y)
+        print(f"{conc=}")
+        for spec in range(nspecies):
+            assert max(conc[spec]).all() >= 0
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
