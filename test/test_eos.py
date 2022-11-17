@@ -478,7 +478,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         conc = test_mech.get_concentrations(rho, y)
         print(f"{conc=}")
         for spec in range(nspecies):
-            assert max(conc[spec]).all() >= 0
+            assert max(conc[spec]).all() == 0
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
