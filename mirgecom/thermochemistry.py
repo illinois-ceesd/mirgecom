@@ -1,5 +1,23 @@
 r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyrometheus`..
 
+This module provides an interface to the
+`Pyrometheus Thermochemistry <https://github.com/pyrometheus>`_ package's
+:class:`pyrometheus.Thermochemistry` object which provides a thermal and chemical
+kinetics model for the the :class:`mirgecom.eos.MixtureEOS`, and some helper
+routines to create the wrapper class.
+
+   .. note::
+    The wrapper addresses a couple of issues with the default interface:
+
+    - Lazy eval is currently incapable of dealing with data-dependent
+      behavior (like that of an iterative Newton solve). This wrapper allows us to
+      hard-code the number of Newton iterations to *temperature_niter*.
+
+    - Small species mass fractions can trigger reaction rates which drive species
+      fractions significantly negative over a single timestep. The wrapper provides
+      the *zero_level* parameter to set concentrations falling below *zero_level*
+      to be pinned to zero.
+
 .. autofunction:: get_pyrometheus_wrapper_class
 .. autofunction:: get_pyrometheus_wrapper_class_from_cantera
 .. autofunction:: get_thermochemistry_class_by_mechanism_name
@@ -38,11 +56,12 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
     to adapt it to :mod:`mirgecom`'s needs.
 
     - get_concentrations: overrides :class:`pyrometheus.Thermochemistry` version
-      of  the same function, pinning any negative concentrations due to slightly
-      negative massfractions (which are OK) back to 0.
+      of  the same function, pinning any concentrations less than the *zero_level*
+      due to small or slightly negative massfractions (which are OK) back to 0.
 
     - get_temperature: MIRGE-specific interface to use a hard-coded Newton solver
-      to find a temperature from an input state.
+      to find a temperature from an input state. This routine hard-codes the number
+      of Newton solve iterations to *temperature_niter*.
 
     Parameters
     ----------
