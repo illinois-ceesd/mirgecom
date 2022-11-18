@@ -62,14 +62,11 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
     if gas_model is None:
         raise ValueError("Gas model is required to create a FluidState.")
 
-    if (pressure is not None and temperature is not None and density is not None):
-        raise ValueError("State is overspecified, require only 2 of (pressure, "
-                         "temperature, density)")
-
-    if ((pressure is not None and (temperature is None or density is not None))
-          or (temperature is not None and (pressure is None or density is None))):
-        raise ValueError("State is underspecified, require 2 of (pressure, "
-                         "temperature, density)")
+    state_spec = sum([pressure is not None, temperature is not None,
+                      density is not None])
+    if state_spec != 2:
+        raise ValueError("Flow initialization requires exactly 2 of (pressure,"
+                         " temperature, density)")
 
     if velocity is None:
         velocity = np.zeros(dim)
