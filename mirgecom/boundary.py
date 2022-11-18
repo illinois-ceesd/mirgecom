@@ -1031,6 +1031,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
                                       temperature_seed=state_minus.temperature,
                                       smoothness=state_minus.smoothness)
+
         state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
 
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
