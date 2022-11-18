@@ -279,6 +279,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         print(f"{conc=}")
         for spec in range(nspecies):
             assert max(conc[spec]).all() >= 0
+
         zlev = 1e-3
         test_mech = \
             get_pyrometheus_wrapper_class_from_cantera(sol, zero_level=zlev)(actx.np)
