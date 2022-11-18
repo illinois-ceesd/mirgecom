@@ -10,10 +10,17 @@ Solution Initializers
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. automethod: make_pulse
 .. autoclass:: MixtureInitializer
 .. autoclass:: PlanarPoiseuille
 .. autoclass:: ShearFlow
+
+State Initializers
+^^^^^^^^^^^^^^^^^^
+.. autofunction:: initialize_fluid_state
+
+Initialization Utilities
+^^^^^^^^^^^^^^^^^^^^^^^^
+.. autofunction:: make_pulse
 """
 
 __copyright__ = """
@@ -46,6 +53,49 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
+def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
+                           density=None, velocity=None, mass_fractions=None):
+    """Create a fluid state from a set of minimal input data."""
+    if gas_model is None:
+        raise ValueError("Gas model is required to create a FluidState.")
+
+    if (pressure is not None and temperature is not None and density is not None):
+        raise ValueError("State is overspecified, require only 2 of (pressure, "
+                         "temperature, density)")
+
+    if ((pressure is not None and (temperature is None or density is not None))
+          or (temperature is not None and (pressure is None or density is None))):
+        raise ValueError("State is underspecified, require 2 of (pressure, "
+                         "temperature, density)")
+
+    if velocity is None:
+        velocity = np.zeros(dim)
+
+    if pressure is None:
+        pressure = gas_model.eos.get_pressure(density, temperature, mass_fractions)
+
+    if temperature is None:
+        temperature = gas_model.eos.get_temperature(density, pressure,
+                                                    mass_fractions)
+
+    if density is None:
+        density = gas_model.eos.get_density(pressure, temperature, mass_fractions)
+
+    internal_energy = gas_model.eos.get_internal_energy(
+        temperature=temperature, mass=density, mass_fractions=mass_fractions)
+
+    species_mass = None if mass_fractions is None else density * mass_fractions
+
+    total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
+    momentum = density*velocity
+
+    cv = make_conserved(dim=dim, mass=density, energy=total_energy,
+                        momentum=momentum, species_mass=species_mass)
+
+    from mirgecom.gas_model import make_fluid_state
+    return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=temperature)
+
+
 def make_pulse(amp, r0, w, r):
     r"""Create a Gaussian pulse.
 
@@ -63,16 +113,16 @@ def make_pulse(amp, r0, w, r):
     ----------
     amp: float
         specifies the value of $a_0$, the pulse amplitude
-    r0: float array
+    r0: numpy.ndarray
         specifies the value of $\mathbf{r}_0$, the pulse location
     w: float
         specifies the value of $w$, the rms pulse width
-    r: Object array of DOFArrays
+    r: numpy.ndarray
         specifies the nodal coordinates
 
     Returns
     -------
-    G: float array
+    G: numpy.ndarray
         The values of the exponential function
     """
     dim = len(r)

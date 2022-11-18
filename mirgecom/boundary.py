@@ -17,6 +17,12 @@ Boundary Conditions
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipMovingBoundary
 .. autoclass:: IsothermalNoSlipBoundary
+.. autoclass:: FarfieldBoundary
+.. autoclass:: InflowBoundary
+.. autoclass:: OutflowBoundary
+.. autoclass:: IsothermalWallBoundary
+.. autoclass:: AdiabaticNoslipWallBoundary
+.. autoclass:: SymmetryBoundary
 """
 
 __copyright__ = """
@@ -43,7 +49,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from warnings import warn
 import numpy as np
+from arraycontext import get_container_context_recursively
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import as_dofdesc
@@ -345,6 +353,10 @@ class PrescribedFluidBoundary(FluidBoundary):
                                               **kwargs)
         return boundary_state.temperature
 
+    def _interior_temperature(self, dcoll, dd_bdry, gas_model, state_minus,
+                              **kwargs):
+        return state_minus.temperature
+
     def _identical_state(self, state_minus, **kwargs):
         return state_minus
 
@@ -443,7 +455,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                                         **kwargs)
 
     def cv_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get the flux for *dd_bdry* for use in grad(CV)."""
+        """Get the cv flux for *dd_bdry* for use in the gradient operator."""
         dd_bdry = as_dofdesc(dd_bdry)
         return self._cv_gradient_flux_func(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
@@ -451,7 +463,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     def temperature_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                                   **kwargs):
-        """Get the flux for *dd_bdry* for use in grad(T)."""
+        """Get the T flux for *dd_bdry* for use in the gradient operator."""
         dd_bdry = as_dofdesc(dd_bdry)
         return self._temperature_grad_flux_func(dcoll, dd_bdry, gas_model,
                                                 state_minus, **kwargs)
@@ -479,7 +491,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         """Get the diffusive fluxes for the AV operator API."""
         dd_bdry = as_dofdesc(dd_bdry)
         grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
-        actx = grad_av_minus.mass[0].array_context
+        actx = get_container_context_recursively(grad_av_minus)
         nhat = actx.thaw(dcoll.normal(dd_bdry))
         grad_av_plus = self._bnd_grad_av_func(
             dcoll=dcoll, dd_bdry=dd_bdry, grad_av_minus=grad_av_minus, **kwargs)
@@ -492,7 +504,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
 
 class DummyBoundary(PrescribedFluidBoundary):
-    """Boundary type that assigns boundary-adjacent soln as the boundary solution."""
+    """Boundary type that assigns boundary-adjacent solution to the boundary."""
 
     def __init__(self):
         """Initialize the DummyBoundary boundary type."""
@@ -502,17 +514,8 @@ class DummyBoundary(PrescribedFluidBoundary):
 class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing inviscid slip boundary.
 
-    a.k.a. Reflective inviscid wall boundary
-
-    This class implements an adiabatic reflective slip boundary given
-    by
-    $\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-}, (\rho\vec{V})^{-}
-    - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}}) \hat{\mathbf{n}}]$
-    wherein the normal component of velocity at the wall is 0, and
-    tangential components are preserved. These perfectly reflecting
-    conditions are used by the forward-facing step case in
-    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
-    boundary conditions described in detail in [Poinsot_1992]_.
+    This function is deprecated and should be replaced by
+    :class:`~mirgecom.boundary.SymmetryBoundary`
 
     .. automethod:: adiabatic_slip_state
     .. automethod:: adiabatic_slip_grad_av
@@ -520,8 +523,11 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     def __init__(self):
         """Initialize AdiabaticSlipBoundary."""
+        warn("AdiabaticSlipBoundary is deprecated. Use SymmetryBoundary instead.",
+             DeprecationWarning, stacklevel=2)
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_slip_state,
+            boundary_temperature_func=self._interior_temperature,
             boundary_grad_av_func=self.adiabatic_slip_grad_av
         )
 
@@ -550,19 +556,18 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         cv_minus = state_minus.cv
         ext_mom = (cv_minus.momentum
                    - 2.0*np.dot(cv_minus.momentum, nhat)*nhat)
+
         # Form the external boundary solution with the new momentum
         ext_cv = make_conserved(dim=dim, mass=cv_minus.mass, energy=cv_minus.energy,
                                 momentum=ext_mom, species_mass=cv_minus.species_mass)
-        t_seed = state_minus.temperature if state_minus.is_mixture else None
-
         return make_fluid_state(cv=ext_cv, gas_model=gas_model,
-                                temperature_seed=t_seed)
+                                temperature_seed=state_minus.temperature)
 
     def adiabatic_slip_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
+        """Get the exterior grad(Q) on the boundary for artificial viscosity."""
         # Grab some boundary-relevant data
         dim, = grad_av_minus.mass.shape
-        actx = grad_av_minus.mass[0].array_context
+        actx = get_container_context_recursively(grad_av_minus)
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
         # Subtract 2*wall-normal component of q
@@ -579,7 +584,10 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
 
 class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
-    r"""Boundary condition implementing a noslip moving boundary.
+    r"""Boundary condition implementing a no-slip moving boundary.
+
+    This function is deprecated and should be replaced by
+    :class:`~mirgecom.boundary.AdiabaticNoslipWallBoundary`
 
     .. automethod:: adiabatic_noslip_state
     .. automethod:: adiabatic_noslip_grad_av
@@ -587,10 +595,16 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
 
     def __init__(self, wall_velocity=None, dim=2):
         """Initialize boundary device."""
+        warn("AdiabaticNoslipMovingBoundary is deprecated. Use "
+             "AdiabaticNoSlipWallBoundary instead.", DeprecationWarning,
+             stacklevel=2)
+
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_noslip_state,
+            boundary_temperature_func=self._interior_temperature,
             boundary_grad_av_func=self.adiabatic_noslip_grad_av,
         )
+
         # Check wall_velocity (assumes dim is correct)
         if wall_velocity is None:
             wall_velocity = np.zeros(shape=(dim,))
@@ -613,16 +627,19 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
                             energy=state_minus.energy_density,
                             momentum=ext_mom,
                             species_mass=state_minus.species_mass_density)
-        tseed = state_minus.temperature if state_minus.is_mixture else None
-        return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=tseed)
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
 
     def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
+        """Get the exterior solution on the boundary for artificial viscosity."""
         return -grad_av_minus
 
 
 class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
     r"""Isothermal no-slip viscous wall boundary.
+
+    This function is deprecated and should be replaced by
+    :class:`~mirgecom.boundary.IsothermalWallBoundary`
 
     .. automethod:: isothermal_noslip_state
     .. automethod:: temperature_bc
@@ -630,6 +647,9 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
 
     def __init__(self, wall_temperature=300):
         """Initialize the boundary condition object."""
+        warn("IsothermalNoSlipBoundary is deprecated. Use IsothermalWallBoundary "
+             "instead.", DeprecationWarning, stacklevel=2)
+
         self._wall_temp = wall_temperature
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.isothermal_noslip_state,
@@ -648,8 +668,7 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
         mass_frac_plus = state_minus.species_mass_fractions
 
         internal_energy_plus = gas_model.eos.get_internal_energy(
-            temperature=temperature_wall, species_mass_fractions=mass_frac_plus
-        )
+            temperature=temperature_wall, species_mass_fractions=mass_frac_plus)
 
         total_energy_plus = state_minus.mass_density*(internal_energy_plus
                                            + .5*np.dot(velocity_plus, velocity_plus))
@@ -666,7 +685,727 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
     def temperature_bc(self, state_minus, **kwargs):
         r"""Get temperature value to weakly prescribe wall bc.
 
-        Returns $2*T_\text{wall} - T^-$ so that a central gradient flux
+        Returns $2T_\text{wall} - T^-$ so that a central gradient flux
         will get the correct $T_\text{wall}$ BC.
         """
         return 2*self._wall_temp - state_minus.temperature
+
+
+class FarfieldBoundary(PrescribedFluidBoundary):
+    r"""Farfield boundary treatment.
+
+    This class implements a farfield boundary as described by
+    [Mengaldo_2014]_ eqn. 30 and eqn. 42.  The boundary condition is implemented
+    as:
+
+    .. math::
+        q^{+} = q_\infty
+
+    and the gradients
+
+    .. math::
+        \nabla q_{bc} = \nabla q^{-}
+
+    .. automethod:: __init__
+    .. automethod:: farfield_state
+    .. automethod:: temperature_bc
+    """
+
+    def __init__(self, numdim, free_stream_pressure,
+                 free_stream_velocity, free_stream_temperature,
+                 free_stream_mass_fractions=None):
+        """Initialize the boundary condition object."""
+        if len(free_stream_velocity) != numdim:
+            raise ValueError("Free-stream velocity must be of ambient dimension.")
+
+        self._temperature = free_stream_temperature
+        self._pressure = free_stream_pressure
+        self._species_mass_fractions = free_stream_mass_fractions
+        self._velocity = free_stream_velocity
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.farfield_state
+        )
+
+    def farfield_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary."""
+        free_stream_mass_fractions = (0.*state_minus.species_mass_fractions
+                                      + self._species_mass_fractions)
+
+        free_stream_temperature = 0.*state_minus.temperature + self._temperature
+        free_stream_pressure = 0.*state_minus.pressure + self._pressure
+        free_stream_velocity = 0.*state_minus.velocity + self._velocity
+
+        free_stream_density = gas_model.eos.get_density(
+            pressure=free_stream_pressure, temperature=free_stream_temperature,
+            species_mass_fractions=free_stream_mass_fractions)
+
+        free_stream_internal_energy = gas_model.eos.get_internal_energy(
+            temperature=free_stream_temperature,
+            species_mass_fractions=free_stream_mass_fractions)
+
+        free_stream_total_energy = \
+            free_stream_density*(free_stream_internal_energy
+                                 + .5*np.dot(free_stream_velocity,
+                                             free_stream_velocity))
+        free_stream_spec_mass = free_stream_density * free_stream_mass_fractions
+
+        cv_infinity = make_conserved(
+            state_minus.dim, mass=free_stream_density,
+            energy=free_stream_total_energy,
+            momentum=free_stream_density*free_stream_velocity,
+            species_mass=free_stream_spec_mass
+        )
+
+        return make_fluid_state(cv=cv_infinity, gas_model=gas_model,
+                                temperature_seed=free_stream_temperature)
+
+    def temperature_bc(self, state_minus, **kwargs):
+        """Return farfield temperature for use in grad(temperature)."""
+        return 0*state_minus.temperature + self._temperature
+
+
+class OutflowBoundary(PrescribedFluidBoundary):
+    r"""Outflow boundary treatment.
+
+    This class implements an outflow boundary as described by
+    [Mengaldo_2014]_.  The boundary condition is implemented
+    as:
+
+    .. math::
+
+        \rho^+ &= \rho^-
+
+        \rho\mathbf{Y}^+ &= \rho\mathbf{Y}^-
+
+        \rho\mathbf{V}^+ &= \rho\mathbf{V}^-
+
+    For an ideal gas at super-sonic flow conditions, i.e. when:
+
+    .. math::
+
+       \rho\mathbf{V} \cdot \hat{\mathbf{n}} \ge c,
+
+    then the pressure is extrapolated from interior points:
+
+    .. math::
+
+        P^+ = P^-
+
+    Otherwise, if the flow is sub-sonic, then the prescribed boundary pressure,
+    $P^+$, is used. In both cases, the energy is computed as:
+
+    .. math::
+
+        \rho{E}^+ = \frac{\left(2~P^+ - P^-\right)}{\left(\gamma-1\right)}
+        + \frac{1}{2}\rho^+\left(\mathbf{V}^+\cdot\mathbf{V}^+\right).
+
+    For mixtures, the pressure is imposed or extrapolated in a similar fashion
+    to the ideal gas case.
+    However, the total energy depends on the temperature to account for the
+    species enthalpy and variable specific heat at constant volume. For super-sonic
+    flows, it is extrapolated from interior points:
+
+    .. math::
+
+       T^+ = T^-
+
+    while for sub-sonic flows, it is evaluated using ideal gas law
+
+    .. math::
+
+        T^+ = \frac{P^+}{R_{mix} \rho^+}
+
+    .. automethod:: __init__
+    .. automethod:: outflow_state
+    """
+
+    def __init__(self, boundary_pressure=101325):
+        """Initialize the boundary condition object."""
+        self._pressure = boundary_pressure
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.outflow_state
+        )
+
+    def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary.
+
+        This is the partially non-reflective boundary state described by
+        [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
+
+        For super-sonic outflow, the interior flow properties (minus) are
+        extrapolated to the exterior point (plus).
+        For sub-sonic outflow, the pressure is imposed on the external point.
+
+        For mixtures, the internal energy is obtained via temperature, which comes
+        from ideal gas law with the mixture-weighted gas constant.
+        For ideal gas, the internal energy is obtained directly from pressure.
+        """
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        # boundary-normal velocity
+        boundary_vel = np.dot(state_minus.velocity, nhat)*nhat
+        boundary_speed = actx.np.sqrt(np.dot(boundary_vel, boundary_vel))
+        speed_of_sound = state_minus.speed_of_sound
+        kinetic_energy = gas_model.eos.kinetic_energy(state_minus.cv)
+        gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
+
+        pressure_plus = 2.0*self._pressure - state_minus.pressure
+        if state_minus.is_mixture:
+            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            temp_plus = (
+                actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
+                state_minus.temperature,
+                pressure_plus/(state_minus.cv.mass*gas_const))
+            )
+
+            internal_energy = state_minus.cv.mass*(
+                gas_model.eos.get_internal_energy(temp_plus,
+                                            state_minus.species_mass_fractions))
+        else:
+            boundary_pressure = actx.np.where(actx.np.greater(boundary_speed,
+                                                              speed_of_sound),
+                                              state_minus.pressure, pressure_plus)
+            internal_energy = (boundary_pressure / (gamma - 1.0))
+
+        total_energy = internal_energy + kinetic_energy
+        cv_outflow = make_conserved(dim=state_minus.dim, mass=state_minus.cv.mass,
+                                    momentum=state_minus.cv.momentum,
+                                    energy=total_energy,
+                                    species_mass=state_minus.cv.species_mass)
+
+        return make_fluid_state(cv=cv_outflow, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+
+class InflowBoundary(PrescribedFluidBoundary):
+    r"""Inflow boundary treatment.
+
+    This class implements an Riemann invariant for inflow boundary as described by
+    [Mengaldo_2014]_.
+
+    .. automethod:: __init__
+    .. automethod:: inflow_state
+    """
+
+    def __init__(self, dim, free_stream_pressure=None, free_stream_temperature=None,
+                 free_stream_density=None, free_stream_velocity=None,
+                 free_stream_mass_fractions=None, gas_model=None):
+        """Initialize the boundary condition object."""
+        if free_stream_velocity is None:
+            raise ValueError("InflowBoundary requires *free_stream_velocity*.")
+
+        from mirgecom.initializers import initialize_fluid_state
+        self._free_stream_state = initialize_fluid_state(
+            dim, gas_model, density=free_stream_density,
+            velocity=free_stream_velocity,
+            mass_fractions=free_stream_mass_fractions, pressure=free_stream_pressure,
+            temperature=free_stream_temperature)
+
+        self._gamma = gas_model.eos.gamma(
+            self._free_stream_state.cv,
+            temperature=self._free_stream_state.temperature
+        )
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.inflow_state
+        )
+
+    def inflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary.
+
+        This is the partially non-reflective boundary state described by
+        [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
+        """
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+
+        v_plus = np.dot(self._free_stream_state.velocity, nhat)
+        rho_plus = self._free_stream_state.mass_density
+        c_plus = self._free_stream_state.speed_of_sound
+        gamma_plus = self._gamma
+
+        v_minus = np.dot(state_minus.velocity, nhat)
+        gamma_minus = gas_model.eos.gamma(state_minus.cv,
+                                          temperature=state_minus.temperature)
+        c_minus = state_minus.speed_of_sound
+
+        ones = 0*v_minus + 1
+        r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
+        r_plus_supersonic = (v_plus + 2*c_plus/(gamma_plus - 1))*ones
+        r_minus = v_plus - 2*c_plus/(gamma_plus - 1)*ones
+        r_plus = actx.np.where(actx.np.greater(v_minus, c_minus), r_plus_supersonic,
+                               r_plus_subsonic)
+
+        velocity_boundary = (r_minus + r_plus)/2
+        velocity_boundary = (
+            self._free_stream_state.velocity + (velocity_boundary - v_plus)*nhat
+        )
+
+        c_boundary = (gamma_plus - 1)*(r_plus - r_minus)/4
+        c_boundary2 = c_boundary**2
+        entropy_boundary = c_plus*c_plus/(gamma_plus*rho_plus**(gamma_plus-1))
+        rho_boundary = c_boundary*c_boundary/(gamma_plus * entropy_boundary)
+        pressure_boundary = rho_boundary * c_boundary2 / gamma_plus
+        energy_boundary = (
+            pressure_boundary / (gamma_plus - 1)
+            + rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+        )
+        species_mass_boundary = None
+        if self._free_stream_state.is_mixture:
+            species_mass_boundary = (
+                rho_boundary * self._free_stream_state.species_mass_fractions
+            )
+
+        boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
+                                     energy=energy_boundary,
+                                     momentum=rho_boundary * velocity_boundary,
+                                     species_mass=species_mass_boundary)
+
+        return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+
+class IsothermalWallBoundary(PrescribedFluidBoundary):
+    r"""Isothermal viscous wall boundary.
+
+    This class implements an isothermal no-slip wall consistent with the prescription
+    by [Mengaldo_2014]_.
+
+    .. automethod:: __init__
+    .. automethod:: inviscid_wall_flux
+    .. automethod:: viscous_wall_flux
+    .. automethod:: grad_cv_bc
+    .. automethod:: temperature_bc
+    .. automethod:: isothermal_wall_state
+    """
+
+    def __init__(self, wall_temperature=300):
+        """Initialize the boundary condition object."""
+        self._wall_temp = wall_temperature
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.isothermal_wall_state,
+            inviscid_flux_func=self.inviscid_wall_flux,
+            viscous_flux_func=self.viscous_wall_flux,
+            boundary_temperature_func=self.temperature_bc,
+            boundary_gradient_cv_func=self.grad_cv_bc
+        )
+
+    def isothermal_wall_state(
+            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return state with zero-velocity and the respective internal energy."""
+        temperature_wall = self._wall_temp + 0*state_minus.mass_density
+        mom_plus = state_minus.mass_density*0.*state_minus.velocity
+        mass_frac_plus = state_minus.species_mass_fractions
+
+        internal_energy_plus = gas_model.eos.get_internal_energy(
+            temperature=temperature_wall, species_mass_fractions=mass_frac_plus)
+
+        # Velocity is pinned to 0 here, no kinetic energy
+        total_energy_plus = state_minus.mass_density*internal_energy_plus
+
+        cv_plus = make_conserved(
+            state_minus.dim, mass=state_minus.mass_density, energy=total_energy_plus,
+            momentum=mom_plus, species_mass=state_minus.species_mass_density
+        )
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+    def inviscid_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
+        """Return Riemann flux using state with mom opposite of interior state."""
+        dd_bdry = as_dofdesc(dd_bdry)
+
+        wall_cv = make_conserved(dim=state_minus.dim,
+                                 mass=state_minus.mass_density,
+                                 momentum=-state_minus.momentum_density,
+                                 energy=state_minus.energy_density,
+                                 species_mass=state_minus.species_mass_density)
+        wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
+                                      temperature_seed=state_minus.temperature)
+        state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
+
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(state_pair, gas_model, normal)
+
+    def temperature_bc(self, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        return 0.*state_minus.temperature + self._wall_temp
+
+    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        if state_minus.nspecies > 0:
+            from mirgecom.fluid import species_mass_fraction_gradient
+            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+                                                          grad_cv_minus)
+            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+            grad_species_mass_plus = 0.*grad_y_plus
+
+            for i in range(state_minus.nspecies):
+                grad_species_mass_plus[i] = \
+                    (state_minus.mass_density*grad_y_plus[i]
+                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
+        return make_conserved(grad_cv_minus.dim,
+                              mass=grad_cv_minus.mass,
+                              energy=grad_cv_minus.energy,
+                              momentum=grad_cv_minus.momentum,
+                              species_mass=grad_species_mass_plus)
+
+    def viscous_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                          grad_cv_minus, grad_t_minus,
+                          numerical_flux_func=viscous_facial_flux_central,
+                          **kwargs):
+        """Return the boundary flux for the divergence of the viscous flux."""
+        dd_bdry = as_dofdesc(dd_bdry)
+
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        state_plus = self.isothermal_wall_state(dcoll=dcoll, dd_bdry=dd_bdry,
+                                                gas_model=gas_model,
+                                                state_minus=state_minus, **kwargs)
+        grad_cv_plus = self.grad_cv_bc(state_minus=state_minus,
+                                       grad_cv_minus=grad_cv_minus,
+                                       normal=normal, **kwargs)
+
+        grad_t_plus = self._bnd_grad_temperature_func(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+            grad_t_minus=grad_t_minus)
+
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
+        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
+                             grad_t=grad_t_plus)
+        return f_ext@normal
+
+
+class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
+    r"""Adiabatic viscous wall boundary.
+
+    This class implements an adiabatic no-slip wall consistent with the prescription
+    by [Mengaldo_2014]_.
+
+    .. automethod:: inviscid_wall_flux
+    .. automethod:: viscous_wall_flux
+    .. automethod:: grad_cv_bc
+    .. automethod:: temperature_bc
+    .. automethod:: adiabatic_wall_state_for_advection
+    .. automethod:: adiabatic_wall_state_for_diffusion
+    .. automethod:: grad_temperature_bc
+    .. automethod:: adiabatic_noslip_grad_av
+    """
+
+    def __init__(self):
+        """Initialize the boundary condition object."""
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.adiabatic_wall_state_for_advection,
+            inviscid_flux_func=self.inviscid_wall_flux,
+            viscous_flux_func=self.viscous_wall_flux,
+            boundary_temperature_func=self.temperature_bc,
+            boundary_gradient_cv_func=self.grad_cv_bc
+        )
+
+    def adiabatic_wall_state_for_advection(self, dcoll, dd_bdry, gas_model,
+                                           state_minus, **kwargs):
+        """Return state with zero-velocity."""
+        dd_bdry = as_dofdesc(dd_bdry)
+        mom_plus = -state_minus.momentum_density
+        cv_plus = make_conserved(
+            state_minus.dim, mass=state_minus.mass_density,
+            energy=state_minus.energy_density, momentum=mom_plus,
+            species_mass=state_minus.species_mass_density
+        )
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+    def adiabatic_wall_state_for_diffusion(self, dcoll, dd_bdry, gas_model,
+                                           state_minus, **kwargs):
+        """Return state with zero-velocity."""
+        dd_bdry = as_dofdesc(dd_bdry)
+        mom_plus = 0*state_minus.momentum_density
+        cv_plus = make_conserved(
+            state_minus.dim, mass=state_minus.mass_density,
+            energy=state_minus.energy_density, momentum=mom_plus,
+            species_mass=state_minus.species_mass_density
+        )
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+    def inviscid_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
+        """Return Riemann flux using state with mom opposite of interior state."""
+        wall_state = self.adiabatic_wall_state_for_advection(
+            dcoll, dd_bdry, gas_model, state_minus)
+        state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
+
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(state_pair, gas_model, normal)
+
+    def temperature_bc(self, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        return state_minus.temperature
+
+    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        if state_minus.nspecies > 0:
+            from mirgecom.fluid import species_mass_fraction_gradient
+            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+                                                          grad_cv_minus)
+            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+            grad_species_mass_plus = 0.*grad_y_plus
+
+            for i in range(state_minus.nspecies):
+                grad_species_mass_plus[i] = \
+                    (state_minus.mass_density*grad_y_plus[i]
+                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
+        return make_conserved(grad_cv_minus.dim,
+                              mass=grad_cv_minus.mass,
+                              energy=grad_cv_minus.energy,
+                              momentum=grad_cv_minus.momentum,
+                              species_mass=grad_species_mass_plus)
+
+    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
+        """Return grad(temperature) to be used in viscous flux at wall."""
+        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
+
+    def viscous_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                          grad_cv_minus, grad_t_minus,
+                          numerical_flux_func=viscous_facial_flux_central,
+                          **kwargs):
+        """Return the boundary flux for the divergence of the viscous flux."""
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        state_plus = self.adiabatic_wall_state_for_diffusion(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus)
+
+        grad_cv_plus = self.grad_cv_bc(state_minus=state_minus,
+                                       grad_cv_minus=grad_cv_minus,
+                                       normal=normal, **kwargs)
+        grad_t_plus = self.grad_temperature_bc(grad_t_minus, normal)
+
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
+        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
+                             grad_t=grad_t_plus)
+
+        return f_ext@normal
+
+    def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
+        """Get the exterior solution on the boundary for artificial viscosity."""
+        return -grad_av_minus
+
+
+class SymmetryBoundary(PrescribedFluidBoundary):
+    r"""Boundary condition implementing symmetry/slip wall boundary.
+
+    a.k.a. Reflective inviscid wall boundary
+
+    This class implements an adiabatic reflective slip boundary given
+    by
+    $\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-}, (\rho\vec{V})^{-}
+    - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}}) \hat{\mathbf{n}}]$
+    wherein the normal component of velocity at the wall is 0, and
+    tangential components are preserved. These perfectly reflecting
+    conditions are used by the forward-facing step case in
+    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
+    boundary conditions described in detail in [Poinsot_1992]_.
+
+    For the gradients, the no-shear condition implies that cross-terms are absent
+    and that temperature gradients are null due to the adiabatic condition.
+
+    .. math::
+
+        \nabla u ^+ = \nabla{u}^- \circ I
+
+        \nabla T \cdot n = 0
+
+    .. automethod:: inviscid_wall_flux
+    .. automethod:: viscous_wall_flux
+    .. automethod:: grad_cv_bc
+    .. automethod:: temperature_bc
+    .. automethod:: adiabatic_wall_state_for_advection
+    .. automethod:: adiabatic_wall_state_for_diffusion
+    .. automethod:: grad_temperature_bc
+    .. automethod:: adiabatic_slip_grad_av
+    """
+
+    def __init__(self):
+        """Initialize the boundary condition object."""
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.adiabatic_wall_state_for_advection,
+            inviscid_flux_func=self.inviscid_wall_flux,
+            viscous_flux_func=self.viscous_wall_flux,
+            boundary_temperature_func=self.temperature_bc,
+            boundary_gradient_cv_func=self.grad_cv_bc
+        )
+
+    def adiabatic_wall_state_for_advection(self, dcoll, dd_bdry, gas_model,
+                                           state_minus, **kwargs):
+        """Return state with opposite normal momentum."""
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+
+        # flip the normal component of the velocity
+        mom_plus = (state_minus.momentum_density
+             - 2*(np.dot(state_minus.momentum_density, nhat)*nhat))
+
+        # no changes are necessary to the energy equation because the velocity
+        # magnitude is the same, only the (normal) direction changes.
+
+        cv_plus = make_conserved(
+            state_minus.dim, mass=state_minus.mass_density,
+            energy=state_minus.energy_density, momentum=mom_plus,
+            species_mass=state_minus.species_mass_density
+        )
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+    def adiabatic_wall_state_for_diffusion(self, dcoll, dd_bdry, gas_model,
+                                           state_minus, **kwargs):
+        """Return state with zero normal-velocity and energy(Twall)."""
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+
+        # remove normal component from velocity/momentum
+        mom_plus = (state_minus.momentum_density
+                      - 1*(np.dot(state_minus.momentum_density, nhat)*nhat))
+
+        # modify energy accordingly
+        kinetic_energy_plus = 0.5*np.dot(mom_plus, mom_plus)/state_minus.mass_density
+        internal_energy_plus = (
+            state_minus.mass_density * gas_model.eos.get_internal_energy(
+                temperature=state_minus.temperature,
+                species_mass_fractions=state_minus.species_mass_fractions))
+
+        cv_plus = make_conserved(
+            state_minus.dim, mass=state_minus.mass_density,
+            energy=kinetic_energy_plus + internal_energy_plus,
+            momentum=mom_plus,
+            species_mass=state_minus.species_mass_density
+        )
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+    def inviscid_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
+        """Return Riemann flux using state with mom opposite of interior state."""
+        wall_state = self.adiabatic_wall_state_for_advection(
+            dcoll, dd_bdry, gas_model, state_minus)
+        state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
+
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(state_pair, gas_model, normal)
+
+    def temperature_bc(self, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        return state_minus.temperature
+
+    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        dim = state_minus.dim
+        if state_minus.nspecies > 0:
+            from mirgecom.fluid import species_mass_fraction_gradient
+            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+                                                          grad_cv_minus)
+            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+            grad_species_mass_plus = 0.*grad_y_plus
+
+            for i in range(state_minus.nspecies):
+                grad_species_mass_plus[i] = \
+                    (state_minus.mass_density*grad_y_plus[i]
+                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
+        # extrapolate density and its gradient
+        mass_plus = state_minus.mass_density
+        grad_mass_plus = grad_cv_minus.mass
+
+        from mirgecom.fluid import velocity_gradient
+        v_minus = state_minus.velocity
+        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
+
+        # modify velocity gradient at the boundary:
+        # remove normal component of velocity
+        v_plus = state_minus.velocity \
+                      - 1*np.dot(state_minus.velocity, normal)*normal
+        # retain only the diagonal terms to force zero shear stress
+        grad_v_plus = grad_v_minus*np.eye(dim)
+
+        # product rule for momentum
+        grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
+
+        # the energy has to be modified accordingly:
+        # first, get gradient of internal energy, i.e., no kinetic energy
+        grad_int_energy_minus = grad_cv_minus.energy \
+            - 0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
+                + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus))
+        grad_int_energy_plus = grad_int_energy_minus
+        # then modify gradient of kinetic energy to match the changes in velocity
+        grad_kin_energy_plus = \
+            0.5*(np.dot(v_plus, v_plus)*grad_mass_plus
+                + 2.0*mass_plus * np.dot(v_plus, grad_v_plus))
+        grad_energy_plus = grad_int_energy_plus + grad_kin_energy_plus
+
+        return make_conserved(grad_cv_minus.dim,
+                              mass=grad_mass_plus,
+                              energy=grad_energy_plus,
+                              momentum=grad_momentum_density_plus,
+                              species_mass=grad_species_mass_plus)
+
+    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
+        """Return grad(temperature) to be used in viscous flux at wall."""
+        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
+
+    def viscous_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                          grad_cv_minus, grad_t_minus,
+                          numerical_flux_func=viscous_facial_flux_central,
+                                           **kwargs):
+        """Return the boundary flux for the divergence of the viscous flux."""
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        state_plus = self.adiabatic_wall_state_for_diffusion(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus)
+
+        grad_cv_plus = self.grad_cv_bc(state_minus=state_minus,
+                                       grad_cv_minus=grad_cv_minus,
+                                       normal=normal, **kwargs)
+        grad_t_plus = self.grad_temperature_bc(grad_t_minus, normal)
+
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
+        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
+                             grad_t=grad_t_plus)
+
+        return f_ext@normal
+
+    def adiabatic_slip_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
+        """Get the exterior grad(Q) on the boundary for artificial viscosity."""
+        # Grab some boundary-relevant data
+        dim, = grad_av_minus.mass.shape
+        actx = get_container_context_recursively(grad_av_minus)
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+
+        # Subtract 2*wall-normal component of q
+        # to enforce q=0 on the wall
+        s_mom_normcomp = np.outer(nhat,
+                                  np.dot(grad_av_minus.momentum, nhat))
+        s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
+
+        # flip components to set a neumann condition
+        return make_conserved(dim, mass=-grad_av_minus.mass,
+                              energy=-grad_av_minus.energy,
+                              momentum=-s_mom_flux,
+                              species_mass=-grad_av_minus.species_mass)

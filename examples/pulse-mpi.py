@@ -44,7 +44,7 @@ from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.boundary import SymmetryBoundary
 from mirgecom.initializers import (
     Lump,
     AcousticPulse
@@ -185,7 +185,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    wall = AdiabaticSlipBoundary()
+    wall = SymmetryBoundary()
     boundaries = {BTAG_ALL: wall}
     uniform_state = initializer(nodes)
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,

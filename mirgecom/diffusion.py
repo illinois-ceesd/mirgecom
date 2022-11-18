@@ -382,8 +382,7 @@ def diffusion_operator(
 
     if grad_u is None:
         grad_u = grad_operator(
-            dcoll, boundaries, u, quadrature_tag=quadrature_tag, dd=dd_vol,
-            comm_tag=comm_tag)
+            dcoll, boundaries, u, quadrature_tag=quadrature_tag, dd=dd_vol)
 
     kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
     grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
