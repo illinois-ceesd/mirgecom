@@ -49,6 +49,8 @@ from grudge.dof_desc import (
 import grudge.op as op
 from mirgecom.fluid import make_conserved
 from mirgecom.utils import normalize_boundaries
+# from mirgecom.profiling import TracedCall
+# from pytato import trace_call as tracer
 
 
 def inviscid_flux(state):
@@ -285,6 +287,7 @@ def inviscid_flux_on_element_boundary(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
+    # @TracedCall(tracer=tracer, tracing_name="interior_facial_flux_inviscid")
     def _interior_flux(state_pair):
         return op.project(dcoll,
             state_pair.dd, dd_allfaces_quad,

@@ -39,7 +39,27 @@ __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
 .. autoclass:: SingleCallKernelProfile
 .. autoclass:: MultiCallKernelProfile
+.. autofunction:: TraceCall
 """
+
+
+class TracedCall(object):
+    """Adds tracing/wrapper to a call."""
+
+    def __init__(self, tracer=None, tracing_name=None):
+        """Initialize the tracing or wrapping decorator."""
+        self.tracing_name = tracing_name
+        self.tracer = tracer
+
+    def __call__(self, f):
+        """Wrap the call."""
+        def traced_call(*args):
+            if self.tracer is not None:
+                self.tracer(f, *args, identifier=self.tracing_name)
+            else:
+                f(*args)
+
+        return traced_call
 
 
 @dataclass
@@ -91,6 +111,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
     """
 
     def __init__(self, queue, allocator=None, logmgr: LogManager = None) -> None:
+        """Initialize this object."""
         super().__init__(queue, allocator)
 
         if not queue.properties & cl.command_queue_properties.PROFILING_ENABLE:
