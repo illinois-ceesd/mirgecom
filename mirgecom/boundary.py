@@ -1130,7 +1130,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
                                            state_minus, **kwargs):
         """Return state with zero-velocity."""
         dd_bdry = as_dofdesc(dd_bdry)
-        mom_plus = 0*state_minus.momentum_density
+        mom_plus = 0.*state_minus.momentum_density
         cv_plus = make_conserved(
             state_minus.dim, mass=state_minus.mass_density,
             energy=state_minus.energy_density, momentum=mom_plus,
