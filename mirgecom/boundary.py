@@ -67,6 +67,10 @@ from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from abc import ABCMeta, abstractmethod
 
 
+def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
+    return external_quantity
+
+
 class FluidBoundary(metaclass=ABCMeta):
     r"""Abstract interface to fluid boundary treatment.
 
@@ -309,7 +313,8 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._bnd_temperature_func:
             self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
-            self._grad_num_flux_func = num_flux_central
+            # self._grad_num_flux_func = num_flux_central
+            self._grad_num_flux_func = _ldg_bnd_flux_for_grad
 
         if not self._cv_gradient_flux_func:
             self._cv_gradient_flux_func = self._gradient_flux_for_prescribed_cv
@@ -1001,7 +1006,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state with zero-velocity and the respective internal energy."""
         temperature_wall = self._wall_temp + 0*state_minus.mass_density
-        mom_plus = state_minus.mass_density*0.*state_minus.velocity
+        mom_plus = 0.*state_minus.momentum_density
         mass_frac_plus = state_minus.species_mass_fractions
 
         internal_energy_plus = gas_model.eos.get_internal_energy(
@@ -1111,7 +1116,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
     def __init__(self):
         """Initialize the boundary condition object."""
         PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.adiabatic_wall_state_for_advection,
+            self, boundary_state_func=self.adiabatic_wall_state_for_diffusion,
             inviscid_flux_func=self.inviscid_wall_flux,
             viscous_flux_func=self.viscous_wall_flux,
             boundary_temperature_func=self.temperature_bc,
@@ -1121,7 +1126,6 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
     def adiabatic_wall_state_for_advection(self, dcoll, dd_bdry, gas_model,
                                            state_minus, **kwargs):
         """Return state with zero-velocity."""
-        dd_bdry = as_dofdesc(dd_bdry)
         mom_plus = -state_minus.momentum_density
         cv_plus = make_conserved(
             state_minus.dim, mass=state_minus.mass_density,
@@ -1162,6 +1166,9 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        # Note we don't need to tweak grad(rhoE) here as it is unused.
+        # Tweaks to grad(rhoV) (i.e. grad(V)) are ineffective as we have V=0 at
+        # the wall
         grad_species_mass_plus = 1.*grad_cv_minus.species_mass
         if state_minus.nspecies > 0:
             from mirgecom.fluid import species_mass_fraction_gradient
@@ -1252,7 +1259,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     def __init__(self):
         """Initialize the boundary condition object."""
         PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.adiabatic_wall_state_for_advection,
+            self, boundary_state_func=self.adiabatic_wall_state_for_diffusion,
             inviscid_flux_func=self.inviscid_wall_flux,
             viscous_flux_func=self.viscous_wall_flux,
             boundary_temperature_func=self.temperature_bc,
@@ -1359,6 +1366,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
         # the energy has to be modified accordingly:
         # first, get gradient of internal energy, i.e., no kinetic energy
+        # MTC: I think this is unneeded; these terms are unused in the flux calc
         grad_int_energy_minus = grad_cv_minus.energy \
             - 0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
                 + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus))
