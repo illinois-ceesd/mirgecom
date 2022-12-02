@@ -1351,7 +1351,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         grad_mass_plus = grad_cv_minus.mass
 
         from mirgecom.fluid import velocity_gradient
-        v_minus = state_minus.velocity
+        # v_minus = state_minus.velocity
         grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
 
         # modify velocity gradient at the boundary:
@@ -1359,27 +1359,34 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         v_plus = state_minus.velocity \
                       - 1*np.dot(state_minus.velocity, normal)*normal
         # retain only the diagonal terms to force zero shear stress
+
+        # MTC: This seems broken for anything but boundaries aligned with
+        # coordinate major axes.
         grad_v_plus = grad_v_minus*np.eye(dim)
 
         # product rule for momentum
         grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
 
+        # MTC: Commenting this for the moment, I think we agree that these
+        # terms are unused in the flux calculation so we don't need to tweak them
+        # here.
+        #
         # the energy has to be modified accordingly:
         # first, get gradient of internal energy, i.e., no kinetic energy
-        # MTC: I think this is unneeded; these terms are unused in the flux calc
-        grad_int_energy_minus = grad_cv_minus.energy \
-            - 0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
-                + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus))
-        grad_int_energy_plus = grad_int_energy_minus
+        # grad_int_energy_minus = grad_cv_minus.energy \
+        #    - 0.5*(np.dot(v_minus, v_minus)*grad_cv_minus.mass
+        #        + 2.0*state_minus.mass_density * np.dot(v_minus, grad_v_minus))
+        # grad_int_energy_plus = grad_int_energy_minus
         # then modify gradient of kinetic energy to match the changes in velocity
-        grad_kin_energy_plus = \
-            0.5*(np.dot(v_plus, v_plus)*grad_mass_plus
-                + 2.0*mass_plus * np.dot(v_plus, grad_v_plus))
-        grad_energy_plus = grad_int_energy_plus + grad_kin_energy_plus
+        # grad_kin_energy_plus = \
+        #     0.5*(np.dot(v_plus, v_plus)*grad_mass_plus
+        #         + 2.0*mass_plus * np.dot(v_plus, grad_v_plus))
+        # grad_energy_plus = grad_int_energy_plus + grad_kin_energy_plus
 
+        # TODO: Need to tweak the grad(V) to get the stress tensor we want
         return make_conserved(grad_cv_minus.dim,
                               mass=grad_mass_plus,
-                              energy=grad_energy_plus,
+                              energy=grad_cv_minus.energy,
                               momentum=grad_momentum_density_plus,
                               species_mass=grad_species_mass_plus)
 
