@@ -91,3 +91,8 @@ mathjax3_config = {
 rst_prolog = """
 .. |mirgecom| replace:: *MIRGE-Com*
 """
+
+# FIXME: Remove when grudge#280 gets merged
+nitpick_ignore_regex = [
+    ("py:class", r".*BoundaryDomainTag.*")
+]

@@ -45,6 +45,12 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+)
 
 import grudge.op as op
 
@@ -53,6 +59,8 @@ from mirgecom.fluid import (
     species_mass_fraction_gradient,
     make_conserved
 )
+
+from mirgecom.utils import normalize_boundaries
 
 
 # low level routine works with numpy arrays and can be tested without
@@ -335,8 +343,9 @@ def viscous_facial_flux_central(dcoll, state_pair, grad_cv_pair, grad_t_pair,
 def viscous_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_state_pairs,
         domain_boundary_states, grad_cv, interior_grad_cv_pairs,
-        grad_t, interior_grad_t_pairs, quadrature_tag=None,
-        numerical_flux_func=viscous_facial_flux_central, time=0.0):
+        grad_t, interior_grad_t_pairs, quadrature_tag=DISCR_TAG_BASE,
+        numerical_flux_func=viscous_facial_flux_central, time=0.0,
+        dd=DD_VOLUME_ALL):
     """Compute the viscous boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the viscous contributions
@@ -351,14 +360,15 @@ def viscous_flux_on_element_boundary(
         The physical model constructs for the gas model
 
     boundaries
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     interior_state_pairs
         Trace pairs of :class:`~mirgecom.gas_model.FluidState` for the interior faces
 
     domain_boundary_states
        A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
-       keyed by btags in *boundaries*.
+       keyed by boundary domain tags in *boundaries*.
 
     grad_cv: :class:`~mirgecom.fluid.ConservedVars`
        The gradient of the fluid conserved quantities.
@@ -374,41 +384,50 @@ def viscous_flux_on_element_boundary(
        Trace pairs for the temperature gradient on interior faces
 
     quadrature_tag
-        An optional identifier denoting a particular quadrature
-        discretization to use during operator evaluations.
-        The default value is *None*.
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
 
     numerical_flux_func
         The numerical flux function to use in computing the boundary flux.
 
     time: float
         Time
-    """
-    from grudge.dof_desc import as_dofdesc
 
-    dd_base = as_dofdesc("vol")
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which the fluid lives. Must be
+        a volume on the base discretization.
+    """
+    boundaries = normalize_boundaries(boundaries)
+
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     # {{{ - Viscous flux helpers -
 
     # viscous fluxes across interior faces (including partition and periodic bnd)
     def _fvisc_divergence_flux_interior(state_pair, grad_cv_pair, grad_t_pair):
         return op.project(dcoll,
-            state_pair.dd, state_pair.dd.with_dtag("all_faces"),
+            state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(
                 dcoll=dcoll, gas_model=gas_model, state_pair=state_pair,
                 grad_cv_pair=grad_cv_pair, grad_t_pair=grad_t_pair))
 
     # viscous part of bcs applied here
-    def _fvisc_divergence_flux_boundary(dd_btag, boundary, state_minus):
-        # Make sure we fields on the quadrature grid
-        # restricted to the tag *btag*
+    def _fvisc_divergence_flux_boundary(bdtag, boundary, state_minus_quad):
+        dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
         return op.project(
-            dcoll, dd_btag, dd_btag.with_dtag("all_faces"),
+            dcoll, dd_bdry_quad, dd_allfaces_quad,
             boundary.viscous_divergence_flux(
-                dcoll=dcoll, btag=dd_btag, gas_model=gas_model,
-                state_minus=state_minus,
-                grad_cv_minus=op.project(dcoll, dd_base, dd_btag, grad_cv),
-                grad_t_minus=op.project(dcoll, dd_base, dd_btag, grad_t),
+                dcoll=dcoll, dd_bdry=dd_bdry_quad, gas_model=gas_model,
+                state_minus=state_minus_quad,
+                grad_cv_minus=op.project(dcoll, dd_vol, dd_bdry_quad, grad_cv),
+                grad_t_minus=op.project(dcoll, dd_vol, dd_bdry_quad, grad_t),
                 time=time, numerical_flux_func=numerical_flux_func))
 
     # }}} viscous flux helpers
@@ -420,9 +439,10 @@ def viscous_flux_on_element_boundary(
         (
             # Domain boundary contributions for the viscous terms
             sum(_fvisc_divergence_flux_boundary(
-                as_dofdesc(btag).with_discr_tag(quadrature_tag),
-                boundary, domain_boundary_states[btag])
-                for btag, boundary in boundaries.items())
+                bdtag,
+                boundary,
+                domain_boundary_states[bdtag])
+                for bdtag, boundary in boundaries.items())
 
             # Interior interface contributions for the viscous terms
             + sum(
@@ -436,12 +456,25 @@ def viscous_flux_on_element_boundary(
     return bnd_term
 
 
-def get_viscous_timestep(dcoll, state):
-    """Routine returns the the node-local maximum stable viscous timestep.
+def get_viscous_timestep(dcoll, state, *, dd=DD_VOLUME_ALL):
+    r"""Routine returns the the node-local maximum stable viscous timestep.
+
+    The locally required timestep $\delta{t}_l$ is calculated from the fluid
+    local wavespeed $s_f$, fluid viscosity $\mu$, fluid density $\rho$, and
+    species diffusivities $d_\alpha$ as:
+
+    .. math::
+        \delta{t}_l =  \frac{\Delta{x}_l}{s_l + \left(\frac{\mu}{\rho} +
+        \mathbf{\text{max}}_\alpha(d_\alpha)\right)\left(\Delta{x}_l\right)^{-1}},
+
+    where $\Delta{x}_l$ is given by
+    :func:`grudge.dt_utils.characteristic_lengthscales`, and the rest are
+    fluid state-dependent quantities. For non-mixture states, species
+    diffusivities $d_\alpha=0$.
 
     Parameters
     ----------
-    dcoll: grudge.discretization.DiscretizationCollection
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
 
         the discretization collection to use
 
@@ -449,15 +482,26 @@ def get_viscous_timestep(dcoll, state):
 
         Full fluid conserved and thermal state
 
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be
+        a volume on the base discretization.
+
     Returns
     -------
     :class:`~meshmode.dof_array.DOFArray`
 
         The maximum stable timestep at each node.
     """
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
     from grudge.dt_utils import characteristic_lengthscales
 
-    length_scales = characteristic_lengthscales(state.array_context, dcoll)
+    length_scales = characteristic_lengthscales(
+        state.array_context, dcoll, dd=dd)
 
     nu = 0
     d_alpha_max = 0
@@ -475,7 +519,7 @@ def get_viscous_timestep(dcoll, state):
     )
 
 
-def get_viscous_cfl(dcoll, dt, state):
+def get_viscous_cfl(dcoll, dt, state, *, dd=DD_VOLUME_ALL):
     """Calculate and return node-local CFL based on current state and timestep.
 
     Parameters
@@ -492,13 +536,18 @@ def get_viscous_cfl(dcoll, dt, state):
 
         The full fluid conserved and thermal state
 
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be
+        a volume on the base discretization.
+
     Returns
     -------
     :class:`~meshmode.dof_array.DOFArray`
 
         The CFL at each node.
     """
-    return dt / get_viscous_timestep(dcoll, state=state)
+    return dt / get_viscous_timestep(dcoll, state=state, dd=dd)
 
 
 def get_local_max_species_diffusivity(actx, d_alpha):

@@ -40,8 +40,15 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    VolumeDomainTag,
+    DISCR_TAG_BASE,
+)
 import grudge.op as op
 from mirgecom.fluid import make_conserved
+from mirgecom.utils import normalize_boundaries
 
 
 def inviscid_flux(state):
@@ -224,8 +231,9 @@ def inviscid_facial_flux_hll(state_pair, gas_model, normal):
 
 def inviscid_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_state_pairs,
-        domain_boundary_states, quadrature_tag=None,
-        numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0):
+        domain_boundary_states, quadrature_tag=DISCR_TAG_BASE,
+        numerical_flux_func=inviscid_facial_flux_rusanov, time=0.0,
+        dd=DD_VOLUME_ALL):
     """Compute the inviscid boundary fluxes for the divergence operator.
 
     This routine encapsulates the computation of the inviscid contributions
@@ -242,40 +250,54 @@ def inviscid_flux_on_element_boundary(
         The physical model constructs for the gas_model
 
     boundaries
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     interior_state_pairs
         A :class:`~mirgecom.gas_model.FluidState` TracePair for each internal face.
 
     domain_boundary_states
        A dictionary of boundary-restricted :class:`~mirgecom.gas_model.FluidState`,
-       keyed by btags in *boundaries*.
+       keyed by boundary domain tags in *boundaries*.
 
     quadrature_tag
-        An optional identifier denoting a particular quadrature
-        discretization to use during operator evaluations.
-        The default value is *None*.
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
 
     numerical_flux_func
         The numerical flux function to use in computing the boundary flux.
 
     time: float
         Time
+
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which the fluid lives. Must be
+        a volume on the base discretization.
     """
-    from grudge.dof_desc import as_dofdesc
+    boundaries = normalize_boundaries(boundaries)
+
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     def _interior_flux(state_pair):
         return op.project(dcoll,
-            state_pair.dd, state_pair.dd.with_dtag("all_faces"),
+            state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(
                 state_pair, gas_model,
                 state_pair.int.array_context.thaw(dcoll.normal(state_pair.dd))))
 
-    def _boundary_flux(dd_bdry, boundary, state_minus):
+    def _boundary_flux(bdtag, boundary, state_minus_quad):
+        dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
         return op.project(dcoll,
-            dd_bdry, dd_bdry.with_dtag("all_faces"),
+            dd_bdry_quad, dd_allfaces_quad,
             boundary.inviscid_divergence_flux(
-                dcoll, dd_bdry, gas_model, state_minus=state_minus,
+                dcoll, dd_bdry_quad, gas_model, state_minus=state_minus_quad,
                 numerical_flux_func=numerical_flux_func, time=time))
 
     # Compute interface contributions
@@ -287,19 +309,27 @@ def inviscid_flux_on_element_boundary(
         # Domain boundary faces
         + sum(
             _boundary_flux(
-                as_dofdesc(btag).with_discr_tag(quadrature_tag),
+                bdtag,
                 boundary,
-                domain_boundary_states[btag])
-            for btag, boundary in boundaries.items())
+                domain_boundary_states[bdtag])
+            for bdtag, boundary in boundaries.items())
     )
 
     return inviscid_flux_bnd
 
 
-def get_inviscid_timestep(dcoll, state):
-    """Return node-local stable timestep estimate for an inviscid fluid.
+def get_inviscid_timestep(dcoll, state, dd=DD_VOLUME_ALL):
+    r"""Return node-local stable timestep estimate for an inviscid fluid.
 
-    The maximum stable timestep is computed from the acoustic wavespeed.
+    The locally required timestep is computed from the acoustic wavespeed:
+
+    .. math::
+        \delta{t}_l = \frac{\Delta{x}_l}{\left(|\mathbf{v}_f| + c\right)},
+
+    where $\Delta{x}_l$ is the local mesh spacing (given by
+    :func:`~grudge.dt_utils.characteristic_lengthscales`), and fluid velocity
+    $\mathbf{v}_f$, and fluid speed-of-sound $c$, are defined by local state
+    data.
 
     Parameters
     ----------
@@ -311,15 +341,25 @@ def get_inviscid_timestep(dcoll, state):
 
         Full fluid conserved and thermal state
 
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be
+        a volume on the base discretization.
+
     Returns
     -------
     class:`~meshmode.dof_array.DOFArray`
 
         The maximum stable timestep at each node.
     """
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
     from grudge.dt_utils import characteristic_lengthscales
     return (
-        characteristic_lengthscales(state.array_context, dcoll)
+        characteristic_lengthscales(state.array_context, dcoll, dd=dd)
         / state.wavespeed
     )
 

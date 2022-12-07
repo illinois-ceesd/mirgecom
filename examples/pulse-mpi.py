@@ -32,7 +32,7 @@ import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD, DTAG_BOUNDARY
+from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
@@ -47,7 +47,8 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     LinearizedOutflowBoundary,
     RiemannInflowBoundary,
-    PressureOutflowBoundary
+    PressureOutflowBoundary,
+    # SymmetryBoundary
 )
 from mirgecom.initializers import (
     Uniform,
@@ -161,9 +162,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 1
-    dcoll = create_discretization_collection(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
@@ -196,15 +195,31 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 0.1
     orig = np.zeros(shape=(dim,))
+
     initializer = Uniform(dim=dim, velocity=velocity)
     uniform_state = initializer(nodes, eos=eos)
+
+    # wall = SymmetryBoundary()
+    # boundaries = {BTAG_ALL: wall}
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
+                                   center=orig)
+    if rst_filename:
+        current_t = restart_data["t"]
+        current_step = restart_data["step"]
+        current_cv = restart_data["cv"]
+        if logmgr:
+            from mirgecom.logging_quantities import logmgr_set_time
+            logmgr_set_time(logmgr, current_step, current_t)
+    else:
+        # Set the current state from time 0
+        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     # Riemann inflow
     from mirgecom.initializers import initialize_flow_solution
     from mirgecom.utils import force_evaluation
 
     free_stream_cv = initialize_flow_solution(
-        actx, dcoll, gas_model, btag=DTAG_BOUNDARY("inlet"),
+        actx, dcoll, gas_model, btag=BoundaryDomainTag("inlet"),
         pressure=1.0, temperature=1.0, velocity=velocity)
 
     inflow_freestream_state = make_fluid_state(cv=free_stream_cv,
@@ -225,9 +240,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
 
     # boundaries
-    boundaries = {DTAG_BOUNDARY("inlet"): riemann_inflow_bnd,
-                  DTAG_BOUNDARY("outlet_L"): linear_outflow_bnd,
-                  DTAG_BOUNDARY("outlet_R"): pressure_outflow_bnd}
+    boundaries = {BoundaryDomainTag("inlet"): riemann_inflow_bnd,
+                  BoundaryDomainTag("outlet_L"): linear_outflow_bnd,
+                  BoundaryDomainTag("outlet_R"): pressure_outflow_bnd}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
     current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)

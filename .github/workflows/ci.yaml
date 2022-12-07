@@ -24,7 +24,8 @@ jobs:
             python3 -m venv myenv
             source myenv/bin/activate
             python -m pip install wheel
-            python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
+            # Need "flake8<6" due to https://github.com/zheller/flake8-quotes/issues/110
+            python -m pip install "flake8<6" pep8-naming flake8-quotes flake8-bugbear
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
 
     pylint:
@@ -100,15 +101,16 @@ jobs:
             conda install vtk  # needed for the accuracy comparison
             export XDG_CACHE_HOME=/tmp
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
-            cd examples && ./test_lazy_accuracy.sh
-
+            # && export POCL_DEBUG=cuda
+            scripts/run-integrated-tests.sh --lazy-accuracy
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
-            examples/run_examples.sh ./examples
+            # && export POCL_DEBUG=cuda
+            scripts/run-integrated-tests.sh --examples
 
     doc:
         name: Documentation
@@ -164,7 +166,7 @@ jobs:
         runs-on: ${{ matrix.os }}
         strategy:
           matrix:
-            os: [ubuntu-latest, macos-latest]
+            os: [ubuntu-latest, macos-latest, porter]
 
         steps:
         - uses: actions/checkout@v2
@@ -172,20 +174,22 @@ jobs:
             fetch-depth: '0'
         - name: Prepare production environment
           run: |
-            [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             MIRGEDIR=$(pwd)
-            cat .ci-support/production-testing-env.sh
-            . .ci-support/production-testing-env.sh
+            cat scripts/production-testing-env.sh
+            . scripts/production-testing-env.sh
             cd ..
-            git clone https://github.com/illinois-ceesd/emirge emirge.y1
-            cd emirge.y1
-            . ../mirgecom/.ci-support/install-mirge-from-source.sh ${MIRGEDIR}/..
-            source ${MIRGEDIR}/../config/activate_env.sh
-            . ../mirgecom/.ci-support/merge-install-production-branch.sh ${MIRGEDIR}
+            date
+            printf "Removing stale install ..."
+            rm -rf emirge.prod emirge.y1
+            printf "done.\n"
+            date
+            git clone https://github.com/illinois-ceesd/emirge emirge.prod
+            cd emirge.prod
+            . ../mirgecom/scripts/install-mirge-from-source.sh ${MIRGEDIR}/..
+
         - name: Run production test
           run: |
-            . .ci-support/production-testing-env.sh
             source ../config/activate_env.sh
-            . .ci-support/production-drivers-install.sh .
-            . .ci-support/production-drivers-run.sh .
+            scripts/run-integrated-tests.sh --production

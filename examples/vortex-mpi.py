@@ -149,9 +149,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 3
-    dcoll = create_discretization_collection(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     vis_timer = None
@@ -190,9 +188,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     initializer = Vortex2D(center=orig, velocity=vel)
     gas_model = GasModel(eos=eos)
 
-    def boundary_solution(dcoll, btag, gas_model, state_minus, **kwargs):
+    def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(btag)
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
