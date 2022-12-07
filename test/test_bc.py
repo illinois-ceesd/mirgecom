@@ -717,7 +717,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
 
-    wall = SymmetryBoundary()
+    wall = SymmetryBoundary(dim=dim)
 
     npts_geom = 17
     a = 1.0
@@ -873,12 +873,12 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
 
-            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
-                                                     gas_model=gas_model,
-                                                     state_minus=state_minus,
-                                                     grad_cv_minus=grad_cv_minus,
-                                                     grad_t_minus=grad_t_minus)
-            print(f"{v_flux_bc=}")
+#            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
+#                                                     gas_model=gas_model,
+#                                                     state_minus=state_minus,
+#                                                     grad_cv_minus=grad_cv_minus,
+#                                                     grad_t_minus=grad_t_minus)
+#            print(f"{v_flux_bc=}")
 
             assert adv_wall_state.cv == expected_adv_wall_cv
             assert diff_wall_state.cv == expected_diff_wall_cv
@@ -928,7 +928,7 @@ def test_slipwall_identity(actx_factory, dim):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity  # Check incoming normal
             initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-            wall = SymmetryBoundary()
+            wall = SymmetryBoundary(dim=dim)
 
             uniform_state = initializer(nodes)
             cv_minus = op.project(dcoll, "vol", BTAG_ALL, uniform_state)
@@ -938,7 +938,7 @@ def test_slipwall_identity(actx_factory, dim):
                 return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))
 
             state_plus = \
-                wall.adiabatic_slip_state(
+                wall.adiabatic_wall_state_for_advection(
                     dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                     state_minus=state_minus)
 
@@ -977,7 +977,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
     """
     actx = actx_factory()
 
-    wall = SymmetryBoundary()
+    wall = SymmetryBoundary(dim=dim)
     gas_model = GasModel(eos=IdealSingleGas())
 
     from pytools.convergence import EOCRecorder
@@ -1016,9 +1016,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
                                                     state=fluid_state,
                                                     gas_model=gas_model)
 
-                bnd_soln = wall.adiabatic_slip_state(dcoll, dd_bdry=BTAG_ALL,
-                                                     gas_model=gas_model,
-                                                     state_minus=interior_soln)
+                bnd_soln = wall.adiabatic_wall_state_for_advection(dcoll,
+                    dd_bdry=BTAG_ALL, gas_model=gas_model, state_minus=interior_soln)
 
                 bnd_pair = TracePair(
                     as_dofdesc(BTAG_ALL),

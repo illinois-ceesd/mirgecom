@@ -53,7 +53,7 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
-def initialize_flow_solution(actx, dcoll, gas_model, btag=None, pressure=None,
+def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None,
                              temperature=None,
                              density=None, velocity=None, mass_fractions=None):
     """Create a fluid state from a set of minimal input data."""
@@ -72,10 +72,11 @@ def initialize_flow_solution(actx, dcoll, gas_model, btag=None, pressure=None,
 
     dim = dcoll.dim
 
-    if btag is None:
+    if dd_bdry is None:
         nodes = actx.thaw(dcoll.nodes())
     else:
-        nodes = actx.thaw(dcoll.nodes(btag))
+        data_discr = dcoll.discr_from_dd(dd_bdry)
+        nodes = actx.thaw(data_discr.nodes())
     zeros = nodes[0]*0.0
 
     if velocity is None:

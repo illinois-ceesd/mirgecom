@@ -304,7 +304,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    my_boundary = SymmetryBoundary()
+    my_boundary = SymmetryBoundary(dim=dim)
     boundaries = {BTAG_ALL: my_boundary}
 
     if rst_filename:

@@ -988,7 +988,7 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
     .. automethod:: inflow_state
     """
 
-    def __init__(self, dim, free_stream_state_func):
+    def __init__(self, free_stream_state_func):
         """Initialize the boundary condition object."""
         self.free_stream_state_func = free_stream_state_func
 
@@ -1336,8 +1336,14 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     .. automethod:: adiabatic_slip_grad_av
     """
 
-    def __init__(self):
+    def __init__(self, dim):
         """Initialize the boundary condition object."""
+
+        self._dim = dim
+        if dim != 2:
+            from warnings import warn
+            warn("SymmetryBoundary is not fully implemented for 3D.", stacklevel=2)
+
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_wall_state_for_diffusion,
             inviscid_flux_func=self.inviscid_wall_flux,
@@ -1431,43 +1437,54 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         from mirgecom.fluid import velocity_gradient
         grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
 
-        # modify velocity gradient at the boundary:
-        # first, remove normal component of velocity
-        v_plus = state_minus.velocity \
-                      - 1*np.dot(state_minus.velocity, normal)*normal
+        # 1) No changes to velocity gradient are required for 1D cases
+        # 2) The code below only works for 2D (for now).
+        # 3) Work is still required for a fully implementation in 3D
+        if self._dim == 2:
 
-        # then force zero shear stress - see documentation for detailed explanation
-        aux_matrix = np.zeros((2, 2))
-        n1 = normal[0]
-        n2 = normal[1]
-        idx11 = 1 - n1**2*n2**2
-        idx12 = +n1**3*n2
-        idx13 = -n1*n2**3
-        idx14 = +n1**2*n2**2
-        idx21 = -n1*n2**3
-        idx22 = +n1**2*n2**2
-        idx23 = 1 - n2**4
-        idx24 = +n1*n2**3
-        idx31 = +n1**3*n2
-        idx32 = 1 - n1**4
-        idx33 = +n1**2*n2**2
-        idx34 = -n1**3*n2
-        idx41 = +n1**2*n2**2
-        idx42 = -n1**3*n2
-        idx43 = +n1*n2**3
-        idx44 = 1 - n1**2*n2**2
+            # modify velocity gradient at the boundary:
+            # first, remove normal component of velocity
+            v_plus = state_minus.velocity \
+                - 1*np.dot(state_minus.velocity, normal)*normal
 
-        aux_matrix = (make_obj_array([idx11, idx21, idx31, idx41,
-                                      idx12, idx22, idx32, idx42,
-                                      idx13, idx23, idx33, idx43,
-                                      idx14, idx24, idx34, idx44]).reshape((4, 4)))
+            # then force zero shear stress by removing normal derivative
+            # of tangential velocity
+            # see documentation for detailed explanation
+            aux_matrix = np.zeros((2, 2))
+            n1 = normal[0]
+            n2 = normal[1]
+            idx11 = 1 - n1**2*n2**2
+            idx12 = +n1**3*n2
+            idx13 = -n1*n2**3
+            idx14 = +n1**2*n2**2
+            idx21 = -n1*n2**3
+            idx22 = +n1**2*n2**2
+            idx23 = 1 - n2**4
+            idx24 = +n1*n2**3
+            idx31 = +n1**3*n2
+            idx32 = 1 - n1**4
+            idx33 = +n1**2*n2**2
+            idx34 = -n1**3*n2
+            idx41 = +n1**2*n2**2
+            idx42 = -n1**3*n2
+            idx43 = +n1*n2**3
+            idx44 = 1 - n1**2*n2**2
 
-        grad_v_plus = (aux_matrix@(grad_v_minus).reshape((4, 1))).reshape((2, 2))
+            aux_matrix = make_obj_array([idx11, idx21, idx31, idx41,
+                                         idx12, idx22, idx32, idx42,
+                                         idx13, idx23, idx33, idx43,
+                                         idx14, idx24, idx34, idx44]).reshape((4, 4))
 
-        grad_v_plus = aux_matrix@grad_v_minus
+            grad_v_plus = (aux_matrix@(grad_v_minus).reshape((4, 1))).reshape((2, 2))
 
-        # finally, product rule for momentum
-        grad_momentum_density_plus = mass_plus*grad_v_plus + v_plus*grad_mass_plus
+            grad_v_plus = aux_matrix@grad_v_minus
+
+            # finally, product rule for momentum
+            grad_momentum_density_plus = (state_minus.mass_density*grad_v_plus
+                           + np.outer(vel_plus, grad_cv_minus.mass))
+
+        else:
+            grad_momentum_density_plus = grad_cv_minus.momentum
 
         return make_conserved(grad_cv_minus.dim, mass=grad_mass_plus,
             energy=grad_cv_minus.energy,  # gradient of energy is useless
@@ -1548,7 +1565,7 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
     viscous effects are not dominant, such as the far-field.
     """
 
-    def __init__(self, dim, free_stream_state=None,
+    def __init__(self, free_stream_state=None,
                  free_stream_density=None,
                  free_stream_velocity=None,
                  free_stream_pressure=None,
@@ -1616,7 +1633,7 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
             int_energy = pressure/(gas_model.eos.gamma() - 1.0)
 
         boundary_cv = (
-            make_conserved(dim=2, mass=mass,
+            make_conserved(dim=state_minus.dim, mass=mass,
                            energy=kin_energy + int_energy,
                            momentum=make_obj_array([u_x*mass, u_y*mass]),
                            species_mass=state_minus.cv.species_mass)
