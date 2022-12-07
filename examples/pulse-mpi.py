@@ -45,9 +45,9 @@ from mirgecom.io import make_init_message
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    LinearizedBoundary,
+    LinearizedOutflowBoundary,
     RiemannInflowBoundary,
-    RiemannOutflowBoundary
+    PressureOutflowBoundary
 )
 from mirgecom.initializers import (
     Uniform,
@@ -217,29 +217,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     riemann_inflow_bnd = RiemannInflowBoundary(dim=2,
         free_stream_state_func=_inflow_bnd_state_func)
 
-    # Riemann outflow, requires a free-stream state
-    free_stream_cv = initialize_flow_solution(
-        actx, dcoll, gas_model, btag=DTAG_BOUNDARY("outlet_R"),
-        pressure=1.0, temperature=1.0, velocity=velocity)
-
-    outflow_freestream_state = make_fluid_state(cv=free_stream_cv,
-                                                gas_model=gas_model)
-    outflow_freestream_state = force_evaluation(actx, outflow_freestream_state)
-
-    def _outflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
-        return outflow_freestream_state
-
-    riemann_outflow_bnd = RiemannOutflowBoundary(dim=2,
-        free_stream_state_func=_outflow_bnd_state_func)
-
     # Linearized outflow
-    linear_outflow_bnd = LinearizedBoundary(dim=2, free_stream_density=1.0,
+    linear_outflow_bnd = LinearizedOutflowBoundary(dim=2, free_stream_density=1.0,
         free_stream_velocity=velocity, free_stream_pressure=1.0)
+
+    # Pressure prescribed outflow boundary
+    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
 
     # boundaries
     boundaries = {DTAG_BOUNDARY("inlet"): riemann_inflow_bnd,
                   DTAG_BOUNDARY("outlet_L"): linear_outflow_bnd,
-                  DTAG_BOUNDARY("outlet_R"): riemann_outflow_bnd}
+                  DTAG_BOUNDARY("outlet_R"): pressure_outflow_bnd}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
     current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
