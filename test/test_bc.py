@@ -32,7 +32,7 @@ import pytest
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.initializers import Lump
-from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.boundary import SymmetryBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
@@ -233,10 +233,10 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 @pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
                                        inviscid_facial_flux_hll])
 def test_outflow_boundary(actx_factory, dim, flux_func):
-    """Check OutflowBoundary boundary treatment."""
+    """Check PressureOutflowBoundary boundary treatment."""
     actx = actx_factory()
     order = 1
-    from mirgecom.boundary import OutflowBoundary
+    from mirgecom.boundary import PressureOutflowBoundary
 
     kappa = 3.0
     sigma = 5.0
@@ -258,7 +258,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
     gas_model = GasModel(eos=eos,
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
-    bndry = OutflowBoundary(boundary_pressure=flowbnd_press)
+    bndry = PressureOutflowBoundary(boundary_pressure=flowbnd_press)
 
     npts_geom = 17
     a = 1.0
@@ -928,7 +928,7 @@ def test_slipwall_identity(actx_factory, dim):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity  # Check incoming normal
             initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-            wall = AdiabaticSlipBoundary()
+            wall = SymmetryBoundary()
 
             uniform_state = initializer(nodes)
             cv_minus = op.project(dcoll, "vol", BTAG_ALL, uniform_state)
@@ -977,7 +977,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
     """
     actx = actx_factory()
 
-    wall = AdiabaticSlipBoundary()
+    wall = SymmetryBoundary()
     gas_model = GasModel(eos=IdealSingleGas())
 
     from pytools.convergence import EOCRecorder
