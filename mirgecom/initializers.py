@@ -16,7 +16,7 @@ Solution Initializers
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
-.. autofunction:: initialize_fluid_state
+.. autofunction:: initialize_flow_solution
 
 Initialization Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -53,17 +53,30 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
-def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
-                           density=None, velocity=None, mass_fractions=None):
+def initialize_flow_solution(actx, dcoll, gas_model, btag=None, pressure=None,
+                             temperature=None,
+                             density=None, velocity=None, mass_fractions=None):
     """Create a fluid state from a set of minimal input data."""
     if gas_model is None:
         raise ValueError("Gas model is required to create a FluidState.")
 
-    state_spec = sum([pressure is not None, temperature is not None,
-                      density is not None])
-    if state_spec != 2:
-        raise ValueError("Flow initialization requires exactly 2 of (pressure,"
-                         " temperature, density)")
+    if (pressure is not None and temperature is not None and density is not None):
+        raise ValueError("State is overspecified, require only 2 of (pressure, "
+                         "temperature, density)")
+
+    if ((pressure is not None and (temperature is None and density is None))
+          or (temperature is not None and (pressure is None and density is None))
+          or (density is not None and (pressure is None and temperature is None))):
+        raise ValueError("State is underspecified, require 2 of (pressure, "
+                         "temperature, density)")
+
+    dim = dcoll.dim
+
+    if btag is None:
+        nodes = actx.thaw(dcoll.nodes())
+    else:
+        nodes = actx.thaw(dcoll.nodes(btag))
+    zeros = nodes[0]*0.0
 
     if velocity is None:
         velocity = np.zeros(dim)
@@ -78,19 +91,18 @@ def initialize_fluid_state(dim, gas_model, pressure=None, temperature=None,
     if density is None:
         density = gas_model.eos.get_density(pressure, temperature, mass_fractions)
 
-    internal_energy = gas_model.eos.get_internal_energy(
-        temperature=temperature, mass=density, mass_fractions=mass_fractions)
+    internal_energy = gas_model.eos.get_internal_energy(temperature, mass_fractions)
 
-    species_mass = None if mass_fractions is None else density * mass_fractions
+    species_mass = None if mass_fractions is None \
+        else (density + zeros)*mass_fractions
 
     total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
     momentum = density*velocity
 
-    cv = make_conserved(dim=dim, mass=density, energy=total_energy,
-                        momentum=momentum, species_mass=species_mass)
-
-    from mirgecom.gas_model import make_fluid_state
-    return make_fluid_state(cv=cv, gas_model=gas_model, temperature_seed=temperature)
+    return make_conserved(dim=dim, mass=density + zeros,
+                          energy=total_energy + zeros,
+                          momentum=momentum + zeros,
+                          species_mass=species_mass)
 
 
 def make_pulse(amp, r0, w, r):
@@ -760,13 +772,13 @@ class MulticomponentLump:
 
 
 class AcousticPulse:
-    r"""Solution initializer for N-dimensional Gaussian acoustic pulse.
+    r"""Solution initializer for N-dimensional isentropic Gaussian acoustic pulse.
 
     The Gaussian pulse is defined by:
 
     .. math::
 
-        {\rho}E(\mathbf{r}) = {\rho}E + a_0 * G(\mathbf{r})\\
+        q(\mathbf{r}) = q_0 + a_0 * G(\mathbf{r})\\
         G(\mathbf{r}) = \exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
     where $\mathbf{r}$ are the nodal coordinates, and $\mathbf{r}_0$,
@@ -816,17 +828,26 @@ class AcousticPulse:
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (unused)
+            Equation of state class to be used in construction of soln
         """
         if eos is None:
             eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        return cv.replace(
-            energy=cv.energy + make_pulse(
-                amp=self._amp, w=self._width, r0=self._center, r=x_vec)
-        )
+        gamma = eos.gamma()
+
+        int_energy = cv.energy - 0.5*cv.mass*np.dot(cv.velocity, cv.velocity)
+        ref_pressure = int_energy*(gamma-1.0)
+        pressure = ref_pressure + \
+            make_pulse(amp=self._amp, w=self._width, r0=self._center, r=x_vec)
+
+        # isentropic relations
+        mass = cv.mass*(pressure/ref_pressure)**(1.0/gamma)
+
+        energy = pressure/(gamma-1.0) + 0.5*mass*np.dot(cv.velocity, cv.velocity)
+
+        return cv.replace(mass=mass, energy=energy)
 
 
 class Uniform:
