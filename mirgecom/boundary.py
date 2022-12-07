@@ -1338,7 +1338,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def __init__(self, dim):
         """Initialize the boundary condition object."""
-
         self._dim = dim
         if dim != 2:
             from warnings import warn
@@ -1476,8 +1475,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                                          idx14, idx24, idx34, idx44]).reshape((4, 4))
 
             grad_v_plus = (aux_matrix@(grad_v_minus).reshape((4, 1))).reshape((2, 2))
-
-            grad_v_plus = aux_matrix@grad_v_minus
 
             # finally, product rule for momentum
             grad_momentum_density_plus = (mass_plus*grad_v_plus

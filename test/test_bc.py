@@ -873,12 +873,12 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             print(f"{grad_cv_minus=}")
             print(f"{grad_t_minus=}")
 
-#            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
-#                                                     gas_model=gas_model,
-#                                                     state_minus=state_minus,
-#                                                     grad_cv_minus=grad_cv_minus,
-#                                                     grad_t_minus=grad_t_minus)
-#            print(f"{v_flux_bc=}")
+            v_flux_bc = wall.viscous_divergence_flux(dcoll, dd_bdry=BTAG_ALL,
+                                                     gas_model=gas_model,
+                                                     state_minus=state_minus,
+                                                     grad_cv_minus=grad_cv_minus,
+                                                     grad_t_minus=grad_t_minus)
+            print(f"{v_flux_bc=}")
 
             assert adv_wall_state.cv == expected_adv_wall_cv
             assert diff_wall_state.cv == expected_diff_wall_cv
