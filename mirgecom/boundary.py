@@ -1480,8 +1480,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             grad_v_plus = aux_matrix@grad_v_minus
 
             # finally, product rule for momentum
-            grad_momentum_density_plus = (state_minus.mass_density*grad_v_plus
-                           + np.outer(vel_plus, grad_cv_minus.mass))
+            grad_momentum_density_plus = (mass_plus*grad_v_plus
+                + np.outer(v_plus, grad_cv_minus.mass))
 
         else:
             grad_momentum_density_plus = grad_cv_minus.momentum
