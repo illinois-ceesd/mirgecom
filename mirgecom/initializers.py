@@ -60,15 +60,9 @@ def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None
     if gas_model is None:
         raise ValueError("Gas model is required to create a FluidState.")
 
-    if (pressure is not None and temperature is not None and density is not None):
-        raise ValueError("State is overspecified, require only 2 of (pressure, "
-                         "temperature, density)")
-
-    if ((pressure is not None and (temperature is None and density is None))
-          or (temperature is not None and (pressure is None and density is None))
-          or (density is not None and (pressure is None and temperature is None))):
-        raise ValueError("State is underspecified, require 2 of (pressure, "
-                         "temperature, density)")
+    state_spec = [pressure is None, temperature is None, density is None]
+    if sum(state_spec) != 1:
+	   raise ValueError("Exactly 2 of (pressure, temperature, density) must be provided.")
 
     dim = dcoll.dim
 
