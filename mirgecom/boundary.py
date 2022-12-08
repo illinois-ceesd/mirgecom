@@ -1566,15 +1566,18 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
                  free_stream_density=None,
                  free_stream_velocity=None,
                  free_stream_pressure=None,
-                 free_stream_temperature=None,
                  free_stream_species_mass_fractions=None):
         """Initialize the boundary condition object."""
-        self._ref_state = free_stream_state
-        self._mass = free_stream_density
-        self._velocity = free_stream_velocity
-        self._pressure = free_stream_pressure
-        self._temperature = free_stream_temperature
-        self._Y = free_stream_species_mass_fractions
+        if free_stream_state is None:
+            self._ref_mass = free_stream_density
+            self._ref_velocity = free_stream_velocity
+            self._ref_pressure = free_stream_pressure
+            self._spec_mass_fracs = free_stream_species_mass_fractions
+        else:
+            self._ref_mass = free_stream_state.cv.mass
+            self._ref_velocity = free_stream_state.velocity
+            self._ref_pressure = free_stream_state.pressure
+            self._spec_mass_fracs = free_stream_state.cv.species_mass_fractions
 
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.outflow_state
@@ -1582,24 +1585,14 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
 
     def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Non-reflecting outflow."""
-        if self._ref_state is None:
-            ref_mass = self._mass
-            ref_velocity = self._velocity
-            ref_pressure = self._pressure
-            species_mass_fractions = self._Y
-        else:
-            ref_mass = self._ref_state.cv.mass
-            ref_velocity = self._ref_state.velocity
-            ref_pressure = self._ref_state.pressure
-            species_mass_fractions = self._ref_state.cv.species_mass_fractions
 
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
-        rtilde = state_minus.cv.mass - ref_mass
-        utilde = state_minus.velocity[0] - ref_velocity[0]
-        vtilde = state_minus.velocity[1] - ref_velocity[1]
-        ptilde = state_minus.dv.pressure - ref_pressure
+        rtilde = state_minus.cv.mass - self._ref_mass
+        utilde = state_minus.velocity[0] - self._ref_velocity[0]
+        vtilde = state_minus.velocity[1] - self._ref_velocity[1]
+        ptilde = state_minus.dv.pressure - self._ref_pressure
 
         un_tilde = +utilde*nhat[0] + vtilde*nhat[1]
         ut_tilde = -utilde*nhat[1] + vtilde*nhat[0]
@@ -1607,25 +1600,25 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
         a = state_minus.speed_of_sound
 
         c1 = -rtilde*a**2 + ptilde
-        c2 = ref_mass*a*ut_tilde
-        c3 = ref_mass*a*un_tilde + ptilde
+        c2 = self._ref_mass*a*ut_tilde
+        c3 = self._ref_mass*a*un_tilde + ptilde
         c4 = 0.0  # zero-out the last characteristic variable
         r_tilde_bnd = 1.0/(a**2)*(-c1 + 0.5*c3 + 0.5*c4)
-        un_tilde_bnd = 1.0/(ref_mass*a)*(0.5*c3 - 0.5*c4)
-        ut_tilde_bnd = 1.0/(ref_mass*a)*c2
+        un_tilde_bnd = 1.0/(self._ref_mass*a)*(0.5*c3 - 0.5*c4)
+        ut_tilde_bnd = 1.0/(self._ref_mass*a)*c2
         p_tilde_bnd = 0.5*c3 + 0.5*c4
 
-        mass = r_tilde_bnd + ref_mass
-        u_x = ref_velocity[0] + (nhat[0]*un_tilde_bnd - nhat[1]*ut_tilde_bnd)
-        u_y = ref_velocity[1] + (nhat[1]*un_tilde_bnd + nhat[0]*ut_tilde_bnd)
-        pressure = p_tilde_bnd + ref_pressure
+        mass = r_tilde_bnd + self._ref_mass
+        u_x = self._ref_velocity[0] + (nhat[0]*un_tilde_bnd - nhat[1]*ut_tilde_bnd)
+        u_y = self._ref_velocity[1] + (nhat[1]*un_tilde_bnd + nhat[0]*ut_tilde_bnd)
+        pressure = p_tilde_bnd + self._ref_pressure
 
         kin_energy = 0.5*mass*(u_x**2 + u_y**2)
         if state_minus.is_mixture:
             gas_const = gas_model.eos.gas_const(state_minus.cv)
-            temperature = ref_pressure/(ref_mass*gas_const)
+            temperature = self._ref_pressure/(self._ref_mass*gas_const)
             int_energy = mass*gas_model.eos.get_internal_energy(
-                temperature, species_mass_fractions)
+                temperature, self._spec_mass_fracs)
         else:
             int_energy = pressure/(gas_model.eos.gamma() - 1.0)
 
