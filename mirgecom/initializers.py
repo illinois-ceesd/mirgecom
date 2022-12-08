@@ -62,7 +62,7 @@ def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None
 
     state_spec = [pressure is None, temperature is None, density is None]
     if sum(state_spec) != 1:
-	   raise ValueError("Exactly 2 of (pressure, temperature, density) must be provided.")
+        raise ValueError("Must provide 2 of (pressure, temperature, density).")
 
     dim = dcoll.dim
 
