@@ -23,6 +23,7 @@ Boundary Conditions
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
 .. autoclass:: SymmetryBoundary
+.. autoclass:: LinearizedOutflowBoundary
 """
 
 __copyright__ = """
