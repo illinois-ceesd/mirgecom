@@ -54,9 +54,9 @@ from mirgecom.fluid import make_conserved
 
 
 def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None,
-                             temperature=None,
-                             density=None, velocity=None, mass_fractions=None):
-    """Create a fluid state from a set of minimal input data."""
+                             temperature=None, density=None, velocity=None,
+                             mass_fractions=None, make_fluid_state=False):
+    """Create a fluid CV/state from a set of minimal input data."""
     if gas_model is None:
         raise ValueError("Gas model is required to create a FluidState.")
 
@@ -94,10 +94,17 @@ def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None
     total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
     momentum = density*velocity
 
-    return make_conserved(dim=dim, mass=density + zeros,
-                          energy=total_energy + zeros,
-                          momentum=momentum + zeros,
-                          species_mass=species_mass)
+    cv = make_conserved(dim=dim, mass=density + zeros,
+                        energy=total_energy + zeros,
+                        momentum=momentum + zeros,
+                        species_mass=species_mass)
+
+    if make_fluid_state:
+        from mirgecom.gas_model import make_fluid_state
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+            temperature_seed=temperature)
+    else:
+        return cv
 
 
 def make_pulse(amp, r0, w, r):
