@@ -7,7 +7,7 @@ else
     PLATFORM=Linux
     if ! command -v mpicc &> /dev/null ;then
         sudo apt-get update
-        sudo apt-get -y install libmpich-dev mpich
+        sudo apt-get -y install libopenmpi-dev openmpi-bin
     fi
     if ! command -v octave &> /dev/null ;then
         sudo apt-get -y install octave
