@@ -1,4 +1,8 @@
-if [ "$(uname)" = "Darwin" ]; then
+#!/bin/bash
+
+set -ex
+
+if [[ "$(uname)" = "Darwin" ]]; then
     PLATFORM=MacOSX
     brew update
     brew install open-mpi
