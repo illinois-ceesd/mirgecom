@@ -1627,7 +1627,6 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
 
     def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Non-reflecting outflow."""
-
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
