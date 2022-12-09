@@ -59,6 +59,42 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
+def test_normal_axes_utility(actx_factory, dim):
+    """Check that we can reliably get an orthonormal set given a normal."""
+    actx = actx_factory()
+
+    from mirgecom.boundary import _get_normal_axes as gna
+    order = 1
+    npts_geom = 5
+    a = -.011
+    b = .01
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    normal_vectors = nodes / actx.np.sqrt(np.dot(nodes, nodes))
+    normal_set = gna(actx, normal_vectors)
+    nset = len(normal_set)
+    assert nset == dim
+
+    def vec_norm(vec, p=2):
+        return actx.to_numpy(op.norm(dcoll, vec, p=p)) # noqa
+
+    # make sure the vecs all have mag=1
+    for i in range(nset):
+        assert vec_norm(normal_set[i]).all() == 1
+
+    tol = 1e-12
+    if dim > 1:
+        for i in range(dim):
+            for j in range(dim-1):
+                next_index = (i + j + 1) % dim
+                print(f"(i,j) = ({i}, {next_index})")
+                norm_comp = np.dot(normal_set[i], normal_set[next_index])
+                assert vec_norm(norm_comp, np.inf) < tol
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
                                        inviscid_facial_flux_hll])
 def test_farfield_boundary(actx_factory, dim, flux_func):
@@ -93,8 +129,8 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                              free_stream_temperature=ff_temp)
 
     npts_geom = 17
-    a = 1.0
-    b = 2.0
+    a = -1.0
+    b = 1.0
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
@@ -996,7 +1032,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
-            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))
+            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL)) # noqa
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
