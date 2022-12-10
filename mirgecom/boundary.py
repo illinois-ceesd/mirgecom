@@ -1483,7 +1483,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def __init__(self, dim=None):
         """Initialize the boundary condition object."""
-
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_wall_state_for_diffusion,
             inviscid_flux_func=self.inviscid_wall_flux,
@@ -1662,20 +1661,20 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                 zeros, zeros, zeros, zeros, zeros, zeros, t_2_x, t_2_y, t_2_z,
                 ]).reshape((9, 9))
 
-            Mforw = matrix_1@matrix_2
+            m_forw = matrix_1@matrix_2
 
             # the inverse transformation is the transpose for an orthogonal matrix
-            Mback = Mforw.T
+            m_back = m_forw.T
 
             # remove normal derivative of tangential velocities (2 components)
-            Mback[1] = make_obj_array([
+            m_back[1] = make_obj_array([
                 zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
-            Mback[2] = make_obj_array([
+            m_back[2] = make_obj_array([
                 zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
 
-            Mslip = Mforw*Mback
+            m_slip = m_forw*m_back
 
-            grad_v_plus = (Mslip@grad_v_minus.reshape((9, 1))).reshape((3, 3))
+            grad_v_plus = (m_slip@grad_v_minus.reshape((9, 1))).reshape((3, 3))
 
         # finally, product rule for momentum
         grad_momentum_density_plus = (mass_plus*grad_v_plus
