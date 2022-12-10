@@ -32,7 +32,7 @@ import pytest
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.initializers import Lump
-from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.boundary import SymmetryBoundary
 from mirgecom.eos import IdealSingleGas
 from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
 from grudge.trace_pair import TracePair
@@ -56,6 +56,42 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.mark.parametrize("dim", [1, 2, 3])
+def test_normal_axes_utility(actx_factory, dim):
+    """Check that we can reliably get an orthonormal set given a normal."""
+    actx = actx_factory()
+
+    from mirgecom.boundary import _get_normal_axes as gna
+    order = 1
+    npts_geom = 5
+    a = -.011
+    b = .01
+    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    normal_vectors = nodes / actx.np.sqrt(np.dot(nodes, nodes))
+    normal_set = gna(actx, normal_vectors)
+    nset = len(normal_set)
+    assert nset == dim
+
+    def vec_norm(vec, p=2):
+        return actx.to_numpy(op.norm(dcoll, vec, p=p)) # noqa
+
+    # make sure the vecs all have mag=1
+    for i in range(nset):
+        assert vec_norm(normal_set[i]).all() == 1
+
+    tol = 1e-12
+    if dim > 1:
+        for i in range(dim):
+            for j in range(dim-1):
+                next_index = (i + j + 1) % dim
+                print(f"(i,j) = ({i}, {next_index})")
+                norm_comp = np.dot(normal_set[i], normal_set[next_index])
+                assert vec_norm(norm_comp, np.inf) < tol
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -93,8 +129,8 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                              free_stream_temperature=ff_temp)
 
     npts_geom = 17
-    a = 1.0
-    b = 2.0
+    a = -1.0
+    b = 1.0
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
@@ -233,10 +269,10 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 @pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
                                        inviscid_facial_flux_hll])
 def test_outflow_boundary(actx_factory, dim, flux_func):
-    """Check OutflowBoundary boundary treatment."""
+    """Check PressureOutflowBoundary boundary treatment."""
     actx = actx_factory()
     order = 1
-    from mirgecom.boundary import OutflowBoundary
+    from mirgecom.boundary import PressureOutflowBoundary
 
     kappa = 3.0
     sigma = 5.0
@@ -258,7 +294,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
     gas_model = GasModel(eos=eos,
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
-    bndry = OutflowBoundary(boundary_pressure=flowbnd_press)
+    bndry = PressureOutflowBoundary(boundary_pressure=flowbnd_press)
 
     npts_geom = 17
     a = 1.0
@@ -717,7 +753,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
 
-    wall = SymmetryBoundary()
+    wall = SymmetryBoundary(dim=dim)
 
     npts_geom = 17
     a = 1.0
@@ -928,7 +964,7 @@ def test_slipwall_identity(actx_factory, dim):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity  # Check incoming normal
             initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-            wall = AdiabaticSlipBoundary()
+            wall = SymmetryBoundary(dim=dim)
 
             uniform_state = initializer(nodes)
             cv_minus = op.project(dcoll, "vol", BTAG_ALL, uniform_state)
@@ -938,7 +974,7 @@ def test_slipwall_identity(actx_factory, dim):
                 return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))
 
             state_plus = \
-                wall.adiabatic_slip_state(
+                wall.adiabatic_wall_state_for_advection(
                     dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                     state_minus=state_minus)
 
@@ -977,7 +1013,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
     """
     actx = actx_factory()
 
-    wall = AdiabaticSlipBoundary()
+    wall = SymmetryBoundary(dim=dim)
     gas_model = GasModel(eos=IdealSingleGas())
 
     from pytools.convergence import EOCRecorder
@@ -996,7 +1032,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
-            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))
+            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL)) # noqa
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
@@ -1016,9 +1052,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
                                                     state=fluid_state,
                                                     gas_model=gas_model)
 
-                bnd_soln = wall.adiabatic_slip_state(dcoll, dd_bdry=BTAG_ALL,
-                                                     gas_model=gas_model,
-                                                     state_minus=interior_soln)
+                bnd_soln = wall.adiabatic_wall_state_for_advection(dcoll,
+                    dd_bdry=BTAG_ALL, gas_model=gas_model, state_minus=interior_soln)
 
                 bnd_pair = TracePair(
                     as_dofdesc(BTAG_ALL),

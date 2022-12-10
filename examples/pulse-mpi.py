@@ -32,7 +32,7 @@ import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
@@ -44,9 +44,13 @@ from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import SymmetryBoundary
+from mirgecom.boundary import (
+    LinearizedOutflowBoundary,
+    RiemannInflowBoundary,
+    PressureOutflowBoundary
+)
 from mirgecom.initializers import (
-    Lump,
+    Uniform,
     AcousticPulse
 )
 from mirgecom.eos import IdealSingleGas
@@ -145,8 +149,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         box_ll = -1
         box_ur = 1
         nel_1d = 16
-        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        generate_mesh = partial(generate_regular_rect_mesh,
+            a=(box_ll,)*dim, b=(box_ur,)*dim,
+            nelements_per_axis=(nel_1d,)*dim,
+            boundary_tag_to_face={
+                "outlet_L": ["+y"],
+                "outlet_R": ["-y", "+x"],
+                "inlet": ["-x"]})
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
@@ -180,16 +189,46 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    eos = IdealSingleGas()
+    eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
     gas_model = GasModel(eos=eos)
-    vel = np.zeros(shape=(dim,))
+    velocity = np.zeros(shape=(dim,))
+    velocity[0] = 0.1
     orig = np.zeros(shape=(dim,))
-    initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    wall = SymmetryBoundary()
-    boundaries = {BTAG_ALL: wall}
-    uniform_state = initializer(nodes)
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
-                                   center=orig)
+    initializer = Uniform(dim=dim, velocity=velocity)
+    uniform_state = initializer(nodes, eos=eos)
+
+    # Riemann inflow
+    from mirgecom.initializers import initialize_flow_solution
+    from mirgecom.utils import force_evaluation
+
+    free_stream_cv = initialize_flow_solution(
+        actx, dcoll, gas_model, dd_bdry=BoundaryDomainTag("inlet"),
+        pressure=1.0, temperature=1.0, velocity=velocity)
+
+    inflow_freestream_state = make_fluid_state(cv=free_stream_cv,
+                                               gas_model=gas_model)
+    inflow_freestream_state = force_evaluation(actx, inflow_freestream_state)
+
+    def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
+        return inflow_freestream_state
+
+    riemann_inflow_bnd = RiemannInflowBoundary(
+        free_stream_state_func=_inflow_bnd_state_func)
+
+    # Linearized outflow
+    linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=1.0,
+        free_stream_velocity=velocity, free_stream_pressure=1.0)
+
+    # Pressure prescribed outflow boundary
+    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
+
+    # boundaries
+    boundaries = {BoundaryDomainTag("inlet"): riemann_inflow_bnd,
+                  BoundaryDomainTag("outlet_L"): linear_outflow_bnd,
+                  BoundaryDomainTag("outlet_R"): pressure_outflow_bnd}
+
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -246,7 +285,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.5):
+           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
