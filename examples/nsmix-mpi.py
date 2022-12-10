@@ -268,7 +268,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    #    my_boundary = SymmetryBoundary()
+    #    my_boundary = SymmetryBoundary(dim=dim)
     my_boundary = IsothermalWallBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
