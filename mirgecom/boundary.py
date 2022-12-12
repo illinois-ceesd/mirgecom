@@ -19,6 +19,7 @@ Boundary Conditions
 .. autoclass:: IsothermalNoSlipBoundary
 .. autoclass:: FarfieldBoundary
 .. autoclass:: RiemannInflowBoundary
+.. autoclass:: RiemannOutflowBoundary
 .. autoclass:: PressureOutflowBoundary
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
@@ -1119,6 +1120,108 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
                                 smoothness=state_minus.smoothness)
 
 
+class RiemannOutflowBoundary(PrescribedFluidBoundary):
+    r"""Outflow boundary treatment.
+
+    This class implements an Riemann invariant for outflow boundary as described
+    by [Mengaldo_2014]_. Note that the "minus" and "plus" are different from the
+    reference to the current Mirge-COM definition.
+
+    This boundary condition assume isentropic flow, so the regions where it can
+    be applied are not general. Far-field regions are adequate, but not
+    viscous-dominated regions of the flow (such as a boundary layer).
+
+    .. automethod:: __init__
+    .. automethod:: outflow_state
+    """
+
+    def __init__(self, dim, free_stream_state_func):
+        """Initialize the boundary condition object."""
+        self.free_stream_state_func = free_stream_state_func
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.outflow_state
+        )
+
+    def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary.
+
+        This is the Riemann Invariant Boundary Condition described by
+        [Mengaldo_2014]_ in eqs. 8 to 18.
+        """
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+
+        ones = 0.0*nhat[0] + 1.0
+
+        free_stream_state = self.free_stream_state_func(
+            dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+
+        v_plus = np.dot(free_stream_state.velocity*ones, nhat)
+        c_plus = free_stream_state.speed_of_sound
+        gamma_plus = gas_model.eos.gamma(free_stream_state.cv,
+                                         free_stream_state.temperature)
+
+        rho_minus = state_minus.mass_density
+        v_minus = np.dot(state_minus.velocity, nhat)
+        c_minus = state_minus.speed_of_sound
+        gamma_minus = gas_model.eos.gamma(
+            state_minus.cv, temperature=state_minus.temperature)
+
+        # eqs 17 and 27
+        r_plus = v_plus - 2.0*c_plus/(gamma_plus - 1.0)
+        r_minus_subsonic = v_minus + 2.0*c_minus/(gamma_minus - 1.0)
+        r_minus_supersonic = v_minus - 2.0*c_minus/(gamma_minus - 1.0)
+        r_minus = actx.np.where(actx.np.greater(v_minus, c_minus),
+                                r_minus_supersonic, r_minus_subsonic)
+
+        velocity_boundary = (r_minus + r_plus)/2.0
+        velocity_boundary = (
+            state_minus.velocity + (velocity_boundary - v_minus)*nhat
+        )
+        gamma_boundary = 1.0*gamma_minus
+
+        c_boundary = (gamma_minus - 1.0)*(r_minus - r_plus)/4.0
+
+        # isentropic relations, using minus state (Eq. 24 and 29)
+        entropy_boundary = \
+            c_minus**2/(gamma_boundary*rho_minus**(gamma_boundary-1.0))
+        rho_boundary = (
+            c_boundary**2/(gamma_boundary * entropy_boundary)
+        )**(1.0/(gamma_minus-1.0))  # in the reference, Eq. 24 lacks the exponent.
+        pressure_boundary = rho_boundary*c_boundary**2/gamma_boundary
+
+        species_mass_boundary = None
+        if free_stream_state.is_mixture:
+
+            # using gas constant based on state_minus species
+            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
+
+            energy_boundary = rho_boundary * (
+                gas_model.eos.get_internal_energy(
+                    temperature_boundary, free_stream_state.species_mass_fractions)
+            ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+
+            # extrapolate species
+            species_mass_boundary = (
+                rho_boundary * state_minus.species_mass_fractions
+            )
+        else:
+            energy_boundary = (
+                pressure_boundary / (gamma_boundary - 1)
+                + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+            )
+
+        boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
+                                     energy=energy_boundary,
+                                     momentum=rho_boundary*velocity_boundary,
+                                     species_mass=species_mass_boundary)
+
+        return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+
 class IsothermalWallBoundary(PrescribedFluidBoundary):
     r"""Isothermal viscous wall boundary.
 
@@ -1392,13 +1495,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     .. automethod:: adiabatic_slip_grad_av
     """
 
-    def __init__(self, dim):
+    def __init__(self, dim=None):
         """Initialize the boundary condition object."""
-        self._dim = dim
-        if dim != 2:
-            from warnings import warn
-            warn("SymmetryBoundary is not fully implemented for 3D.", stacklevel=2)
-
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.adiabatic_wall_state_for_diffusion,
             inviscid_flux_func=self.inviscid_wall_flux,
@@ -1473,6 +1571,9 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        actx = state_minus.array_context
+        dim = state_minus.dim
+
         grad_species_mass_plus = 1.*grad_cv_minus.species_mass
         if state_minus.nspecies > 0:
             from mirgecom.fluid import species_mass_fraction_gradient
@@ -1494,15 +1595,15 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         from mirgecom.fluid import velocity_gradient
         grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
 
-        # 1) No changes to velocity gradient are required for 1D cases
-        # 2) The code below only works for 2D (for now).
-        # 3) Work is still required for a fully implementation in 3D
-        if self._dim == 2:
+        # modify velocity gradient at the boundary:
+        # first, remove normal component of velocity
+        v_plus = state_minus.velocity \
+            - 1*np.dot(state_minus.velocity, normal)*normal
 
-            # modify velocity gradient at the boundary:
-            # first, remove normal component of velocity
-            v_plus = state_minus.velocity \
-                - 1*np.dot(state_minus.velocity, normal)*normal
+        if dim == 1:
+            grad_v_plus = grad_v_minus
+
+        if dim == 2:
 
             # then force zero shear stress by removing normal derivative
             # of tangential velocity
@@ -1534,12 +1635,66 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
             grad_v_plus = (aux_matrix@(grad_v_minus).reshape((4, 1))).reshape((2, 2))
 
-            # finally, product rule for momentum
-            grad_momentum_density_plus = (mass_plus*grad_v_plus
-                + np.outer(v_plus, grad_cv_minus.mass))
+        if dim == 3:
 
-        else:
-            grad_momentum_density_plus = grad_cv_minus.momentum
+            normal_set = _get_normal_axes(actx, normal)
+
+            n_1_x = normal_set[0][0]
+            n_1_y = normal_set[0][1]
+            n_1_z = normal_set[0][2]
+
+            t_1_x = normal_set[1][0]
+            t_1_y = normal_set[1][1]
+            t_1_z = normal_set[1][2]
+
+            t_2_x = normal_set[2][0]
+            t_2_y = normal_set[2][1]
+            t_2_z = normal_set[2][2]
+
+            zeros = n_1_x*0.0
+
+            matrix_1 = make_obj_array([
+                n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z, zeros, zeros,
+                zeros, n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z, zeros,
+                zeros, zeros, n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z,
+                t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z, zeros, zeros,
+                zeros, t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z, zeros,
+                zeros, zeros, t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z,
+                t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z, zeros, zeros,
+                zeros, t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z, zeros,
+                zeros, zeros, t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z
+                ]).reshape((9, 9))
+
+            matrix_2 = make_obj_array([
+                n_1_x, n_1_y, n_1_z, zeros, zeros, zeros, zeros, zeros, zeros,
+                t_1_x, t_1_y, t_1_z, zeros, zeros, zeros, zeros, zeros, zeros,
+                t_2_x, t_2_y, t_2_z, zeros, zeros, zeros, zeros, zeros, zeros,
+                zeros, zeros, zeros, n_1_x, n_1_y, n_1_z, zeros, zeros, zeros,
+                zeros, zeros, zeros, t_1_x, t_1_y, t_1_z, zeros, zeros, zeros,
+                zeros, zeros, zeros, t_2_x, t_2_y, t_2_z, zeros, zeros, zeros,
+                zeros, zeros, zeros, zeros, zeros, zeros, n_1_x, n_1_y, n_1_z,
+                zeros, zeros, zeros, zeros, zeros, zeros, t_1_x, t_1_y, t_1_z,
+                zeros, zeros, zeros, zeros, zeros, zeros, t_2_x, t_2_y, t_2_z,
+                ]).reshape((9, 9))
+
+            m_forw = matrix_1@matrix_2
+
+            # the inverse transformation is the transpose for an orthogonal matrix
+            m_back = m_forw.T
+
+            # remove normal derivative of tangential velocities (2 components)
+            m_back[1] = make_obj_array([
+                zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
+            m_back[2] = make_obj_array([
+                zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
+
+            m_slip = m_forw*m_back
+
+            grad_v_plus = (m_slip@grad_v_minus.reshape((9, 1))).reshape((3, 3))
+
+        # finally, product rule for momentum
+        grad_momentum_density_plus = (mass_plus*grad_v_plus
+            + np.outer(v_plus, grad_cv_minus.mass))
 
         return make_conserved(grad_cv_minus.dim, mass=grad_mass_plus,
             energy=grad_cv_minus.energy,  # gradient of energy is useless
