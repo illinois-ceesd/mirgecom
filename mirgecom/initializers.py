@@ -1328,4 +1328,3 @@ class ShearFlow:
 
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=total_energy)
-
