@@ -46,7 +46,7 @@ from grudge.shortcuts import compiled_lsrk45_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    OutflowBoundary,
+    PressureOutflowBoundary,
     SymmetryBoundary
 )
 from mirgecom.initializers import DoubleMachReflection
@@ -366,7 +366,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     boundaries = {
         BoundaryDomainTag("flow"): flow_boundary,
         BoundaryDomainTag("wall"): SymmetryBoundary(),
-        BoundaryDomainTag("out"): OutflowBoundary(boundary_pressure=1.0),
+        BoundaryDomainTag("out"): PressureOutflowBoundary(boundary_pressure=1.0),
     }
 
     visualizer = make_visualizer(dcoll, order)
