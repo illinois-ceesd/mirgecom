@@ -864,14 +864,15 @@ class PlanarDiscontinuity:
     given an initial thermal state (pressure, temperature) and an EOS.
 
     The solution varies across a planar interface defined by a tanh function
-    located at disc_location for pressure, temperature, velocity, and mass fraction
+    located at disc_location with normal normal_dir
+    for pressure, temperature, velocity, and mass fraction
 
     .. automethod:: __init__
     .. automethod:: __call__
     """
 
     def __init__(
-            self, *, dim=3, normal_dir=0, disc_location=0, nspecies=0,
+            self, *, dim=3, normal_dir, disc_location, nspecies=0,
             temperature_left, temperature_right,
             pressure_left, pressure_right,
             velocity_left=None, velocity_right=None,
@@ -884,10 +885,11 @@ class PlanarDiscontinuity:
         ----------
         dim: int
             specifies the number of dimensions for the solution
-        normal_dir: int
+        normal_dir: numpy.ndarray
             specifies the direction (plane) the discontinuity is applied in
-        disc_location: float or Function[float]
-           location of discontinuity (in time)
+        disc_location: numpy.ndarray or Callable
+            fixed location of discontinuity or optionally a function that
+            returns the time-dependent location.
         nspecies: int
             specifies the number of mixture species
         pressure_left: float
@@ -919,6 +921,13 @@ class PlanarDiscontinuity:
         if species_mass_right is None:
             species_mass_right = np.zeros(shape=(nspecies,))
 
+        if normal_dir is None:
+            normal_dir = np.zeros(shape=(dim,))
+            normal_dir[0] = 1.
+
+        if disc_location is None:
+            disc_location = np.zeros(shape=(dim,))
+
         self._nspecies = nspecies
         self._dim = dim
         self._disc_location = disc_location
@@ -932,13 +941,10 @@ class PlanarDiscontinuity:
         self._tr = temperature_right
         self._yl = species_mass_left
         self._yr = species_mass_right
-        self._xdir = normal_dir
-        if self._xdir >= self._dim:
-            self._xdir = self._dim - 1
+        self._normal = normal_dir
 
-    def __call__(self, x_vec, eos, *, t=0.0, **kwargs):
-        """
-        Create the mixture state at locations *x_vec*.
+    def __call__(self, x_vec, eos, *, time=0.0):
+        """Create the mixture state at locations *x_vec*.
 
         Parameters
         ----------
@@ -949,22 +955,23 @@ class PlanarDiscontinuity:
             these functions:
             `eos.get_density`
             `eos.get_internal_energy`
-        t: float
-            Time at which solution is desired.
-            The location is (optionally) dependent on time
+        time: float
+            Time at which solution is desired. The location is (optionally)
+            dependent on time
         """
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
-        x = x_vec[self._xdir]
+        x = x_vec[0]
         actx = x.array_context
-        if isinstance(self._disc_location, Number):
-            x0 = self._disc_location
+        if callable(self._disc_location):
+            x0 = self._disc_location(time)
         else:
-            x0 = self._disc_location(t)
+            x0 = self._disc_location
 
-        xtanh = 1.0/self._sigma*(x0 - x)
+        dist = np.dot(x0 - x_vec, self._normal)
+        xtanh = 1.0/self._sigma*dist
         weight = 0.5*(1.0 - actx.np.tanh(xtanh))
         pressure = self._pl + (self._pr - self._pl)*weight
         temperature = self._tl + (self._tr - self._tl)*weight
@@ -972,19 +979,19 @@ class PlanarDiscontinuity:
         y = self._yl + (self._yr - self._yl)*weight
 
         if self._nspecies:
-            mass = eos.get_density(pressure, temperature, y)
+            mass = eos.get_density(pressure, temperature,
+                                   species_mass_fractions=y)
         else:
             mass = pressure/temperature/eos.gas_const()
 
         specmass = mass * y
         mom = mass * velocity
-        if self._nspecies:
-            internal_energy = eos.get_internal_energy(temperature, y)
-        else:
-            internal_energy = pressure/mass/(eos.gamma() - 1)
+        internal_energy = eos.get_internal_energy(temperature,
+                                                  species_mass_fractions=y)
 
         kinetic_energy = 0.5 * np.dot(velocity, velocity)
         energy = mass * (internal_energy + kinetic_energy)
 
-        return join_conserved(dim=self._dim, mass=mass, energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mom, species_mass=specmass)
+
