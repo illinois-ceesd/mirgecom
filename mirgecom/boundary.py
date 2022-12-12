@@ -587,9 +587,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     def adiabatic_slip_wall_state(
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state with zero normal-component velocity
-           and the respective internal energy for an adiabatic wall."""
-
+        """Return state with zero normal-component velocity for an adiabatic wall."""
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
@@ -614,17 +612,24 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
             species_mass=state_minus.species_mass_density
         )
 
+        # we'll need this when we go to production
+        """
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness=state_minus.smoothness)
+        """
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
 
     def inviscid_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                            numerical_flux_func=inviscid_facial_flux_rusanov,
                            **kwargs):
         """
-        Compute the flux such that there will be vanishing
-        flux through the boundary, preserving mass, momentum (magnitude) and
-        energy.
+        Compute the inviscid boundary flux.
+
+        The construc the flux such that it vanished through the boundary,i
+        preserving mass, momentum (magnitude) and energy.
+
         rho_plus = rho_minus
         v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
         mom_plus = rho_plus * v_plus
@@ -642,9 +647,14 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                                  energy=state_minus.energy_density,
                                  species_mass=state_minus.species_mass_density)
 
+        # we'll need this when we go to production
+        """
         wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
                                       temperature_seed=state_minus.temperature,
                                       smoothness=state_minus.smoothness)
+        """
+        wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
+                                      temperature_seed=state_minus.temperature)
 
         state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
 
@@ -652,8 +662,9 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """
-        The temperature gradient on the plus state,
-        opposite normal component to enforce zero energy flux 
+        Compute temperature gradient on the plus state.
+
+        Impose the opposite normal component to enforce zero energy flux
         from conduction.
         """
         return (grad_t_minus
@@ -661,7 +672,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, state_plus, grad_cv_minus, normal, **kwargs):
         """
-        Return the external grad(CV) to be used in the boundary calculation of viscous flux.
+        Return external grad(CV) used in the boundary calculation of viscous flux.
 
         Specify the velocity gradients on the external state to ensure zero
         energy and momentum flux due to shear stresses.
@@ -669,7 +680,6 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         Gradients of species mass fractions are set to zero in the normal direction
         to ensure zero flux of species across the boundary.
         """
-
         dim = state_minus.dim
         actx = state_minus.array_context
 
@@ -732,8 +742,6 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                           **kwargs):
         """Return the boundary flux for the divergence of the viscous flux."""
         dd_bdry = as_dofdesc(dd_bdry)
-
-        from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
@@ -761,7 +769,6 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                                     grad_cv_pair=grad_cv_pair,
                                     grad_t_pair=grad_t_pair,
                                     gas_model=gas_model))
-
 
     def adiabatic_slip_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary for artificial viscosity."""
