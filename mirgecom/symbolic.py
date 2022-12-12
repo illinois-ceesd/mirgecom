@@ -5,6 +5,7 @@
 .. autofunction:: grad
 
 .. autoclass:: EvaluationMapper
+.. autofunction:: evaluate
 """
 
 __copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
@@ -29,18 +30,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
+import numpy as np  # noqa
 import numpy.linalg as la # noqa
-# from pytools.obj_array import flat_obj_array
+from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-import pymbolic.primitives as prim
-import pymbolic.mapper.evaluator as ev
+from pymbolic.mapper.differentiator import (
+    DifferentiationMapper as BaseDifferentiationMapper
+)
+from pymbolic.mapper.evaluator import EvaluationMapper as BaseEvaluationMapper
+import mirgecom.math as mm
+
+
+class DifferentiationMapper(BaseDifferentiationMapper):
+    """
+    Differentiates a symbolic expression.
+
+    Inherits from :class:`pymbolic.mapper.differentiator.DifferentiationMapper`.
+    """
+
+    def __call__(self, expr, *args, **kwargs):
+        """Differentiate *expr*."""
+        from arraycontext import rec_map_array_container
+        return rec_map_array_container(
+            lambda f: super(DifferentiationMapper, self).__call__(
+                f, *args, **kwargs),
+            expr)
 
 
 def diff(var):
     """Return the symbolic derivative operator with respect to *var*."""
-    from pymbolic.mapper.differentiator import DifferentiationMapper
-
     def func_map(arg_index, func, arg, allowed_nonsmoothness):
         if func == pmbl.var("sin"):
             return pmbl.var("cos")(*arg)
@@ -54,23 +72,34 @@ def diff(var):
     return DifferentiationMapper(var, func_map=func_map)
 
 
-def div(vector_func):
-    """Return the symbolic divergence of *vector_func*."""
-    dim = len(vector_func)
-    coords = prim.make_sym_vector("x", dim)
-    div = 0
-    for i in range(dim):
-        div += diff(coords[i])(vector_func[i])
-    return div
+def div(ambient_dim, func):
+    """Return the symbolic divergence of *func*."""
+    coords = pmbl.make_sym_vector("x", ambient_dim)
+
+    from grudge.tools import rec_map_subarrays
+    from pymbolic.primitives import Expression
+    return rec_map_subarrays(
+        lambda f: sum(diff(coords[i])(f[i]) for i in range(ambient_dim)),
+        (ambient_dim,), (),
+        func,
+        scalar_cls=Expression)
 
 
-def grad(dim, func):
+def grad(ambient_dim, func, nested=False):
     """Return the symbolic *dim*-dimensional gradient of *func*."""
-    coords = prim.make_sym_vector("x", dim)
-    return [diff(coords[i])(func) for i in range(dim)]
+    coords = pmbl.make_sym_vector("x", ambient_dim)
+
+    from grudge.tools import rec_map_subarrays
+    from pymbolic.primitives import Expression
+    return rec_map_subarrays(
+        lambda f: make_obj_array([
+            diff(coords[i])(f) for i in range(ambient_dim)]),
+        (), (ambient_dim,),
+        func,
+        scalar_cls=Expression, return_nested=nested)
 
 
-class EvaluationMapper(ev.EvaluationMapper):
+class EvaluationMapper(BaseEvaluationMapper):
     """Evaluates symbolic expressions given a mapping from variables to values.
 
     Inherits from :class:`pymbolic.mapper.evaluator.EvaluationMapper`.
@@ -78,36 +107,17 @@ class EvaluationMapper(ev.EvaluationMapper):
 
     def map_call(self, expr):
         """Map a symbolic code expression to actual function call."""
-        assert isinstance(expr.function, prim.Variable)
-        if expr.function.name == "sin":
-            par, = expr.parameters
-            return self._sin(self.rec(par))
-        elif expr.function.name == "cos":
-            par, = expr.parameters
-            return self._cos(self.rec(par))
-        elif expr.function.name == "exp":
-            par, = expr.parameters
-            return self._exp(self.rec(par))
-        else:
-            raise ValueError("Unrecognized function '%s'" % expr.function)
+        from pymbolic.primitives import Variable
+        assert isinstance(expr.function, Variable)
+        par, = expr.parameters
+        return getattr(mm, expr.function.name)(self.rec(par))
 
-    def _sin(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.sin(val)
-        else:
-            return val.array_context.np.sin(val)
 
-    def _cos(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.cos(val)
-        else:
-            return val.array_context.np.cos(val)
+# TODO: Figure out how to reconcile this with the need for evaluation that promotes
+# scalar values to DOF arrays (see test_operators.py)
+def evaluate(expr, mapper_type=EvaluationMapper, **kwargs):
+    """Evaluate a symbolic expression using a specified mapper."""
+    mapper = mapper_type(kwargs)
 
-    def _exp(self, val):
-        from numbers import Number
-        if isinstance(val, Number):
-            return np.exp(val)
-        else:
-            return val.array_context.np.exp(val)
+    from arraycontext import rec_map_array_container
+    return rec_map_array_container(mapper, expr)

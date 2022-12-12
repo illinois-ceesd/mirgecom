@@ -39,14 +39,19 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
-from logpyle import (LogQuantity, LogManager, MultiLogQuantity, add_run_info,
+from logpyle import (LogQuantity, PostLogQuantity, LogManager,
+    MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
+from arraycontext.container import get_container_context_recursively
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.discretization import Discretization
+from grudge.discretization import DiscretizationCollection
 import pyopencl as cl
 
 from typing import Optional, Callable
 import numpy as np
+
+from grudge.dof_desc import DD_VOLUME_ALL
+import grudge.op as oper
 
 
 def initialize_logmgr(enable_logmgr: bool,
@@ -97,22 +102,29 @@ def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
     logmgr.add_quantity(DeviceMemoryUsage())
 
 
-def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
-      extract_vars_for_logging, units_for_logging):
+def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
+        extract_vars_for_logging, units_for_logging, dd=DD_VOLUME_ALL):
     """Add default discretization quantities to the logmgr."""
-    for op in ["min", "max", "L2_norm"]:
-        for quantity in ["pressure", "temperature"]:
-            logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+    if dd != DD_VOLUME_ALL:
+        suffix = f"_{dd.domain_tag.tag}"
+    else:
+        suffix = ""
 
-        for quantity in ["mass", "energy"]:
+    for reduction_op in ["min", "max", "L2_norm"]:
+        for quantity in ["pressure"+suffix, "temperature"+suffix]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                dcoll, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging, dd=dd))
+
+        for quantity in ["mass"+suffix, "energy"+suffix]:
+            logmgr.add_quantity(DiscretizationBasedQuantity(
+                dcoll, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging, dd=dd))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                axis=d))
+                dcoll, "momentum"+suffix, reduction_op, extract_vars_for_logging,
+                units_for_logging, axis=d, dd=dd))
 
 
 # {{{ Package versions
@@ -230,15 +242,15 @@ class StateConsumer:
 # {{{ Discretization-based quantities
 
 
-class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
+class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     """Logging support for physical quantities.
 
     Possible rank aggregation operations (``op``) are: min, max, L2_norm.
     """
 
-    def __init__(self, discr: Discretization, quantity: str, op: str,
+    def __init__(self, dcoll: DiscretizationCollection, quantity: str, op: str,
                  extract_vars_for_logging, units_logging, name: str = None,
-                 axis: Optional[int] = None):
+                 axis: Optional[int] = None, dd=DD_VOLUME_ALL):
         unit = units_logging(quantity)
 
         if name is None:
@@ -247,7 +259,7 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self, extract_vars_for_logging)
 
-        self.discr = discr
+        self.dcoll = dcoll
 
         self.quantity = quantity
         self.axis = axis
@@ -255,13 +267,13 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
         from functools import partial
 
         if op == "min":
-            self._discr_reduction = partial(self.discr.nodal_min, "vol")
+            self._discr_reduction = partial(oper.nodal_min, self.dcoll, dd)
             self.rank_aggr = min
         elif op == "max":
-            self._discr_reduction = partial(self.discr.nodal_max, "vol")
+            self._discr_reduction = partial(oper.nodal_max, self.dcoll, dd)
             self.rank_aggr = max
         elif op == "L2_norm":
-            self._discr_reduction = partial(self.discr.norm, p=2)
+            self._discr_reduction = partial(oper.norm, self.dcoll, p=2, dd=dd)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
@@ -278,17 +290,19 @@ class DiscretizationBasedQuantity(LogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
+        actx = get_container_context_recursively(quantity)
+
         if self.axis is not None:  # e.g. momentum
             quantity = quantity[self.axis]
 
-        return self._discr_reduction(quantity)
+        return actx.to_numpy(self._discr_reduction(quantity))[()]
 
 # }}}
 
 
 # {{{ Kernel profile quantities
 
-class KernelProfile(MultiLogQuantity):
+class KernelProfile(MultiPostLogQuantity):
     """Logging support for statistics of the OpenCL kernel profiling (num_calls, \
     time, flops, bytes_accessed, footprint).
 
@@ -336,7 +350,7 @@ class KernelProfile(MultiLogQuantity):
 
 # {{{ Memory profiling
 
-class PythonMemoryUsage(LogQuantity):
+class PythonMemoryUsage(PostLogQuantity):
     """Logging support for Python memory usage (RSS, host).
 
     Uses :mod:`psutil` to track memory usage. Virtually no overhead.
@@ -357,7 +371,7 @@ class PythonMemoryUsage(LogQuantity):
         return self.process.memory_info()[0] / 1024 / 1024
 
 
-class DeviceMemoryUsage(LogQuantity):
+class DeviceMemoryUsage(PostLogQuantity):
     """Logging support for GPU memory usage (Nvidia only currently)."""
 
     def __init__(self, name: str = None) -> None:

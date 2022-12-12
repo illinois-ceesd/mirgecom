@@ -28,8 +28,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+from functools import partial
+import grudge.op as op
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+from grudge.dof_desc import DD_VOLUME_ALL
 
 
 def make_init_message(*, dim, order, dt, t_final,
@@ -37,7 +40,7 @@ def make_init_message(*, dim, order, dt, t_final,
                       initname, eosname, casename,
                       nelements=0, global_nelements=0):
     """Create a summary of some general simulation parameters and inputs."""
-    return(
+    return (
         f"Initialization for Case({casename})\n"
         f"===\n"
         f"Num {dim}d order-{order} elements: {nelements}\n"
@@ -51,12 +54,12 @@ def make_init_message(*, dim, order, dt, t_final,
     )
 
 
-def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
+def make_status_message(
+        *, dcoll, t, step, dt, cfl, dependent_vars, fluid_dd=DD_VOLUME_ALL):
     r"""Make simulation status and health message."""
     dv = dependent_vars
-    from functools import partial
-    _min = partial(discr.nodal_min, "vol")
-    _max = partial(discr.nodal_max, "vol")
+    _min = partial(op.nodal_min, dcoll, fluid_dd)
+    _max = partial(op.nodal_max, dcoll, fluid_dd)
     statusmsg = (
         f"Status: {step=} {t=}\n"
         f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"

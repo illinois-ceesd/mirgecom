@@ -24,8 +24,9 @@ jobs:
             python3 -m venv myenv
             source myenv/bin/activate
             python -m pip install wheel
-            python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
-            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py && echo "Flake8 found no errors."
+            # Need "flake8<6" due to https://github.com/zheller/flake8-quotes/issues/110
+            python -m pip install "flake8<6" pep8-naming flake8-quotes flake8-bugbear
+            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
 
     pylint:
         name: Pylint
@@ -40,14 +41,11 @@ jobs:
           run: |
             . .ci-support/install.sh
 
-        - name: Pylint
+        - name: Run Pylint
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            python -m pip install wheel
-            python -m pip install pylint pyyaml
-            curl -L -O https://raw.githubusercontent.com/inducer/ci-support/master/run-pylint.py
-            python run-pylint.py --yaml-rcfile=.pylintrc.yml "$(basename $GITHUB_REPOSITORY)" test examples && echo "Pylint found no errors."
+            ./run-pylint.sh
 
     pydocstyle:
         runs-on: ubuntu-latest
@@ -57,7 +55,7 @@ jobs:
           uses: actions/setup-python@v1
           with:
             python-version: '3.x'
-        - name: Lint
+        - name: Run Pydocstyle
           run: |
             python3 -m venv myenv
             source myenv/bin/activate
@@ -66,11 +64,8 @@ jobs:
             python -m pydocstyle "$(basename $GITHUB_REPOSITORY)" && echo "pydocstyle found no errors."
 
     pytest:
-        name: Pytest ${{ matrix.os }}
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: [ubuntu-latest, macos-latest]
+        name: Pytest
+        runs-on: ubuntu-latest
 
         steps:
         - uses: actions/checkout@v2
@@ -83,18 +78,15 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
-            if [[ ${{ matrix.os }} == "macos-latest" ]]; then
-              export PYOPENCL_TEST=port:pthread
-            fi
-
-            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+            python -m pip install pytest
+            python -m pytest --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
-        name: Examples ${{ matrix.os }}
+        name: Examples
         runs-on: ${{ matrix.os }}
         strategy:
           matrix:
-            os: [ubuntu-latest, macos-latest]
+            os: [ubuntu-latest, porter]
 
         steps:
         - uses: actions/checkout@v2
@@ -102,11 +94,23 @@ jobs:
           run: |
             . .ci-support/install.sh
 
+        - name: Test lazy accuracy
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            conda install vtk  # needed for the accuracy comparison
+            export XDG_CACHE_HOME=/tmp
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
+            # && export POCL_DEBUG=cuda
+            scripts/run-integrated-tests.sh --lazy-accuracy
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            examples/run_examples.sh ./examples
+            export XDG_CACHE_HOME=/tmp
+            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME && conda install pocl-cuda
+            # && export POCL_DEBUG=cuda
+            scripts/run-integrated-tests.sh --examples
 
     doc:
         name: Documentation
@@ -123,10 +127,13 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
-            conda install sphinx graphviz
+            sudo apt-get update
+            sudo apt-get install texlive-latex-extra latexmk
+            conda install sphinx graphviz 'docutils>=0.16'
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             make html SPHINXOPTS="-W --keep-going -n"
+            make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     emirge:
         name: Emirge installation
@@ -139,7 +146,7 @@ jobs:
         - uses: actions/checkout@v2
         - name: Install emirge
           run: |
-            [[ $(uname) == Linux ]] && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew update && brew install mpich
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
@@ -152,5 +159,36 @@ jobs:
             cd ..
             source emirge/config/activate_env.sh
             cd mirgecom/examples
-            python -m mpi4py ./wave-eager-mpi.py
+            python -m mpi4py ./pulse-mpi.py
 
+    y1:
+        name: Production testing
+        runs-on: ${{ matrix.os }}
+        strategy:
+          matrix:
+            os: [ubuntu-latest, macos-latest, porter]
+
+        steps:
+        - uses: actions/checkout@v2
+          with:
+            fetch-depth: '0'
+        - name: Prepare production environment
+          run: |
+            [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+            [[ $(uname) == Darwin ]] && brew update && brew install mpich
+            MIRGEDIR=$(pwd)
+            cat scripts/production-testing-env.sh
+            . scripts/production-testing-env.sh
+            cd ..
+            date
+            printf "Removing stale install ..."
+            rm -rf emirge.prod emirge.y1
+            printf "done.\n"
+            date
+            git clone https://github.com/illinois-ceesd/emirge emirge.prod
+            cd emirge.prod
+            . ../mirgecom/scripts/install-mirge-from-source.sh ${MIRGEDIR}/..
+        - name: Run production test
+          run: |
+            source ../config/activate_env.sh
+            scripts/run-integrated-tests.sh --production

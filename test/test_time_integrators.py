@@ -27,6 +27,10 @@ THE SOFTWARE.
 import numpy as np
 import logging
 import pytest
+import importlib
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
 
 from mirgecom.integrators import (euler_step,
                                   lsrk54_step,
@@ -41,7 +45,8 @@ logger = logging.getLogger(__name__)
                           (lsrk54_step, 4),
                           (lsrk144_step, 4),
                           (rk4_step, 4)])
-def test_integration_order(integrator, method_order):
+@pytest.mark.parametrize("local_dt", [True, False])
+def test_integrator_order(integrator, method_order, local_dt):
     """Test that time integrators have correct order."""
 
     def exact_soln(t):
@@ -53,18 +58,140 @@ def test_integration_order(integrator, method_order):
     from pytools.convergence import EOCRecorder
     integrator_eoc = EOCRecorder()
 
-    dt = 1.0
+    dt = (np.asarray([0.5, 1.0, 1.5, 2.0]) if local_dt else 1.0)
+    max_steps = 5
+
     for refine in [1, 2, 4, 8]:
+        # These are multi-valued when local_dt
         dt = dt / refine
-        t = 0
+        t = 0*dt
         state = exact_soln(t)
 
-        while t < 4:
+        for _ in range(max_steps):
             state = integrator(state, t, dt, rhs)
             t = t + dt
 
-        error = np.abs(state - exact_soln(t)) / exact_soln(t)
-        integrator_eoc.add_data_point(dt, error)
+        if local_dt:
+            # Use the max error among multi-"cells" for local_dt
+            error = max(np.abs(state - exact_soln(t)) / exact_soln(t))
+            integrator_eoc.add_data_point(dt[0], error)
+        else:
+            error = np.abs(state - exact_soln(t)) / exact_soln(t)
+            integrator_eoc.add_data_point(dt, error)
 
     logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
     assert integrator_eoc.order_estimate() >= method_order - .01
+
+
+@pytest.mark.parametrize(("integrator", "method_order"),
+                         [(euler_step, 1),
+                          (lsrk54_step, 4),
+                          (lsrk144_step, 4),
+                          (rk4_step, 4)])
+@pytest.mark.parametrize("local_dt", [True, False])
+def test_state_advancer(integrator, method_order, local_dt):
+    """Test that time integrators have correct order."""
+
+    def exact_soln(t):
+        return np.exp(-t)
+
+    def rhs(t, state):
+        return -np.exp(-t)
+
+    from pytools.convergence import EOCRecorder
+    integrator_eoc = EOCRecorder()
+
+    dt = (np.asarray([0.5, 1.0, 1.5, 2.0]) if local_dt else 1.0)
+    max_steps = 5 if local_dt else None
+    t_final = 5*dt
+
+    for refine in [1, 2, 4, 8]:
+        # These are multi-valued when local_dt
+        dt = dt / refine
+        t = 0*dt
+        state = exact_soln(t)
+
+        advanced_step, advanced_t, advanced_state = \
+            advance_state(rhs=rhs, timestepper=integrator, dt=dt,
+                          state=state, t=t, t_final=t_final,
+                          max_steps=max_steps, local_dt=local_dt,
+                          istep=0)
+
+        expected_soln = exact_soln(advanced_t)
+
+        if local_dt:
+            # Use the max error among multi-"cells" for local_dt
+            error = max(np.abs(advanced_state - expected_soln)
+                        / expected_soln)
+            integrator_eoc.add_data_point(dt[0], error)
+        else:
+            error = (
+                np.abs(advanced_state - expected_soln) / expected_soln
+            )
+            integrator_eoc.add_data_point(dt, error)
+
+    logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
+    assert integrator_eoc.order_estimate() >= method_order - .01
+
+
+leap_spec = importlib.util.find_spec("leap")
+found = leap_spec is not None
+if found:
+    from leap.rk import (
+        ODE23MethodBuilder, ODE45MethodBuilder,
+        ForwardEulerMethodBuilder,
+        MidpointMethodBuilder, HeunsMethodBuilder,
+        RK3MethodBuilder, RK4MethodBuilder, RK5MethodBuilder,
+        LSRK4MethodBuilder,
+        SSPRK22MethodBuilder, SSPRK33MethodBuilder,
+        )
+    from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
+    from mirgecom.steppers import advance_state
+
+    @pytest.mark.parametrize(("method", "method_order"), [
+        (ODE23MethodBuilder("y", use_high_order=False), 2),
+        (ODE23MethodBuilder("y", use_high_order=True), 3),
+        (ODE45MethodBuilder("y", use_high_order=False), 4),
+        (ODE45MethodBuilder("y", use_high_order=True), 5),
+        (ForwardEulerMethodBuilder("y"), 1),
+        (MidpointMethodBuilder("y"), 2),
+        (HeunsMethodBuilder("y"), 2),
+        (RK3MethodBuilder("y"), 3),
+        (RK4MethodBuilder("y"), 4),
+        (RK5MethodBuilder("y"), 5),
+        (LSRK4MethodBuilder("y"), 4),
+        (KennedyCarpenterIMEXARK4MethodBuilder("y", use_implicit=False,
+            explicit_rhs_name="y"), 4),
+        (SSPRK22MethodBuilder("y"), 2),
+        (SSPRK33MethodBuilder("y"), 3),
+        ])
+    def test_leapgen_integration_order(method, method_order):
+        """Test that time integrators have correct order."""
+        def exact_soln(t):
+            return np.exp(-t)
+
+        def rhs(t, y):
+            return -np.exp(-t)
+
+        from pytools.convergence import EOCRecorder
+        integrator_eoc = EOCRecorder()
+
+        dt = 1.0
+        for refine in [1, 2, 4, 8]:
+            dt = dt / refine
+            t = 0
+            state = exact_soln(t)
+
+            t_final = 4
+            step = 0
+
+            (step, t, state) = \
+                advance_state(rhs=rhs, timestepper=method, dt=dt,
+                              state=state, t=t, t_final=t_final,
+                              component_id="y")
+
+            error = np.abs(state - exact_soln(t)) / exact_soln(t)
+            integrator_eoc.add_data_point(dt, error)
+
+        logger.info(f"Time Integrator EOC:\n = {integrator_eoc}")
+        assert integrator_eoc.order_estimate() >= method_order - .1

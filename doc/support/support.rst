@@ -4,6 +4,7 @@ Simulation Support
 
 .. toctree::
 
+   arrays
    time-integrators
    integration-loops
    filter
@@ -11,4 +12,6 @@ Simulation Support
    input-output
    tools
    symbolic
+   math
+   operators
    thermochem

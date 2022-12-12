@@ -46,11 +46,19 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import grudge.dof_desc as dof_desc
+from functools import partial
+
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    DISCR_TAG_BASE,
+    DISCR_TAG_MODAL,
+)
+
+from arraycontext import map_array_container
 
 from meshmode.dof_array import DOFArray
+
 from pytools import keyed_memoize_in
-from pytools.obj_array import obj_array_vectorized_n_args
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
@@ -69,8 +77,8 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
 
     Parameters
     ----------
-    actx: :class:`meshmode.array_context.ArrayContext`
-        A :class:`meshmode.array_context.ArrayContext` associated with
+    actx: :class:`arraycontext.ArrayContext`
+        A :class:`arraycontext.ArrayContext` associated with
         an array of degrees of freedom
     group: :class:`meshmode.mesh.MeshElementGroup`
         A :class:`meshmode.mesh.MeshElementGroup` from which the mode ids,
@@ -126,8 +134,8 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
 
     Parameters
     ----------
-    actx: :class:`meshmode.array_context.ArrayContext`
-        A :class:`meshmode.array_context.ArrayContext` associated with
+    actx: :class:`arraycontext.ArrayContext`
+        A :class:`arraycontext.ArrayContext` associated with
         an array of degrees of freedom
     modal_field: numpy.ndarray
         DOFArray or object array of DOFArrays denoting the modal data
@@ -146,7 +154,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
         DOFArray or object array of DOFArrays
 
     """
-    from meshmode.array_context import FirstAxisIsElementsTag
+    from meshmode.transform_metadata import FirstAxisIsElementsTag
     return DOFArray(
         actx,
         tuple(actx.einsum("j,ej->ej",
@@ -163,8 +171,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
     )
 
 
-@obj_array_vectorized_n_args
-def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
+def filter_modally(dcoll, cutoff, mode_resp_func, field, *, dd=DD_VOLUME_ALL):
     """Stand-alone procedural interface to spectral filtering.
 
     For each element group in the discretization, and restriction,
@@ -182,30 +189,38 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     ----------
     dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
-    dd: :class:`grudge.dof_desc.DOFDesc` or as accepted by
-        :func:`grudge.dof_desc.as_dofdesc`
-        Describe the type of DOF vector on which to operate.
     cutoff: int
         Mode below which *field* will not be filtered
     mode_resp_func:
         Modal response function returns a filter coefficient for input mode id
-    field: :class:`numpy.ndarray`
-        DOFArray or object array of DOFArrays
+    field: :class:`mirgecom.fluid.ConservedVars`
+        An array container containing the relevant field(s) to filter.
+    dd: grudge.dof_desc.DOFDesc
+        Describe the type of DOF vector on which to operate. Must be on the base
+        discretization.
 
     Returns
     -------
-    result: numpy.ndarray
-        Filtered version of *field*.
+    result: :class:`mirgecom.fluid.ConservedVars`
+        An array container containing the filtered field(s).
     """
-    dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.DD_VOLUME_MODAL
-    discr = dcoll.discr_from_dd(dd)
+    if not isinstance(field, DOFArray):
+        return map_array_container(
+            partial(filter_modally, dcoll, cutoff, mode_resp_func, dd=dd), field
+        )
 
-    assert isinstance(field, DOFArray)
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_nodal = dd
+    dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
+
+    discr = dcoll.discr_from_dd(dd_nodal)
+
     actx = field.array_context
 
-    modal_map = dcoll.connection_from_dds(dd, dd_modal)
-    nodal_map = dcoll.connection_from_dds(dd_modal, dd)
+    modal_map = dcoll.connection_from_dds(dd_nodal, dd_modal)
+    nodal_map = dcoll.connection_from_dds(dd_modal, dd_nodal)
     field = modal_map(field)
     field = apply_spectral_filter(actx, field, discr, cutoff,
                                   mode_resp_func)
