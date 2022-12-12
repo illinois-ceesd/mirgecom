@@ -65,8 +65,8 @@ def test_normal_axes_utility(actx_factory, dim):
 
     from mirgecom.boundary import _get_normal_axes as gna
     order = 1
-    npts_geom = 5
-    a = -.011
+    npts_geom = 6
+    a = -.01
     b = .01
     mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
