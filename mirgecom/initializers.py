@@ -1202,7 +1202,8 @@ class PlanarDiscontinuity:
     given an initial thermal state (pressure, temperature) and an EOS.
 
     The solution varies across a planar interface defined by a tanh function
-    located at disc_location for pressure, temperature, velocity, and mass fraction
+    located at disc_location with normal normal_dir
+    for pressure, temperature, velocity, and mass fraction
 
     .. automethod:: __init__
     .. automethod:: __call__
