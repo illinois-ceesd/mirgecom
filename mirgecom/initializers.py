@@ -47,7 +47,6 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
-
 def make_pulse(amp, r0, w, r):
     r"""Create a Gaussian pulse.
 
@@ -1329,3 +1328,4 @@ class ShearFlow:
 
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=total_energy)
+
