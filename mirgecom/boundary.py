@@ -1727,7 +1727,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        actx = state_minus.array_context
         dim = state_minus.dim
 
         grad_species_mass_plus = 1.*grad_cv_minus.species_mass
@@ -1793,7 +1792,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
         if dim == 3:
 
-            normal_set = _get_normal_axes(actx, normal)
+            normal_set = _get_normal_axes(normal)
 
             n_1_x = normal_set[0][0]
             n_1_y = normal_set[0][1]
