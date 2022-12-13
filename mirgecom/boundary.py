@@ -695,9 +695,6 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         Gradients of species mass fractions are set to zero in the normal direction
         to ensure zero flux of species across the boundary.
         """
-        dim = state_minus.dim
-        actx = state_minus.array_context
-
         grad_species_mass_plus = 1.*grad_cv_minus.species_mass
         if state_minus.nspecies > 0:
             from mirgecom.fluid import species_mass_fraction_gradient
@@ -714,17 +711,19 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         # normal velocity on the surface is zero,
         vel_plus = state_plus.velocity
 
+        rotation_matrix = _get_rotation_matrix(normal)
+
         # get orthogonal vector(s) to the normal and
         # construct the rotation matrix
-        if dim == 2:
-            n1, t1 = _get_normal_axes(actx, normal)
-            rotation_matrix = make_obj_array([n1[0], n1[1],
-                                              t1[0], t1[1]]).reshape(dim, dim)
-        else:
-            n1, t1, t2 = _get_normal_axes(actx, normal)
-            rotation_matrix = make_obj_array([n1[0], n1[1], n1[2],
-                                              t1[0], t1[1], t1[2],
-                                              t2[0], t2[1], t2[2]]).reshape(dim, dim)
+        # if dim == 2:
+        #    n1, t1 = _get_normal_axes(actx, normal)
+        #    rotation_matrix = make_obj_array([n1[0], n1[1],
+        #                                      t1[0], t1[1]]).reshape(dim, dim)
+        # else:
+        #    n1, t1, t2 = _get_normal_axes(actx, normal)
+        #    rotation_matrix = make_obj_array([n1[0], n1[1], n1[2],
+        #                                      t1[0], t1[1], t1[2],
+        #                                      t2[0], t2[1], t2[2]]).reshape(dim, di)
 
         from mirgecom.fluid import velocity_gradient
         grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
