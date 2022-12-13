@@ -74,7 +74,8 @@ def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
     return external_quantity
 
 
-def _get_normal_axes(actx, seed_vector):
+def _get_normal_axes(seed_vector):
+    actx = get_container_context_recursively(seed_vector)
     vec_dim, = seed_vector.shape
 
     vec_mag = actx.np.sqrt(np.dot(seed_vector, seed_vector))
@@ -114,6 +115,20 @@ def _get_normal_axes(actx, seed_vector):
         vector_3[2] = x_comp*y_comp_2 - y_comp*x_comp_2
 
     return seed_vector, vector_2, vector_3
+
+
+def _get_rotation_matrix(principal_direction):
+    principal_axes = _get_normal_axes(principal_direction)
+    dim, = principal_direction.shape
+    comps = []
+
+    for d in range(dim):
+        axis = principal_axes[d]
+        for i in range(dim):
+            comps.append(axis[i])
+
+    comps = make_obj_array(comps)
+    return comps.reshape(dim, dim)
 
 
 class FluidBoundary(metaclass=ABCMeta):
