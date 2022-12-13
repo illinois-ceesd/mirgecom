@@ -74,7 +74,8 @@ def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
     return external_quantity
 
 
-def _get_normal_axes(actx, seed_vector):
+def _get_normal_axes(seed_vector):
+    actx = get_container_context_recursively(seed_vector)
     vec_dim, = seed_vector.shape
 
     vec_mag = actx.np.sqrt(np.dot(seed_vector, seed_vector))
@@ -114,6 +115,20 @@ def _get_normal_axes(actx, seed_vector):
         vector_3[2] = x_comp*y_comp_2 - y_comp*x_comp_2
 
     return seed_vector, vector_2, vector_3
+
+
+def _get_rotation_matrix(principal_direction):
+    principal_axes = _get_normal_axes(principal_direction)
+    dim, = principal_direction.shape
+    comps = []
+
+    for d in range(dim):
+        axis = principal_axes[d]
+        for i in range(dim):
+            comps.append(axis[i])
+
+    comps = make_obj_array(comps)
+    return comps.reshape(dim, dim)
 
 
 class FluidBoundary(metaclass=ABCMeta):
@@ -1571,7 +1586,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        actx = state_minus.array_context
         dim = state_minus.dim
 
         grad_species_mass_plus = 1.*grad_cv_minus.species_mass
@@ -1637,7 +1651,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
         if dim == 3:
 
-            normal_set = _get_normal_axes(actx, normal)
+            normal_set = _get_normal_axes(normal)
 
             n_1_x = normal_set[0][0]
             n_1_y = normal_set[0][1]
