@@ -712,22 +712,19 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         # normal velocity on the surface is zero,
         vel_plus = state_plus.velocity
 
-        rotation_matrix = _get_rotation_matrix(normal)
-
         from mirgecom.fluid import velocity_gradient
         grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
 
         # rotate the velocity gradient tensor into the normal direction
-        grad_v_minus_normal = rotation_matrix@grad_v_minus@rotation_matrix.T
+        rotation_matrix = _get_rotation_matrix(normal)
+        grad_v_normal = rotation_matrix@grad_v_minus@rotation_matrix.T
 
-        # set the shear terms in the plus state opposite the normal state to
-        # cancel the shear flux
-        grad_v_plus_shear = (grad_v_minus_normal
-                             - grad_v_minus_normal*np.eye(state_minus.dim))
-        grad_v_plus_normal = grad_v_minus_normal - 2*grad_v_plus_shear
+        # set the normal component of the tangential velocity to 0
+        for i in range(state_minus.dim-1):
+            grad_v_normal[i+1][0] = 0.*grad_v_normal[i+1][0]
 
         # get the gradient on the plus side in the global coordiate space
-        grad_v_plus = rotation_matrix.T*grad_v_plus_normal*rotation_matrix
+        grad_v_plus = rotation_matrix.T@grad_v_normal@rotation_matrix
 
         # construct grad(mom)
         grad_mom_plus = (state_minus.mass_density*grad_v_plus
@@ -761,17 +758,8 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         grad_t_wall = self.grad_temperature_bc(grad_t_minus=grad_t_minus,
                                                normal=normal, **kwargs)
 
-        state_pair = TracePair(dd_bdry, interior=state_minus,
-                               exterior=state_wall)
-        grad_cv_pair = TracePair(dd_bdry, interior=grad_cv_minus,
-                                 exterior=grad_cv_wall)
-        grad_t_pair = TracePair(dd_bdry, interior=grad_t_minus,
-                                exterior=grad_t_wall)
-
-        return (numerical_flux_func(dcoll, state_pair=state_pair,
-                                    grad_cv_pair=grad_cv_pair,
-                                    grad_t_pair=grad_t_pair,
-                                    gas_model=gas_model))
+        from mirgecom.viscous import viscous_flux
+        return viscous_flux(state_wall, grad_cv_wall, grad_t_wall)@normal
 
     def adiabatic_slip_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary for artificial viscosity."""
