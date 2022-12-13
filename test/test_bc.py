@@ -28,6 +28,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 import logging
 import pytest
+from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
@@ -73,7 +74,7 @@ def test_normal_axes_utility(actx_factory, dim):
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
     normal_vectors = nodes / actx.np.sqrt(np.dot(nodes, nodes))
-    normal_set = gna(actx, normal_vectors)
+    normal_set = gna(normal_vectors)
     nset = len(normal_set)
     assert nset == dim
 
@@ -92,6 +93,26 @@ def test_normal_axes_utility(actx_factory, dim):
                 print(f"(i,j) = ({i}, {next_index})")
                 norm_comp = np.dot(normal_set[i], normal_set[next_index])
                 assert vec_norm(norm_comp, np.inf) < tol
+
+        if dim == 2:
+            rmat_exp = make_obj_array([normal_set[0][0], normal_set[0][1],
+                                       normal_set[1][0], normal_set[1][1]])
+        else:
+            rmat_exp = make_obj_array(
+                [normal_set[0][0], normal_set[0][1], normal_set[0][2],
+                 normal_set[1][0], normal_set[1][1], normal_set[1][2],
+                 normal_set[2][0], normal_set[2][1], normal_set[2][2]])
+        rmat_exp = rmat_exp.reshape(dim, dim)
+        print(f"{rmat_exp=}")
+
+        from mirgecom.boundary import _get_rotation_matrix as grm
+        rotation_matrix = grm(normal_vectors)
+        print(f"{rotation_matrix.shape}")
+        print(f"{rotation_matrix=}")
+        print(f"{rmat_exp - rotation_matrix=}")
+
+        resid = rmat_exp - rotation_matrix
+        assert vec_norm(resid).all() == 0
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
