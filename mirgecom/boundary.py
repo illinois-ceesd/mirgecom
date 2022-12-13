@@ -738,7 +738,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         grad_v_plus_normal = grad_v_minus_normal - 2*grad_v_plus_shear
 
         # get the gradient on the plus side in the global coordiate space
-        grad_v_plus = rotation_matrix.T*grad_v_plus_normal*rotation_matrix
+        grad_v_plus = rotation_matrix.T@grad_v_plus_normal@rotation_matrix
 
         # construct grad(mom)
         grad_mom_plus = (state_minus.mass_density*grad_v_plus
