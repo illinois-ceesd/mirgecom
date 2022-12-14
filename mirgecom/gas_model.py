@@ -292,6 +292,9 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, limiter_func=None,
         cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
                           dd=limiter_dd)
 
+    if smoothness is None:  # noqa
+        smoothness = cv.mass*0.0  # noqa
+
     dv = GasDependentVars(
         temperature=temperature,
         pressure=pressure,
