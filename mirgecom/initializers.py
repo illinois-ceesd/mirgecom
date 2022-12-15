@@ -11,7 +11,6 @@ Solution Initializers
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
 .. autoclass:: MixtureInitializer
-.. autoclass:: PlanarDiscontinuity
 .. autoclass:: PlanarPoiseuille
 .. autoclass:: ShearFlow
 .. autoclass:: PlanarDiscontinuity
