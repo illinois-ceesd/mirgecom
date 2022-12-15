@@ -261,7 +261,8 @@ class ViscousFluidState(FluidState):
         return self.tv.species_diffusivity
 
 
-def make_fluid_state(cv, gas_model, temperature_seed=None, smoothness=None):
+def make_fluid_state(cv, gas_model, temperature_seed=None, smoothness=None,
+                     limiter_func=None, limiter_dd=None):
     """Create a fluid state from the conserved vars and physical gas model.
 
     Parameters
@@ -279,21 +280,52 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, smoothness=None):
         An optional array or number with the temperature to use as a seed
         for a temperature evaluation for the created fluid state
 
+    limiter_func:
+
+        Callable function to limit the fluid conserved quantities to physically
+        valid and realizable values.
+
     Returns
     -------
     :class:`~mirgecom.gas_model.FluidState`
 
         Thermally consistent fluid state
     """
-    dv = gas_model.eos.dependent_vars(cv, temperature_seed=temperature_seed,
-                                      smoothness=smoothness)
+    temperature = gas_model.eos.temperature(cv, temperature_seed=temperature_seed)
+    pressure = gas_model.eos.pressure(cv, temperature=temperature)
+
+    if limiter_func:
+        cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
+                          dd=limiter_dd)
+
+    # FIXME work-around for now
+    if smoothness is None:
+        smoothness = cv.mass*0.0
+
+    dv = GasDependentVars(
+        temperature=temperature,
+        pressure=pressure,
+        speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
+        smoothness=smoothness
+    )
+
+    from mirgecom.eos import MixtureEOS, MixtureDependentVars
+    if isinstance(gas_model.eos, MixtureEOS):
+        dv = MixtureDependentVars(
+            temperature=dv.temperature,
+            pressure=dv.pressure,
+            speed_of_sound=dv.speed_of_sound,
+            smoothness=dv.smoothness,
+            species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature))
+
     if gas_model.transport is not None:
         tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
         return ViscousFluidState(cv=cv, dv=dv, tv=tv)
+
     return FluidState(cv=cv, dv=dv)
 
 
-def project_fluid_state(dcoll, src, tgt, state, gas_model):
+def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
     """Project a fluid state onto a boundary consistent with the gas model.
 
     If required by the gas model, (e.g. gas is a mixture), this routine will
@@ -325,6 +357,11 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model):
 
         The physical model constructs for the gas_model
 
+    limiter_func:
+
+        Callable function to limit the fluid conserved quantities to physically
+        valid and realizable values.
+
     Returns
     -------
     :class:`~mirgecom.gas_model.FluidState`
@@ -341,7 +378,8 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model):
         smoothness = op.project(dcoll, src, tgt, state.dv.smoothness)
 
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
-                            temperature_seed=temperature_seed, smoothness=smoothness)
+                            temperature_seed=temperature_seed, smoothness=smoothness,
+                            limiter_func=limiter_func, limiter_dd=tgt)
 
 
 def _getattr_ish(obj, name):
@@ -352,7 +390,7 @@ def _getattr_ish(obj, name):
 
 
 def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=None,
-                                 smoothness_pairs=None):
+                                 smoothness_pairs=None, limiter_func=None):
     """Create a fluid state from the conserved vars and equation of state.
 
     This routine helps create a thermally consistent fluid state out of a collection
@@ -375,6 +413,11 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
         List of tracepairs of :class:`~meshmode.dof_array.DOFArray` with the
         temperature seeds to use in creation of the thermally consistent states.
 
+    limiter_func:
+
+        Callable function to limit the fluid conserved quantities to physically
+        valid and realizable values.
+
     Returns
     -------
     List of :class:`~grudge.trace_pair.TracePair`
@@ -391,10 +434,12 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
         cv_pair.dd,
         interior=make_fluid_state(cv_pair.int, gas_model,
                                   temperature_seed=_getattr_ish(tseed_pair, "int"),
-                                  smoothness=_getattr_ish(smoothness_pair, "int")),
+                                  smoothness=_getattr_ish(smoothness_pair, "int"),
+                                  limiter_func=limiter_func, limiter_dd=cv_pair.dd),
         exterior=make_fluid_state(cv_pair.ext, gas_model,
                                   temperature_seed=_getattr_ish(tseed_pair, "ext"),
-                                  smoothness=_getattr_ish(smoothness_pair, "ext")))
+                                  smoothness=_getattr_ish(smoothness_pair, "ext"),
+                                  limiter_func=limiter_func, limiter_dd=cv_pair.dd))
         for cv_pair, tseed_pair, smoothness_pair in zip(cv_pairs,
                                                         temperature_seed_pairs,
                                                         smoothness_pairs)]
@@ -414,7 +459,7 @@ class _FluidSmoothnessTag:
 
 def make_operator_fluid_states(
         dcoll, volume_state, gas_model, boundaries, quadrature_tag=DISCR_TAG_BASE,
-        dd=DD_VOLUME_ALL, comm_tag=None):
+        dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
     This routine prepares a model-consistent fluid state for each of the volume and
@@ -457,6 +502,11 @@ def make_operator_fluid_states(
     comm_tag: Hashable
         Tag for distributed communication
 
+    limiter_func:
+
+        Callable function to limit the fluid conserved quantities to physically
+        valid and realizable values.
+
     Returns
     -------
     (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
@@ -483,7 +533,7 @@ def make_operator_fluid_states(
     domain_boundary_states_quad = {
         bdtag: project_fluid_state(dcoll, dd_vol,
                                   dd_vol_quad.with_domain_tag(bdtag),
-                                  volume_state, gas_model)
+                                  volume_state, gas_model, limiter_func=limiter_func)
         for bdtag in boundaries
     }
 
@@ -522,12 +572,14 @@ def make_operator_fluid_states(
     interior_boundary_states_quad = \
         make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
                                      tseed_interior_pairs,
-                                     smoothness_interior_pairs)
+                                     smoothness_interior_pairs,
+                                     limiter_func=limiter_func)
 
     # Interpolate the fluid state to the volume quadrature grid
     # (this includes the conserved and dependent quantities)
     volume_state_quad = project_fluid_state(dcoll, dd_vol, dd_vol_quad,
-                                            volume_state, gas_model)
+                                            volume_state, gas_model,
+                                            limiter_func=limiter_func)
 
     return \
         volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad
