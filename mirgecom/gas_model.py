@@ -298,10 +298,15 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, smoothness=None,
         cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
                           dd=limiter_dd)
 
+    # FIXME work-around for now
+    if smoothness is None:
+        smoothness = cv.mass*0.0
+
     dv = GasDependentVars(
         temperature=temperature,
         pressure=pressure,
-        speed_of_sound=gas_model.eos.sound_speed(cv, temperature)
+        speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
+        smoothness=smoothness
     )
 
     from mirgecom.eos import MixtureEOS, MixtureDependentVars
@@ -310,6 +315,7 @@ def make_fluid_state(cv, gas_model, temperature_seed=None, smoothness=None,
             temperature=dv.temperature,
             pressure=dv.pressure,
             speed_of_sound=dv.speed_of_sound,
+            smoothness=dv.smoothness,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature))
 
     if gas_model.transport is not None:
