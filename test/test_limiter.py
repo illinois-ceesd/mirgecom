@@ -27,9 +27,58 @@ from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
+from meshmode.mesh import BTAG_ALL
 from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.discretization import create_discretization_collection
+
+from mirgecom.initializers import Uniform
+from mirgecom.eos import IdealSingleGas
+from mirgecom.gas_model import (  # noqa
+    GasModel, make_fluid_state, make_operator_fluid_states
+)
+from mirgecom.fluid import make_conserved
+import grudge.op as op
+
 import pytest
+
+
+def test_fluid_api(actx_factory):
+    actx = actx_factory()
+    dim = 2
+    nel_1d = 4
+    order = 1
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = dcoll.zeros(actx)
+    ones = zeros + 1.
+    eos = IdealSingleGas(gas_const=1)
+    gas_model = GasModel(eos=eos)
+
+    eps = .001
+    initializer = Uniform(dim=dim)
+    fluid_cv = initializer(nodes, eos=eos)
+    fluid_cv = fluid_cv.replace(mass=ones-eps)
+
+    # create a fluid CV limiting routine that preserves pressure and temperature
+    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
+
+        density_lim = bound_preserving_limiter(dcoll, cv.mass, mmin=1.0)
+
+        # make a new CV with the limited variables
+        return make_conserved(dim=dim, mass=density_lim, energy=cv.energy,
+                              momentum=density_lim*cv.velocity)
+
+    fluid_state = make_fluid_state(cv=fluid_cv, gas_model=gas_model,
+                                   limiter_func=_limit_fluid_cv)
+
+    mass = fluid_state.mass_density
+    assert min(actx.to_numpy(mass)).all() >= 1.0
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
