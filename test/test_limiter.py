@@ -27,7 +27,6 @@ from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
     PytatoPyOpenCLArrayContext
 )
-from meshmode.mesh import BTAG_ALL
 from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.discretization import create_discretization_collection
 
@@ -37,7 +36,6 @@ from mirgecom.gas_model import (  # noqa
     GasModel, make_fluid_state, make_operator_fluid_states
 )
 from mirgecom.fluid import make_conserved
-import grudge.op as op
 
 import pytest
 
