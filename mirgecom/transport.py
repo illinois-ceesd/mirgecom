@@ -94,7 +94,7 @@ class TransportModel:
     .. automethod:: transport_vars
     """
 
-    def bulk_viscosity(self, viscosity, cv: ConservedVars,
+    def bulk_viscosity(self, cv: ConservedVars,
                        dv: Optional[GasDependentVars] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas (${\mu}_{B}$)."""
         raise NotImplementedError()
@@ -104,18 +104,18 @@ class TransportModel:
         r"""Get the gas dynamic viscosity, $\mu$."""
         raise NotImplementedError()
 
-    def volume_viscosity(self, viscosity, cv: ConservedVars,
+    def volume_viscosity(self, cv: ConservedVars,
                          dv: Optional[GasDependentVars] = None) -> DOFArray:
         r"""Get the 2nd coefficent of viscosity, $\lambda$."""
         raise NotImplementedError()
 
-    def thermal_conductivity(self, viscosity, cv: ConservedVars,
+    def thermal_conductivity(self, cv: ConservedVars,
                              dv: Optional[GasDependentVars] = None,
                              eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         raise NotImplementedError()
 
-    def species_diffusivity(self, viscosity, cv: ConservedVars,
+    def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
@@ -126,8 +126,8 @@ class TransportModel:
                        eos: Optional[GasEOS] = None) -> GasTransportVars:
         r"""Compute the transport properties from the conserved state."""
         return GasTransportVars(
-            viscosity=self.viscosity(cv=cv, dv=dv),
             bulk_viscosity=self.bulk_viscosity(cv=cv, dv=dv),
+            viscosity=self.viscosity(cv=cv, dv=dv),
             thermal_conductivity=self.thermal_conductivity(cv=cv, dv=dv, eos=eos),
             species_diffusivity=self.species_diffusivity(cv=cv, dv=dv, eos=eos)
         )
@@ -156,15 +156,15 @@ class SimpleTransport(TransportModel):
         self._kappa = thermal_conductivity
         self._d_alpha = species_diffusivity
 
-    def viscosity(self, cv: ConservedVars,
-                  dv: Optional[GasDependentVars] = None) -> DOFArray:
-        r"""Get the gas dynamic viscosity, $\mu$."""
-        return self._mu*(0*cv.mass + 1.0)
-
     def bulk_viscosity(self, cv: ConservedVars,
                        dv: Optional[GasDependentVars] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         return self._mu_bulk*(0*cv.mass + 1.0)
+
+    def viscosity(self, cv: ConservedVars,
+                  dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$."""
+        return self._mu*(0*cv.mass + 1.0)
 
     def volume_viscosity(self, cv: ConservedVars,
                          dv: Optional[GasDependentVars] = None) -> DOFArray:
@@ -236,13 +236,6 @@ class PowerLawTransport(TransportModel):
         self._d_alpha = species_diffusivity
         self._lewis = lewis
 
-    def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
-        r"""Get the gas dynamic viscosity, $\mu$.
-
-        $\mu = \beta{T}^n$
-        """
-        return self._beta * dv.temperature**self._n
-
     def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
@@ -252,6 +245,15 @@ class PowerLawTransport(TransportModel):
 
         """
         return self._alpha * self.viscosity(cv, dv)
+
+    # TODO: Should this be memoized? Avoid multiple calls?
+    # Tulio: this would only help PowerLaw, and it is not a big deal.
+    def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$.
+
+        $\mu = \beta{T}^n$
+        """
+        return self._beta * dv.temperature**self._n
 
     def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
