@@ -24,8 +24,7 @@ jobs:
             python3 -m venv myenv
             source myenv/bin/activate
             python -m pip install wheel
-            # Need "flake8<6" due to https://github.com/zheller/flake8-quotes/issues/110
-            python -m pip install "flake8<6" pep8-naming flake8-quotes flake8-bugbear
+            python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
 
     pylint:
