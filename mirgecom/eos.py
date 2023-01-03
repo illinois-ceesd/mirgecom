@@ -742,7 +742,9 @@ class PyrometheusMixture(MixtureEOS):
 
     def species_enthalpies(self, cv: ConservedVars, temperature):
         """Get the species specific enthalpies."""
-        return self._pyrometheus_mech.get_species_enthalpies_rt(temperature)
+        spec_r = self.gas_const(cv)/self._pyrometheus_mech.wts
+        return (spec_r * temperature
+                * self._pyrometheus_mech.get_species_enthalpies_rt(temperature))
 
     def get_production_rates(self, cv: ConservedVars, temperature):
         r"""Get the production rate for each species.
