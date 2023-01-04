@@ -113,7 +113,8 @@ Diffusive flux
 The species diffusive fluxes are given by:
 
 $$
-\b{J}_{\alpha} = -\rho{d}_{(\alpha)}\nabla{Y}_{\alpha},
+\b{J}_{\alpha} = -\rho\left({d}_{(\alpha)}\nabla{Y}_{(\alpha)}-Y_{(\alpha)}d_{\alpha}
+\nabla{Y}_{\alpha}\right),
 $$
 
 with gas density $\rho$, species diffusivities ${d}_{\alpha}$, and
