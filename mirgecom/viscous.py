@@ -5,9 +5,6 @@ Viscous Flux Calculation
 
 .. autofunction:: viscous_flux
 .. autofunction:: viscous_stress_tensor
-.. autofunction:: diffusive_flux
-.. autofunction:: conductive_heat_flux
-.. autofunction:: diffusive_heat_flux
 .. autofunction:: viscous_facial_flux_central
 .. autofunction:: viscous_facial_flux_harmonic
 .. autofunction:: viscous_flux_on_element_boundary
@@ -104,128 +101,6 @@ def viscous_stress_tensor(state, grad_cv):
         grad_v=velocity_gradient(state.cv, grad_cv))
 
 
-# low level routine works with numpy arrays and can be tested without
-# a full grid + fluid state, etc
-def _compute_diffusive_flux(density, d_alpha, y, grad_y):
-    return -density*(d_alpha.reshape(-1, 1)*grad_y
-                     - outer(y, sum(d_alpha.reshape(-1, 1)*grad_y)))
-
-
-def diffusive_flux(state, grad_cv):
-    r"""Compute the species diffusive flux vector, ($\mathbf{J}_{\alpha}$).
-
-    The species diffusive flux is defined by:
-
-    .. math::
-
-        \mathbf{J}_{\alpha} = -\rho\left({d}_{(\alpha)}\nabla{Y_{\alpha}}
-        -Y_{(\alpha)}{d}_{\alpha}\nabla{Y_{\alpha}}\right),
-
-    with gas density $\rho$, species diffusivities ${d}_{\alpha}$, and
-    species mass fractions ${Y}_{\alpha}$.  The parens $(\alpha)$ indicate no sum
-    over repeated indices is to be performed.
-
-    Parameters
-    ----------
-    state: :class:`~mirgecom.gas_model.FluidState`
-
-        Full fluid conserved and thermal state
-
-    grad_cv: :class:`~mirgecom.fluid.ConservedVars`
-
-        Gradient of the fluid state
-
-    Returns
-    -------
-    numpy.ndarray
-
-        The species diffusive flux vector, $\mathbf{J}_{\alpha}$
-    """
-    grad_y = species_mass_fraction_gradient(state.cv, grad_cv)
-    rho = state.mass_density
-    d = state.species_diffusivity
-    y = state.species_mass_fractions
-    if state.is_mixture:
-        return _compute_diffusive_flux(rho, d, y, grad_y)
-    return -rho*(d.reshape(-1, 1)*grad_y)  # dummy quantity with right shape
-
-
-# low level routine works with numpy arrays and can be tested without
-# a full grid + fluid state, etc
-def _compute_conductive_heat_flux(grad_t, kappa):
-    return -kappa*grad_t
-
-
-def conductive_heat_flux(state, grad_t):
-    r"""Compute the conductive heat flux, ($\mathbf{q}_{c}$).
-
-    The conductive heat flux is defined by:
-
-    .. math::
-
-        \mathbf{q}_{c} = -\kappa\nabla{T},
-
-    with thermal conductivity $\kappa$, and gas temperature $T$.
-
-    Parameters
-    ----------
-    state: :class:`~mirgecom.gas_model.FluidState`
-
-        Full fluid conserved and thermal state
-
-    grad_t: numpy.ndarray
-
-        Gradient of the fluid temperature
-
-    Returns
-    -------
-    numpy.ndarray
-
-        The conductive heat flux vector
-    """
-    return _compute_conductive_heat_flux(grad_t, state.thermal_conductivity)
-
-
-# low level routine works with numpy arrays and can be tested without
-# a full grid + fluid state, etc
-def _compute_diffusive_heat_flux(j, h_alpha):
-    return sum(h_alpha.reshape(-1, 1) * j)
-
-
-def diffusive_heat_flux(state, j):
-    r"""Compute the diffusive heat flux, ($\mathbf{q}_{d}$).
-
-    The diffusive heat flux is defined by:
-
-    .. math::
-
-        \mathbf{q}_{d} = \sum_{\alpha=1}^{\mathtt{Nspecies}}{h}_{\alpha}
-        \mathbf{J}_{\alpha},
-
-    with species specific enthalpy ${h}_{\alpha}$ and diffusive flux
-    ,$\mathbf{J}_{\alpha}$.
-
-    Parameters
-    ----------
-    state: :class:`~mirgecom.gas_model.FluidState`
-
-        Full fluid conserved and thermal state
-
-    j: numpy.ndarray
-
-        The species diffusive flux vector
-
-    Returns
-    -------
-    numpy.ndarray
-
-        The total diffusive heat flux vector
-    """
-    if state.is_mixture:
-        return _compute_diffusive_heat_flux(j, state.species_enthalpies)
-    return 0
-
-
 def viscous_flux(state, grad_cv, grad_t):
     r"""Compute the viscous flux vectors.
 
@@ -273,19 +148,29 @@ def viscous_flux(state, grad_cv, grad_t):
         warnings.warn("Viscous fluxes requested for inviscid state.")
         return 0
 
-    viscous_mass_flux = 0 * state.momentum_density
-    tau = viscous_stress_tensor(state, grad_cv)
-    j = diffusive_flux(state, grad_cv)
+    rho = state.mass_density
+    grad_y = species_mass_fraction_gradient(state.cv, grad_cv)
 
-    viscous_energy_flux = (
-        np.dot(tau, state.velocity) - diffusive_heat_flux(state, j)
-        - conductive_heat_flux(state, grad_t)
-    )
+    viscous_mass_flux = 0 * state.momentum_density
+    tau = viscous_stress_tensor(state, grad_cv)  # momentum flux
+    viscous_energy_flux = (np.dot(tau, state.velocity)  # includes q_c
+                           + state.thermal_conductivity*grad_t)
+    j = grad_y  # dummy diffusive mass flux with correct shape
+
+    if state.is_mixture:
+        d = state.species_diffusivity
+        y = state.species_mass_fractions
+        h = state.species_enthalpies
+        j = rho*(d.reshape(-1, 1)*grad_y
+                  - outer(y, sum(d.reshape(-1, 1)*grad_y)))
+        # diffusive energy flux
+        viscous_energy_flux = (viscous_energy_flux
+                               + sum(h.reshape(-1, 1) * j))
 
     return make_conserved(state.dim,
             mass=viscous_mass_flux,
             energy=viscous_energy_flux,
-            momentum=tau, species_mass=-j)
+            momentum=tau, species_mass=j)
 
 
 def viscous_facial_flux_central(dcoll, state_pair, grad_cv_pair, grad_t_pair,
