@@ -63,12 +63,6 @@ from mirgecom.fluid import (
 from mirgecom.utils import normalize_boundaries
 
 
-# low level routine works with numpy arrays and can be tested without
-# a full grid + fluid state, etc
-def _compute_viscous_stress_tensor(dim, mu, mu_b, grad_v):
-    return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*np.trace(grad_v)*np.eye(dim)
-
-
 def viscous_stress_tensor(state, grad_cv):
     r"""Compute the viscous stress tensor.
 
@@ -96,9 +90,12 @@ def viscous_stress_tensor(state, grad_cv):
 
         The viscous stress tensor
     """
-    return _compute_viscous_stress_tensor(
-        dim=state.dim, mu=state.viscosity, mu_b=state.bulk_viscosity,
-        grad_v=velocity_gradient(state.cv, grad_cv))
+    mu = state.viscosity
+    mu_b = state.bulk_viscosity
+    grad_v = velocity_gradient(state.cv, grad_cv)
+    dim = state.dim
+
+    return mu*(grad_v + grad_v.T) + (mu_b - 2*mu/3)*np.trace(grad_v)*np.eye(dim)
 
 
 def viscous_flux(state, grad_cv, grad_t):
