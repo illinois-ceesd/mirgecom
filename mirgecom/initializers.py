@@ -1057,9 +1057,10 @@ class PlanarDiscontinuity:
     """
 
     def __init__(
-            self, *, dim=3, normal_dir, disc_location, nspecies=0,
+            self, *, dim=3,
             temperature_left, temperature_right,
             pressure_left, pressure_right,
+            normal_dir=None, disc_location=None, nspecies=0,
             velocity_left=None, velocity_right=None,
             species_mass_left=None, species_mass_right=None,
             convective_velocity=None, sigma=0.5
