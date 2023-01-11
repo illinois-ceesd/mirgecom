@@ -162,7 +162,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
-            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))
+            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))  # noqa
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction
