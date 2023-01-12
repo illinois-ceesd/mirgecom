@@ -490,6 +490,8 @@ def make_operator_fluid_states(
         boundary domain tags in *boundaries*, all on the quadrature grid (if
         specified).
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):

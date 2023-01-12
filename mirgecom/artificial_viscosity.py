@@ -214,6 +214,8 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     :class:`mirgecom.fluid.ConservedVars`
         The artificial viscosity operator applied to *q*.
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     boundaries = normalize_boundaries(boundaries)
 
     cv = fluid_state.cv

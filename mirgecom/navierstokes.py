@@ -163,6 +163,8 @@ def grad_cv_operator(
         CV object with vector components representing the gradient of the fluid
         conserved variables.
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
@@ -264,6 +266,8 @@ def grad_t_operator(
         Array of :class:`~meshmode.dof_array.DOFArray` representing the gradient of
         the fluid temperature.
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
@@ -407,6 +411,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
             \partial_t \mathbf{Q} = \nabla\cdot(\mathbf{F}_V - \mathbf{F}_I)
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     if not state.is_viscous:
         raise ValueError("Navier-Stokes operator expects viscous gas model.")
 
