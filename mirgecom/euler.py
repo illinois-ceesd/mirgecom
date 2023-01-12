@@ -125,6 +125,8 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
         Tag for distributed communication
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):

@@ -242,6 +242,8 @@ def grad_operator(
     grad_u: numpy.ndarray
         the gradient of *u*
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     if isinstance(u, np.ndarray):
         if not isinstance(boundaries, list):
             raise TypeError("boundaries must be a list if u is an object array")
@@ -351,6 +353,8 @@ def diffusion_operator(
     grad_u: numpy.ndarray
         the gradient of *u*; only returned if *return_grad_u* is True
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     if isinstance(u, np.ndarray):
         if not isinstance(boundaries, list):
             raise TypeError("boundaries must be a list if u is an object array")
