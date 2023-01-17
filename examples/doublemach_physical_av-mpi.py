@@ -53,7 +53,6 @@ from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import (
     SimpleTransport,
-    ArtificialViscosityTransport,
     ArtificialViscosityTransportDiv
 )
 from mirgecom.simutil import get_sim_timestep
@@ -242,12 +241,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             ("t_step.max", "------- step walltime: {value:6g} s, ")
         ])
 
-    # which kind of artificial viscostiy?
+    # which kind of artificial viscosity?
     #    0 - none
     #    1 - laplacian diffusion
-    #    2 - physical viscosity based, rho indicator
-    #    3 - physical viscosity based, div(velocity) indicator
-    use_av = 3
+    #    2 - physical viscosity based, div(velocity) indicator
+    use_av = 2
 
     # Solution setup and initialization
     # {{{ Initialize simple transport model
@@ -270,13 +268,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.gas_model import GasModel, make_fluid_state
     physical_transport = SimpleTransport(
         viscosity=sigma_v, thermal_conductivity=kappa_t)
-    if use_av == 0 or use_av == 1:
+    if use_av < 2:
         transport_model = physical_transport
-    elif use_av == 2:
-        transport_model = ArtificialViscosityTransport(
-            physical_transport=physical_transport,
-            av_mu=alpha, av_prandtl=0.75)
-    elif use_av == 3:
+    else:
         transport_model = ArtificialViscosityTransportDiv(
             physical_transport=physical_transport,
             av_mu=1.0, av_prandtl=0.75)
@@ -317,7 +311,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         r = gas_model.eos.gas_const(cv)
         static_temp = 0.015
         c_star = actx.np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
-        # smoothness = kappa_h*length_scales*div_v/dv.speed_of_sound
         indicator = -kappa_h*length_scales*div_v/c_star
 
         # steepness of the smoothed function
@@ -342,6 +335,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
 
     smoothness = None
+    no_smoothness = None
     if use_av > 0:
         smoothness = smoothness_indicator(dcoll, current_cv.mass,
                                           kappa=kappa, s0=s0)
@@ -537,18 +531,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             do_status = check_step(step=step, interval=nstatus)
 
             if any([do_viz, do_restart, do_health, do_status, constant_cfl]):
-                if use_av == 0 or use_av == 1:
-                    fluid_state = create_fluid_state(cv=state)
-                elif use_av == 2:
-                    smoothness = smoothness_indicator(dcoll, state.mass,
-                                                      kappa=kappa, s0=s0)
-                    force_evaluation(actx, smoothness)
-                    fluid_state = create_fluid_state(cv=state,
-                                                     smoothness=smoothness)
-                elif use_av == 3:
-                    fluid_state = create_fluid_state(cv=state,
-                                                     smoothness=no_smoothness)
-
+                fluid_state = create_fluid_state(cv=state,
+                                                 smoothness=no_smoothness)
+                if use_av > 1:
                     # recompute the dv to have the correct smoothness
                     # this is forcing a recompile, only do it at dump time
                     # not sure why the compiled version of grad_cv doesn't work
@@ -677,13 +662,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         grad_cv=grad_cv)
         )
 
-    my_rhs = _my_rhs
-    if use_av == 1:
-        my_rhs = _my_rhs_av
-    elif use_av == 2:
-        my_rhs = _my_rhs_phys_visc_av
-    elif use_av == 3:
-        my_rhs = _my_rhs_phys_visc_div_av
+    my_rhs = (_my_rhs if use_av == 0 else _my_rhs_av if use_av == 1 else
+              _my_rhs_phys_visc_div_av)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -699,14 +679,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    if use_av == 0 or use_av == 1:
+    if use_av < 2:
         current_state = create_fluid_state(cv=current_cv)
-    elif use_av == 2:
-        smoothness = smoothness_indicator(dcoll, current_cv.mass,
-                                          kappa=kappa, s0=s0)
-        current_state = create_fluid_state(cv=current_cv,
-                                           smoothness=smoothness)
-    elif use_av == 3:
+    else:
         current_state = create_fluid_state(cv=current_cv,
                                            smoothness=no_smoothness)
 
@@ -715,7 +690,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                     time=current_t)
         smoothness = compute_smoothness_compiled(current_cv,
                                                  current_grad_cv)
-
         from dataclasses import replace
         new_dv = replace(current_state.dv, smoothness=smoothness)
         current_state = replace(current_state, dv=new_dv)
