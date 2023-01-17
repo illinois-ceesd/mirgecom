@@ -564,8 +564,8 @@ def compare_files_vtu(
         rank1 = numranks(first_file)
         rank2 = numranks(second_file)
         if rank1 != rank2:
-            raise ValueError(f"File '{first_file}' has {rank1} ranks, "
-                f"but file '{second_file}' has {rank2} ranks.")
+            raise ValueError(f"File \'{first_file}\' has {rank1} ranks, "
+                f"but file \'{second_file}\' has {rank2} ranks.")
 
     reader2.SetFileName(second_file)
     reader2.Update()
