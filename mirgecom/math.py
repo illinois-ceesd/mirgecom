@@ -71,7 +71,7 @@ def __getattr__(name):
     """
     # Avoid special/private names, and restrict to functions that exist in numpy
     if name.startswith("_") or name.endswith("_") or not hasattr(np, name):
-        raise AttributeError(f"module \'{__name__}\' has no attribute \'{name}\'")
+        raise AttributeError(f"module ({__name__}) has no attribute ({name})")
 
     def dispatcher_func(*args):
         if any(isinstance(arg, Expression) for arg in args):
