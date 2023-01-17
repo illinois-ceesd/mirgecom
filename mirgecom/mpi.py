@@ -102,7 +102,7 @@ def _check_gpu_oversubscription():
                 dup = [item for item in dev_ids if dev_ids.count(item) > 1]
 
                 from warnings import warn
-                warn(f"Multiple ranks are sharing GPUs on node '{hostname}'. "
+                warn(f"Multiple ranks are sharing GPUs on node ({hostname}). "
                      f"Duplicate PCIe IDs: {dup}.")
 
 
@@ -117,8 +117,8 @@ def mpi_entry_point(func):
     @wraps(func)
     def wrapped_func(*args, **kwargs):
         if "mpi4py.run" not in sys.modules:
-            raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
-                        "mpi4py <args>').")
+            raise RuntimeError("Must run MPI scripts via mpi4py. Example: (python -m"
+                        "  mpi4py <args>).")
 
         if "mpi4py.MPI" in sys.modules:
             raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
