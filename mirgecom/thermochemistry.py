@@ -2,7 +2,7 @@ r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyromethe
 
 This module provides an interface to the
 `Pyrometheus Thermochemistry <https://github.com/pyrometheus>`_ package's
-:class:`pyrometheus.Thermochemistry` object which provides a thermal and chemical
+``Thermochemistry`` object which provides a thermal and chemical
 kinetics model for the the :class:`mirgecom.eos.MixtureEOS`, and some helper
 routines to create the wrapper class.
 
@@ -52,10 +52,10 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Dynamically creates a class that inherits from a
-    :class:`pyrometheus.Thermochemistry` class and overrides a couple of the methods
-    to adapt it to :mod:`mirgecom`'s needs.
+    :mod:`pyrometheus` ``Thermochemistry`` class and overrides a couple of the
+    methods to adapt it to :mod:`mirgecom`'s needs.
 
-    - get_concentrations: overrides :class:`pyrometheus.Thermochemistry` version
+    - get_concentrations: overrides ``Thermochemistry`` version
       of  the same function, pinning any concentrations less than the *zero_level*
       due to small or slightly negative massfractions (which are OK) back to 0.
 
@@ -65,8 +65,8 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
     Parameters
     ----------
-    pyro_class: :class:`pyrometheus.Thermochemistry`
-        Pyro thermochemical mechanism to wrap
+    pyro_class:
+        Pyro thermochemical mechanism ``Thermochemistry`` class to wrap
     temperature_niter: int
         Number of Newton iterations in `get_temperature` (default=5)
     zero_level: float
@@ -134,9 +134,8 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
                                                zero_level=0.):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
-    Cantera-based interface that creates a Pyrometheus mechanism
-    :class:`pyrometheus.Thermochemistry` class on-the-fly using
-    a Cantera solution.
+    Cantera-based interface that creates a :mod:`pyrometheus` mechanism
+    ``Thermochemistry`` class on-the-fly using a Cantera solution.
 
     Parameters
     ----------
