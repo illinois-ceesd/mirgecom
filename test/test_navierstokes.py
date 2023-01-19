@@ -822,6 +822,12 @@ class RoySolution(FluidManufacturedSolution):
         return super().get_boundaries(dcoll, actx, t)
 
 
+from mirgecom.transport import (
+    SimpleTransport as ConstantTransport,
+    TransportModel
+)
+
+
 @pytest.mark.parametrize("order", [1])
 @pytest.mark.parametrize(("dim", "u_0", "v_0", "w_0"),
                          [(1, 800, 0, 0),
@@ -831,6 +837,9 @@ class RoySolution(FluidManufacturedSolution):
                           (2, 5, -20, 0)])
 @pytest.mark.parametrize(("a_r", "a_p", "a_u", "a_v", "a_w"),
                          [(1.0, 2.0, .75, 2/3, 1/6)])
+@pytest.mark.parametrize("transport_class", [ConstantTransport,
+                                             LinearTransport,
+                                             QuadraticTransport])
 def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
                  a_v, a_w):
     """CNS manufactured solution test from [Roy_2017]_."""
@@ -852,9 +861,10 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         [a_v, a_v/6, a_v/3],
         [a_w, a_w/10, a_w/7]
     ]
-    mu = 1.0
+
+    mu_c = 10.0
     gas_const = 287.
-    prandtl = 1.0
+    prandtl = 4.0
     gamma = 1.4
     kappa = gamma * gas_const * mu / ((gamma - 1) * prandtl)
 
@@ -877,7 +887,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
     print(f"{dcv_dt=}")
 
     from mirgecom.symbolic_fluid import sym_ns
-    sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu=mu, kappa=kappa)
+    sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu=mu_c*sym_x, kappa=kappa)
 
     sym_ns_source = dcv_dt - sym_ns_rhs
 

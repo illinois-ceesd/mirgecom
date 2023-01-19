@@ -12,6 +12,8 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: GasTransportVars
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
+.. autoclass:: UniformConstantTransport
+.. autoclass:: UDFTransport
 .. autoclass:: PowerLawTransport
 
 Exceptions
@@ -45,8 +47,10 @@ THE SOFTWARE.
 
 from typing import Optional
 from dataclasses import dataclass
-from arraycontext import dataclass_array_container
+from functools import partial
 import numpy as np
+
+from arraycontext import dataclass_array_container
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars
@@ -188,6 +192,127 @@ class SimpleTransport(TransportModel):
                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._d_alpha*(0*cv.mass + 1.0)
+
+
+class UniformConstantTransport(TransportModel):
+    r"""Transport model with uniform, constant properties.
+
+    Inherits from (and implements) :class:`TransportModel`.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
+    """
+
+    def __init__(self, bulk_viscosity=0, viscosity=0,
+                 thermal_conductivity=0,
+                 species_diffusivity=None):
+        """Initialize uniform, constant transport properties."""
+        if species_diffusivity is None:
+            species_diffusivity = np.empty((0,), dtype=object)
+        self._mu_bulk = bulk_viscosity
+        self._mu = viscosity
+        self._kappa = thermal_conductivity
+        self._d_alpha = species_diffusivity
+
+    def bulk_viscosity(self, cv: ConservedVars,
+                       dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        return self._mu_bulk*(0*cv.mass + 1.0)
+
+    def viscosity(self, cv: ConservedVars,
+                  dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$."""
+        return self._mu*(0*cv.mass + 1.0)
+
+    def volume_viscosity(self, cv: ConservedVars,
+                         dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        """
+        return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)
+
+    def thermal_conductivity(self, cv: ConservedVars,
+                             dv: Optional[GasDependentVars] = None,
+                             eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the gas thermal_conductivity, $\kappa$."""
+        return self._kappa*(0*cv.mass + 1.0)
+
+    def species_diffusivity(self, cv: ConservedVars,
+                            dv: Optional[GasDependentVars] = None,
+                            eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        return self._d_alpha*(0*cv.mass + 1.0)
+
+
+class UDFTransport(TransportModel):
+    r"""Transport model with user defined functions.
+
+    Inherits from (and implements) :class:`TransportModel`.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
+    """
+
+    def _constant(self, rv, cv, **kwargs):
+        return rv*(0*cv.mass + 1)
+
+    def _empty(self, cv, **kwargs):
+        return np.empty((0,), dtype=object)*(0*cv.mass + 1)
+
+    def __init__(self, bulk_viscosity_func=None,
+                 viscosity_func=None,
+                 thermal_conductivity_func=None,
+                 species_diffusivity_func=None):
+        """Initialize uniform, constant transport properties."""
+        self._d_alpha_func = species_diffusivity_func or self._empty
+        self._mu_bulk_func = \
+            bulk_viscosity_func or partial(self._constant, rv=0)
+        self._mu_func = viscosity_func or partial(self._constant, rv=0)
+        self._kappa_func = \
+            thermal_conductivity_func or partial(self._constant, rv=0)
+
+    def bulk_viscosity(self, cv: ConservedVars,
+                       dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        return self._mu_bulk_func(cv=dv, dv=dv)
+
+    def viscosity(self, cv: ConservedVars,
+                  dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$."""
+        return self._mu_func(cv=dv, dv=dv)
+
+    def volume_viscosity(self, cv: ConservedVars,
+                         dv: Optional[GasDependentVars] = None) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        """
+        return self.bulk_viscosity(cv, dv) - 2 * self.viscosity(cv, dv) / 3
+
+    def thermal_conductivity(self, cv: ConservedVars,
+                             dv: Optional[GasDependentVars] = None,
+                             eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the gas thermal_conductivity, $\kappa$."""
+        return self._kappa_func(cv=cv, dv=dv, eos=eos)
+
+    def species_diffusivity(self, cv: ConservedVars,
+                            dv: Optional[GasDependentVars] = None,
+                            eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        return self._d_alpha_func(cv=cv, dv=dv, eos=eos)
 
 
 class PowerLawTransport(TransportModel):
