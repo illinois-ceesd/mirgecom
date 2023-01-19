@@ -14,15 +14,12 @@ echo "*** Running examples in $examples_dir ..."
 failed_examples=""
 succeeded_examples=""
 
-mpi_exec="mpiexec"
-mpi_launcher=""
-if [[ $(hostname) == "porter" ]]; then
-    mpi_launcher="bash scripts/run_gpus_generic.sh"
-elif [[ $(hostname) == "lassen"* ]]; then
-    export PYOPENCL_CTX="port:tesla"
-    export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-    mpi_exec="jsrun -g 1 -a 1"
+if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
+    . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
 fi
+
+mpi_exec="${MIRGE_MPI_EXEC}"
+mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
 
 examples=""
 for example in $examples_dir/*.py
@@ -41,7 +38,7 @@ do
     then
         echo "*** Running parallel lazy example (2 ranks): $example"
         set -x
-        ${mpi_exec} -n 2 python -u -O -m mpi4py ${example} --lazy
+        ${mpi_exec} -n 2 $mpi_launcher python -u -O -m mpi4py ${example} --lazy
         example_return_code=$?
         set +x
     elif [[ "$example" == *"-mpi.py" ]]; then
@@ -79,6 +76,8 @@ do
     # rm -rf *vtu *sqlite *pkl *-journal restart_data
 done
 ((numtests=numsuccess+numfail))
+
+cd ${origin}
 echo "*** Done running examples!"
 if [[ $numfail -eq 0 ]]
 then
@@ -88,5 +87,6 @@ else
     echo "*** Failed tests: ($numfail/$numtests): $failed_examples"
 fi
 echo "*** Successful tests: ($numsuccess/$numtests): $succeeded_examples"
+
 exit $numfail
 #rm -f examples/*.vtu
