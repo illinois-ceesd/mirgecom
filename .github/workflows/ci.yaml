@@ -36,11 +36,13 @@ jobs:
             uses: actions/setup-python@v4
             with:
                 python-version: '3.x'
-        -   name: "Main Script"
+        -   name: Install
             run: |
-                python3 -m venv myenv
-                source myenv/bin/activate
-                python -m pip install mypy
+                . .ci-support/install.sh
+        -   name: Run mypy
+            run: |
+                MINIFORGE_INSTALL_DIR=.miniforge3
+                . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
                 ./run-mypy.sh
 
     pylint:
