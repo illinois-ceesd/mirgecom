@@ -400,9 +400,16 @@ def _kappa_inter_volume_trace_pairs(
         gas_model,
         fluid_dd, wall_dd,
         fluid_state, wall_kappa):
+    actx = fluid_state.array_context
+    fluid_kappa = fluid_state.thermal_conductivity
+
+    from meshmode.dof_array import DOFArray
+    if not isinstance(fluid_kappa, DOFArray):
+        fluid_kappa = fluid_kappa * (dcoll.zeros(actx, dd=fluid_dd) + 1)
+    if not isinstance(wall_kappa, DOFArray):
+        wall_kappa = wall_kappa * (dcoll.zeros(actx, dd=wall_dd) + 1)
     pairwise_kappa = {
-        (fluid_dd, wall_dd):
-            (fluid_state.thermal_conductivity, wall_kappa)}
+        (fluid_dd, wall_dd): (fluid_kappa, wall_kappa)}
     return inter_volume_trace_pairs(
         dcoll, pairwise_kappa, comm_tag=_KappaInterVolTag)
 
@@ -545,7 +552,9 @@ def coupled_grad_t_operator(
         # FIXME: See if there's a better way to do this
         _kappa_inter_vol_tpairs=None,
         _temperature_inter_vol_tpairs=None,
-        _fluid_operator_states_quad=None):
+        _fluid_operator_states_quad=None,
+        _fluid_interface_boundaries_no_grad=None,
+        _wall_interface_boundaries_no_grad=None):
     # FIXME: Incomplete docs
     """Compute grad(T) of the coupled fluid-wall system."""
     fluid_boundaries = {
@@ -555,14 +564,24 @@ def coupled_grad_t_operator(
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
 
-    fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
-        get_interface_boundaries(
-            dcoll,
-            gas_model,
-            fluid_dd, wall_dd,
-            fluid_state, wall_kappa, wall_temperature,
-            _kappa_inter_vol_tpairs=_kappa_inter_vol_tpairs,
-            _temperature_inter_vol_tpairs=_temperature_inter_vol_tpairs)
+    assert (
+        (_fluid_interface_boundaries_no_grad is None)
+        == (_wall_interface_boundaries_no_grad is None)), (
+        "Expected both _fluid_interface_boundaries_no_grad and "
+        "_wall_interface_boundaries_no_grad or neither")
+
+    if _fluid_interface_boundaries_no_grad is None:
+        fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
+            get_interface_boundaries(
+                dcoll,
+                gas_model,
+                fluid_dd, wall_dd,
+                fluid_state, wall_kappa, wall_temperature,
+                _kappa_inter_vol_tpairs=_kappa_inter_vol_tpairs,
+                _temperature_inter_vol_tpairs=_temperature_inter_vol_tpairs)
+    else:
+        fluid_interface_boundaries_no_grad = _fluid_interface_boundaries_no_grad
+        wall_interface_boundaries_no_grad = _wall_interface_boundaries_no_grad
 
     fluid_all_boundaries_no_grad = {}
     fluid_all_boundaries_no_grad.update(fluid_boundaries)
@@ -653,7 +672,9 @@ def coupled_ns_heat_operator(
         quadrature_tag=quadrature_tag,
         _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
         _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
-        _fluid_operator_states_quad=fluid_operator_states_quad)
+        _fluid_operator_states_quad=fluid_operator_states_quad,
+        _fluid_interface_boundaries_no_grad=fluid_interface_boundaries_no_grad,
+        _wall_interface_boundaries_no_grad=wall_interface_boundaries_no_grad)
 
     fluid_interface_boundaries, wall_interface_boundaries = \
         get_interface_boundaries(
