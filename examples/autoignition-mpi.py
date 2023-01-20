@@ -74,6 +74,14 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class FluidTag:
+    pass
+
+
+class FluidOpTag:
+    pass
+
+
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_overintegration=False, use_profiling=False,
@@ -612,11 +620,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                        limiter_func=_limit_fluid_cv)
 
         fluid_operator_states = make_operator_fluid_states(
-            dcoll, fluid_state, gas_model, boundaries=boundaries,
+            dcoll, fluid_state, gas_model, boundaries=boundaries, comm_tag=FluidTag,
             quadrature_tag=quadrature_tag, limiter_func=_limit_fluid_cv)
 
         fluid_rhs = fluid_operator(
             dcoll, state=fluid_state, gas_model=gas_model, time=t,
+            comm_tag=FluidOpTag,
             boundaries=boundaries, operator_states_quad=fluid_operator_states,
             quadrature_tag=quadrature_tag,
             inviscid_numerical_flux_func=inv_num_flux_func)

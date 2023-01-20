@@ -60,7 +60,7 @@ class _WaveTag:
     pass
 
 
-def wave_operator(dcoll, c, w, *, comm_tag=None):
+def wave_operator(dcoll, c, w, *, comm_tag):
     """Compute the RHS of the wave equation.
 
     Parameters
@@ -79,8 +79,6 @@ def wave_operator(dcoll, c, w, *, comm_tag=None):
     numpy.ndarray
         an object array of DOF arrays, representing the ODE RHS
     """
-    assert comm_tag is not None, "comm_tag can not be 'None'"
-
     u = w[0]
     v = w[1:]
 

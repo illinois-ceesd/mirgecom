@@ -73,6 +73,10 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class EulerTag:
+    pass
+
+
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_overintegration=False, lazy=False, use_leap=False, use_profiling=False,
@@ -303,7 +307,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return euler_operator(dcoll, state=fluid_state, time=t,
                               boundaries=boundaries,
                               gas_model=gas_model,
-                              quadrature_tag=quadrature_tag)
+                              quadrature_tag=quadrature_tag,
+                              comm_tag=EulerTag)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)

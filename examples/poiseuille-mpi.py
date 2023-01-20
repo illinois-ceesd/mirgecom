@@ -70,6 +70,10 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class NSTag:
+    pass
+
+
 # Box grid generator widget lifted from @majosm and slightly bent
 def _get_box_mesh(dim, a, b, n, t=None):
     dim_names = ["x", "y", "z"]
@@ -419,7 +423,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
+        return ns_operator(dcoll, comm_tag=NSTag, gas_model=gas_model,
+                           boundaries=boundaries,
                            state=fluid_state, time=t,
                            quadrature_tag=quadrature_tag)
 

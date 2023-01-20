@@ -156,10 +156,11 @@ class _AVRTag:
     pass
 
 
-def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
+def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, comm_tag,
+                          gas_model=None,
                           kappa=1., s0=-6., time=0, quadrature_tag=DISCR_TAG_BASE,
                           dd=DD_VOLUME_ALL, boundary_kwargs=None, indicator=None,
-                          divergence_numerical_flux=num_flux_central, comm_tag=None,
+                          divergence_numerical_flux=num_flux_central,
                           operator_states_quad=None,
                           grad_cv=None,
                           **kwargs):
@@ -181,6 +182,9 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
 
     alpha: float
         The maximum artificial viscosity coefficient to be applied
+
+    comm_tag: Hashable
+        Tag for distributed communication
 
     indicator: :class:`~meshmode.dof_array.DOFArray`
         The indicator field used for locating where AV should be applied. If not
@@ -206,16 +210,11 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
         the DOF descriptor of the discretization on which *fluid_state* lives.
         Must be a volume on the base discretization.
 
-    comm_tag: Hashable
-        Tag for distributed communication
-
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
         The artificial viscosity operator applied to *q*.
     """
-    assert comm_tag is not None, "comm_tag can not be 'None'"
-
     boundaries = normalize_boundaries(boundaries)
 
     cv = fluid_state.cv
@@ -248,8 +247,8 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     if operator_states_quad is None:
         from mirgecom.gas_model import make_operator_fluid_states
         operator_states_quad = make_operator_fluid_states(
-            dcoll, fluid_state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            dcoll, fluid_state, gas_model, boundaries, comm_tag, quadrature_tag,
+            dd=dd_vol)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad

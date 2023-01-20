@@ -65,6 +65,10 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class EulerTag:
+    pass
+
+
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, lazy=False,
@@ -330,7 +334,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return euler_operator(dcoll, state=fluid_state, time=t,
+        return euler_operator(dcoll, comm_tag=EulerTag, state=fluid_state, time=t,
                               boundaries=boundaries, gas_model=gas_model)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,

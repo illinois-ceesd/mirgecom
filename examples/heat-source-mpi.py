@@ -47,6 +47,10 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 from logpyle import IntervalTimer, set_dt
 
 
+class DiffusionTag:
+    pass
+
+
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, lazy=False,
@@ -151,7 +155,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def rhs(t, u):
         return (
-            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u)
+            diffusion_operator(dcoll, comm_tag=DiffusionTag,
+                               kappa=1, boundaries=boundaries, u=u)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     compiled_rhs = actx.compile(rhs)

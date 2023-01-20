@@ -309,8 +309,8 @@ def grad_operator(
 
 
 def diffusion_operator(
-        dcoll, kappa, boundaries, u, *, return_grad_u=False,
-        quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
+        dcoll, kappa, boundaries, u, *, comm_tag, return_grad_u=False,
+        quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         grad_u=None):
@@ -353,8 +353,6 @@ def diffusion_operator(
     grad_u: numpy.ndarray
         the gradient of *u*; only returned if *return_grad_u* is True
     """
-    assert comm_tag is not None, "comm_tag can not be 'None'"
-
     if isinstance(u, np.ndarray):
         if not isinstance(boundaries, list):
             raise TypeError("boundaries must be a list if u is an object array")

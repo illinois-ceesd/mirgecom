@@ -72,10 +72,9 @@ from mirgecom.operators import div_operator
 from mirgecom.utils import normalize_boundaries
 
 
-def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
+def euler_operator(dcoll, state, gas_model, boundaries, comm_tag, time=0.0,
                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                    quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
-                   comm_tag=None,
                    operator_states_quad=None):
     r"""Compute RHS of the Euler flow equations.
 
@@ -102,6 +101,10 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
         Dictionary of boundary functions, one for each valid
         :class:`~grudge.dof_desc.BoundaryDomainTag`
 
+    comm_tag: Hashable
+
+        Tag for distributed communication
+
     time
 
         Time
@@ -120,13 +123,7 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
         the DOF descriptor of the discretization on which *state* lives. Must be a
         volume on the base discretization.
-
-    comm_tag: Hashable
-
-        Tag for distributed communication
     """
-    # assert comm_tag is not None, "comm_tag can not be 'None'"
-
     boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
@@ -140,8 +137,8 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            dcoll, state, gas_model, boundaries, comm_tag, quadrature_tag,
+            dd=dd_vol)
 
     volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
         operator_states_quad

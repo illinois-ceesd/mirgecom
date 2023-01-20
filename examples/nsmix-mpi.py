@@ -73,6 +73,10 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class NSTag:
+    pass
+
+
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
@@ -485,7 +489,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         cv, tseed = state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        ns_rhs = ns_operator(dcoll, state=fluid_state, time=t,
+        ns_rhs = ns_operator(dcoll, comm_tag=NSTag, state=fluid_state, time=t,
                              boundaries=visc_bnds, gas_model=gas_model)
         cv_rhs = ns_rhs + eos.get_species_source_terms(cv, fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
