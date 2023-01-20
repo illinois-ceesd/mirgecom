@@ -27,6 +27,22 @@ jobs:
             python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
 
+    mypy:
+        name: Mypy
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v3
+        -
+            uses: actions/setup-python@v4
+            with:
+            python-version: '3.x'
+        -   name: "Main Script"
+            run: |
+                python3 -m venv myenv
+                source myenv/bin/activate
+                python -m pip install mypy
+                ./run-mypy.sh
+
     pylint:
         name: Pylint
         runs-on: ubuntu-latest
