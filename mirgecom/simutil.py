@@ -433,9 +433,9 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
         componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
-def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
-                               nranks_per_axis=None, auto_balance=False,
-                               imbalance_tolerance=.01, debug=False):
+def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
+                               auto_balance=False, imbalance_tolerance=.01,
+                               debug=False):
     """Partition a mesh uniformly along the X coordinate axis.
 
     The intent is to partition the mesh uniformly along user-specified
@@ -448,8 +448,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
         The serial mesh to partition
     num_ranks: int
         The number of partitions to make
-    tag_to_elements:
-        Maps volume tags to elements.  Currently unused.
     nranks_per_axis: numpy.ndarray
         How many partitions per specified axis.  Currently unused.
     auto_balance: bool
