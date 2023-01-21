@@ -35,6 +35,8 @@ from logpyle import LogManager
 from mirgecom.logging_quantities import KernelProfile
 from mirgecom.utils import StatisticsAccumulator
 
+from typing import List, Dict, Optional
+
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
 .. autoclass:: SingleCallKernelProfile
@@ -49,7 +51,7 @@ class SingleCallKernelProfile:
     time: int
     flops: int
     bytes_accessed: int
-    footprint_bytes: int
+    footprint_bytes: Optional[int]
 
 
 @dataclass
@@ -99,13 +101,14 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                  "cl.command_queue_properties.PROFILING_ENABLE.")
 
         # list of ProfileEvents that haven't been transferred to profiled results yet
-        self.profile_events = []
+        self.profile_events: List[ProfileEvent] = []
 
-        # dict of kernel name -> SingleCallKernelProfile results
-        self.profile_results = {}
+        # dict of kernel name -> list of SingleCallKernelProfile results
+        self.profile_results: Dict[str, List[SingleCallKernelProfile]] = {}
 
         # dict of (Kernel, args_tuple) -> calculated number of flops, bytes
-        self.kernel_stats = {}
+        self.kernel_stats: Dict[lp.TranslationUnit,
+                                Dict[tuple, SingleCallKernelProfile]] = {}
         self.logmgr = logmgr
 
         # Only store the first kernel exec hook for elwise kernels
@@ -199,7 +202,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 time.add_value(r.time)
                 gflops.add_value(r.flops)
                 gbytes_accessed.add_value(r.bytes_accessed)
-                fprint_gbytes.add_value(r.footprint_bytes)
+                if r.footprint_bytes is not None:
+                    fprint_gbytes.add_value(r.footprint_bytes)
 
         return MultiCallKernelProfile(num_calls, time, gflops, gbytes_accessed,
                                       fprint_gbytes)
@@ -215,18 +219,18 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         tbl = pytools.Table()
 
         # Table header
-        tbl.add_row(["Function", "Calls",
+        tbl.add_row(("Function", "Calls",
             "Time_sum [s]", "Time_min [s]", "Time_avg [s]", "Time_max [s]",
             "GFlops/s_min", "GFlops/s_avg", "GFlops/s_max",
             "BWAcc_min [GByte/s]", "BWAcc_mean [GByte/s]", "BWAcc_max [GByte/s]",
             "BWFoot_min [GByte/s]", "BWFoot_mean [GByte/s]", "BWFoot_max [GByte/s]",
-            "Intensity (flops/byte)"])
+            "Intensity (flops/byte)"))
 
         # Precision of results
         g = ".4g"
 
         total_calls = 0
-        total_time = 0
+        total_time = 0.0
 
         for knl in self.profile_results.keys():
             r = self.get_profiling_data_for_kernel(knl)
@@ -244,9 +248,11 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             total_calls += r.num_calls
 
-            total_time += r.time.sum()
+            t_sum = r.time.sum()
+            if t_sum is not None:
+                total_time += t_sum
 
-            time_sum = f"{r.time.sum():{g}}"
+            time_sum = f"{t_sum:{g}}"
             time_min = f"{r.time.min():{g}}"
             time_avg = f"{r.time.mean():{g}}"
             time_max = f"{r.time.max():{g}}"
@@ -260,8 +266,12 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_min = "--"
                 fprint_max = "--"
 
-            if r.flops.sum() > 0:
-                bytes_per_flop_mean = f"{r.bytes_accessed.sum() / r.flops.sum():{g}}"
+            flop_sum = r.flops.sum()
+            bytes_accessed_sum = r.bytes_accessed.sum()
+
+            if (bytes_accessed_sum is not None and flop_sum is not None
+                    and flop_sum > 0):
+                bytes_per_flop_mean = f"{bytes_accessed_sum / flop_sum:{g}}"
                 flops_per_sec_min = f"{flops_per_sec.min():{g}}"
                 flops_per_sec_mean = f"{flops_per_sec.mean():{g}}"
                 flops_per_sec_max = f"{flops_per_sec.max():{g}}"
@@ -275,14 +285,14 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             bandwidth_access_mean = f"{bandwidth_access.sum():{g}}"
             bandwidth_access_max = f"{bandwidth_access.max():{g}}"
 
-            tbl.add_row([knl, r.num_calls, time_sum,
+            tbl.add_row((knl, r.num_calls, time_sum,
                 time_min, time_avg, time_max,
                 flops_per_sec_min, flops_per_sec_mean, flops_per_sec_max,
                 bandwidth_access_min, bandwidth_access_mean, bandwidth_access_max,
                 fprint_min, fprint_mean, fprint_max,
-                bytes_per_flop_mean])
+                bytes_per_flop_mean))
 
-        tbl.add_row(["Total", total_calls, f"{total_time:{g}}"] + ["--"] * 13)
+        tbl.add_row(("Total", total_calls, f"{total_time:{g}}") + tuple(["--"] * 13))
 
         return tbl
 
