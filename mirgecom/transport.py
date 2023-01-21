@@ -351,20 +351,20 @@ class ArtificialViscosityTransportDiv(TransportModel):
         return self._av_mu*actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
                                         + dv.speed_of_sound**2)
 
-    def bulk_viscosity(self, cv: ConservedVars,
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                        dv: GasDependentVars,
                        eos: GasEOS) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         return self._physical_transport.bulk_viscosity(cv, dv)
 
-    def viscosity(self, cv: ConservedVars,
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
                   dv: GasDependentVars,
                   eos: GasEOS) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
         return (dv.smoothness*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.viscosity(cv, dv))
 
-    def volume_viscosity(self, cv: ConservedVars,
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                          dv: GasDependentVars,
                          eos: GasEOS) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
@@ -376,7 +376,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
         return (dv.smoothness*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.volume_viscosity(cv, dv))
 
-    def thermal_conductivity(self, cv: ConservedVars,
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
                              dv: GasDependentVars,
                              eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
