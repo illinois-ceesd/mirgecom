@@ -199,6 +199,6 @@ def enable_rank_labeled_print() -> None:
 
         __builtins__["oldprint"](out_str, *args, **kwargs)
 
-    if "oldprint" not in __builtins__:
-        __builtins__["oldprint"] = __builtins__["print"]
+    if "oldprint" not in __builtins__:  # type: ignore[operator]
+        __builtins__["oldprint"] = __builtins__["print"]  # type: ignore[index]
     __builtins__["print"] = rank_print
