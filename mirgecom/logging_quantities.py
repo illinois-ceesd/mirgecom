@@ -48,7 +48,6 @@ from grudge.discretization import DiscretizationCollection
 import pyopencl as cl
 
 from typing import Optional, Callable
-from ctypes import _NamedFuncPointer
 import numpy as np
 
 from grudge.dof_desc import DD_VOLUME_ALL
@@ -391,7 +390,7 @@ class DeviceMemoryUsage(PostLogQuantity):
             # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335  # noqa
             # on why this calls cuMemGetInfo_v2 and not cuMemGetInfo
             libcuda = ctypes.cdll.LoadLibrary("libcuda.so")
-            self.mem_func: Optional[_NamedFuncPointer] = libcuda.cuMemGetInfo_v2
+            self.mem_func: Optional[Callable] = libcuda.cuMemGetInfo_v2
         except OSError:
             self.mem_func = None
 
