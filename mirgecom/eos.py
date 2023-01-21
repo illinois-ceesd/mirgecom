@@ -157,7 +157,7 @@ class GasEOS(metaclass=ABCMeta):
         """Get the kinetic energy for the gas."""
 
     @abstractmethod
-    def gamma(self, cv: ConservedVars, temperature: DOFArray):
+    def gamma(self, cv: ConservedVars, temperature: DOFArray = None):
         """Get the ratio of gas specific heats Cp/Cv."""
 
     @abstractmethod
@@ -623,7 +623,7 @@ class PyrometheusMixture(MixtureEOS):
             / self.gamma(cv, temperature)
         )
 
-    def gamma(self, cv: ConservedVars, temperature):
+    def gamma(self, cv: ConservedVars, temperature):  # type: ignore[override]
         r"""Get mixture-averaged heat capacity ratio, $\frac{C_p}{C_p - R_s}$.
 
         Parameters
