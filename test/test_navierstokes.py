@@ -1046,7 +1046,7 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         from mirgecom.simutil import max_component_norm
         err_scale = max_component_norm(dcoll, cv_exact)
 
-        def get_rhs(t, stepper_state):
+        def get_rhs(t, cv):
             from mirgecom.gas_model import make_fluid_state
             fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
             source = eval_source(t, nodes)
