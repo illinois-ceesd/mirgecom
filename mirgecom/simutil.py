@@ -78,7 +78,7 @@ from arraycontext import map_array_container, flatten
 from meshmode.dof_array import DOFArray
 from mirgecom.viscous import get_viscous_timestep
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
@@ -1127,7 +1127,7 @@ def compare_files_vtu(
         second_file: str,
         file_type: str,
         tolerance: float = 1e-12,
-        field_tolerance: Dict[str, float] = None
+        field_tolerance: Optional[Dict[str, float]] = None
         ):
     """Compare files of vtu type.
 

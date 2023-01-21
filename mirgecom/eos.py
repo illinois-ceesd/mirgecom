@@ -140,7 +140,7 @@ class GasEOS(metaclass=ABCMeta):
         r"""Get the specific heat capacity at constant pressure ($C_p$)."""
 
     @abstractmethod
-    def heat_capacity_cv(self, cv: ConservedVars):
+    def heat_capacity_cv(self, cv: ConservedVars, temperature: DOFArray):
         r"""Get the specific heat capacity at constant volume ($C_v$)."""
 
     @abstractmethod
@@ -157,7 +157,7 @@ class GasEOS(metaclass=ABCMeta):
         """Get the kinetic energy for the gas."""
 
     @abstractmethod
-    def gamma(self, cv: ConservedVars, temperature=None):
+    def gamma(self, cv: ConservedVars, temperature: DOFArray = None):
         """Get the ratio of gas specific heats Cp/Cv."""
 
     @abstractmethod
@@ -234,7 +234,7 @@ class MixtureEOS(GasEOS):
         """Get the production rate for each species."""
 
     @abstractmethod
-    def get_species_source_terms(self, cv: ConservedVars):
+    def get_species_source_terms(self, cv: ConservedVars, temperature: DOFArray):
         r"""Get the species mass source terms to be used on the RHS for chemistry."""
 
     def dependent_vars(
@@ -291,11 +291,11 @@ class IdealSingleGas(GasEOS):
         self._gamma = gamma
         self._gas_const = gas_const
 
-    def gamma(self, cv: ConservedVars = None, temperature=None):
+    def gamma(self, cv: Optional[ConservedVars] = None, temperature=None):
         """Get specific heat ratio Cp/Cv."""
         return self._gamma
 
-    def heat_capacity_cp(self, cv: ConservedVars = None, temperature=None):
+    def heat_capacity_cp(self, cv: Optional[ConservedVars] = None, temperature=None):
         r"""Get specific heat capacity at constant pressure.
 
         Parameters
@@ -307,7 +307,7 @@ class IdealSingleGas(GasEOS):
         """
         return self._gas_const * self._gamma / (self._gamma - 1)
 
-    def heat_capacity_cv(self, cv: ConservedVars = None, temperature=None):
+    def heat_capacity_cv(self, cv: Optional[ConservedVars] = None, temperature=None):
         r"""Get specific heat capacity at constant volume.
 
         Parameters
@@ -319,7 +319,7 @@ class IdealSingleGas(GasEOS):
         """
         return self._gas_const / (self._gamma - 1)
 
-    def gas_const(self, cv: ConservedVars = None):
+    def gas_const(self, cv: Optional[ConservedVars] = None):
         """Get specific gas constant R."""
         return self._gas_const
 
@@ -623,7 +623,7 @@ class PyrometheusMixture(MixtureEOS):
             / self.gamma(cv, temperature)
         )
 
-    def gamma(self, cv: ConservedVars, temperature):
+    def gamma(self, cv: ConservedVars, temperature):  # type: ignore[override]
         r"""Get mixture-averaged heat capacity ratio, $\frac{C_p}{C_p - R_s}$.
 
         Parameters
