@@ -92,7 +92,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
        will be able to profile these kernels.
     """
 
-    def __init__(self, queue, allocator=None, logmgr: LogManager = None) -> None:
+    def __init__(self, queue, allocator=None,
+                 logmgr: Optional[LogManager] = None) -> None:
         super().__init__(queue, allocator)
 
         if not queue.properties & cl.command_queue_properties.PROFILING_ENABLE:

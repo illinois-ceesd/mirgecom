@@ -52,11 +52,12 @@ import numpy as np
 
 from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as oper
+from typing import List
 
 
 def initialize_logmgr(enable_logmgr: bool,
                       filename: Optional[str] = None, mode: str = "wu",
-                      mpi_comm=None) -> LogManager:
+                      mpi_comm=None) -> Optional[LogManager]:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
     if not enable_logmgr:
         return None
@@ -338,7 +339,7 @@ class KernelProfile(MultiPostLogQuantity):
         self.kernel_name = kernel_name
         self.actx = actx
 
-    def __call__(self) -> list:
+    def __call__(self) -> List[Optional[float]]:
         """Return the requested kernel profile quantity."""
         r = self.actx.get_profiling_data_for_kernel(self.kernel_name)
         self.actx.reset_profiling_data_for_kernel(self.kernel_name)
