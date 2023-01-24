@@ -414,9 +414,11 @@ class DeviceMemoryUsage(PostLogQuantity):
 
 
 class PeakMemoryUsage(PostLogQuantity):
-    """Logging support for peak process memory usage (RSS, host) on Linux,
-    via the ``VmHWM`` field (HWM=High Water Mark) in ``/proc/self/status``.
+    """Logging support for peak process memory usage (RSS, host) on Linux.
+
+    It uses the ``VmHWM`` field (HWM=High Water Mark) in ``/proc/self/status``.
     """
+
     def __init__(self, name: Optional[str] = None) -> None:
         if name is None:
             name = "memory_usage_peak"
