@@ -171,7 +171,8 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
 
-        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+        logmgr.add_watches(["step.max", "t_step.max", "t_log.max",
+                            "peak_memory_usage.max"])
 
         try:
             logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
