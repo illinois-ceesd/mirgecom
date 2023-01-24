@@ -456,4 +456,6 @@ class PeakMemoryUsage(PostLogQuantity):
                     kbytes = int(line[7:].split()[0])
                     return kbytes / 1024
 
+        return None
+
 # }}}
