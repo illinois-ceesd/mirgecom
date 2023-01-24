@@ -447,13 +447,32 @@ class PeakMemoryUsage(PostLogQuantity):
     def __call__(self) -> Optional[float]:
         """Return the peak memory usage (RSS, host) in MByte."""
         if not self.has_proc_field:
-            return None
+            from resource import RUSAGE_SELF, getrusage
+            import os
+
+            res = getrusage(RUSAGE_SELF)
+
+            if os.uname().sysname == "Linux":
+                return res[2] / 1024
+            elif os.uname().sysname == "Darwin":
+                return res[2] / 1024 / 1024
+            else:
+                return None
 
         with open("/proc/self/status", "r") as file:
+            from resource import RUSAGE_SELF, getrusage
+            import os
+
+            res = getrusage(RUSAGE_SELF)
+
+            if os.uname().sysname == "Linux":
+                print(res[2] / 1024)
+
             lines = file.readlines()
             for line in lines:
                 if line[:7] == "VmHWM:\t":
                     kbytes = int(line[7:].split()[0])
+                    print(kbytes / 1024)
                     return kbytes / 1024
 
         return None
