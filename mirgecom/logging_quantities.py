@@ -69,6 +69,8 @@ def initialize_logmgr(enable_logmgr: bool,
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
 
+    logmgr.add_quantity(PeakMemoryUsage())
+
     try:
         logmgr.add_quantity(PythonMemoryUsage())
     except ImportError:
@@ -409,5 +411,47 @@ class DeviceMemoryUsage(PostLogQuantity):
             return None
         else:
             return (self.total.value - self.free.value) / 1024 / 1024
+
+
+class PeakMemoryUsage(PostLogQuantity):
+    """Logging support for peak process memory usage (RSS, host) on Linux,
+    via the ``VmHWM`` field (HWM=High Water Mark) in ``/proc/self/status``.
+    """
+    def __init__(self, name: Optional[str] = None) -> None:
+        if name is None:
+            name = "memory_usage_peak"
+
+        super().__init__(name, "MByte", description="Peak memory usage (RSS, host)")
+
+        self.has_proc_field = True
+
+        try:
+            file = open("/proc/self/status", "r")
+        except FileNotFoundError:
+            self.has_proc_field = False
+        else:
+            lines = file.readlines()
+            found = False
+            for line in lines:
+                if line[:7] == "VmHWM:\t":
+                    found = True
+                    break
+
+            if not found:
+                self.has_proc_field = False
+
+            file.close()
+
+    def __call__(self) -> Optional[float]:
+        """Return the peak memory usage (RSS, host) in MByte."""
+        if not self.has_proc_field:
+            return None
+
+        with open("/proc/self/status", "r") as file:
+            lines = file.readlines()
+            for line in lines:
+                if line[:7] == "VmHWM:\t":
+                    kbytes = int(line[7:].split()[0])
+                    return kbytes / 1024
 
 # }}}
