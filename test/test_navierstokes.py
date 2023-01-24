@@ -45,7 +45,7 @@ from mirgecom.boundary import (
     PrescribedFluidBoundary,
 )
 from mirgecom.eos import IdealSingleGas
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import SimpleTransport, PowerLawTransport
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
 from meshmode.array_context import (  # noqa
@@ -73,6 +73,10 @@ from meshmode.array_context import (  # noqa
 
 
 logger = logging.getLogger(__name__)
+
+
+class _TestCommTag():
+    pass
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
@@ -757,13 +761,22 @@ class RoySolution(FluidManufacturedSolution):
     """CNS manufactured solution from [Roy_2017]__."""
 
     def __init__(self, dim, q_coeff=None, x_coeff=None, lx=None, gamma=1.4,
-                 gas_const=287.):
+                 gas_const=287., alpha=0.0, beta=1e-5, sigma=1e-1, n=.666,
+                 nspecies=0, d_alpha=None, mu=0, kappa=0):
         """Initialize it."""
         super().__init__(dim=dim, lx=lx, gamma=gamma, gas_const=gas_const)
         if q_coeff is None:
             q_coeff = 0
         self._q_coeff = q_coeff
         self._x_coeff = x_coeff
+        self._alpha = alpha
+        self._beta = beta
+        self._sigma = sigma
+        self._n = n
+        self._mu = mu
+        self._kappa = kappa
+        self._nspecies = nspecies
+        self._d_alpha = d_alpha
 
     def get_solution(self, x, t):
         """Return the symbolically-compatible solution."""
@@ -814,8 +827,26 @@ class RoySolution(FluidManufacturedSolution):
         mom = density*velocity
         temperature = press/(density*self._gas_const)*tone
         energy = press/(self._gamma - 1) + .5*density*np.dot(velocity, velocity)*xone
-        return make_conserved(dim=self._dim, mass=density, momentum=mom,
-                              energy=energy), press, temperature
+
+        species_mass = None
+        if self._nspecies > 0:
+            spec = make_obj_array([xone/self._nspecies
+                            for _ in range(self._nspecies)])
+            species_mass = density*spec
+
+        return (make_conserved(dim=self._dim, mass=density, momentum=mom,
+                               energy=energy, species_mass=species_mass),
+                press, temperature)
+
+    def get_transport_properties(self, sym_soln, sym_pressure, sym_temperature):
+        if self._n == 0:
+            mu = self._mu
+            kappa = self._kappa
+        else:
+            mu = self._alpha * sym_temperature*self._n
+            kappa = self._sigma * mu * self._gas_const / (self._gamma - 1)
+
+        return mu, kappa
 
     def get_mesh(self, n):
         """Get the mesh."""
@@ -831,13 +862,17 @@ class VarMuSolution(FluidManufacturedSolution):
     use powerlaw transport model."""
 
     def __init__(self, dim, q_coeff=None, x_coeff=None, lx=None, gamma=1.4,
-                 gas_const=287.):
+                 gas_const=287., alpha=0.0, beta=1e-5, sigma=1e-1, n=.666):
         """Initialize it."""
         super().__init__(dim=dim, lx=lx, gamma=gamma, gas_const=gas_const)
         if q_coeff is None:
             q_coeff = 0
         self._q_coeff = q_coeff
         self._x_coeff = x_coeff
+        self._alpha = alpha
+        self._beta = beta
+        self._sigma = sigma
+        self._n = n
 
     def get_solution(self, x, t):
         """Return the symbolically-compatible solution."""
@@ -890,6 +925,11 @@ class VarMuSolution(FluidManufacturedSolution):
         energy = press/(self._gamma - 1) + .5*density*np.dot(velocity, velocity)*xone
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=energy), press, temperature
+
+    def get_transport_properties(self, sym_soln, sym_pressure, sym_temperature):
+        mu = self._alpha * sym_temperature*self._n
+        kappa = self._sigma * mu * self._gas_const / (self._gamma - 1)
+        return mu, kappa
 
     def get_mesh(self, n):
         """Get the mesh."""
@@ -909,20 +949,21 @@ class VarMuSolution(FluidManufacturedSolution):
                           (2, 5, -20, 0)])
 @pytest.mark.parametrize(("a_r", "a_p", "a_u", "a_v", "a_w"),
                          [(1.0, 2.0, .75, 2/3, 1/6)])
-def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
+def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
                  a_v, a_w):
     """CNS manufactured solution test from [Roy_2017]_."""
-    cl_ctx = ctx_factory()
-    import pyopencl as cl
-    import pyopencl.tools as cl_tools
+    # cl_ctx = ctx_factory()
+    # import pyopencl as cl
+    # import pyopencl.tools as cl_tools
 
-    queue = cl.CommandQueue(cl_ctx)
+    # queue = cl.CommandQueue(cl_ctx)
     # actx = actx_factory()
 
-    actx = PytatoPyOpenCLArrayContext(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-    
+    # actx = PytatoPyOpenCLArrayContext(
+    #      queue,
+    #    allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    actx = actx_factory()
+
     sym_x = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
     q_coeff = [
@@ -939,21 +980,37 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         [a_v, a_v/6, a_v/3],
         [a_w, a_w/10, a_w/7]
     ]
-    mu = 1.0
     gas_const = 287.
     prandtl = 1.0
     gamma = 1.4
+    alpha = 0.0
+    beta = 1e-5
+    sigma = 1e-1
+    tn = .666
+    nspecies = 4
+
+    diffusivity = np.empty((0,), dtype=object)
+    if nspecies > 0:
+        diffusivity = np.zeros(nspecies)
+
+    mu = 1.0
     kappa = gamma * gas_const * mu / ((gamma - 1) * prandtl)
 
     eos = IdealSingleGas(gas_const=gas_const)
-    transport_model = SimpleTransport(viscosity=mu,
-                                      thermal_conductivity=kappa)
+    # transport_model = SimpleTransport(viscosity=mu,
+    #                                  thermal_conductivity=kappa)
+    transport_model = PowerLawTransport(alpha=alpha, beta=beta, sigma=sigma,
+                                        n=tn, species_diffusivity=diffusivity)
+
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-    man_soln = RoySolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff, lx=None)
+    man_soln = RoySolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff, lx=None,
+                           alpha=alpha, beta=beta, sigma=sigma, mu=mu, kappa=kappa,
+                           nspecies=nspecies)
 
     sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
-
+    sym_mu, sym_kappa = man_soln.get_transport_properties(sym_cv, sym_prs, sym_tmp)
+    
     logger.info(f"{sym_cv=}\n"
                 f"{sym_cv.mass=}\n"
                 f"{sym_cv.energy=}\n"
@@ -964,7 +1021,22 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
     print(f"{dcv_dt=}")
 
     from mirgecom.symbolic_fluid import sym_ns
-    sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu=mu, kappa=kappa)
+    sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu=sym_mu, kappa=sym_kappa,
+                        species_diffusivities=diffusivity)
+    from pymbolic.mapper.analysis import get_num_nodes
+
+    nnodes_mass = get_num_nodes(sym_ns_rhs.mass)
+    nnodes_mom = get_num_nodes(sym_ns_rhs.momentum[0])
+    nnodes_ener = get_num_nodes(sym_ns_rhs.energy)
+
+    nnodes_dmassdt = get_num_nodes(dcv_dt.mass)
+    nnodes_dmomdt = get_num_nodes(dcv_dt.momentum[0])
+    nnodes_denerdt = get_num_nodes(dcv_dt.energy)
+
+    print(f"{nnodes_mass=},{nnodes_mom=},{nnodes_ener=},{nnodes_dmassdt=},{nnodes_dmomdt=},{nnodes_denerdt=}")
+
+    # assert False
+
     sym_ns_source = dcv_dt - sym_ns_rhs
 
     tol = 1e-12
@@ -984,8 +1056,8 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
     def _evaluate_soln(t, x):
         return evaluate(sym_cv, t=t, x=x)
 
-    eval_source = actx.compile(_evaluate_source)
-    eval_soln = actx.compile(_evaluate_soln)
+    # eval_source = actx.compile(_evaluate_source)
+    # eval_soln = actx.compile(_evaluate_soln)
 
     for n in [n0, 2*n0, 4*n0]:
 
@@ -999,11 +1071,18 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
             op.norm(dcoll, characteristic_lengthscales(actx, dcoll), np.inf)
         )
 
-        # source_eval = evaluate(sym_source, t=0, x=nodes)
-        source_eval = eval_source(0, nodes)
-        # cv_exact = evaluate(sym_cv, t=0, x=nodes)
-        cv_exact = eval_soln(0, nodes)
-
+        source_eval = evaluate(sym_source, t=0, x=nodes)
+        # source_eval = eval_source(0, nodes)
+        cv_exact = evaluate(sym_cv, t=0, x=nodes)
+        # cv_exact = eval_soln(0, nodes)
+        import time as perftime
+        t0 = perftime.perf_counter()
+        print(f"{source_eval=}")
+        t1 = perftime.perf_counter() - t0
+        print(f"{cv_exact=}")
+        perftime.perf_counter()
+        t2 = perftime.perf_counter() - t1
+        print(f"{t1=},{t2=}")
         # Sanity check the dependent quantities
         # tmp_exact = evaluate(sym_tmp, t=0, x=nodes)
         # tmp_eos = eos.temperature(cv=cv_exact)
@@ -1029,13 +1108,16 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         logger.info(f"{source_norms=}")
         logger.info(f"{source_eval=}")
 
-        def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, time=0,
-                                 **kwargs):
+        def _boundary_state_func(dcoll, dd_bdry, gas_model,
+                                 state_minus, time=0, **kwargs):
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            # boundary_cv = evaluate(sym_cv, x=nodes, t=time)
-            boundary_cv = eval_soln(time, nodes)
+            t0 = perftime.perf_counter()
+            boundary_cv = evaluate(sym_cv, x=nodes, t=time)
+            t_bnd = perftime.perf_counter() - t0
+            print(f"{t_bnd=}")
+            # boundary_cv = eval_soln(time, nodes)
             return make_fluid_state(boundary_cv, gas_model)
 
         boundaries = {
@@ -1049,11 +1131,21 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         def get_rhs(t, cv):
             from mirgecom.gas_model import make_fluid_state
             fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-            source = eval_source(t, nodes)
-            rhs_val = ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
-                                  gas_model=gas_model) + source
-            print(f"{max_component_norm(dcoll, rhs_val/err_scale)=}")
-            return rhs_val
+            # source = eval_source(t, nodes)
+            t0 = perftime.perf_counter()
+            mms_source = evaluate(sym_source, t=t, x=nodes)
+            t_src = perftime.perf_counter() - t0
+            t0 = perftime.perf_counter()
+            print(f"{t_src=}")
+            # assert False
+            ns_rhs = \
+                ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
+                            gas_model=gas_model, comm_tag=_TestCommTag)
+            t_rhs = perftime.perf_counter() - t0
+            print(f"{t_rhs=}")
+            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")
+
+            return ns_rhs + mms_source
 
         t = 0.
         from mirgecom.integrators import rk4_step
@@ -1063,9 +1155,11 @@ def test_roy_mms(ctx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         print(f"{cv.dim=}")
         print(f"{cv=}")
 
-        for _ in range(nsteps):
+        for iloop in range(nsteps):
+            print(f"{iloop=}")
             cv = rk4_step(cv, t, dt, get_rhs)
             t += dt
+            # assert False
 
         soln_resid = compare_fluid_solutions(dcoll, cv, cv_exact)
         cv_err_scales = componentwise_norms(dcoll, cv_exact)
