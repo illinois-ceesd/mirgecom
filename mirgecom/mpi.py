@@ -72,8 +72,8 @@ def _check_cache_dirs() -> None:
             except KeyError:
                 warn(f"Please set the '{var}' variable in your job script to "
                     "avoid file system overheads when running on large numbers of "
-                    "ranks. See https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes"  # noqa: E501
-                    " for more information.")
+                    "ranks. See https://mirgecom.readthedocs.io/en/latest/running/large-systems.html "  # noqa: E501
+                    "for more information.")
                 # Create a fake path so there will not be a second warning below.
                 my_path = f"no/such/path/rank{node_rank}"
 
