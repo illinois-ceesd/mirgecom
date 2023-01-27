@@ -53,9 +53,7 @@ def shared_split_comm_world() -> Generator["Comm", None, None]:
 
 
 def _check_cache_dirs() -> None:
-    """
-    Check whether multiple ranks are sharing cache directories on the same node.
-    """
+    """Check whether multiple ranks share cache directories on the same node."""
     from mpi4py import MPI
 
     size = MPI.COMM_WORLD.Get_size()
