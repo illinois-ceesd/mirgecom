@@ -83,7 +83,7 @@ def _check_cache_dirs() -> None:
                 assert all_paths
                 if len(all_paths) != len(set(all_paths)):
                     hostname = MPI.Get_processor_name()
-                    dup = [path for path in all_paths if all_paths.count(path) > 1]
+                    dup = [path for path in set(all_paths) if all_paths.count(path) > 1]
 
                     from warnings import warn
                     warn(f"Multiple ranks are sharing '{var}' on node '{hostname}'. "
