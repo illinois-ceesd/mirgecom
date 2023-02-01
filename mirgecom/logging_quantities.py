@@ -52,11 +52,12 @@ import numpy as np
 
 from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as oper
+from typing import List
 
 
 def initialize_logmgr(enable_logmgr: bool,
-                      filename: str = None, mode: str = "wu",
-                      mpi_comm=None) -> LogManager:
+                      filename: Optional[str] = None, mode: str = "wu",
+                      mpi_comm=None) -> Optional[LogManager]:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
     if not enable_logmgr:
         return None
@@ -129,7 +130,8 @@ def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
 
 # {{{ Package versions
 
-def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> None:
+def add_package_versions(mgr: LogManager, path_to_version_sh: Optional[str] = None) \
+        -> None:
     """Add the output of the emirge version.sh script to the log.
 
     Parameters
@@ -231,7 +233,7 @@ class StateConsumer:
             state.
         """
         self.extract_state_vars = extract_vars_for_logging
-        self.state_vars = None
+        self.state_vars: Optional[np.ndarray] = None
 
     def set_state_vars(self, state_vars: np.ndarray) -> None:
         """Update the state vector of the object."""
@@ -273,7 +275,7 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     """
 
     def __init__(self, dcoll: DiscretizationCollection, quantity: str, op: str,
-                 extract_vars_for_logging, units_logging, name: str = None,
+                 extract_vars_for_logging, units_logging, name: Optional[str] = None,
                  axis: Optional[int] = None, dd=DD_VOLUME_ALL):
         unit = units_logging(quantity)
 
@@ -361,7 +363,7 @@ class KernelProfile(MultiPostLogQuantity):
         self.kernel_name = kernel_name
         self.actx = actx
 
-    def __call__(self) -> list:
+    def __call__(self) -> List[Optional[float]]:
         """Return the requested kernel profile quantity."""
         r = self.actx.get_profiling_data_for_kernel(self.kernel_name)
         self.actx.reset_profiling_data_for_kernel(self.kernel_name)
@@ -380,7 +382,7 @@ class PythonMemoryUsage(PostLogQuantity):
     Uses :mod:`psutil` to track memory usage. Virtually no overhead.
     """
 
-    def __init__(self, name: str = None):
+    def __init__(self, name: Optional[str] = None):
 
         if name is None:
             name = "memory_usage_python"
@@ -398,7 +400,7 @@ class PythonMemoryUsage(PostLogQuantity):
 class DeviceMemoryUsage(PostLogQuantity):
     """Logging support for GPU memory usage (Nvidia only currently)."""
 
-    def __init__(self, name: str = None) -> None:
+    def __init__(self, name: Optional[str] = None) -> None:
 
         if name is None:
             name = "memory_usage_gpu"
@@ -413,11 +415,11 @@ class DeviceMemoryUsage(PostLogQuantity):
             # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335  # noqa
             # on why this calls cuMemGetInfo_v2 and not cuMemGetInfo
             libcuda = ctypes.cdll.LoadLibrary("libcuda.so")
-            self.mem_func = libcuda.cuMemGetInfo_v2
+            self.mem_func: Optional[Callable] = libcuda.cuMemGetInfo_v2
         except OSError:
             self.mem_func = None
 
-    def __call__(self) -> float:
+    def __call__(self) -> Optional[float]:
         """Return the memory usage in MByte."""
         if self.mem_func is None:
             return None

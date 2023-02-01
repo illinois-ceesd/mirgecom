@@ -78,7 +78,7 @@ from arraycontext import map_array_container, flatten
 from meshmode.dof_array import DOFArray
 from mirgecom.viscous import get_viscous_timestep
 
-from typing import List, Dict
+from typing import List, Dict, Optional
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
@@ -433,9 +433,9 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
         componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
-def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
-                               nranks_per_axis=None, auto_balance=False,
-                               imbalance_tolerance=.01, debug=False):
+def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
+                               auto_balance=False, imbalance_tolerance=.01,
+                               debug=False):
     """Partition a mesh uniformly along the X coordinate axis.
 
     The intent is to partition the mesh uniformly along user-specified
@@ -448,8 +448,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, tag_to_elements=None,
         The serial mesh to partition
     num_ranks: int
         The number of partitions to make
-    tag_to_elements:
-        Maps volume tags to elements.  Currently unused.
     nranks_per_axis: numpy.ndarray
         How many partitions per specified axis.  Currently unused.
     auto_balance: bool
@@ -1129,7 +1127,7 @@ def compare_files_vtu(
         second_file: str,
         file_type: str,
         tolerance: float = 1e-12,
-        field_tolerance: Dict[str, float] = None
+        field_tolerance: Optional[Dict[str, float]] = None
         ):
     """Compare files of vtu type.
 

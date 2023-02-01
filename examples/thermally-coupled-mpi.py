@@ -167,14 +167,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 "Wall": ["Lower"]}
             return mesh, tag_to_elements, volume_to_tags
 
-        def partition_generator_func(mesh, tag_to_elements, num_parts):
-            # assert num_parts == 2
+        def partition_generator_func(mesh, tag_to_elements, num_ranks):
+            # assert num_ranks == 2
             # rank_per_element = np.empty(mesh.nelements)
             # rank_per_element[tag_to_elements["Lower"]] = 0
             # rank_per_element[tag_to_elements["Upper"]] = 1
             # return rank_per_element
             from meshmode.distributed import get_partition_by_pymetis
-            return get_partition_by_pymetis(mesh, num_parts)
+            return get_partition_by_pymetis(mesh, num_ranks)
 
         from mirgecom.simutil import distribute_mesh
         volume_to_local_mesh_data, global_nelements = distribute_mesh(

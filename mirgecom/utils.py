@@ -68,9 +68,9 @@ class StatisticsAccumulator:
         # Number of values stored in the StatisticsAccumulator
         self.num_values: int = 0
 
-        self._sum = 0
-        self._min = None
-        self._max = None
+        self._sum: float = 0
+        self._min: Optional[float] = None
+        self._max: Optional[float] = None
         self.scale_factor = scale_factor
 
     def add_value(self, v: float) -> None:
@@ -100,14 +100,14 @@ class StatisticsAccumulator:
 
     def max(self) -> Optional[float]:
         """Return the max of added values."""
-        if self.num_values == 0:
+        if self.num_values == 0 or self._max is None:
             return None
 
         return self._max * self.scale_factor
 
     def min(self) -> Optional[float]:
         """Return the min of added values."""
-        if self.num_values == 0:
+        if self.num_values == 0 or self._min is None:
             return None
 
         return self._min * self.scale_factor

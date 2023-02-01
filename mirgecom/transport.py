@@ -13,7 +13,6 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
 .. autoclass:: PowerLawTransport
-.. autoclass:: ArtificialViscosityTransport
 .. autoclass:: ArtificialViscosityTransportDiv
 
 Exceptions
@@ -245,7 +244,8 @@ class PowerLawTransport(TransportModel):
         self._d_alpha = species_diffusivity
         self._lewis = lewis
 
-    def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                       dv: GasDependentVars,
                        eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
@@ -257,7 +257,8 @@ class PowerLawTransport(TransportModel):
         return self._alpha * self.viscosity(cv, dv)
 
     # TODO: Should this be memoized? Avoid multiple calls?
-    def viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                  dv: GasDependentVars,
                   eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$.
 
@@ -265,7 +266,8 @@ class PowerLawTransport(TransportModel):
         """
         return self._beta * dv.temperature**self._n
 
-    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                         dv: GasDependentVars,
                          eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
 
@@ -278,8 +280,8 @@ class PowerLawTransport(TransportModel):
         """
         return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
 
-    def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-                             eos: GasEOS) -> DOFArray:
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+                             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$.
 
         .. math::
@@ -292,8 +294,8 @@ class PowerLawTransport(TransportModel):
             * eos.heat_capacity_cv(cv, dv.temperature)
         )
 
-    def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
-                            eos: GasEOS) -> DOFArray:
+    def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
+                            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$.
 
         The species diffusivities can be specified directly or based on the
@@ -349,20 +351,20 @@ class ArtificialViscosityTransportDiv(TransportModel):
         return self._av_mu*actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
                                         + dv.speed_of_sound**2)
 
-    def bulk_viscosity(self, cv: ConservedVars,
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                        dv: GasDependentVars,
                        eos: GasEOS) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         return self._physical_transport.bulk_viscosity(cv, dv)
 
-    def viscosity(self, cv: ConservedVars,
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
                   dv: GasDependentVars,
                   eos: GasEOS) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
         return (dv.smoothness*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.viscosity(cv, dv))
 
-    def volume_viscosity(self, cv: ConservedVars,
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                          dv: GasDependentVars,
                          eos: GasEOS) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
@@ -374,85 +376,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
         return (dv.smoothness*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.volume_viscosity(cv, dv))
 
-    def thermal_conductivity(self, cv: ConservedVars,
-                             dv: GasDependentVars,
-                             eos: GasEOS) -> DOFArray:
-        r"""Get the gas thermal_conductivity, $\kappa$."""
-        mu = self.av_viscosity(cv, dv, eos)
-        av_kappa = (dv.smoothness*mu
-                    * eos.heat_capacity_cp(cv, dv.temperature)/self._av_prandtl)
-        return av_kappa + self._physical_transport.thermal_conductivity(
-            cv, dv, eos)
-
-    def species_diffusivity(self, cv: ConservedVars,
-                            dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
-        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return self._physical_transport.species_diffusivity(cv, dv, eos)
-
-
-class ArtificialViscosityTransport(TransportModel):
-    r"""Transport model that adds artificial viscosity.
-
-    Inherits from (and implements) :class:`TransportModel`.
-
-    Takes a physical transport model and adds the artificial viscosity
-    contribution to it. Defaults to simple transport with inviscid settings.
-    This is equivalent to inviscid flow with artifical viscosity enabled.
-
-    .. automethod:: __init__
-    .. automethod:: bulk_viscosity
-    .. automethod:: viscosity
-    .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
-    .. automethod:: thermal_conductivity
-    """
-
-    def __init__(self,
-                 av_mu, av_prandtl, physical_transport=None,
-                 av_species_diffusivity=None):
-        """Initialize uniform, constant transport properties."""
-        if physical_transport is None:
-            self._physical_transport = SimpleTransport()
-        else:
-            self._physical_transport = physical_transport
-
-        if av_species_diffusivity is None:
-            av_species_diffusivity = np.empty((0,), dtype=object)
-
-        self._av_mu = av_mu
-        self._av_prandtl = av_prandtl
-
-    def av_viscosity(self, cv, dv, eos):
-        r"""Get the artificial viscosity for the gas."""
-        return self._av_mu
-
-    def bulk_viscosity(self, cv: ConservedVars,
-                       dv: GasDependentVars,
-                       eos: GasEOS) -> DOFArray:
-        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
-        return self._physical_transport.bulk_viscosity(cv, dv)
-
-    def viscosity(self, cv: ConservedVars,
-                  dv: GasDependentVars,
-                  eos: GasEOS) -> DOFArray:
-        r"""Get the gas dynamic viscosity, $\mu$."""
-        return (dv.smoothness*self.av_viscosity(cv, dv, eos)
-                + self._physical_transport.viscosity(cv, dv))
-
-    def volume_viscosity(self, cv: ConservedVars,
-                         dv: GasDependentVars,
-                         eos: GasEOS) -> DOFArray:
-        r"""Get the 2nd viscosity coefficent, $\lambda$.
-
-        In this transport model, the second coefficient of viscosity is defined as:
-
-        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
-        """
-        return (dv.smoothness*self.av_viscosity(cv, dv, eos)
-                + self._physical_transport.volume_viscosity(cv, dv))
-
-    def thermal_conductivity(self, cv: ConservedVars,
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
                              dv: GasDependentVars,
                              eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
