@@ -72,6 +72,7 @@ intersphinx_mapping = {
     "https://logpyle.readthedocs.io/en/latest/": None,
     "https://psutil.readthedocs.io/en/latest/": None,
     "https://mpi4py.readthedocs.io/en/stable/": None,
+    "https://bloomberg.github.io/memray": None,
     }
 
 autoclass_content = "class"
