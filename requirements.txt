@@ -9,6 +9,7 @@ importlib-resources
 psutil
 pyyaml
 git+https://github.com/pythological/kanren.git#egg=miniKanren
+nvidia-ml-py
 
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic

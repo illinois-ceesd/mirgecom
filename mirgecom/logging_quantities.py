@@ -76,6 +76,8 @@ def initialize_logmgr(enable_logmgr: bool,
         warn("psutil module not found, not tracking memory consumption."
              "Install it with 'pip install psutil'")
 
+    logmgr.add_quantity(NvmlReservedMemory())
+
     return logmgr
 
 
@@ -409,5 +411,38 @@ class DeviceMemoryUsage(PostLogQuantity):
             return None
         else:
             return (self.total.value - self.free.value) / 1024 / 1024
+
+
+class NvmlReservedMemory(PostLogQuantity):
+    """Logging support for GPU reserved memory (Nvidia only currently)."""
+
+    def __init__(self, name: Optional[str] = None) -> None:
+
+        if name is None:
+            name = "memory_reserved_gpu"
+
+        super().__init__(name, "MByte", description="Memory reserved (GPU)")
+
+        # pylint: disable=no-name-in-module
+        from pynvml import (nvmlInit, nvmlDeviceGetHandleByIndex,
+                            NVMLError_LibraryNotFound)
+
+        try:
+            nvmlInit()
+            from pynvml import nvmlMemory_v2  # noqa
+        except (ImportError, NVMLError_LibraryNotFound):
+            self.handle = None
+        else:
+            self.handle = nvmlDeviceGetHandleByIndex(0)
+
+    def __call__(self) -> Optional[float]:
+        """Return the reserved memory in MByte."""
+        if self.handle is None:
+            return None
+
+        from pynvml import nvmlDeviceGetMemoryInfo, nvmlMemory_v2
+        meminfo = nvmlDeviceGetMemoryInfo(self.handle, version=nvmlMemory_v2)
+
+        return meminfo.reserved / 1024 / 1024
 
 # }}}
