@@ -71,6 +71,8 @@ from grudge.trace_pair import (
 )
 from mirgecom.utils import normalize_boundaries
 
+from typing import Optional
+
 
 @dataclass(frozen=True)
 class GasModel:
@@ -87,7 +89,7 @@ class GasModel:
     """
 
     eos: GasEOS
-    transport: TransportModel = None
+    transport: Optional[TransportModel] = None
 
 
 @dataclass_array_container
