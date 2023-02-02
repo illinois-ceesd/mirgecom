@@ -174,7 +174,8 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
 
         try:
-            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max",
+                                "memory_reserved_gpu.max"])
         except KeyError:
             pass
 
