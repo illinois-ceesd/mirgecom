@@ -103,6 +103,69 @@ class _WallOperatorTag:
     pass
 
 
+# FIXME: Import from mirgecom.boundary when
+# https://github.com/illinois-ceesd/mirgecom/pull/678 gets merged
+def _get_normal_axes(seed_vector):
+    from arraycontext import get_container_context_recursively
+    actx = get_container_context_recursively(seed_vector)
+    vec_dim, = seed_vector.shape
+
+    vec_mag = actx.np.sqrt(np.dot(seed_vector, seed_vector))
+    seed_vector = seed_vector / vec_mag
+
+    if vec_dim == 1:
+        return seed_vector,
+
+    if vec_dim == 2:
+        vector_2 = 0*seed_vector
+        vector_2[0] = -1.*seed_vector[1]
+        vector_2[1] = 1.*seed_vector[0]
+        return seed_vector, vector_2
+
+    if vec_dim == 3:
+        x_comp = seed_vector[0]
+        y_comp = seed_vector[1]
+        z_comp = seed_vector[2]
+        zsign = z_comp / actx.np.abs(z_comp)
+
+        a = vec_mag * zsign
+        b = z_comp + a
+
+        vector_2 = 0*seed_vector
+        vector_2[0] = a*b - x_comp*x_comp
+        vector_2[1] = -x_comp*y_comp
+        vector_2[2] = -x_comp*b
+        vec_mag2 = actx.np.sqrt(np.dot(vector_2, vector_2))
+        vector_2 = vector_2 / vec_mag2
+        x_comp_2 = vector_2[0]
+        y_comp_2 = vector_2[1]
+        z_comp_2 = vector_2[2]
+
+        vector_3 = 0*vector_2
+        vector_3[0] = y_comp*z_comp_2 - y_comp_2*z_comp
+        vector_3[1] = x_comp_2*z_comp - x_comp*z_comp_2
+        vector_3[2] = x_comp*y_comp_2 - y_comp*x_comp_2
+
+    return seed_vector, vector_2, vector_3
+
+
+# FIXME: Import from mirgecom.boundary when
+# https://github.com/illinois-ceesd/mirgecom/pull/678 gets merged
+def _get_rotation_matrix(principal_direction):
+    principal_axes = _get_normal_axes(principal_direction)
+    dim, = principal_direction.shape
+    comps = []
+
+    for d in range(dim):
+        axis = principal_axes[d]
+        for i in range(dim):
+            comps.append(axis[i])
+
+    from pytools.obj_array import make_obj_array
+    comps = make_obj_array(comps)
+    return comps.reshape(dim, dim)
+
+
 class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
     """Interface boundary condition for the fluid side."""
 
@@ -254,7 +317,6 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
         grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
 
         # rotate the velocity gradient tensor into the normal direction
-        from mirgecom.boundary import _get_rotation_matrix
         rotation_matrix = _get_rotation_matrix(normal)
         grad_v_normal = rotation_matrix@grad_v_minus@rotation_matrix.T
 
