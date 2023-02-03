@@ -165,7 +165,7 @@ jobs:
         - name: Install emirge
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich gcc
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
@@ -193,7 +193,7 @@ jobs:
         - name: Prepare production environment
           run: |
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich gcc
             MIRGEDIR=$(pwd)
             cat scripts/production-testing-env.sh
             . scripts/production-testing-env.sh
