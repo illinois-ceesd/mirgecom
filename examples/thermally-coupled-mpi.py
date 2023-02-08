@@ -301,10 +301,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_state = make_obj_array([current_cv, current_wall_temperature])
 
     fluid_boundaries = {
-        dd_vol_fluid.trace("Upper Sides").domain_tag: IsothermalWallBoundary(
-            wall_temperature=isothermal_wall_temp)}
+        dd_vol_fluid.trace("Upper Sides").domain_tag:  # pylint: disable=no-member
+        IsothermalWallBoundary(wall_temperature=isothermal_wall_temp)}
     wall_boundaries = {
-        dd_vol_wall.trace("Lower Sides").domain_tag: NeumannDiffusionBoundary(0)}
+        dd_vol_wall.trace("Lower Sides").domain_tag:  # pylint: disable=no-member
+        NeumannDiffusionBoundary(0)}
 
     fluid_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_fluid)
     wall_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_wall)
