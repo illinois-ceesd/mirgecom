@@ -25,7 +25,6 @@ THE SOFTWARE.
 """
 
 import logging
-import math
 import pytest
 import numpy as np
 from functools import partial
@@ -68,19 +67,17 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     vol_discr = dcoll.discr_from_dd("vol")
 
     eta = .5  # just filter half the modes
-    # number of modes see e.g.:
-    # JSH/TW Nodal DG Methods, Section 10.1
-    # DOI: 10.1007/978-0-387-72067-8
-    nmodes = 1
-    for d in range(1, dim+1):
-        nmodes *= (order + d)
-    nmodes /= math.factorial(int(dim))
-    nmodes = int(nmodes)
+
+    from mirgecom.simutil import get_number_of_nodes
+    nmodes = get_number_of_nodes(dim, order)
+    print(f"{nmodes=}")
 
     cutoff = int(eta * order)
+    print(f"{cutoff=}")
 
     # number of filtered modes
     nfilt = order - cutoff
+    print(f"{nfilt=}")
     # alpha = f(machine eps)
     # Alpha value suggested by:
     # JSH/TW Nodal DG Methods, Section 5.3
@@ -120,21 +117,30 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     if nfilt <= 0:
         expected_high_coeff = 1.0
 
+    print(f"{expected_high_coeff=}")
+    print(f"{expected_cutoff_coeff=}")
+
     from mirgecom.filter import exponential_mode_response_function as xmrfunc
     frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
 
+    print(f"{vol_discr.groups=}")
+
     for group in vol_discr.groups:
         mode_ids = group.mode_ids()
+        print(f"{mode_ids=}")
         filter_coeff = actx.thaw(
             make_spectral_filter(
                 actx, group, cutoff=cutoff,
                 mode_response_function=frfunc
             )
         )
+        print(f"{filter_coeff=}")
         for mode_index, mode_id in enumerate(mode_ids):
             mode = mode_id
+            print(f"{mode_id=}")
             if dim > 1:
                 mode = sum(mode_id)
+            print(f"{mode=}")
             if mode == cutoff:
                 assert filter_coeff[mode_index] == expected_cutoff_coeff
             if mode == order:
@@ -169,13 +175,10 @@ def test_filter_function(actx_factory, dim, order, do_viz=False):
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
-    # number of modes see e.g.:
-    # JSH/TW Nodal DG Methods, Section 10.1
-    # DOI: 10.1007/978-0-387-72067-8
-    nummodes = int(1)
-    for _ in range(dim):
-        nummodes *= int(order + dim + 1)
-    nummodes /= math.factorial(int(dim))
+    from mirgecom.simutil import get_number_of_nodes
+    nummodes = get_number_of_nodes(dim, order)
+    print(f"{nummodes=}")
+
     cutoff = int(eta * order)
 
     from mirgecom.filter import exponential_mode_response_function as xmrfunc
