@@ -617,8 +617,8 @@ class _NoSlipBoundaryComponent:
 
 
 class _AdiabaticBoundaryComponent:
-    def grad_temperature_plus(self, grad_t_minus, normal):
-        return grad_t_minus - 2.*np.dot(grad_t_minus, normal)*normal
+    def grad_temperature_bc(self, grad_t_minus, normal):
+        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
 
 
 class _IsothermalBoundaryComponent:
@@ -661,7 +661,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: grad_cv_bc
-    .. automethod:: grad_temperature_plus
+    .. automethod:: grad_temperature_bc
     .. automethod:: grad_av_plus
     """
 
@@ -673,7 +673,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
             inviscid_flux_func=self.inviscid_wall_flux,
             viscous_flux_func=self.viscous_wall_flux,
             boundary_gradient_cv_func=self.grad_cv_bc,
-            boundary_gradient_temperature_func=self.grad_temperature_plus)
+            boundary_gradient_temperature_func=self.grad_temperature_bc)
 
         self._adiabatic = _AdiabaticBoundaryComponent()
         self._slip = _SlipBoundaryComponent()
@@ -776,14 +776,14 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
             momentum=grad_mom_bc,
             species_mass=grad_species_mass_bc)
 
-    def grad_temperature_plus(self, grad_t_minus, normal, **kwargs):
+    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """
         Compute temperature gradient on the boundary.
 
         Impose the opposite normal component to enforce zero energy flux
         from conduction.
         """
-        return self._adiabatic.grad_temperature_plus(grad_t_minus, normal)
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
     def viscous_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                           grad_cv_minus, grad_t_minus,
@@ -803,11 +803,10 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                                      grad_cv_minus=grad_cv_minus,
                                      normal=normal, **kwargs)
 
-        # FIXME: Should we be computing grad_t_bc instead of grad_t_plus? Check this
-        grad_t_plus = self.grad_temperature_plus(grad_t_minus, normal)
+        grad_t_bc = self.grad_temperature_bc(grad_t_minus, normal)
 
         from mirgecom.viscous import viscous_flux
-        return viscous_flux(state_bc, grad_cv_bc, grad_t_plus) @ normal
+        return viscous_flux(state_bc, grad_cv_bc, grad_t_bc) @ normal
 
     # FIXME: Remove this?
     def grad_av_plus(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
@@ -1555,7 +1554,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: grad_cv_bc
-    .. automethod:: grad_temperature_plus
+    .. automethod:: grad_temperature_bc
     .. automethod:: grad_av_plus
     """
 
@@ -1567,7 +1566,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
             inviscid_flux_func=self.inviscid_wall_flux,
             viscous_flux_func=self.viscous_wall_flux,
             boundary_gradient_cv_func=self.grad_cv_bc,
-            boundary_gradient_temperature_func=self.grad_temperature_plus)
+            boundary_gradient_temperature_func=self.grad_temperature_bc)
 
         self._adiabatic = _AdiabaticBoundaryComponent()
         self._no_slip = _NoSlipBoundaryComponent()
@@ -1634,9 +1633,9 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
             momentum=grad_cv_minus.momentum,
             species_mass=grad_species_mass_bc)
 
-    def grad_temperature_plus(self, grad_t_minus, normal, **kwargs):
+    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
-        return self._adiabatic.grad_temperature_plus(grad_t_minus, normal)
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
     def viscous_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                           grad_cv_minus, grad_t_minus,
@@ -1653,13 +1652,12 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
                                      grad_cv_minus=grad_cv_minus,
                                      normal=normal, **kwargs)
 
-        # FIXME: Should we be computing grad_t_bc instead of grad_t_plus? Check this
-        grad_t_plus = self.grad_temperature_plus(grad_t_minus, normal)
+        grad_t_bc = self.grad_temperature_bc(grad_t_minus, normal)
 
         # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
         # *not* the numerical viscous flux as advised by [Bassi_1997]_.
         from mirgecom.viscous import viscous_flux
-        return viscous_flux(state_bc, grad_cv_bc, grad_t_plus) @ normal
+        return viscous_flux(state_bc, grad_cv_bc, grad_t_bc) @ normal
 
     # FIXME: Remove this?
     def grad_av_plus(self, grad_av_minus, **kwargs):
@@ -1705,6 +1703,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc)
 
+        self._adiabatic = _AdiabaticBoundaryComponent()
         self._slip = _SlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
 
@@ -1883,10 +1882,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux."""
-        # FIXME: Might be able to use _MengaldoAdiabaticBoundaryMixin for this if
-        # it turns out that it should define _grad_temperature_bc instead of
-        # the current _grad_temperature_plus
-        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
     def viscous_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                           grad_cv_minus, grad_t_minus,
