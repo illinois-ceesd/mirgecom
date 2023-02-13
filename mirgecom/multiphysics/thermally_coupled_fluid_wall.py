@@ -39,6 +39,7 @@ THE SOFTWARE.
 
 from dataclasses import replace
 import numpy as np
+from functools import partial
 
 from grudge.trace_pair import (
     TracePair,
@@ -50,7 +51,13 @@ from grudge.dof_desc import (
 )
 import grudge.op as op
 
-from mirgecom.boundary import PrescribedFluidBoundary
+from mirgecom.boundary import (
+    PrescribedFluidBoundary,
+    _SlipBoundaryComponent,
+    _NoSlipBoundaryComponent,
+    _ImpermeableBoundaryComponent,
+    _inviscid_flux_for_prescribed_state_mengaldo,
+    _viscous_flux_for_prescribed_state_mengaldo)
 from mirgecom.fluid import make_conserved
 from mirgecom.flux import num_flux_central
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
@@ -103,67 +110,95 @@ class _WallOperatorTag:
     pass
 
 
-# FIXME: Import from mirgecom.boundary when
-# https://github.com/illinois-ceesd/mirgecom/pull/678 gets merged
-def _get_normal_axes(seed_vector):
-    from arraycontext import get_container_context_recursively
-    actx = get_container_context_recursively(seed_vector)
-    vec_dim, = seed_vector.shape
-
-    vec_mag = actx.np.sqrt(np.dot(seed_vector, seed_vector))
-    seed_vector = seed_vector / vec_mag
-
-    if vec_dim == 1:
-        return seed_vector,
-
-    if vec_dim == 2:
-        vector_2 = 0*seed_vector
-        vector_2[0] = -1.*seed_vector[1]
-        vector_2[1] = 1.*seed_vector[0]
-        return seed_vector, vector_2
-
-    if vec_dim == 3:
-        x_comp = seed_vector[0]
-        y_comp = seed_vector[1]
-        z_comp = seed_vector[2]
-        zsign = z_comp / actx.np.abs(z_comp)
-
-        a = vec_mag * zsign
-        b = z_comp + a
-
-        vector_2 = 0*seed_vector
-        vector_2[0] = a*b - x_comp*x_comp
-        vector_2[1] = -x_comp*y_comp
-        vector_2[2] = -x_comp*b
-        vec_mag2 = actx.np.sqrt(np.dot(vector_2, vector_2))
-        vector_2 = vector_2 / vec_mag2
-        x_comp_2 = vector_2[0]
-        y_comp_2 = vector_2[1]
-        z_comp_2 = vector_2[2]
-
-        vector_3 = 0*vector_2
-        vector_3[0] = y_comp*z_comp_2 - y_comp_2*z_comp
-        vector_3[1] = x_comp_2*z_comp - x_comp*z_comp_2
-        vector_3[2] = x_comp*y_comp_2 - y_comp*x_comp_2
-
-    return seed_vector, vector_2, vector_3
+def _project_from_base(dcoll, dd_bdry, field):
+    if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
+        dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
+        return op.project(dcoll, dd_bdry_base, dd_bdry, field)
+    else:
+        return field
 
 
-# FIXME: Import from mirgecom.boundary when
-# https://github.com/illinois-ceesd/mirgecom/pull/678 gets merged
-def _get_rotation_matrix(principal_direction):
-    principal_axes = _get_normal_axes(principal_direction)
-    dim, = principal_direction.shape
-    comps = []
+# Note: callback function inputs have no default on purpose so that they can't be
+# accidentally omitted
+def _interface_viscous_flux(
+        dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+        grad_t_minus, *, penalty_amount, lengthscales,
+        state_bc_func, temperature_plus_func, grad_cv_bc_func,
+        grad_temperature_bc_func, **kwargs):
+    """Return the boundary flux for the divergence of the viscous flux.
 
-    for d in range(dim):
-        axis = principal_axes[d]
-        for i in range(dim):
-            comps.append(axis[i])
+    Returns the standard Mengaldo viscous flux plus a temperature interior penalty
+    term on the energy.
+    """
+    dd_bdry = as_dofdesc(dd_bdry)
 
-    from pytools.obj_array import make_obj_array
-    comps = make_obj_array(comps)
-    return comps.reshape(dim, dim)
+    state_bc = state_bc_func(
+        dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+        state_minus=state_minus, **kwargs)
+
+    flux_without_penalty = _viscous_flux_for_prescribed_state_mengaldo(
+        dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus,
+        grad_cv_minus=grad_cv_minus, grad_t_minus=grad_t_minus,
+        # FIXME: Not sure if this optimization is necessary
+        state_bc_func=lambda *a, **kw: state_bc,
+        grad_cv_bc_func=grad_cv_bc_func,
+        grad_temperature_bc_func=grad_temperature_bc_func,
+        **kwargs)
+
+    lengthscales = _project_from_base(dcoll, dd_bdry, lengthscales)
+
+    tau = penalty_amount * state_bc.thermal_conductivity / lengthscales
+
+    t_minus = state_minus.temperature
+    t_plus = temperature_plus_func(
+        dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus,
+        **kwargs)
+
+    return replace(
+        flux_without_penalty,
+        # NS and diffusion use opposite sign conventions for flux; hence penalty
+        # is added here instead of subtracted
+        energy=flux_without_penalty.energy + tau * (t_plus - t_minus))
+
+
+class _ThermallyCoupledBoundaryComponent:
+    def __init__(self, kappa_plus, t_plus, grad_t_plus=None):
+        self._kappa_plus = kappa_plus
+        self._t_plus = t_plus
+        self._grad_t_plus = grad_t_plus
+
+    def kappa_plus(self, dcoll, dd_bdry):
+        return _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+
+    def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
+        actx = kappa_minus.array_context
+
+        def harmonic_mean(x, y):
+            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+            return 2*x*y/x_plus_y
+
+        kappa_plus = _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+
+        return harmonic_mean(kappa_minus, kappa_plus)
+
+    def temperature_plus(self, dcoll, dd_bdry):
+        return _project_from_base(dcoll, dd_bdry, self._t_plus)
+
+    def temperature_bc(self, dcoll, dd_bdry, t_minus):
+        t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
+        return (t_minus + t_plus)/2
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
+        if self._grad_t_plus is None:
+            raise ValueError(
+                "Boundary does not have external temperature gradient data.")
+        grad_t_plus = _project_from_base(dcoll, dd_bdry, self._grad_t_plus)
+        return (grad_t_plus + grad_t_minus)/2
+
+
+def _replace_kappa(state, kappa):
+    new_tv = replace(state.tv, thermal_conductivity=kappa)
+    return replace(state, tv=new_tv)
 
 
 class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
@@ -171,90 +206,115 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
 
     # FIXME: Incomplete docs
     def __init__(
-            self, ext_kappa, ext_t, ext_grad_t=None, heat_flux_penalty_amount=None,
-            lengthscales=None):
+            self, kappa_plus, t_plus, grad_t_plus=None,
+            heat_flux_penalty_amount=None, lengthscales=None):
         """Initialize InterfaceFluidBoundary."""
+        self.inviscid_flux = partial(
+            _inviscid_flux_for_prescribed_state_mengaldo,
+            state_plus_func=self.state_plus)
+
+        self.viscous_flux = partial(
+            _interface_viscous_flux,
+            penalty_amount=heat_flux_penalty_amount,
+            lengthscales=lengthscales,
+            state_bc_func=self.state_bc,
+            temperature_plus_func=self.temperature_plus,
+            grad_cv_bc_func=self.grad_cv_bc,
+            grad_temperature_bc_func=self.grad_temperature_bc)
+
         PrescribedFluidBoundary.__init__(
             self,
-            boundary_state_func=self.get_external_state,
-            boundary_grad_av_func=self.get_external_grad_av,
-            boundary_temperature_func=self.get_external_t,
-            boundary_gradient_temperature_func=self.get_external_grad_t,
-            inviscid_flux_func=self.inviscid_wall_flux,
-            viscous_flux_func=self.viscous_wall_flux,
-            boundary_gradient_cv_func=self.get_external_grad_cv
-        )
-        self.ext_kappa = ext_kappa
-        self.ext_t = ext_t
-        self.ext_grad_t = ext_grad_t
-        self.heat_flux_penalty_amount = heat_flux_penalty_amount
-        self.lengthscales = lengthscales
+            boundary_state_func=self.state_bc,
+            inviscid_flux_func=self.inviscid_flux,
+            viscous_flux_func=self.viscous_flux,
+            boundary_temperature_func=self.temperature_plus,
+            boundary_gradient_cv_func=self.grad_cv_bc,
+            boundary_gradient_temperature_func=self.grad_temperature_bc,
+            boundary_grad_av_func=self.grad_av_plus)
 
-    # NOTE: The BC for species mass is y_+ = y_-, I think that is OK here
-    #       The BC for species mass fraction gradient is set down inside the
-    #       `viscous_flux` method.
-    def get_external_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            ext_kappa = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_kappa)
-            ext_t = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
-        else:
-            ext_kappa = self.ext_kappa
-            ext_t = self.ext_t
+        self._thermally_coupled = _ThermallyCoupledBoundaryComponent(
+            kappa_plus=kappa_plus,
+            t_plus=t_plus,
+            grad_t_plus=grad_t_plus)
+        self._slip = _SlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
+
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
         cv_minus = state_minus.cv
 
-        # Cancel out the momentum in the normal direction
-        actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-        ext_mom = cv_minus.momentum - np.dot(cv_minus.momentum, nhat)*nhat
+        mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
 
-        # Compute the energy
-        ext_internal_energy = (
+        t_plus = self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+
+        internal_energy_plus = (
             cv_minus.mass
             * gas_model.eos.get_internal_energy(
-                temperature=ext_t,
+                temperature=t_plus,
                 species_mass_fractions=cv_minus.species_mass_fractions))
-        ext_kinetic_energy = 0.5*np.dot(ext_mom, ext_mom)/cv_minus.mass
-        ext_energy = ext_internal_energy + ext_kinetic_energy
+        total_energy_plus = (
+            internal_energy_plus
+            # Kinetic energy is the same
+            + gas_model.eos.kinetic_energy(cv_minus))
 
-        # Form the external boundary solution with the new momentum and energy.
-        ext_cv = make_conserved(
-            dim=state_minus.dim, mass=cv_minus.mass, energy=ext_energy,
-            momentum=ext_mom, species_mass=cv_minus.species_mass)
+        cv_plus = make_conserved(
+            state_minus.dim,
+            mass=cv_minus.mass,
+            energy=total_energy_plus,
+            momentum=mom_plus,
+            species_mass=cv_minus.species_mass)
 
-        def replace_thermal_conductivity(state, kappa):
-            new_tv = replace(state.tv, thermal_conductivity=kappa)
-            return replace(state, tv=new_tv)
+        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry)
 
-        return replace_thermal_conductivity(
+        return _replace_kappa(
             make_fluid_state(
-                cv=ext_cv, gas_model=gas_model,
+                cv=cv_plus, gas_model=gas_model,
                 temperature_seed=state_minus.temperature),
-            ext_kappa)
+            kappa_plus)
 
-    def inviscid_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
-            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
-        """Return Riemann flux using state with mom opposite of interior state."""
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
         dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
-        ext_mom = (state_minus.momentum_density
-                   - 2.0*np.dot(state_minus.momentum_density, normal)*normal)
-        # NOTE: For the inviscid/advection part we set mom_+ = -mom_-, and
-        #       use energy_+ = energy_-, per [Mengaldo_2014]_.
-        wall_cv = make_conserved(dim=state_minus.dim,
-                                 mass=state_minus.mass_density,
-                                 momentum=ext_mom,
-                                 energy=state_minus.energy_density,
-                                 species_mass=state_minus.species_mass_density)
-        wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
-                                      temperature_seed=state_minus.temperature)
-        state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        return numerical_flux_func(state_pair, gas_model, normal)
+        cv_minus = state_minus.cv
 
-    def get_external_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
+        mom_bc = self._slip.momentum_bc(cv_minus.momentum, normal)
+
+        t_bc = self._thermally_coupled.temperature_bc(
+            dcoll, dd_bdry, state_minus.temperature)
+
+        internal_energy_bc = (
+            cv_minus.mass
+            * gas_model.eos.get_internal_energy(
+                temperature=t_bc,
+                species_mass_fractions=cv_minus.species_mass_fractions))
+        total_energy_bc = (
+            internal_energy_bc
+            + 0.5*np.dot(mom_bc, mom_bc)/cv_minus.mass)
+
+        cv_bc = make_conserved(
+            state_minus.dim,
+            mass=cv_minus.mass,
+            energy=total_energy_bc,
+            momentum=mom_bc,
+            species_mass=cv_minus.species_mass)
+
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
+
+        return _replace_kappa(
+            make_fluid_state(
+                cv=cv_bc, gas_model=gas_model,
+                temperature_seed=state_minus.temperature),
+            kappa_bc)
+
+    # FIXME: Remove this?
+    def grad_av_plus(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
         actx = grad_av_minus.array_context
@@ -265,7 +325,7 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
         # Apply a Neumann condition on the energy gradient
         # Should probably compute external energy gradient using external temperature
         # gradient, but that is a can of worms
-        ext_grad_energy = \
+        grad_energy_plus = \
             grad_av_minus.energy - 2 * np.dot(grad_av_minus.energy, nhat) * nhat
 
         # uh oh - we don't have the necessary data to compute grad_y from grad_av
@@ -278,16 +338,17 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
         # for i in range(state_minus.nspecies):
         #    grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
         #        + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-        ext_grad_species_mass = (
+        grad_species_mass_plus = (
             grad_av_minus.species_mass
             - np.outer(grad_av_minus.species_mass @ nhat, nhat))
 
         return make_conserved(
-            grad_av_minus.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
-            momentum=grad_av_minus.momentum, species_mass=ext_grad_species_mass)
+            grad_av_minus.dim, mass=grad_av_minus.mass, energy=grad_energy_plus,
+            momentum=grad_av_minus.momentum, species_mass=grad_species_mass_plus)
 
-    def get_external_grad_cv(self, state_minus, state_plus, grad_cv_minus,
-                             normal, **kwargs):
+    def grad_cv_bc(
+            self, dcoll, dd_bdry, gas_model, state_minus, state_bc, grad_cv_minus,
+            **kwargs):
         """
         Return external grad(CV) used in the boundary calculation of viscous flux.
 
@@ -297,130 +358,32 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
         Gradients of species mass fractions are set to zero in the normal direction
         to ensure zero flux of species across the boundary.
         """
-        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
-        if state_minus.nspecies > 0:
-            from mirgecom.fluid import species_mass_fraction_gradient
-            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-                                                          grad_cv_minus)
-            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-            grad_species_mass_plus = 0.*grad_y_plus
-
-            for i in range(state_minus.nspecies):
-                grad_species_mass_plus[i] = \
-                    (state_minus.mass_density*grad_y_plus[i]
-                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-
-        # normal velocity on the surface is zero,
-        vel_plus = state_plus.velocity
-
-        from mirgecom.fluid import velocity_gradient
-        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
-
-        # rotate the velocity gradient tensor into the normal direction
-        rotation_matrix = _get_rotation_matrix(normal)
-        grad_v_normal = rotation_matrix@grad_v_minus@rotation_matrix.T
-
-        # set the normal component of the tangential velocity to 0
-        for i in range(state_minus.dim-1):
-            grad_v_normal[i+1][0] = 0.*grad_v_normal[i+1][0]
-
-        # get the gradient on the plus side in the global coordiate space
-        grad_v_plus = rotation_matrix.T@grad_v_normal@rotation_matrix
-
-        # construct grad(mom)
-        grad_mom_plus = (state_minus.mass_density*grad_v_plus
-                         + np.outer(vel_plus, grad_cv_minus.mass))
-
-        return make_conserved(grad_cv_minus.dim,
-                              mass=grad_cv_minus.mass,
-                              energy=grad_cv_minus.energy,
-                              momentum=grad_mom_plus,
-                              species_mass=grad_species_mass_plus)
-
-    def viscous_wall_flux(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-            grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
-            **kwargs):
-        """Return the boundary flux for the divergence of the viscous flux."""
-        if self.heat_flux_penalty_amount is None:
-            raise ValueError("Boundary does not have heat flux penalty amount.")
-        if self.lengthscales is None:
-            raise ValueError("Boundary does not have length scales data.")
-
         dd_bdry = as_dofdesc(dd_bdry)
-        dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-        from mirgecom.viscous import viscous_flux
-        actx = state_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
-        state_plus = self.get_external_state(
-            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-            state_minus=state_minus, **kwargs)
-        grad_cv_bc = self.get_external_grad_cv(
-            state_minus=state_minus, state_plus=state_plus,
-            grad_cv_minus=grad_cv_minus, normal=normal,
-            **kwargs)
+        grad_mom_bc = self._slip.grad_momentum_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
 
-        grad_t_plus = self.get_external_grad_t(
-            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-            state_minus=state_minus, grad_cv_minus=grad_cv_minus,
-            grad_t_minus=grad_t_minus)
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
 
-        def harmonic_mean(x, y):
-            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
-            return 2*x*y/x_plus_y
+        return make_conserved(
+            grad_cv_minus.dim,
+            mass=grad_cv_minus.mass,
+            energy=grad_cv_minus.energy,
+            momentum=grad_mom_bc,
+            species_mass=grad_species_mass_bc)
 
-        def replace_kappa(state, kappa):
-            from dataclasses import replace
-            new_tv = replace(state.tv, thermal_conductivity=kappa)
-            return replace(state, tv=new_tv)
-
-        kappa_harmonic_mean = harmonic_mean(
-            state_minus.tv.thermal_conductivity,
-            state_plus.tv.thermal_conductivity)
-
-        state_plus_harmonic_kappa = replace_kappa(state_plus, kappa_harmonic_mean)
-
-        # need to sum grad_t_plus and grad_t_minus
-        # assumes the harmonic flux
-        grad_t_interface = (grad_t_plus + grad_t_minus)/2.
-        viscous_flux = viscous_flux(state_plus_harmonic_kappa,
-                                    grad_cv_bc, grad_t_interface)
-
-        lengthscales = op.project(dcoll, dd_bdry_base, dd_bdry, self.lengthscales)
-
-        tau = (
-            self.heat_flux_penalty_amount * kappa_harmonic_mean / lengthscales)
-
-        # NS and diffusion use opposite sign conventions for flux; hence penalty
-        # is added here instead of subtracted
-        flux_without_penalty = viscous_flux@normal
-        return replace(
-            flux_without_penalty,
-            energy=(
-                flux_without_penalty.energy
-                + tau * (state_plus.temperature - state_minus.temperature)))
-
-    def get_external_t(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
-        else:
-            return self.ext_t
+        return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
 
-    def get_external_grad_t(
+    def grad_temperature_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
             grad_t_minus, **kwargs):
-        """Get the exterior grad(T) on the boundary."""
-        if self.ext_grad_t is None:
-            raise ValueError(
-                "Boundary does not have external temperature gradient data.")
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_grad_t)
-        else:
-            return self.ext_grad_t
+        """Get grad(T) on the boundary."""
+        return self._thermally_coupled.grad_temperature_bc(
+            dcoll, dd_bdry, grad_t_minus)
 
 
 class InterfaceFluidBoundary(PrescribedFluidBoundary):
@@ -428,87 +391,113 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
     # FIXME: Incomplete docs
     def __init__(
-            self, ext_kappa, ext_t, ext_grad_t=None, heat_flux_penalty_amount=None,
-            lengthscales=None):
+            self, kappa_plus, t_plus, grad_t_plus=None,
+            heat_flux_penalty_amount=None, lengthscales=None):
         """Initialize InterfaceFluidBoundary."""
+        self.inviscid_flux = partial(
+            _inviscid_flux_for_prescribed_state_mengaldo,
+            state_plus_func=self.state_plus)
+
+        self.viscous_flux = partial(
+            _interface_viscous_flux,
+            penalty_amount=heat_flux_penalty_amount,
+            lengthscales=lengthscales,
+            state_bc_func=self.state_bc,
+            temperature_plus_func=self.temperature_plus,
+            grad_cv_bc_func=self.grad_cv_bc,
+            grad_temperature_bc_func=self.grad_temperature_bc)
+
         PrescribedFluidBoundary.__init__(
             self,
-            boundary_state_func=self.get_external_state,
-            boundary_grad_av_func=self.get_external_grad_av,
-            boundary_temperature_func=self.get_external_t,
-            boundary_gradient_temperature_func=self.get_external_grad_t,
-            inviscid_flux_func=self.inviscid_wall_flux,
-            viscous_flux_func=self.viscous_wall_flux,
-            boundary_gradient_cv_func=self.get_external_grad_cv
-        )
-        self.ext_kappa = ext_kappa
-        self.ext_t = ext_t
-        self.ext_grad_t = ext_grad_t
-        self.heat_flux_penalty_amount = heat_flux_penalty_amount
-        self.lengthscales = lengthscales
+            boundary_state_func=self.state_bc,
+            inviscid_flux_func=self.inviscid_flux,
+            viscous_flux_func=self.viscous_flux,
+            boundary_temperature_func=self.temperature_plus,
+            boundary_gradient_cv_func=self.grad_cv_bc,
+            boundary_gradient_temperature_func=self.grad_temperature_bc,
+            boundary_grad_av_func=self.grad_av_plus)
 
-    # NOTE: The BC for species mass is y_+ = y_-, I think that is OK here
-    #       The BC for species mass fraction gradient is set down inside the
-    #       `viscous_flux` method.
-    def get_external_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            ext_kappa = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_kappa)
-            ext_t = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
-        else:
-            ext_kappa = self.ext_kappa
-            ext_t = self.ext_t
+        self._thermally_coupled = _ThermallyCoupledBoundaryComponent(
+            kappa_plus=kappa_plus,
+            t_plus=t_plus,
+            grad_t_plus=grad_t_plus)
+        self._no_slip = _NoSlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
 
-        # Cancel out the momentum
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+
         cv_minus = state_minus.cv
-        ext_mom = 0.*state_minus.momentum_density
 
-        # Compute the energy
-        ext_internal_energy = (
+        mom_plus = self._no_slip.momentum_plus(cv_minus.momentum, normal)
+
+        t_plus = self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+
+        internal_energy_plus = (
             cv_minus.mass
             * gas_model.eos.get_internal_energy(
-                temperature=ext_t,
+                temperature=t_plus,
                 species_mass_fractions=cv_minus.species_mass_fractions))
-        ext_kinetic_energy = gas_model.eos.kinetic_energy(cv_minus)
-        ext_energy = ext_internal_energy + ext_kinetic_energy
+        total_energy_plus = (
+            internal_energy_plus
+            # Kinetic energy is the same
+            + gas_model.eos.kinetic_energy(cv_minus))
 
-        # Form the external boundary solution with the new momentum and energy.
-        ext_cv = make_conserved(
-            dim=state_minus.dim, mass=cv_minus.mass, energy=ext_energy,
-            momentum=ext_mom, species_mass=cv_minus.species_mass)
+        cv_plus = make_conserved(
+            state_minus.dim,
+            mass=cv_minus.mass,
+            energy=total_energy_plus,
+            momentum=mom_plus,
+            species_mass=cv_minus.species_mass)
 
-        def replace_thermal_conductivity(state, kappa):
-            new_tv = replace(state.tv, thermal_conductivity=kappa)
-            return replace(state, tv=new_tv)
+        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry)
 
-        return replace_thermal_conductivity(
+        return _replace_kappa(
             make_fluid_state(
-                cv=ext_cv, gas_model=gas_model,
+                cv=cv_plus, gas_model=gas_model,
                 temperature_seed=state_minus.temperature),
-            ext_kappa)
+            kappa_plus)
 
-    def inviscid_wall_flux(self, dcoll, dd_bdry, gas_model, state_minus,
-            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
-        """Return Riemann flux using state with mom opposite of interior state."""
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
         dd_bdry = as_dofdesc(dd_bdry)
-        # NOTE: For the inviscid/advection part we set mom_+ = -mom_-, and
-        #       use energy_+ = energy_-, per [Mengaldo_2014]_.
-        wall_cv = make_conserved(dim=state_minus.dim,
-                                 mass=state_minus.mass_density,
-                                 momentum=-state_minus.momentum_density,
-                                 energy=state_minus.energy_density,
-                                 species_mass=state_minus.species_mass_density)
-        wall_state = make_fluid_state(cv=wall_cv, gas_model=gas_model,
-                                      temperature_seed=state_minus.temperature)
-        state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        # Grab a unit normal to the boundary
-        nhat = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        cv_minus = state_minus.cv
 
-        return numerical_flux_func(state_pair, gas_model, nhat)
+        mom_bc = self._no_slip.momentum_bc(cv_minus.momentum, normal)
 
-    def get_external_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
+        t_bc = self._thermally_coupled.temperature_bc(
+            dcoll, dd_bdry, state_minus.temperature)
+
+        internal_energy_bc = gas_model.eos.get_internal_energy(
+            temperature=t_bc,
+            species_mass_fractions=cv_minus.species_mass_fractions)
+
+        # Velocity is pinned to 0 here, no kinetic energy
+        total_energy_bc = cv_minus.mass * internal_energy_bc
+
+        cv_bc = make_conserved(
+            state_minus.dim,
+            mass=cv_minus.mass,
+            energy=total_energy_bc,
+            momentum=mom_bc,
+            species_mass=cv_minus.species_mass)
+
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
+
+        return _replace_kappa(
+            make_fluid_state(
+                cv=cv_bc, gas_model=gas_model,
+                temperature_seed=state_minus.temperature),
+            kappa_bc)
+
+    # FIXME: Remove this?
+    def grad_av_plus(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
         """Get the exterior grad(Q) on the boundary."""
         # Grab some boundary-relevant data
         actx = grad_av_minus.array_context
@@ -519,7 +508,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         # Apply a Neumann condition on the energy gradient
         # Should probably compute external energy gradient using external temperature
         # gradient, but that is a can of worms
-        ext_grad_energy = \
+        grad_energy_plus = \
             grad_av_minus.energy - 2 * np.dot(grad_av_minus.energy, nhat) * nhat
 
         # uh oh - we don't have the necessary data to compute grad_y from grad_av
@@ -532,115 +521,41 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         # for i in range(state_minus.nspecies):
         #    grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
         #        + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-        ext_grad_species_mass = (
+        grad_species_mass_plus = (
             grad_av_minus.species_mass
             - np.outer(grad_av_minus.species_mass @ nhat, nhat))
 
         return make_conserved(
-            grad_av_minus.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
-            momentum=grad_av_minus.momentum, species_mass=ext_grad_species_mass)
+            grad_av_minus.dim, mass=grad_av_minus.mass, energy=grad_energy_plus,
+            momentum=grad_av_minus.momentum, species_mass=grad_species_mass_plus)
 
-    def get_external_grad_cv(self, state_minus, grad_cv_minus, normal, **kwargs):
-        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        from mirgecom.fluid import species_mass_fraction_gradient
-        grad_y_minus = species_mass_fraction_gradient(state_minus.cv, grad_cv_minus)
-        grad_y_bc = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        grad_species_mass_plus = 0.*grad_y_bc
-
-        for i in range(state_minus.nspecies):
-            grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_bc[i]
-                + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-
-        return make_conserved(grad_cv_minus.dim,
-                              mass=grad_cv_minus.mass,
-                              energy=grad_cv_minus.energy,
-                              momentum=grad_cv_minus.momentum,
-                              species_mass=grad_species_mass_plus)
-
-    def viscous_wall_flux(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-            grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
+    def grad_cv_bc(
+            self, dcoll, dd_bdry, gas_model, state_minus, state_bc, grad_cv_minus,
             **kwargs):
-        """Return the boundary flux for the divergence of the viscous flux."""
-        if self.heat_flux_penalty_amount is None:
-            raise ValueError("Boundary does not have heat flux penalty amount.")
-        if self.lengthscales is None:
-            raise ValueError("Boundary does not have length scales data.")
-
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
         dd_bdry = as_dofdesc(dd_bdry)
-        dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-        from mirgecom.viscous import viscous_flux
-        actx = state_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
-        # FIXME: Need to examine [Mengaldo_2014]_ - specifically momentum terms
-        state_plus = self.get_external_state(
-            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-            state_minus=state_minus, **kwargs)
-        grad_cv_bc = self.get_external_grad_cv(
-            state_minus=state_minus, grad_cv_minus=grad_cv_minus, normal=normal,
-            **kwargs)
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
 
-        grad_t_plus = self.get_external_grad_t(
-            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-            state_minus=state_minus, grad_cv_minus=grad_cv_minus,
-            grad_t_minus=grad_t_minus)
+        return make_conserved(
+            grad_cv_minus.dim,
+            mass=grad_cv_minus.mass,
+            energy=grad_cv_minus.energy,
+            momentum=grad_cv_minus.momentum,
+            species_mass=grad_species_mass_bc)
 
-        def harmonic_mean(x, y):
-            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
-            return 2*x*y/x_plus_y
-
-        def replace_kappa(state, kappa):
-            from dataclasses import replace
-            new_tv = replace(state.tv, thermal_conductivity=kappa)
-            return replace(state, tv=new_tv)
-
-        kappa_harmonic_mean = harmonic_mean(
-            state_minus.tv.thermal_conductivity,
-            state_plus.tv.thermal_conductivity)
-
-        state_plus_harmonic_kappa = replace_kappa(state_plus, kappa_harmonic_mean)
-
-        # need to sum grad_t_plus and grad_t_minus
-        # assumes the harmonic flux
-        grad_t_interface = (grad_t_plus + grad_t_minus)/2.
-        viscous_flux = viscous_flux(state_plus_harmonic_kappa,
-                                    grad_cv_bc, grad_t_interface)
-
-        lengthscales = op.project(dcoll, dd_bdry_base, dd_bdry, self.lengthscales)
-
-        tau = (
-            self.heat_flux_penalty_amount * kappa_harmonic_mean / lengthscales)
-
-        # NS and diffusion use opposite sign conventions for flux; hence penalty
-        # is added here instead of subtracted
-        flux_without_penalty = viscous_flux @ normal
-        return replace(
-            flux_without_penalty,
-            energy=(
-                flux_without_penalty.energy
-                + tau * (state_plus.temperature - state_minus.temperature)))
-
-    def get_external_t(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
-        else:
-            return self.ext_t
+        return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
 
-    def get_external_grad_t(
+    def grad_temperature_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
             grad_t_minus, **kwargs):
-        """Get the exterior grad(T) on the boundary."""
-        if self.ext_grad_t is None:
-            raise ValueError(
-                "Boundary does not have external temperature gradient data.")
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_grad_t)
-        else:
-            return self.ext_grad_t
+        """Get grad(T) on the boundary."""
+        return self._thermally_coupled.grad_temperature_bc(
+            dcoll, dd_bdry, grad_t_minus)
 
 
 class InterfaceWallBoundary(DiffusionBoundary):
@@ -655,10 +570,10 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
     def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):  # noqa: D102
         actx = u_minus.array_context
-        kappa_plus = self.get_external_kappa(dcoll, dd_bdry)
+        kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
-        u_plus = self.get_external_u(dcoll, dd_bdry)
+        u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
         from mirgecom.diffusion import grad_facial_flux
@@ -667,13 +582,16 @@ class InterfaceWallBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, penalty_amount=None):  # noqa: D102
+        if self.grad_u_plus is None:
+            raise ValueError(
+                "Boundary does not have external gradient data.")
         actx = u_minus.array_context
-        kappa_plus = self.get_external_kappa(dcoll, dd_bdry)
+        kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
-        u_plus = self.get_external_u(dcoll, dd_bdry)
+        u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
-        grad_u_plus = self.get_external_grad_u(dcoll, dd_bdry)
+        grad_u_plus = _project_from_base(dcoll, dd_bdry, self.grad_u_plus)
         grad_u_tpair = TracePair(
             dd_bdry, interior=grad_u_minus, exterior=grad_u_plus)
         lengthscales_tpair = TracePair(
@@ -683,33 +601,6 @@ class InterfaceWallBoundary(DiffusionBoundary):
         return diffusion_facial_flux(
             kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
             penalty_amount=penalty_amount)
-
-    def get_external_kappa(self, dcoll, dd_bdry):
-        """Get the exterior grad(u) on the boundary."""
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.kappa_plus)
-        else:
-            return self.kappa_plus
-
-    def get_external_u(self, dcoll, dd_bdry):
-        """Get the exterior u on the boundary."""
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.u_plus)
-        else:
-            return self.u_plus
-
-    def get_external_grad_u(self, dcoll, dd_bdry):
-        """Get the exterior grad(u) on the boundary."""
-        if self.grad_u_plus is None:
-            raise ValueError(
-                "Boundary does not have external gradient data.")
-        if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-            dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.grad_u_plus)
-        else:
-            return self.grad_u_plus
 
 
 def _kappa_inter_volume_trace_pairs(
