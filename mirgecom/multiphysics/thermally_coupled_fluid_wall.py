@@ -9,6 +9,7 @@ and heat flux across their interface.
 .. autofunction:: coupled_grad_t_operator
 .. autofunction:: coupled_ns_heat_operator
 
+.. autoclass:: InterfaceFluidSlipBoundary
 .. autoclass:: InterfaceFluidBoundary
 .. autoclass:: InterfaceWallBoundary
 """
