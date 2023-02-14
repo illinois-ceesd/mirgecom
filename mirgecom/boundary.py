@@ -631,6 +631,9 @@ class _IsothermalBoundaryComponent:
     def __init__(self, t_bc):
         self._t_bc = t_bc
 
+    def temperature_plus(self, state_minus):
+        return 2*self._t_bc - state_minus.temperature
+
     def temperature_bc(self, state_minus):
         return self._t_bc + 0*state_minus.temperature
 
@@ -1461,7 +1464,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
     .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
-    .. automethod:: temperature_bc
+    .. automethod:: temperature_plus
     .. automethod:: grad_cv_bc
     """
 
@@ -1482,7 +1485,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
             boundary_state_func=self.state_bc,
             inviscid_flux_func=self.inviscid_flux,
             viscous_flux_func=self.viscous_flux,
-            boundary_temperature_func=self.temperature_bc,
+            boundary_temperature_func=self.temperature_plus,
             boundary_gradient_cv_func=self.grad_cv_bc)
 
         self._isothermal = _IsothermalBoundaryComponent(wall_temperature)
@@ -1536,9 +1539,9 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         return make_fluid_state(cv=cv_bc, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
 
-    def temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
-        return self._isothermal.temperature_bc(state_minus)
+        return self._isothermal.temperature_plus(state_minus)
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, **kwargs):
