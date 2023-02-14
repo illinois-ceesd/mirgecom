@@ -517,7 +517,9 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
 
-            temperature_bc = wall.temperature_bc(state_minus)
+            temperature_bc = wall.temperature_bc(
+                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
+                state_minus=state_minus)
             print(f"{temperature_bc=}")
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
