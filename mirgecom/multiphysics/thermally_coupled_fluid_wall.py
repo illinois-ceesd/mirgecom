@@ -209,24 +209,20 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
             self, kappa_plus, t_plus, grad_t_plus=None,
             heat_flux_penalty_amount=None, lengthscales=None):
         """Initialize InterfaceFluidBoundary."""
-        self.inviscid_flux = partial(
-            _inviscid_flux_for_prescribed_state_mengaldo,
-            state_plus_func=self.state_plus)
-
-        self.viscous_flux = partial(
-            _interface_viscous_flux,
-            penalty_amount=heat_flux_penalty_amount,
-            lengthscales=lengthscales,
-            state_bc_func=self.state_bc,
-            temperature_plus_func=self.temperature_plus,
-            grad_cv_bc_func=self.grad_cv_bc,
-            grad_temperature_bc_func=self.grad_temperature_bc)
-
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
-            inviscid_flux_func=self.inviscid_flux,
-            viscous_flux_func=self.viscous_flux,
+            inviscid_flux_func=partial(
+                _inviscid_flux_for_prescribed_state_mengaldo,
+                state_plus_func=self.state_plus),
+            viscous_flux_func=partial(
+                _interface_viscous_flux,
+                penalty_amount=heat_flux_penalty_amount,
+                lengthscales=lengthscales,
+                state_bc_func=self.state_bc,
+                temperature_plus_func=self.temperature_plus,
+                grad_cv_bc_func=self.grad_cv_bc,
+                grad_temperature_bc_func=self.grad_temperature_bc),
             boundary_temperature_func=self.temperature_plus,
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc,
@@ -394,24 +390,20 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             self, kappa_plus, t_plus, grad_t_plus=None,
             heat_flux_penalty_amount=None, lengthscales=None):
         """Initialize InterfaceFluidBoundary."""
-        self.inviscid_flux = partial(
-            _inviscid_flux_for_prescribed_state_mengaldo,
-            state_plus_func=self.state_plus)
-
-        self.viscous_flux = partial(
-            _interface_viscous_flux,
-            penalty_amount=heat_flux_penalty_amount,
-            lengthscales=lengthscales,
-            state_bc_func=self.state_bc,
-            temperature_plus_func=self.temperature_plus,
-            grad_cv_bc_func=self.grad_cv_bc,
-            grad_temperature_bc_func=self.grad_temperature_bc)
-
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
-            inviscid_flux_func=self.inviscid_flux,
-            viscous_flux_func=self.viscous_flux,
+            inviscid_flux_func=partial(
+                _inviscid_flux_for_prescribed_state_mengaldo,
+                state_plus_func=self.state_plus),
+            viscous_flux_func=partial(
+                _interface_viscous_flux,
+                penalty_amount=heat_flux_penalty_amount,
+                lengthscales=lengthscales,
+                state_bc_func=self.state_bc,
+                temperature_plus_func=self.temperature_plus,
+                grad_cv_bc_func=self.grad_cv_bc,
+                grad_temperature_bc_func=self.grad_temperature_bc),
             boundary_temperature_func=self.temperature_plus,
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc,
