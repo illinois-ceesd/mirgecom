@@ -718,8 +718,6 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: grad_cv_bc
@@ -729,21 +727,17 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
 
     def __init__(self):
         """Initialize the boundary condition object."""
-        self.inviscid_flux = partial(
-            _inviscid_flux_for_prescribed_state_mengaldo,
-            state_plus_func=self.state_plus)
-
-        self.viscous_flux = partial(
-            _viscous_flux_for_prescribed_state_mengaldo,
-            state_bc_func=self.state_bc,
-            grad_cv_bc_func=self.grad_cv_bc,
-            grad_temperature_bc_func=self.grad_temperature_bc)
-
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
-            inviscid_flux_func=self.inviscid_flux,
-            viscous_flux_func=self.viscous_flux,
+            inviscid_flux_func=partial(
+                _inviscid_flux_for_prescribed_state_mengaldo,
+                state_plus_func=self.state_plus),
+            viscous_flux_func=partial(
+                _viscous_flux_for_prescribed_state_mengaldo,
+                state_bc_func=self.state_bc,
+                grad_cv_bc_func=self.grad_cv_bc,
+                grad_temperature_bc_func=self.grad_temperature_bc),
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc)
 
@@ -1457,8 +1451,6 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: temperature_bc
@@ -1467,21 +1459,17 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
     def __init__(self, wall_temperature=300):
         """Initialize the boundary condition object."""
-        self.inviscid_flux = partial(
-            _inviscid_flux_for_prescribed_state_mengaldo,
-            state_plus_func=self.state_plus)
-
-        self.viscous_flux = partial(
-            _viscous_flux_for_prescribed_state_mengaldo,
-            state_bc_func=self.state_bc,
-            grad_cv_bc_func=self.grad_cv_bc,
-            grad_temperature_bc_func=None)
-
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
-            inviscid_flux_func=self.inviscid_flux,
-            viscous_flux_func=self.viscous_flux,
+            inviscid_flux_func=partial(
+                _inviscid_flux_for_prescribed_state_mengaldo,
+                state_plus_func=self.state_plus),
+            viscous_flux_func=partial(
+                _viscous_flux_for_prescribed_state_mengaldo,
+                state_bc_func=self.state_bc,
+                grad_cv_bc_func=self.grad_cv_bc,
+                grad_temperature_bc_func=None),
             boundary_temperature_func=self.temperature_bc,
             boundary_gradient_cv_func=self.grad_cv_bc)
 
@@ -1561,8 +1549,6 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: grad_cv_bc
@@ -1572,21 +1558,17 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
     def __init__(self):
         """Initialize the boundary condition object."""
-        self.inviscid_flux = partial(
-            _inviscid_flux_for_prescribed_state_mengaldo,
-            state_plus_func=self.state_plus)
-
-        self.viscous_flux = partial(
-            _viscous_flux_for_prescribed_state_mengaldo,
-            state_bc_func=self.state_bc,
-            grad_cv_bc_func=self.grad_cv_bc,
-            grad_temperature_bc_func=self.grad_temperature_bc)
-
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
-            inviscid_flux_func=self.inviscid_flux,
-            viscous_flux_func=self.viscous_flux,
+            inviscid_flux_func=partial(
+                _inviscid_flux_for_prescribed_state_mengaldo,
+                state_plus_func=self.state_plus),
+            viscous_flux_func=partial(
+                _viscous_flux_for_prescribed_state_mengaldo,
+                state_bc_func=self.state_bc,
+                grad_cv_bc_func=self.grad_cv_bc,
+                grad_temperature_bc_func=self.grad_temperature_bc),
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc)
 
@@ -1680,8 +1662,6 @@ class SymmetryBoundary(PrescribedFluidBoundary):
     and that temperature gradients are null due to the adiabatic condition.
 
     .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: grad_cv_bc
@@ -1691,21 +1671,17 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def __init__(self, dim=None):
         """Initialize the boundary condition object."""
-        self.inviscid_flux = partial(
-            _inviscid_flux_for_prescribed_state_mengaldo,
-            state_plus_func=self.state_plus)
-
-        self.viscous_flux = partial(
-            _viscous_flux_for_prescribed_state_mengaldo,
-            state_bc_func=self.state_bc,
-            grad_cv_bc_func=self.grad_cv_bc,
-            grad_temperature_bc_func=self.grad_temperature_bc)
-
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
-            inviscid_flux_func=self.inviscid_flux,
-            viscous_flux_func=self.viscous_flux,
+            inviscid_flux_func=partial(
+                _inviscid_flux_for_prescribed_state_mengaldo,
+                state_plus_func=self.state_plus),
+            viscous_flux_func=partial(
+                _viscous_flux_for_prescribed_state_mengaldo,
+                state_bc_func=self.state_bc,
+                grad_cv_bc_func=self.grad_cv_bc,
+                grad_temperature_bc_func=self.grad_temperature_bc),
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc)
 
