@@ -64,13 +64,12 @@ from functools import partial
 
 from meshmode.dof_array import DOFArray
 
-from typing import List, Dict, Optional, TYPE_CHECKING
+from typing import List, Dict, Optional
 from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.viscous import get_viscous_timestep
 
-if TYPE_CHECKING:
-    import pyopencl as cl
+import pyopencl as cl
 
 logger = logging.getLogger(__name__)
 
