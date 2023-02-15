@@ -66,8 +66,8 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
 
     eta = .5  # just filter half the modes
 
-    from mirgecom.simutil import get_number_of_nodes
-    nmodes = get_number_of_nodes(dim, order)
+    from mirgecom.simutil import get_number_of_tetrahedron_nodes
+    nmodes = get_number_of_tetrahedron_nodes(dim, order)
     print(f"{nmodes=}")
 
     cutoff = int(eta * order)
@@ -164,15 +164,18 @@ def test_spectral_filter(actx_factory, element_order, dim):
         periodic=periodic
     )
     numelem = mesh.nelements
-    from mirgecom.simutil import get_number_of_nodes
-    nummodes = get_number_of_nodes(dim, element_order)
+    from mirgecom.simutil import get_number_of_tetrahedron_nodes
+    nummodes = get_number_of_tetrahedron_nodes(dim, element_order)
     print(f"{nummodes=}")
     print(f"{numelem=}")
     print(f"{element_order=}")
     # low_cutoff = 0
     # hi_cutoff = int(element_order - 1)
     mid_cutoff = int(element_order/2)
+
+    # Test fields which have components with the following max orders:
     test_field_orders = [0, 1, 2, 3, 8, 9, 10, 20]
+
     print(f"{test_field_orders=}")
     print(f"{mid_cutoff=}")
 
