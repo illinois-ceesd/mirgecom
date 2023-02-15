@@ -22,7 +22,7 @@ Mesh and element utilities
 --------------------------
 
 .. autofunction:: generate_and_distribute_mesh
-.. autofunction:: get_number_of_tetrahedraon_nodes
+.. autofunction:: get_number_of_tetrahedron_nodes
 
 File comparison utilities
 -------------------------
