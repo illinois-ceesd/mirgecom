@@ -172,7 +172,10 @@ def test_spectral_filter(actx_factory, element_order, dim):
     # low_cutoff = 0
     # hi_cutoff = int(element_order - 1)
     mid_cutoff = int(element_order/2)
+
+    # Test fields which have components with the following max orders:
     test_field_orders = [0, 1, 2, 3, 8, 9, 10, 20]
+
     print(f"{test_field_orders=}")
     print(f"{mid_cutoff=}")
 
