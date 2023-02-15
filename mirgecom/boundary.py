@@ -589,11 +589,8 @@ class _SlipBoundaryComponent:
         # set the normal momentum to 0
         return mom_minus - np.dot(mom_minus, normal)*normal
 
-    def grad_momentum_bc(
+    def grad_velocity_bc(
             self, state_minus, state_bc, grad_cv_minus, normal):
-        # normal velocity on the surface is zero,
-        vel_bc = state_bc.velocity
-
         from mirgecom.fluid import velocity_gradient
         grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
 
@@ -606,12 +603,7 @@ class _SlipBoundaryComponent:
             grad_v_normal[i+1][0] = 0.*grad_v_normal[i+1][0]
 
         # get the gradient on the boundary in the global coordiate space
-        grad_v_bc = rotation_matrix.T@grad_v_normal@rotation_matrix
-
-        # construct grad(mom)
-        return (
-            state_minus.mass_density*grad_v_bc
-            + np.outer(vel_bc, grad_cv_minus.mass))
+        return rotation_matrix.T@grad_v_normal@rotation_matrix
 
 
 class _NoSlipBoundaryComponent:
@@ -811,8 +803,12 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
-        grad_mom_bc = self._slip.grad_momentum_bc(
+        grad_v_bc = self._slip.grad_velocity_bc(
             state_minus, state_bc, grad_cv_minus, normal)
+
+        grad_mom_bc = (
+            state_bc.mass_density * grad_v_bc
+            + np.outer(state_bc.velocity, grad_cv_minus.mass))
 
         grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
             state_minus, grad_cv_minus, normal)
@@ -1729,128 +1725,34 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                                 temperature_seed=state_minus.temperature)
 
     def grad_cv_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, **kwargs):
+            self, dcoll, dd_bdry, gas_model, state_minus, state_bc, grad_cv_minus,
+            **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        dim = state_minus.dim
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
-        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
-            state_minus, grad_cv_minus, normal)
-
-        # extrapolate density and remove its normal gradient (symmetry condition)
-        mass_bc = state_minus.mass_density
+        # remove density normal gradient (symmetry condition)
+        # FIXME: This condition may not be necessary, in which case this BC becomes
+        # the same as AdiabaticSlipBoundary; investigate this
         grad_mass_bc = grad_cv_minus.mass \
             - np.dot(grad_cv_minus.mass, normal)*normal
 
-        from mirgecom.fluid import velocity_gradient
-        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
-
         # modify velocity gradient at the boundary:
-        # first, remove normal component of velocity
-        v_bc = state_minus.velocity - np.dot(state_minus.velocity, normal)*normal
+        grad_v_bc = self._slip.grad_velocity_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
 
-        if dim == 1:
-            grad_v_bc = grad_v_minus
+        grad_mom_bc = (
+            state_bc.mass_density * grad_v_bc
+            + np.outer(state_bc.velocity, grad_mass_bc))
 
-        if dim == 2:
-
-            # then force zero shear stress by removing normal derivative
-            # of tangential velocity
-            # see documentation for detailed explanation
-            aux_matrix = np.zeros((2, 2))
-            n1 = normal[0]
-            n2 = normal[1]
-            idx11 = 1 - n1**2*n2**2
-            idx12 = +n1**3*n2
-            idx13 = -n1*n2**3
-            idx14 = +n1**2*n2**2
-            idx21 = -n1*n2**3
-            idx22 = +n1**2*n2**2
-            idx23 = 1 - n2**4
-            idx24 = +n1*n2**3
-            idx31 = +n1**3*n2
-            idx32 = 1 - n1**4
-            idx33 = +n1**2*n2**2
-            idx34 = -n1**3*n2
-            idx41 = +n1**2*n2**2
-            idx42 = -n1**3*n2
-            idx43 = +n1*n2**3
-            idx44 = 1 - n1**2*n2**2
-
-            aux_matrix = make_obj_array([idx11, idx21, idx31, idx41,
-                                         idx12, idx22, idx32, idx42,
-                                         idx13, idx23, idx33, idx43,
-                                         idx14, idx24, idx34, idx44]).reshape((4, 4))
-
-            grad_v_bc = (aux_matrix@(grad_v_minus).reshape((4, 1))).reshape((2, 2))
-
-        if dim == 3:
-
-            normal_set = _get_normal_axes(normal)
-
-            n_1_x = normal_set[0][0]
-            n_1_y = normal_set[0][1]
-            n_1_z = normal_set[0][2]
-
-            t_1_x = normal_set[1][0]
-            t_1_y = normal_set[1][1]
-            t_1_z = normal_set[1][2]
-
-            t_2_x = normal_set[2][0]
-            t_2_y = normal_set[2][1]
-            t_2_z = normal_set[2][2]
-
-            zeros = n_1_x*0.0
-
-            matrix_1 = make_obj_array([
-                n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z, zeros, zeros,
-                zeros, n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z, zeros,
-                zeros, zeros, n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z,
-                t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z, zeros, zeros,
-                zeros, t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z, zeros,
-                zeros, zeros, t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z,
-                t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z, zeros, zeros,
-                zeros, t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z, zeros,
-                zeros, zeros, t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z
-                ]).reshape((9, 9))
-
-            matrix_2 = make_obj_array([
-                n_1_x, n_1_y, n_1_z, zeros, zeros, zeros, zeros, zeros, zeros,
-                t_1_x, t_1_y, t_1_z, zeros, zeros, zeros, zeros, zeros, zeros,
-                t_2_x, t_2_y, t_2_z, zeros, zeros, zeros, zeros, zeros, zeros,
-                zeros, zeros, zeros, n_1_x, n_1_y, n_1_z, zeros, zeros, zeros,
-                zeros, zeros, zeros, t_1_x, t_1_y, t_1_z, zeros, zeros, zeros,
-                zeros, zeros, zeros, t_2_x, t_2_y, t_2_z, zeros, zeros, zeros,
-                zeros, zeros, zeros, zeros, zeros, zeros, n_1_x, n_1_y, n_1_z,
-                zeros, zeros, zeros, zeros, zeros, zeros, t_1_x, t_1_y, t_1_z,
-                zeros, zeros, zeros, zeros, zeros, zeros, t_2_x, t_2_y, t_2_z,
-                ]).reshape((9, 9))
-
-            m_forw = matrix_1@matrix_2
-
-            # the inverse transformation is the transpose for an orthogonal matrix
-            m_back = m_forw.T
-
-            # remove normal derivative of tangential velocities (2 components)
-            m_back[1] = make_obj_array([
-                zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
-            m_back[2] = make_obj_array([
-                zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
-
-            m_slip = m_forw*m_back
-
-            grad_v_bc = (m_slip@grad_v_minus.reshape((9, 1))).reshape((3, 3))
-
-        # finally, product rule for momentum
-        grad_momentum_density_bc = (mass_bc*grad_v_bc
-            + np.outer(v_bc, grad_cv_minus.mass))
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
 
         return make_conserved(
             grad_cv_minus.dim,
             mass=grad_mass_bc,
             energy=grad_cv_minus.energy,  # gradient of energy is useless
-            momentum=grad_momentum_density_bc,
+            momentum=grad_mom_bc,
             species_mass=grad_species_mass_bc)
 
     def grad_temperature_bc(
