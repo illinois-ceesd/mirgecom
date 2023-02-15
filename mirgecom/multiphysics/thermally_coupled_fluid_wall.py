@@ -552,12 +552,15 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
     def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):  # noqa: D102
         actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
         kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
+
         u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+
         from mirgecom.diffusion import grad_facial_flux
         return grad_facial_flux(kappa_tpair, u_tpair, normal)
 
@@ -567,18 +570,24 @@ class InterfaceWallBoundary(DiffusionBoundary):
         if self.grad_u_plus is None:
             raise ValueError(
                 "Boundary does not have external gradient data.")
+
         actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
         kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
+
         u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
+
         grad_u_plus = _project_from_base(dcoll, dd_bdry, self.grad_u_plus)
         grad_u_tpair = TracePair(
             dd_bdry, interior=grad_u_minus, exterior=grad_u_plus)
+
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+
         from mirgecom.diffusion import diffusion_facial_flux
         return diffusion_facial_flux(
             kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
