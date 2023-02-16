@@ -11,7 +11,9 @@ and heat flux across their interface.
 
 .. autoclass:: InterfaceFluidSlipBoundary
 .. autoclass:: InterfaceFluidBoundary
+.. autoclass:: InterfaceFluidSlipRadiationBoundary
 .. autoclass:: InterfaceWallBoundary
+.. autoclass:: InterfaceWallRadiationBoundary
 """
 
 __copyright__ = """
@@ -162,6 +164,44 @@ def _interface_viscous_flux(
         energy=flux_without_penalty.energy + tau * (t_plus - t_minus))
 
 
+# Note: callback function inputs have no default on purpose so that they can't be
+# accidentally omitted
+def _interface_viscous_flux_with_radiation(
+        dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+        grad_t_minus, *, penalty_amount, lengthscales, epsilon_plus,
+        state_bc_func, temperature_plus_func, grad_cv_bc_func,
+        grad_temperature_bc_func, **kwargs):
+    """Return the boundary flux for the divergence of the viscous flux.
+
+    Returns the standard Mengaldo viscous flux with the heat flux modified to
+    included radiation from the wall, plus a temperature interior penalty
+    term on the energy.
+    """
+    dd_bdry = as_dofdesc(dd_bdry)
+
+    t_plus = temperature_plus_func(
+        dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus,
+        **kwargs)
+
+    flux_without_radiation = _interface_viscous_flux(
+        dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus,
+        grad_cv_minus=grad_cv_minus, grad_t_minus=grad_t_minus,
+        penalty_amount=penalty_amount, lengthscales=lengthscales,
+        state_bc_func=state_bc_func,
+        # FIXME: Not sure if this optimization is necessary
+        temperature_plus_func=lambda *a, **kw: t_plus,
+        grad_cv_bc_func=grad_cv_bc_func,
+        grad_temperature_bc_func=grad_temperature_bc_func,
+        **kwargs)
+
+    # Stefan-Boltzmann constant
+    sigma = 5.6e-8
+
+    return replace(
+        flux_without_radiation,
+        energy=flux_without_radiation.energy + epsilon_plus * sigma * t_plus**4)
+
+
 def _harmonic_mean(actx, x, y):
     x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
     return 2*x*y/x_plus_y
@@ -194,6 +234,34 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
                 "Boundary does not have external temperature gradient data.")
         grad_t_plus = _project_from_base(dcoll, dd_bdry, self._grad_t_plus)
         return (grad_t_plus + grad_t_minus)/2
+
+
+class _ThermallyCoupledUpwindBoundaryComponent:
+    def __init__(self, kappa_plus, t_plus, grad_t_plus=None):
+        self._kappa_plus = kappa_plus
+        self._t_plus = t_plus
+        self._grad_t_plus = grad_t_plus
+
+    def kappa_plus(self, dcoll, dd_bdry):
+        return _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+
+    def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
+        return _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+
+    def temperature_plus(self, dcoll, dd_bdry):
+        return _project_from_base(dcoll, dd_bdry, self._t_plus)
+
+    def temperature_bc(self, dcoll, dd_bdry, t_minus):
+        t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
+        # Only the heat flux is upwinded
+        return (t_minus + t_plus)/2
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
+        if self._grad_t_plus is None:
+            raise ValueError(
+                "Boundary does not have external temperature gradient data.")
+        grad_t_plus = _project_from_base(dcoll, dd_bdry, self._grad_t_plus)
+        return grad_t_plus
 
 
 def _replace_kappa(state, kappa):
@@ -550,6 +618,154 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             dcoll, dd_bdry, grad_t_minus)
 
 
+class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
+    """Interface boundary condition for the fluid side."""
+
+    # FIXME: Incomplete docs
+    def __init__(
+            self, kappa_plus, t_plus, epsilon_plus, grad_t_plus=None,
+            heat_flux_penalty_amount=None, lengthscales=None):
+        """Initialize InterfaceFluidSlipRadiationBoundary."""
+        PrescribedFluidBoundary.__init__(
+            self,
+            boundary_state_func=self.state_bc,
+            inviscid_flux_func=partial(
+                _inviscid_flux_for_prescribed_state_mengaldo,
+                state_plus_func=self.state_plus),
+            viscous_flux_func=partial(
+                _interface_viscous_flux_with_radiation,
+                penalty_amount=heat_flux_penalty_amount,
+                lengthscales=lengthscales,
+                epsilon_plus=epsilon_plus,
+                state_bc_func=self.state_bc,
+                temperature_plus_func=self.temperature_plus,
+                grad_cv_bc_func=self.grad_cv_bc,
+                grad_temperature_bc_func=self.grad_temperature_bc),
+            boundary_temperature_func=self.temperature_plus,
+            boundary_gradient_cv_func=self.grad_cv_bc,
+            boundary_gradient_temperature_func=self.grad_temperature_bc)
+
+        self._thermally_coupled = _ThermallyCoupledUpwindBoundaryComponent(
+            kappa_plus=kappa_plus,
+            t_plus=t_plus,
+            grad_t_plus=grad_t_plus)
+        self._slip = _SlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
+
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+
+        cv_minus = state_minus.cv
+
+        mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
+
+        t_plus = self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+
+        internal_energy_plus = (
+            cv_minus.mass
+            * gas_model.eos.get_internal_energy(
+                temperature=t_plus,
+                species_mass_fractions=cv_minus.species_mass_fractions))
+        total_energy_plus = (
+            internal_energy_plus
+            # Kinetic energy is the same
+            + gas_model.eos.kinetic_energy(cv_minus))
+
+        cv_plus = make_conserved(
+            state_minus.dim,
+            mass=cv_minus.mass,
+            energy=total_energy_plus,
+            momentum=mom_plus,
+            species_mass=cv_minus.species_mass)
+
+        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry)
+
+        return _replace_kappa(
+            make_fluid_state(
+                cv=cv_plus, gas_model=gas_model,
+                temperature_seed=state_minus.temperature),
+            kappa_plus)
+
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        cv_minus = state_minus.cv
+
+        mom_bc = self._slip.momentum_bc(cv_minus.momentum, normal)
+
+        t_bc = self._thermally_coupled.temperature_bc(
+            dcoll, dd_bdry, state_minus.temperature)
+
+        internal_energy_bc = (
+            cv_minus.mass
+            * gas_model.eos.get_internal_energy(
+                temperature=t_bc,
+                species_mass_fractions=cv_minus.species_mass_fractions))
+        total_energy_bc = (
+            internal_energy_bc
+            + 0.5*np.dot(mom_bc, mom_bc)/cv_minus.mass)
+
+        cv_bc = make_conserved(
+            state_minus.dim,
+            mass=cv_minus.mass,
+            energy=total_energy_bc,
+            momentum=mom_bc,
+            species_mass=cv_minus.species_mass)
+
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
+
+        return _replace_kappa(
+            make_fluid_state(
+                cv=cv_bc, gas_model=gas_model,
+                temperature_seed=state_minus.temperature),
+            kappa_bc)
+
+    def grad_cv_bc(
+            self, dcoll, dd_bdry, gas_model, state_minus, state_bc, grad_cv_minus,
+            **kwargs):
+        """
+        Return external grad(CV) used in the boundary calculation of viscous flux.
+
+        Specify the velocity gradients on the external state to ensure zero
+        energy and momentum flux due to shear stresses.
+
+        Gradients of species mass fractions are set to zero in the normal direction
+        to ensure zero flux of species across the boundary.
+        """
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+
+        grad_mom_bc = self._slip.grad_momentum_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
+
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
+
+        return make_conserved(
+            grad_cv_minus.dim,
+            mass=grad_cv_minus.mass,
+            energy=grad_cv_minus.energy,
+            momentum=grad_mom_bc,
+            species_mass=grad_species_mass_bc)
+
+    def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Get the exterior T on the boundary."""
+        return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+
+    def grad_temperature_bc(
+            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+            grad_t_minus, **kwargs):
+        """Get grad(T) on the boundary."""
+        return self._thermally_coupled.grad_temperature_bc(
+            dcoll, dd_bdry, grad_t_minus)
+
+
 class InterfaceWallBoundary(DiffusionBoundary):
     """Interface boundary condition for the wall side."""
 
@@ -604,6 +820,88 @@ class InterfaceWallBoundary(DiffusionBoundary):
             penalty_amount=penalty_amount)
 
 
+def _diffusion_facial_flux_upwind_with_radiation(
+        kappa_tpair, u_tpair, grad_u_tpair, epsilon_minus, lengthscales_tpair,
+        normal, *, penalty_amount=None):
+    r"""Compute the flux for $\nabla \cdot (\kappa \nabla u)$."""
+    if penalty_amount is None:
+        # *shrug*
+        penalty_amount = 0.05
+
+    actx = u_tpair.int.array_context
+
+    # Stefan-Boltzmann constant
+    sigma = 5.6e-8
+
+    from mirgecom.diffusion import diffusion_flux
+    flux_without_penalty = (
+        np.dot(diffusion_flux(kappa_tpair.ext, grad_u_tpair.ext), normal)
+        + epsilon_minus * sigma * u_tpair.int**4)
+
+    # TODO: Figure out what this is really supposed to be
+    # Not sure if interior penalty even makes sense for this version
+    kappa_harmonic_mean = _harmonic_mean(actx, kappa_tpair.int, kappa_tpair.ext)
+    tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
+
+    return flux_without_penalty - tau*(u_tpair.ext - u_tpair.int)
+
+
+class InterfaceWallRadiationBoundary(DiffusionBoundary):
+    """Interface boundary condition for the wall side, with radiation."""
+
+    # FIXME: Incomplete docs
+    def __init__(self, kappa_plus, u_plus, epsilon_minus, grad_u_plus=None):
+        """Initialize InterfaceWallRadiationBoundary."""
+        self.kappa_plus = kappa_plus
+        self.u_plus = u_plus
+        self.epsilon_minus = epsilon_minus
+        self.grad_u_plus = grad_u_plus
+
+    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):  # noqa: D102
+        actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        # FIXME: Figure out if this should do the kappa-weighted gradient flux or not
+
+        kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
+        kappa_tpair = TracePair(
+            dd_bdry, interior=kappa_minus, exterior=kappa_plus)
+
+        u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
+        u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
+
+        from mirgecom.diffusion import grad_facial_flux
+        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+
+    def get_diffusion_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
+            lengthscales_minus, penalty_amount=None):  # noqa: D102
+        if self.grad_u_plus is None:
+            raise ValueError(
+                "Boundary does not have external gradient data.")
+
+        actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
+        kappa_tpair = TracePair(
+            dd_bdry, interior=kappa_minus, exterior=kappa_plus)
+
+        u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
+        u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
+
+        grad_u_plus = _project_from_base(dcoll, dd_bdry, self.grad_u_plus)
+        grad_u_tpair = TracePair(
+            dd_bdry, interior=grad_u_minus, exterior=grad_u_plus)
+
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
+
+        return _diffusion_facial_flux_upwind_with_radiation(
+            kappa_tpair, u_tpair, grad_u_tpair, self.epsilon_minus,
+            lengthscales_tpair, normal, penalty_amount=penalty_amount)
+
+
 def _kappa_inter_volume_trace_pairs(
         dcoll,
         gas_model,
@@ -656,6 +954,8 @@ def get_interface_boundaries(
         fluid_grad_temperature=None, wall_grad_temperature=None,
         *,
         interface_noslip=True,
+        interface_radiation=False,
+        wall_epsilon=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
@@ -665,10 +965,41 @@ def get_interface_boundaries(
         _grad_temperature_inter_vol_tpairs=None):
     # FIXME: Incomplete docs
     """Get the fluid-wall interface boundaries."""
-    if interface_noslip:
-        fluid_bc_class = InterfaceFluidBoundary
+    if interface_radiation:
+        if wall_epsilon is None:
+            raise ValueError(
+                "Argument 'wall_epsilon' is required if using radiation at the "
+                "interface.")
+        if interface_noslip:
+            raise NotImplementedError(
+                "Radiation interface condition is not yet implemented for no-slip "
+                "walls.")
+        else:
+            fluid_bc_class = InterfaceFluidSlipRadiationBoundary
+
+        def make_fluid_bc(kappa_plus, t_plus, grad_t_plus=None, lengthscales=None):
+            return fluid_bc_class(
+                kappa_plus, t_plus, wall_epsilon, grad_t_plus,
+                heat_flux_penalty_amount=wall_penalty_amount,
+                lengthscales=lengthscales)
+
+        def make_wall_bc(kappa_plus, t_plus, grad_t_plus=None):
+            return InterfaceWallRadiationBoundary(
+                kappa_plus, t_plus, wall_epsilon, grad_t_plus)
     else:
-        fluid_bc_class = InterfaceFluidSlipBoundary
+        if interface_noslip:
+            fluid_bc_class = InterfaceFluidBoundary
+        else:
+            fluid_bc_class = InterfaceFluidSlipBoundary
+
+        def make_fluid_bc(kappa_plus, t_plus, grad_t_plus=None, lengthscales=None):
+            return fluid_bc_class(
+                kappa_plus, t_plus, grad_t_plus,
+                heat_flux_penalty_amount=wall_penalty_amount,
+                lengthscales=lengthscales)
+
+        def make_wall_bc(kappa_plus, t_plus, grad_t_plus=None):
+            return InterfaceWallBoundary(kappa_plus, t_plus, grad_t_plus)
 
     include_gradient = (
         fluid_grad_temperature is not None and wall_grad_temperature is not None)
@@ -712,11 +1043,10 @@ def get_interface_boundaries(
             * (0*fluid_state.temperature+1))
 
         fluid_interface_boundaries = {
-            kappa_tpair.dd.domain_tag: fluid_bc_class(
+            kappa_tpair.dd.domain_tag: make_fluid_bc(
                 kappa_tpair.ext,
                 temperature_tpair.ext,
                 grad_temperature_tpair.ext,
-                wall_penalty_amount,
                 lengthscales=op.project(dcoll,
                     fluid_dd, temperature_tpair.dd, fluid_lengthscales))
             for kappa_tpair, temperature_tpair, grad_temperature_tpair in zip(
@@ -725,7 +1055,7 @@ def get_interface_boundaries(
                 grad_temperature_inter_vol_tpairs[wall_dd, fluid_dd])}
 
         wall_interface_boundaries = {
-            kappa_tpair.dd.domain_tag: InterfaceWallBoundary(
+            kappa_tpair.dd.domain_tag: make_wall_bc(
                 kappa_tpair.ext,
                 temperature_tpair.ext,
                 grad_temperature_tpair.ext)
@@ -735,7 +1065,7 @@ def get_interface_boundaries(
                 grad_temperature_inter_vol_tpairs[fluid_dd, wall_dd])}
     else:
         fluid_interface_boundaries = {
-            kappa_tpair.dd.domain_tag: fluid_bc_class(
+            kappa_tpair.dd.domain_tag: make_fluid_bc(
                 kappa_tpair.ext,
                 temperature_tpair.ext)
             for kappa_tpair, temperature_tpair in zip(
@@ -743,7 +1073,7 @@ def get_interface_boundaries(
                 temperature_inter_vol_tpairs[wall_dd, fluid_dd])}
 
         wall_interface_boundaries = {
-            kappa_tpair.dd.domain_tag: InterfaceWallBoundary(
+            kappa_tpair.dd.domain_tag: make_wall_bc(
                 kappa_tpair.ext,
                 temperature_tpair.ext)
             for kappa_tpair, temperature_tpair in zip(
@@ -762,6 +1092,8 @@ def coupled_grad_t_operator(
         *,
         time=0.,
         interface_noslip=True,
+        interface_radiation=False,
+        wall_epsilon=None,
         quadrature_tag=DISCR_TAG_BASE,
         fluid_numerical_flux_func=num_flux_central,
         # Added to avoid repeated computation
@@ -773,6 +1105,10 @@ def coupled_grad_t_operator(
         _wall_interface_boundaries_no_grad=None):
     # FIXME: Incomplete docs
     """Compute grad(T) of the coupled fluid-wall system."""
+    if interface_radiation and wall_epsilon is None:
+        raise ValueError(
+            "Argument 'wall_epsilon' is required if using radiation at the "
+            "interface.")
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in fluid_boundaries.items()}
@@ -794,6 +1130,8 @@ def coupled_grad_t_operator(
                 fluid_dd, wall_dd,
                 fluid_state, wall_kappa, wall_temperature,
                 interface_noslip=interface_noslip,
+                interface_radiation=interface_radiation,
+                wall_epsilon=wall_epsilon,
                 _kappa_inter_vol_tpairs=_kappa_inter_vol_tpairs,
                 _temperature_inter_vol_tpairs=_temperature_inter_vol_tpairs)
     else:
@@ -829,6 +1167,8 @@ def coupled_ns_heat_operator(
         *,
         time=0.,
         interface_noslip=True,
+        interface_radiation=False,
+        wall_epsilon=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         fluid_gradient_numerical_flux_func=num_flux_central,
@@ -839,6 +1179,11 @@ def coupled_ns_heat_operator(
         return_gradients=False):
     # FIXME: Incomplete docs
     """Compute RHS of the coupled fluid-wall system."""
+    if interface_radiation and wall_epsilon is None:
+        raise ValueError(
+            "Argument 'wall_epsilon' is required if using radiation at the "
+            "interface.")
+
     if wall_penalty_amount is None:
         # *shrug*
         wall_penalty_amount = 0.05
@@ -871,6 +1216,8 @@ def coupled_ns_heat_operator(
             fluid_state=fluid_state, wall_kappa=wall_kappa,
             wall_temperature=wall_temperature,
             interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
+            wall_epsilon=wall_epsilon,
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs)
 
@@ -890,6 +1237,8 @@ def coupled_ns_heat_operator(
         fluid_state, wall_kappa, wall_temperature,
         time=time,
         interface_noslip=interface_noslip,
+        interface_radiation=interface_radiation,
+        wall_epsilon=wall_epsilon,
         quadrature_tag=quadrature_tag,
         fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
         _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
@@ -908,6 +1257,8 @@ def coupled_ns_heat_operator(
             fluid_grad_temperature=fluid_grad_temperature,
             wall_grad_temperature=wall_grad_temperature,
             interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
+            wall_epsilon=wall_epsilon,
             wall_penalty_amount=wall_penalty_amount,
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs)
