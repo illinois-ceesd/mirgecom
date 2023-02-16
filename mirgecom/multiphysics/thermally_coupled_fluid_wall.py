@@ -208,7 +208,7 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
     def __init__(
             self, kappa_plus, t_plus, grad_t_plus=None,
             heat_flux_penalty_amount=None, lengthscales=None):
-        """Initialize InterfaceFluidBoundary."""
+        """Initialize InterfaceFluidSlipBoundary."""
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
