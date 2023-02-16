@@ -129,9 +129,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-7
+    t_final = 1e-4
     current_cfl = 1.0
-    current_dt = 1e-8
+    current_dt = 1e-9
     current_t = 0
     constant_cfl = False
 
@@ -250,15 +250,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     gas_model = GasModel(eos=eos, transport=transport)
 
     fluid_pressure = 4935.22/x_scale
-    fluid_temperature = 300
+    fluid_temperature = 1000
     fluid_density = fluid_pressure/fluid_temperature/r
     wall_density = fluid_density
-    wall_heat_capacity = 50*eos.heat_capacity_cp()
-    wall_kappa = 10*fluid_kappa*wall_ones
+    wall_heat_capacity = eos.heat_capacity_cp()
+    wall_kappa = fluid_kappa*wall_ones
 
-    wall_time_scale = 20
+    wall_time_scale = 1
 
-    isothermal_wall_temp = 300
+    isothermal_wall_temp = 1000
 
     def smooth_step(actx, x, epsilon=1e-12):
         y = actx.np.minimum(actx.np.maximum(x, 0*x), 0*x+1)
@@ -519,6 +519,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             fluid_state,
             wall_kappa, wall_temperature,
             time=t,
+            interface_noslip=False,
+            interface_radiation=True,
+            wall_epsilon=1,
             return_gradients=return_gradients,
             quadrature_tag=quadrature_tag)
 
@@ -533,13 +536,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             wall_time_scale
             * wall_energy_rhs/(wall_density * wall_heat_capacity))
         from dataclasses import replace
-        fluid_rhs = replace(
-            fluid_rhs,
-            energy=fluid_rhs.energy + (
-                1e9
-                * actx.np.exp(
-                    -(fluid_nodes[0]**2+(fluid_nodes[1]-0.005)**2)/0.004**2)
-                * actx.np.exp(-t/5e-6)))
+        # fluid_rhs = replace(
+        #     fluid_rhs,
+        #     energy=fluid_rhs.energy + (
+        #         1e9
+        #         * actx.np.exp(
+        #             -(fluid_nodes[0]**2+(fluid_nodes[1]-0.005)**2)/0.004**2)
+        #         * actx.np.exp(-t/5e-6)))
 
         if return_gradients:
             return make_obj_array([
