@@ -67,6 +67,10 @@ def grad_facial_flux(kappa_tpair, u_tpair, normal):
         * normal)
 
 
+def diffusion_flux(kappa, grad_u):
+    return -kappa * grad_u
+
+
 def diffusion_facial_flux(
         kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal, *,
         penalty_amount=None):
@@ -84,13 +88,15 @@ def diffusion_facial_flux(
     kappa_harmonic_mean = harmonic_mean(kappa_tpair.int, kappa_tpair.ext)
 
     flux_tpair = TracePair(grad_u_tpair.dd,
-        interior=-kappa_harmonic_mean * np.dot(grad_u_tpair.int, normal),
-        exterior=-kappa_harmonic_mean * np.dot(grad_u_tpair.ext, normal))
+        interior=diffusion_flux(kappa_harmonic_mean, grad_u_tpair.int),
+        exterior=diffusion_flux(kappa_harmonic_mean, grad_u_tpair.ext))
+
+    flux_without_penalty = np.dot(flux_tpair.avg, normal)
 
     # TODO: Figure out what this is really supposed to be
-    tau_quad = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
+    tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
 
-    return flux_tpair.avg - tau_quad*(u_tpair.ext - u_tpair.int)
+    return flux_without_penalty - tau*(u_tpair.ext - u_tpair.int)
 
 
 class DiffusionBoundary(metaclass=abc.ABCMeta):
