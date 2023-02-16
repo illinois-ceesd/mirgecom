@@ -361,7 +361,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         dcoll, dt, fluid_state, dd=dd_vol_fluid)))
             wall_alpha = (
                 wall_time_scale
-                * wall_kappa/(wall_density * wall_kappa))
+                * wall_kappa/(wall_density * wall_heat_capacity))
             wall_cfl = actx.to_numpy(
                 nodal_max(
                     dcoll, dd_vol_wall,
