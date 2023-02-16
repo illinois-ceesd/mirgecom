@@ -643,12 +643,12 @@ def get_interface_boundaries(
         gas_model,
         fluid_dd, wall_dd,
         fluid_state, wall_kappa, wall_temperature,
+        fluid_grad_temperature=None, wall_grad_temperature=None,
+        *,
         interface_noslip=True,
         use_kappa_weighted_grad_flux_in_fluid=False,
-        fluid_grad_temperature=None, wall_grad_temperature=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        *,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         _kappa_inter_vol_tpairs=None,
@@ -754,10 +754,10 @@ def coupled_grad_t_operator(
         fluid_state, wall_kappa, wall_temperature,
         *,
         time=0.,
-        fluid_numerical_flux_func=num_flux_central,
         interface_noslip=True,
         use_kappa_weighted_grad_flux_in_fluid=False,
         quadrature_tag=DISCR_TAG_BASE,
+        fluid_numerical_flux_func=num_flux_central,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         _kappa_inter_vol_tpairs=None,
@@ -807,8 +807,8 @@ def coupled_grad_t_operator(
     return (
         fluid_grad_t_operator(
             dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
-            time=time, numerical_flux_func=fluid_numerical_flux_func,
-            quadrature_tag=quadrature_tag, dd=fluid_dd,
+            time=time, quadrature_tag=quadrature_tag,
+            numerical_flux_func=fluid_numerical_flux_func, dd=fluid_dd,
             operator_states_quad=_fluid_operator_states_quad,
             comm_tag=_FluidGradTag),
         wall_grad_t_operator(
@@ -824,14 +824,14 @@ def coupled_ns_heat_operator(
         fluid_state, wall_kappa, wall_temperature,
         *,
         time=0.,
+        interface_noslip=True,
+        use_kappa_weighted_grad_flux_in_fluid=False,
+        wall_penalty_amount=None,
+        quadrature_tag=DISCR_TAG_BASE,
         fluid_gradient_numerical_flux_func=num_flux_central,
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
-        interface_noslip=True,
-        use_kappa_weighted_grad_flux_in_fluid=False,
-        return_gradients=False,
-        wall_penalty_amount=None,
-        quadrature_tag=DISCR_TAG_BASE):
+        return_gradients=False):
     # FIXME: Incomplete docs
     """Compute RHS of the coupled fluid-wall system."""
     if wall_penalty_amount is None:
@@ -886,11 +886,11 @@ def coupled_ns_heat_operator(
         fluid_boundaries, wall_boundaries,
         fluid_state, wall_kappa, wall_temperature,
         time=time,
-        fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
         interface_noslip=interface_noslip,
         use_kappa_weighted_grad_flux_in_fluid=(
             use_kappa_weighted_grad_flux_in_fluid),
         quadrature_tag=quadrature_tag,
+        fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
         _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
         _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
         _fluid_operator_states_quad=fluid_operator_states_quad,
@@ -936,8 +936,8 @@ def coupled_ns_heat_operator(
 
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
-        return_grad_u=return_gradients, penalty_amount=wall_penalty_amount,
-        quadrature_tag=quadrature_tag, dd=wall_dd, grad_u=wall_grad_temperature,
+        penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
+        return_grad_u=return_gradients, dd=wall_dd, grad_u=wall_grad_temperature,
         comm_tag=_WallOperatorTag)
 
     if return_gradients:
