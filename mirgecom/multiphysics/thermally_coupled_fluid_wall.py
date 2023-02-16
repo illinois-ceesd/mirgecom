@@ -162,7 +162,12 @@ def _interface_viscous_flux(
         energy=flux_without_penalty.energy + tau * (t_plus - t_minus))
 
 
-class _ThermallyCoupledBoundaryComponent:
+def _harmonic_mean(actx, x, y):
+    x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+    return 2*x*y/x_plus_y
+
+
+class _ThermallyCoupledHarmonicMeanBoundaryComponent:
     def __init__(self, kappa_plus, t_plus, grad_t_plus=None):
         self._kappa_plus = kappa_plus
         self._t_plus = t_plus
@@ -173,14 +178,8 @@ class _ThermallyCoupledBoundaryComponent:
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
         actx = kappa_minus.array_context
-
-        def harmonic_mean(x, y):
-            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
-            return 2*x*y/x_plus_y
-
         kappa_plus = _project_from_base(dcoll, dd_bdry, self._kappa_plus)
-
-        return harmonic_mean(kappa_minus, kappa_plus)
+        return _harmonic_mean(actx, kappa_minus, kappa_plus)
 
     def temperature_plus(self, dcoll, dd_bdry):
         return _project_from_base(dcoll, dd_bdry, self._t_plus)
@@ -229,7 +228,7 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
             boundary_gradient_temperature_func=self.grad_temperature_bc,
             boundary_grad_av_func=self.grad_av_plus)
 
-        self._thermally_coupled = _ThermallyCoupledBoundaryComponent(
+        self._thermally_coupled = _ThermallyCoupledHarmonicMeanBoundaryComponent(
             kappa_plus=kappa_plus,
             t_plus=t_plus,
             grad_t_plus=grad_t_plus)
@@ -410,7 +409,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             boundary_gradient_temperature_func=self.grad_temperature_bc,
             boundary_grad_av_func=self.grad_av_plus)
 
-        self._thermally_coupled = _ThermallyCoupledBoundaryComponent(
+        self._thermally_coupled = _ThermallyCoupledHarmonicMeanBoundaryComponent(
             kappa_plus=kappa_plus,
             t_plus=t_plus,
             grad_t_plus=grad_t_plus)
