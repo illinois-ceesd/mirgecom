@@ -820,6 +820,13 @@ class InterfaceWallBoundary(DiffusionBoundary):
             penalty_amount=penalty_amount)
 
 
+def _grad_facial_flux_upwind(kappa_tpair, u_tpair, normal):
+    r"""Compute the numerical flux for $\nabla u$."""
+    # Not upwinding for the gradient, but we don't weight by kappa like the default
+    # grad_facial_flux does
+    return -u_tpair.avg * normal
+
+
 def _diffusion_facial_flux_upwind_with_radiation(
         kappa_tpair, u_tpair, grad_u_tpair, epsilon_minus, lengthscales_tpair,
         normal, *, penalty_amount=None):
@@ -870,8 +877,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
-        from mirgecom.diffusion import grad_facial_flux
-        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+        return _grad_facial_flux_upwind(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
