@@ -83,6 +83,7 @@ from typing import List, Dict, Optional
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
+import pyopencl as cl
 
 logger = logging.getLogger(__name__)
 
@@ -1100,10 +1101,29 @@ def force_evaluation(actx, expn):
     return actx.thaw(actx.freeze(expn))
 
 
-def get_reasonable_memory_pool(ctx, queue):
-    """Return an SVM or buffer memory pool based on what the device supports."""
+def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
+                               force_buffer: bool = False,
+                               force_non_pool: bool = False):
+    """Return an SVM or buffer memory pool based on what the device supports.
+
+    By default, it prefers SVM allocations over CL buffers, and memory
+    pools over direct allocations.
+    """
     from pyopencl.characterize import has_coarse_grain_buffer_svm
     import pyopencl.tools as cl_tools
+
+    if force_buffer and force_non_pool:
+        logger.info(f"Using non-pooled CL buffer allocations on {queue.device}.")
+        return cl_tools.DeferredAllocator(ctx)
+
+    if force_buffer:
+        logger.info(f"Using pooled CL buffer allocations on {queue.device}.")
+        return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
+
+    if force_non_pool and has_coarse_grain_buffer_svm(queue.device):
+        logger.info(f"Using non-pooled SVM allocations on {queue.device}.")
+        return cl_tools.SVMAllocator(  # pylint: disable=no-member
+            ctx, alignment=0, queue=queue)
 
     if has_coarse_grain_buffer_svm(queue.device) and hasattr(cl_tools, "SVMPool"):
         logger.info(f"Using SVM-based memory pool on {queue.device}.")
@@ -1138,7 +1158,7 @@ def compare_files_vtu(
         file_type: str,
         tolerance: float = 1e-12,
         field_tolerance: Optional[Dict[str, float]] = None
-        ):
+        ) -> None:
     """Compare files of vtu type.
 
     Parameters
