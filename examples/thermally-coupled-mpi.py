@@ -522,7 +522,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             interface_noslip=False,
             interface_radiation=True,
             wall_epsilon=1,
-            wall_penalty_amount=10,
             return_gradients=return_gradients,
             quadrature_tag=quadrature_tag)
 
