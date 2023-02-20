@@ -1642,20 +1642,8 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 class SymmetryBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing symmetry boundary.
 
-    a.k.a. Reflective inviscid wall boundary
-
-    This class implements an adiabatic reflective slip boundary given
-    by
-    $\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-}, (\rho\vec{V})^{-}
-    - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}}) \hat{\mathbf{n}}]$
-    wherein the normal component of velocity at the boundary is 0, and
-    tangential components are preserved. These perfectly reflecting
-    conditions are used by the forward-facing step case in
-    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
-    boundary conditions described in detail in [Poinsot_1992]_.
-
-    For the gradients, the no-shear condition implies that cross-terms are absent
-    and that temperature gradients are null due to the adiabatic condition.
+    This class is deprecated and should be replaced by
+    :class:`~mirgecom.boundary.AdiabaticSlipBoundary`.
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -1667,6 +1655,9 @@ class SymmetryBoundary(PrescribedFluidBoundary):
 
     def __init__(self, dim=None):
         """Initialize the boundary condition object."""
+        warn(
+            "SymmetryBoundary is deprecated, and will be removed in Q3 2023. Use "
+            "AdiabaticSlipBoundary instead.", DeprecationWarning, stacklevel=2)
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.state_bc,
