@@ -74,12 +74,12 @@ def make_status_message(
 
 def make_rank_fname(basename, rank=0, step=0, t=0):
     """Create a rank-specific filename."""
-    return f"{basename}-{step:06d}-{{rank:04d}}.vtu"
+    return f"{basename}-{step:09d}-{{rank:04d}}.vtu"
 
 
 def make_par_fname(basename, step=0, t=0):
     r"""Make parallel visualization filename."""
-    return f"{basename}-{step:06d}.pvtu"
+    return f"{basename}-{step:09d}.pvtu"
 
 
 def read_and_distribute_yaml_data(mpi_comm, file_path):
