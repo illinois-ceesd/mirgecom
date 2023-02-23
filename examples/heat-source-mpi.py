@@ -178,6 +178,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+
+    if logmgr:
+        logmgr.close()
+
     final_answer = actx.to_numpy(op.norm(dcoll, u, np.inf))
     resid = abs(final_answer - 0.0002062062188374177)
     if resid > 1e-15:
