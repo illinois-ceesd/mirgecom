@@ -170,6 +170,9 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
             set_dt(logmgr, dt)
             logmgr.tick_after()
 
+    if logmgr:
+        logmgr.close()
+
 
 if __name__ == "__main__":
     import argparse

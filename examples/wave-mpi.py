@@ -234,6 +234,9 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
             set_dt(logmgr, dt)
             logmgr.tick_after()
 
+    if logmgr:
+        logmgr.close()
+
     final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
     assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
