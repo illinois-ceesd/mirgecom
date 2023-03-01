@@ -1148,7 +1148,10 @@ def configurate(config_key, config_object=None, default_value=None):
         d = config_object if isinstance(config_object, dict) else\
             config_object.__dict__
         if config_key in d:
-            return d[config_key]
+            value = d[config_key]
+            if default_value is not None:
+                return type(default_value)(value)
+            return value
     return default_value
 
 
