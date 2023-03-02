@@ -13,9 +13,9 @@ jobs:
         name: Flake8
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
         -
-          uses: actions/setup-python@v1
+          uses: actions/setup-python@v4
           with:
             # matches compat target in setup.py
             python-version: '3.8'
@@ -24,17 +24,35 @@ jobs:
             python3 -m venv myenv
             source myenv/bin/activate
             python -m pip install wheel
-            # Need "flake8<6" due to https://github.com/zheller/flake8-quotes/issues/110
-            python -m pip install "flake8<6" pep8-naming flake8-quotes flake8-bugbear
+            python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
+
+    mypy:
+        name: Mypy
+        runs-on: ubuntu-latest
+        steps:
+        -   uses: actions/checkout@v3
+        -
+            uses: actions/setup-python@v4
+            with:
+                python-version: '3.x'
+        -   name: Install
+            run: |
+                . .ci-support/install.sh
+        -   name: Run mypy
+            run: |
+                MINIFORGE_INSTALL_DIR=.miniforge3
+                . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+                python -m pip install types-psutil
+                ./run-mypy.sh
 
     pylint:
         name: Pylint
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
         -
-          uses: actions/setup-python@v1
+          uses: actions/setup-python@v4
           with:
             python-version: '3.x'
         - name: Install
@@ -50,9 +68,9 @@ jobs:
     pydocstyle:
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
         -
-          uses: actions/setup-python@v1
+          uses: actions/setup-python@v4
           with:
             python-version: '3.x'
         - name: Run Pydocstyle
@@ -68,7 +86,7 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
         - name: Install
           run: |
             . .ci-support/install.sh
@@ -89,7 +107,7 @@ jobs:
             os: [ubuntu-latest, porter]
 
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
         - name: Install
           run: |
             . .ci-support/install.sh
@@ -117,7 +135,7 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
         - name: Install
           run: |
             . .ci-support/install.sh
@@ -143,11 +161,11 @@ jobs:
             os: [ubuntu-latest, macos-latest]
 
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
         - name: Install emirge
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew update && brew install mpich
+            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
@@ -169,13 +187,13 @@ jobs:
             os: [ubuntu-latest, macos-latest, porter]
 
         steps:
-        - uses: actions/checkout@v2
+        - uses: actions/checkout@v3
           with:
             fetch-depth: '0'
         - name: Prepare production environment
           run: |
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew update && brew install mpich
+            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
             MIRGEDIR=$(pwd)
             cat scripts/production-testing-env.sh
             . scripts/production-testing-env.sh

@@ -155,7 +155,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # create a stretched grid to force different grid cell size
         xx = np.linspace(left_boundary_location, right_boundary_location, npts_x + 1)
         yy = np.sqrt(np.linspace(0.0, 1.0, npts_y + 1))*(ytop - ybottom)
-        coords = tuple((xx, yy))
+        coords = (xx, yy)
 
         from meshmode.mesh.generation import generate_box_mesh
         generate_mesh = partial(generate_box_mesh,
