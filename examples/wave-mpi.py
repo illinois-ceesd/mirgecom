@@ -44,7 +44,8 @@ from logpyle import IntervalTimer, set_dt
 
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
-                                         logmgr_add_device_memory_usage)
+                                         logmgr_add_device_memory_usage,
+                                         logmgr_add_mempool_usage,)
 
 
 def bump(actx, nodes, t=0):
@@ -170,11 +171,19 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_mempool_usage(logmgr, alloc)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
 
         try:
             logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        try:
+            logmgr.add_watches(
+                ["memory_usage_mempool_managed.max",
+                 "memory_usage_mempool_active.max"])
         except KeyError:
             pass
 
@@ -233,6 +242,9 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+
+    if logmgr:
+        logmgr.close()
 
     final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
     assert np.abs(final_soln - 0.04409852463947439) < 1e-14

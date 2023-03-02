@@ -249,7 +249,8 @@ class PowerLawTransport(TransportModel):
         self._d_alpha = species_diffusivity
         self._lewis = lewis
 
-    def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                       dv: GasDependentVars) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
         .. math::
@@ -260,14 +261,16 @@ class PowerLawTransport(TransportModel):
         return self._alpha * self.viscosity(cv, dv)
 
     # TODO: Should this be memoized? Avoid multiple calls?
-    def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                  dv: GasDependentVars) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$.
 
         $\mu = \beta{T}^n$
         """
         return self._scaling_factor * self._beta * dv.temperature**self._n
 
-    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                         dv: GasDependentVars) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
 
         In this transport model, the second coefficient of viscosity is defined as:
@@ -279,8 +282,8 @@ class PowerLawTransport(TransportModel):
         """
         return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
 
-    def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-                             eos: GasEOS) -> DOFArray:
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+                             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$.
 
         .. math::
@@ -293,8 +296,8 @@ class PowerLawTransport(TransportModel):
             * eos.heat_capacity_cv(cv, dv.temperature)
         )
 
-    def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
-                            eos: GasEOS) -> DOFArray:
+    def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
+                            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$.
 
         The species diffusivities can be specified directly or based on the

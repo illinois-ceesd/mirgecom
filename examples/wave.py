@@ -43,7 +43,8 @@ from logpyle import IntervalTimer, set_dt
 
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
-                                         logmgr_add_device_memory_usage)
+                                         logmgr_add_device_memory_usage,
+                                         logmgr_add_mempool_usage)
 
 
 def bump(actx, nodes, t=0):
@@ -121,6 +122,7 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_mempool_usage(logmgr, alloc)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
 
@@ -169,6 +171,9 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+
+    if logmgr:
+        logmgr.close()
 
 
 if __name__ == "__main__":

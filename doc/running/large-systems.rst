@@ -23,21 +23,32 @@ parameter to ``install.sh`` when installing emirge, or by running
 ``makezip.sh`` after installation.
 
 
-Avoiding overheads due to caching of kernels
---------------------------------------------
+Avoiding errors and overheads due to caching of kernels
+-------------------------------------------------------
 
 Several packages used in MirgeCOM cache generated files on the hard
 disk in order to speed up multiple executions of the same kernel. This can lead
-to slowdowns on startup when executing on many ranks and/or nodes due to concurrent
-hard disk accesses. An indicator of concurrency issues are warnings like these::
+to errors and slowdowns when executing on multiple ranks due to concurrent
+hard disk accesses. Indicators of file system concurrency issues include::
 
    .conda/envs/dgfem/lib/python3.8/site-packages/pyopencl/cache.py:101: UserWarning:
    could not obtain cache lock--delete '.cache/pyopencl/pyopencl-compiler-cache-v2-py3.8.3.final.0/lock' if necessary
 
+and::
 
-In order to avoid the slowdowns and warnings, users can direct the packages to create
-cache files in directories that are private to each node by using the ``XDG_CACHE_HOME``
-environment variable, such as in the following example::
+   pocl-cuda: failed to generate PTX
+   CUDA_ERROR_FILE_NOT_FOUND: file not found
 
-   $ export XDG_CACHE_HOME="/tmp/$USER/xdg-scratch"
-   $ srun -n 512 python -m mpi4py examples/wave-mpi.py'
+In order to avoid these issues, users should direct the packages to create
+cache files in directories that are private to each rank by using the ``XDG_CACHE_HOME`` and ``POCL_CACHE_DIR``
+environment variables, such as in the following example::
+
+   $ export XDG_CACHE_ROOT="/tmp/$USER/xdg-scratch"
+   $ export POCL_CACHE_ROOT="/tmp/$USER/pocl-scratch"
+   $ srun -n 512 bash -c 'POCL_CACHE_DIR=$POCL_CACHE_ROOT/$$ XDG_CACHE_HOME=$XDG_CACHE_ROOT/$$ python -m mpi4py examples/wave-mpi.py'
+
+
+There is also on-disk caching of compiled kernels done by CUDA itself.
+As of 01/2023, we have not observed issues specific to this caching.
+The CUDA caching behavior can also be controlled via
+`environment variables <https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html?highlight=cuda_cache_disable#cuda-environment-variables>`__.

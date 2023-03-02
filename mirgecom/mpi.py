@@ -34,11 +34,14 @@ import os
 import sys
 
 from contextlib import contextmanager
-from typing import Callable, Any
+from typing import Callable, Any, Generator, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from mpi4py.MPI import Comm
 
 
 @contextmanager
-def shared_split_comm_world():
+def shared_split_comm_world() -> Generator["Comm", None, None]:
     """Create a context manager for a MPI.COMM_TYPE_SHARED comm."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)
@@ -49,7 +52,53 @@ def shared_split_comm_world():
         comm.Free()
 
 
-def _check_gpu_oversubscription():
+def _check_cache_dirs() -> None:
+    """Check whether multiple ranks share cache directories on the same node."""
+    from mpi4py import MPI
+
+    size = MPI.COMM_WORLD.Get_size()
+
+    if size <= 1:
+        return
+
+    with shared_split_comm_world() as node_comm:
+        node_rank = node_comm.Get_rank()
+
+        def _check_var(var: str) -> None:
+            from warnings import warn
+
+            try:
+                my_path = os.environ[var]
+            except KeyError:
+                warn(f"Please set the '{var}' variable in your job script to "
+                    "avoid file system overheads when running on large numbers of "
+                    "ranks. See https://mirgecom.readthedocs.io/en/latest/running/large-systems.html "  # noqa: E501
+                    "for more information.")
+                # Create a fake path so there will not be a second warning below.
+                my_path = f"no/such/path/rank{node_rank}"
+
+            all_paths = node_comm.gather(my_path, root=0)
+
+            if node_rank == 0:
+                assert all_paths
+                if len(all_paths) != len(set(all_paths)):
+                    hostname = MPI.Get_processor_name()
+                    dup = [path for path in set(all_paths)
+                                if all_paths.count(path) > 1]
+
+                    from warnings import warn
+                    warn(f"Multiple ranks are sharing '{var}' on node '{hostname}'. "
+                        f"Duplicate '{var}'s: {dup}.")
+
+        _check_var("XDG_CACHE_HOME")
+        _check_var("POCL_CACHE_DIR")
+
+        # We haven't observed an issue yet that 'CUDA_CACHE_PATH' fixes,
+        # so disable this check for now.
+        # _check_var("CUDA_CACHE_PATH")
+
+
+def _check_gpu_oversubscription() -> None:
     """
     Check whether multiple ranks are running on the same GPU on each node.
 
@@ -97,6 +146,7 @@ def _check_gpu_oversubscription():
         dev_ids = node_comm.gather(dev_id, root=0)
 
         if node_rank == 0:
+            assert dev_ids
             if len(dev_ids) != len(set(dev_ids)):
                 hostname = MPI.Get_processor_name()
                 dup = [item for item in dev_ids if dev_ids.count(item) > 1]
@@ -106,7 +156,7 @@ def _check_gpu_oversubscription():
                      f"Duplicate PCIe IDs: {dup}.")
 
 
-def mpi_entry_point(func):
+def mpi_entry_point(func) -> Callable:
     """
     Return a decorator that designates a function as the "main" function for MPI.
 
@@ -115,7 +165,7 @@ def mpi_entry_point(func):
     hook to call `MPI_Finalize()` on exit.
     """
     @wraps(func)
-    def wrapped_func(*args, **kwargs):
+    def wrapped_func(*args, **kwargs) -> None:
         if "mpi4py.run" not in sys.modules:
             raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
                         "mpi4py <args>').")
@@ -137,29 +187,17 @@ def mpi_entry_point(func):
 
         # Runs MPI_Init()/MPI_Init_thread() and sets up a hook for MPI_Finalize() on
         # exit
-        from mpi4py import MPI
-
-        # This code warns the user of potentially slow startups due to file system
-        # locking when running with large numbers of ranks. See
-        # https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes
-        # for more details
-        size = MPI.COMM_WORLD.Get_size()
-        rank = MPI.COMM_WORLD.Get_rank()
-        if size > 1 and rank == 0 and "XDG_CACHE_HOME" not in os.environ:
-            from warnings import warn
-            warn("Please set the XDG_CACHE_HOME variable in your job script to "
-                 "avoid file system overheads when running on large numbers of "
-                 "ranks. See https://mirgecom.readthedocs.io/en/latest/running.html#running-with-large-numbers-of-ranks-and-nodes"  # noqa: E501
-                 " for more information.")
+        from mpi4py import MPI  # noqa
 
         _check_gpu_oversubscription()
+        _check_cache_dirs()
 
         func(*args, **kwargs)
 
     return wrapped_func
 
 
-def pudb_remote_debug_on_single_rank(func: Callable):
+def pudb_remote_debug_on_single_rank(func: Callable) -> Callable:
     """
     Designate a function *func* to be debugged with ``pudb`` on rank 0.
 
@@ -178,7 +216,7 @@ def pudb_remote_debug_on_single_rank(func: Callable):
     as normal.
     """
     @wraps(func)
-    def wrapped_func(*args: Any, **kwargs: Any):
+    def wrapped_func(*args: Any, **kwargs: Any) -> None:
         # pylint: disable=import-error
         from pudb.remote import debug_remote_on_single_rank
         from mpi4py import MPI
@@ -199,6 +237,6 @@ def enable_rank_labeled_print() -> None:
 
         __builtins__["oldprint"](out_str, *args, **kwargs)
 
-    if "oldprint" not in __builtins__:
-        __builtins__["oldprint"] = __builtins__["print"]
+    if "oldprint" not in __builtins__:  # type: ignore[operator]
+        __builtins__["oldprint"] = __builtins__["print"]  # type: ignore[index]
     __builtins__["print"] = rank_print
