@@ -29,7 +29,7 @@ import pyopencl.array as cla  # noqa
 
 from pytools.obj_array import flat_obj_array
 
-from grudge.shortcuts import make_visualizer
+# from grudge.shortcuts import make_visualizer
 import grudge.op as op
 
 from mirgecom.discretization import create_discretization_collection
@@ -124,10 +124,11 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_mempool_usage(logmgr, alloc)
 
-        logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
+        logmgr.add_watches(["step.max"])
 
         try:
-            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+            logmgr.add_watches(["memory_usage_mempool_managed.max",
+                                "memory_usage_mempool_active.max"])
         except KeyError:
             pass
 
@@ -137,13 +138,15 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(dcoll)
+    # vis = make_visualizer(dcoll)
 
     def rhs(t, w):
         return wave_operator(dcoll, c=wave_speed, w=w)
 
     compiled_rhs = actx.compile(rhs)
     fields = force_evaluation(actx, fields)
+
+    import gc
 
     t = 0
     t_final = 1
@@ -152,18 +155,19 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
         if logmgr:
             logmgr.tick_before()
 
+        gc.collect()
+
         fields = rk4_step(fields, t, dt, compiled_rhs)
         fields = force_evaluation(actx, fields)
 
-        if istep % 10 == 0:
-            if use_profiling:
-                print(actx.tabulate_profiling_data())
-            print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
-            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ], overwrite=True)
+        if istep == 10:
+            gc.set_debug(gc.DEBUG_SAVEALL)
+            gc.collect()
+            gc.set_debug(0)
+            obj_list = gc.garbage
+
+            for obj in obj_list:
+                print(type(obj))
 
         t += dt
         istep += 1
