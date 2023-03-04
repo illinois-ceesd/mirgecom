@@ -84,3 +84,5 @@ References
     `(DOI) <https://doi.org/10.1098/rspa.2011.0153>`__
 .. [Kee_2003] Robert J. Kee, Michael E. Coltrin, Peter Glarborg (2003), Chemically Reacting Flow: Theory and Practice \
     `(DOI) <https://doi.org/10.1002/0471461296>`__
+.. [Giles_1988] Michael Giles (1988), Non-Reflecting Boundary Conditions for the Euler \
+    Equations, CFDL-TR-88-1

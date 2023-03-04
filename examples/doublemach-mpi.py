@@ -44,7 +44,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    AdiabaticNoslipMovingBoundary,
+    AdiabaticNoslipWallBoundary,
     PrescribedFluidBoundary
 )
 from mirgecom.initializers import DoubleMachReflection
@@ -164,7 +164,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Some i/o frequencies
     nstatus = 10
-    nviz = 100
+    nviz = 10
     nrestart = 100
     nhealth = 1
 
@@ -250,8 +250,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             PrescribedFluidBoundary(boundary_state_func=_boundary_state),
         BoundaryDomainTag("ic3"):
             PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        BoundaryDomainTag("wall"): AdiabaticNoslipMovingBoundary(),
-        BoundaryDomainTag("out"): AdiabaticNoslipMovingBoundary(),
+        BoundaryDomainTag("wall"): AdiabaticNoslipWallBoundary(),
+        BoundaryDomainTag("out"): AdiabaticNoslipWallBoundary(),
     }
 
     if rst_filename:
@@ -336,7 +336,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
         if global_reduce(
-                check_range_local(dcoll, "vol", dv.temperature, 2.48e-3, 1.071e-2),
+                check_range_local(dcoll, "vol", dv.temperature, 2.48e-3, 1.16e-2),
                 op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min

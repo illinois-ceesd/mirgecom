@@ -33,7 +33,11 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.transport import MixtureAveragedTransport
+from mirgecom.transport import (
+    MixtureAveragedTransport,
+    SimpleTransport,
+    PowerLawTransport
+)
 from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
 
@@ -43,8 +47,8 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
-    AdiabaticSlipBoundary,
-    IsothermalNoSlipBoundary,
+    SymmetryBoundary,
+    IsothermalWallBoundary,
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -119,6 +123,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
     timestepper = rk4_step
     debug = False
+
+    transport_type = 2  # 0 Simple, 1 PowerLawTransport, 2 MixtureAveragedTransport
 
     # Some i/o frequencies
     nstatus = 1
@@ -234,10 +240,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
-    # Initialize mixture-dependent transport model
-    transport_model = MixtureAveragedTransport(pyrometheus_mechanism)
+    # {{{ Initialize transport model
+    spec_ones = np.ones(nspecies)
+    kappa = 1e-5
+    const_diffus = 1e-5 * spec_ones
+    sigma = 1e-5
+    lewis = 1. * spec_ones
+    lewis[cantera_soln.species_index("H2")] = 0.2
+    transport_model = (
+        SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
+                        species_diffusivity=const_diffus) if transport_type == 0
+        else PowerLawTransport(lewis=lewis) if transport_type == 1 else
+        MixtureAveragedTransport(pyrometheus_mechanism)
+    )
+    # }}}
 
-    # Initialize gas model (eos and transport model)
+    # Initialize gas model
     gas_model = GasModel(eos=eos, transport=transport_model)
 
     # {{{ MIRGE-Com state initialization
@@ -250,8 +268,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    #    my_boundary = AdiabaticSlipBoundary()
-    my_boundary = IsothermalNoSlipBoundary(wall_temperature=can_t)
+    #    my_boundary = SymmetryBoundary(dim=dim)
+    my_boundary = IsothermalWallBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 
     def _get_temperature_update(cv, temperature):
