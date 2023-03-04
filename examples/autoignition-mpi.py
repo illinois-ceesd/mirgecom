@@ -224,19 +224,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # Initial temperature, pressure, and mixutre mole fractions are needed to
     # set up the initial state in Cantera.
     temperature_seed = 1500.0  # Initial temperature hot enough to burn
+
     # Parameters for calculating the amounts of fuel, oxidizer, and inert species
-    equiv_ratio = 1.0
-    ox_di_ratio = 0.21
-    stoich_ratio = 3.0
-    # Grab the array indices for the specific species, ethylene, oxygen, and nitrogen
-    i_fu = cantera_soln.species_index("C2H4")
-    i_ox = cantera_soln.species_index("O2")
-    i_di = cantera_soln.species_index("N2")
-    x = np.zeros(nspecies)
-    # Set the species mole fractions according to our desired fuel/air mixture
-    x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
-    x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
-    x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
+    # which directly sets the species fractions inside cantera
+    cantera_soln.set_equivalence_ratio(phi=1.0, fuel="C2H4:1,H2:1",
+                                       oxidizer={"O2": 1.0, "N2": 3.76})
+    x = cantera_soln.X
+
     # Uncomment next line to make pylint fail when it can't find cantera.one_atm
     one_atm = cantera.one_atm  # pylint: disable=no-member
     # one_atm = 101325.0
@@ -244,7 +238,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # Let the user know about how Cantera is being initilized
     print(f"Input state (T,P,X) = ({temperature_seed}, {one_atm}, {x}")
     # Set Cantera internal gas temperature, pressure, and mole fractios
-    cantera_soln.TPX = temperature_seed, one_atm, x
+    cantera_soln.TP = temperature_seed, one_atm
     # Pull temperature, total density, mass fractions, and pressure from Cantera
     # We need total density, and mass fractions to initialize the fluid/gas state.
     can_t, can_rho, can_y = cantera_soln.TDY
@@ -266,15 +260,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
     # {{{ Initialize simple transport model
-    from mirgecom.transport import SimpleTransport
+    from mirgecom.transport import MixtureAveragedTransport
     transport_model = None
     if viscous_terms_on:
-        kappa = 1e-5
-        spec_diffusivity = 1e-5 * np.ones(nspecies)
-        sigma = 1e-5
-        transport_model = SimpleTransport(viscosity=sigma,
-                                          thermal_conductivity=kappa,
-                                          species_diffusivity=spec_diffusivity)
+        transport_model = MixtureAveragedTransport(pyro_mechanism)
     # }}}
 
     gas_model = GasModel(eos=eos, transport=transport_model)
