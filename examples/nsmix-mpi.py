@@ -120,7 +120,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     timestepper = rk4_step
     debug = False
 
-   	use_powerlaw_transport = False
+    use_powerlaw_transport = False
 
     # Some i/o frequencies
     nstatus = 1
@@ -238,10 +238,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     sigma = 1e-5
     lewis = 1. * spec_ones
     lewis[cantera_soln.species_index("H2")] = 0.2
-    transport_model = \
-    (PowerLawTransport(lewis=lewis) if use_powerlaw_transport else
-     SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
-                                  species_diffusivity=const_diffus)) 
+    transport_model = (
+        PowerLawTransport(lewis=lewis) if use_powerlaw_transport else
+        SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
+                        species_diffusivity=const_diffus)
+    )
     # }}}
 
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
