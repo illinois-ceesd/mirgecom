@@ -46,6 +46,7 @@ THE SOFTWARE.
 
 import numpy as np
 from grudge.trace_pair import TracePair
+from arraycontext import outer
 from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
@@ -105,8 +106,9 @@ def viscous_stress_tensor(state, grad_cv):
 
 # low level routine works with numpy arrays and can be tested without
 # a full grid + fluid state, etc
-def _compute_diffusive_flux(density, d_alpha, grad_y):
-    return -density*d_alpha.reshape(-1, 1)*grad_y
+def _compute_diffusive_flux(density, d_alpha, y, grad_y):
+    return -density*(d_alpha.reshape(-1, 1)*grad_y
+                     - outer(y, sum(d_alpha.reshape(-1, 1)*grad_y)))
 
 
 def diffusive_flux(state, grad_cv):
@@ -116,11 +118,12 @@ def diffusive_flux(state, grad_cv):
 
     .. math::
 
-        \mathbf{J}_{\alpha} = -\rho{d}_{(\alpha)}\nabla{Y_{\alpha}}~~
-        (\mathtt{no~implied~sum}),
+        \mathbf{J}_{\alpha} = -\rho\left({d}_{(\alpha)}\nabla{Y_{\alpha}}
+        -Y_{(\alpha)}{d}_{\alpha}\nabla{Y_{\alpha}}\right),
 
-    with species diffusivities ${d}_{\alpha}$, and species mass
-    fractions ${Y}_{\alpha}$.
+    with gas density $\rho$, species diffusivities ${d}_{\alpha}$, and
+    species mass fractions ${Y}_{\alpha}$.  The parens $(\alpha)$ indicate no sum
+    over repeated indices is to be performed.
 
     Parameters
     ----------
@@ -138,8 +141,13 @@ def diffusive_flux(state, grad_cv):
 
         The species diffusive flux vector, $\mathbf{J}_{\alpha}$
     """
-    return _compute_diffusive_flux(state.mass_density, state.species_diffusivity,
-                                   species_mass_fraction_gradient(state.cv, grad_cv))
+    grad_y = species_mass_fraction_gradient(state.cv, grad_cv)
+    rho = state.mass_density
+    d = state.species_diffusivity
+    y = state.species_mass_fractions
+    if state.is_mixture:
+        return _compute_diffusive_flux(rho, d, y, grad_y)
+    return -rho*(d.reshape(-1, 1)*grad_y)  # dummy quantity with right shape
 
 
 # low level routine works with numpy arrays and can be tested without
@@ -195,13 +203,7 @@ def diffusive_heat_flux(state, j):
         \mathbf{J}_{\alpha},
 
     with species specific enthalpy ${h}_{\alpha}$ and diffusive flux
-    ($\mathbf{J}_{\alpha}$) defined as:
-
-    .. math::
-
-        \mathbf{J}_{\alpha} = -\rho{d}_{\alpha}\nabla{Y}_{\alpha},
-
-    where ${Y}_{\alpha}$ is the vector of species mass fractions.
+    ,$\mathbf{J}_{\alpha}$.
 
     Parameters
     ----------

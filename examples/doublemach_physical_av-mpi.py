@@ -535,8 +535,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                  smoothness=no_smoothness)
                 if use_av > 1:
                     # recompute the dv to have the correct smoothness
-                    # this is forcing a recompile, only do it at dump time
-                    # not sure why the compiled version of grad_cv doesn't work
                     if do_viz:
                         # use the divergence to compute the smoothness field
                         force_evaluation(actx, t)
