@@ -486,7 +486,7 @@ class MixtureAveragedTransport(TransportModel):
             )
         return self._factor*(
             self._pyro_mech.get_species_mass_diffusivities_mixavg(
-                dv.temperature, dv.pressure, cv.species_mass_fractions)
+                dv.pressure, dv.temperature, cv.species_mass_fractions)
         )
 
 
