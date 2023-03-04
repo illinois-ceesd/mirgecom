@@ -383,7 +383,9 @@ class MixtureAveragedTransport(TransportModel):
             if (len(self._lewis) != self._pyro_mech.num_species):
                 raise ValueError("Lewis number should match number of species")
 
-    def viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                  dv: GasDependentVars,
+                  eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the mixture dynamic viscosity, $\mu^{(m)}$.
 
         The viscosity depends on the mixture composition given by $X_k$ mole
@@ -407,7 +409,9 @@ class MixtureAveragedTransport(TransportModel):
                 dv.temperature, cv.species_mass_fractions)
         )
 
-    def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                       dv: GasDependentVars,
+                       eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
         .. math::
@@ -417,7 +421,9 @@ class MixtureAveragedTransport(TransportModel):
         """
         return self._alpha*self.viscosity(cv, dv)
 
-    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars) -> DOFArray:
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                         dv: GasDependentVars,
+                         eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$.
 
         In this transport model, the second coefficient of viscosity is defined as:
@@ -429,7 +435,8 @@ class MixtureAveragedTransport(TransportModel):
         """
         return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
 
-    def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+                             dv: GasDependentVars,
                              eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$.
 
