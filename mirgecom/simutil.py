@@ -88,13 +88,16 @@ import pyopencl as cl
 logger = logging.getLogger(__name__)
 
 
-def get_number_of_tetrahedron_nodes(dim, order):
+def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     """Get number of nodes (modes) in *dim* Tetrahedron of *order*."""
     # number of {nodes, modes} see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
     # DOI: 10.1007/978-0-387-72067-8
-    return int(np.math.factorial(dim+order)
-               / (np.math.factorial(dim) * np.math.factorial(order)))
+    nnodes = int(np.math.factorial(dim+order)
+                 / (np.math.factorial(dim) * np.math.factorial(order)))
+    if include_faces:
+        nnodes = nnodes + (dim+1)*get_number_of_tetrahedron_nodes(dim-1, order)
+    return nnodes
 
 
 def check_step(step, interval):
