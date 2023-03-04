@@ -340,7 +340,7 @@ class MixtureAveragedTransport(TransportModel):
     """
 
     def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0,
-                 prandtl=None, lewis=None, diff_switch=1.0e-7):
+                 prandtl=None, lewis=None):
         r"""Initialize power law coefficients and parameters.
 
         Parameters
@@ -368,18 +368,12 @@ class MixtureAveragedTransport(TransportModel):
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
             thermal conductivity and the species diffusivities.
-
-        diff_switch: float
-            Value when the dominant species self-diffusivity is used
-            instead of the mixture-rule to avoid a singularity when
-            $\epsilon = (1.0 - Yi) \to 0.0$.
         """
         self._pyro_mech = pyrometheus_mech
         self._alpha = alpha
         self._factor = factor
         self._prandtl = prandtl
         self._lewis = lewis
-        self._diff_switch = diff_switch
         if self._lewis is not None:
             if (len(self._lewis) != self._pyro_mech.num_species):
                 raise ValueError("Lewis number should match number of species")
@@ -492,8 +486,7 @@ class MixtureAveragedTransport(TransportModel):
             )
         return self._factor*(
             self._pyro_mech.get_species_mass_diffusivities_mixavg(
-                dv.temperature, dv.pressure, cv.species_mass_fractions,
-                self._diff_switch)
+                dv.temperature, dv.pressure, cv.species_mass_fractions)
         )
 
 
