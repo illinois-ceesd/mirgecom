@@ -150,8 +150,7 @@ class SimpleTransport(TransportModel):
     .. automethod:: thermal_conductivity
     """
 
-    def __init__(self, bulk_viscosity=0, viscosity=0,
-                 thermal_conductivity=0,
+    def __init__(self, bulk_viscosity=0, viscosity=0, thermal_conductivity=0,
                  species_diffusivity=None):
         """Initialize uniform, constant transport properties."""
         if species_diffusivity is None:
@@ -278,16 +277,15 @@ class PowerLawTransport(TransportModel):
             \lambda = \left(\alpha - \frac{2}{3}\right)\mu
 
         """
-        return (self._alpha - 2.0/3.0)*self.viscosity(cv, dv)
+        return (self._alpha - 2.0/3.0) * self.viscosity(cv, dv)
 
     def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
                              dv: GasDependentVars, eos: GasEOS) -> DOFArray:
-        r"""Get the gas thermal_conductivity, $\kappa$.
+        r"""Get the gas thermal conductivity, $\kappa$.
 
         .. math::
 
             \kappa = \sigma\mu{C}_{v}
-
         """
         return (
             self._sigma * self.viscosity(cv, dv)
@@ -307,8 +305,8 @@ class PowerLawTransport(TransportModel):
             d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
         """
         if self._lewis is not None:
-            return (self.thermal_conductivity(cv, dv, eos)/(
-                cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
+            return (self._sigma * self.viscosity(cv, dv)/(
+                cv.mass*self._lewis*eos.gamma(cv, dv.temperature))
             )
         return self._d_alpha*(0*cv.mass + 1.)
 
