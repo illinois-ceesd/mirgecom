@@ -87,7 +87,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
             x_sum = self._pyro_make_array(x_sum)
             denom = [x_sum[i] - mole_fracs[i]/bdiff_ij[i, i]
                      for i in range(self.num_species)]
-            denom = self._pyro_mak_array(denom)
+            denom = self._pyro_make_array(denom)
             tp = temperature**(3/2)/pressure
             d_list = [tp*self.usr_np.where(self.usr_np.greater(denom[i], 0),
                                            ((mmw-mole_fracs[i] * self.wts[i])
