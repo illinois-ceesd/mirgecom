@@ -82,17 +82,17 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
             mole_fracs = self.get_mole_fractions(mmw, mass_fractions)
             bdiff_ij = self.get_species_binary_mass_diffusivities(temperature)
             x_sum = [sum([mole_fracs[i] / bdiff_ij[i, j]
-                          for i in range(self.nspecies)])
-                     for j in range(self.nspecies)]
+                          for i in range(self.num_species)])
+                     for j in range(self.num_species)]
             x_sum = self._pyro_make_array(x_sum)
             denom = [x_sum[i] - mole_fracs[i]/bdiff_ij[i, i]
-                     for i in range(self.nspecies)]
+                     for i in range(self.num_species)]
             denom = self._pyro_mak_array(denom)
             tp = temperature**(3/2)/pressure
             d_list = [tp*self.usr_np.where(self.usr_np.greater(denom[i], 0),
                                            ((mmw-mole_fracs[i] * self.wts[i])
                                             / (mmw * denom[i])), bdiff_ij[i, i])
-                      for i in range(self.nspecies)]
+                      for i in range(self.num_species)]
             return self._pyro_make_array(d_list)
 
         # This bit disallows negative concentrations and instead
