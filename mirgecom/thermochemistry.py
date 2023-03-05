@@ -76,8 +76,9 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
     class PyroWrapper(pyro_class):
 
-        def get_species_mass_diffusivities_mixavg(self, pressure, temperature,
-                                                  mass_fractions):
+        def disable_get_species_mass_diffusivities_mixavg(self, pressure,
+                                                          temperature,
+                                                          mass_fractions):
             mmw = self.get_mix_molecular_weight(mass_fractions)
             mole_fracs = self.get_mole_fractions(mmw, mass_fractions)
             bdiff_ij = self.get_species_binary_mass_diffusivities(temperature)
