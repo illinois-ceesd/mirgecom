@@ -57,14 +57,11 @@ from mirgecom.utils import normalize_boundaries
 def grad_facial_flux(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$."""
     actx = u_tpair.int.array_context
-    kappa_sum = actx.np.where(
+    ext_weight = actx.np.where(
         actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0*kappa_tpair.int),
-        kappa_tpair.int + kappa_tpair.ext,
-        0*kappa_tpair.int + 1)
-    return (
-        -(u_tpair.int * kappa_tpair.int + u_tpair.ext * kappa_tpair.ext)
-        / kappa_sum
-        * normal)
+        kappa_tpair.ext / (kappa_tpair.int + kappa_tpair.ext),
+        0*kappa_tpair.int)
+    return ((1 - ext_weight) * u_tpair.int + ext_weight * u_tpair.ext) * normal
 
 
 def diffusion_flux(kappa, grad_u):
