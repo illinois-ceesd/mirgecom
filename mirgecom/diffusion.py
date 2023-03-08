@@ -61,7 +61,7 @@ def grad_facial_flux(kappa_tpair, u_tpair, normal):
         actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0*kappa_tpair.int),
         kappa_tpair.ext / (kappa_tpair.int + kappa_tpair.ext),
         0*kappa_tpair.int)
-    return ((1 - ext_weight) * u_tpair.int + ext_weight * u_tpair.ext) * normal
+    return -((1 - ext_weight) * u_tpair.int + ext_weight * u_tpair.ext) * normal
 
 
 def diffusion_flux(kappa, grad_u):
