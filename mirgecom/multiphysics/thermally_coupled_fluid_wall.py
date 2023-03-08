@@ -221,12 +221,19 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         kappa_plus = _project_from_base(dcoll, dd_bdry, self._kappa_plus)
         return _harmonic_mean(actx, kappa_minus, kappa_plus)
 
-    def temperature_plus(self, dcoll, dd_bdry):
-        return _project_from_base(dcoll, dd_bdry, self._t_plus)
+    def temperature_plus(self, dcoll, dd_bdry, kappa_minus, t_minus):
+        t_bc = self.temperature_bc(dcoll, dd_bdry, kappa_minus, t_minus)
+        return 2*t_bc - t_minus
 
-    def temperature_bc(self, dcoll, dd_bdry, t_minus):
+    def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
+        actx = t_minus.array_context
         t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
-        return (t_minus + t_plus)/2
+        kappa_plus = _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+        plus_weight = actx.np.where(
+            actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
+            kappa_plus / (kappa_minus + kappa_plus),
+            0*kappa_minus)
+        return (1 - plus_weight) * t_minus + plus_weight * t_plus
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
         if self._grad_t_plus is None:
@@ -248,10 +255,10 @@ class _ThermallyCoupledUpwindBoundaryComponent:
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
         return _project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
-    def temperature_plus(self, dcoll, dd_bdry):
+    def temperature_plus(self, dcoll, dd_bdry, kappa_minus, t_minus):
         return _project_from_base(dcoll, dd_bdry, self._t_plus)
 
-    def temperature_bc(self, dcoll, dd_bdry, t_minus):
+    def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
         # Only the heat flux is upwinded
         return (t_minus + t_plus)/2
@@ -309,9 +316,14 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
 
-        t_plus = self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+        t_plus = self._thermally_coupled.temperature_plus(
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
         internal_energy_plus = (
             cv_minus.mass
@@ -345,10 +357,14 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_bc = self._slip.momentum_bc(cv_minus.momentum, normal)
 
         t_bc = self._thermally_coupled.temperature_bc(
-            dcoll, dd_bdry, state_minus.temperature)
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
         internal_energy_bc = (
             cv_minus.mass
@@ -366,9 +382,6 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
             momentum=mom_bc,
             species_mass=cv_minus.species_mass)
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
         kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
 
         return _replace_kappa(
@@ -440,7 +453,11 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
 
     def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
-        return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        return self._thermally_coupled.temperature_plus(
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
     def grad_temperature_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
@@ -490,9 +507,14 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_plus = self._no_slip.momentum_plus(cv_minus.momentum, normal)
 
-        t_plus = self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+        t_plus = self._thermally_coupled.temperature_plus(
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
         internal_energy_plus = (
             cv_minus.mass
@@ -526,10 +548,14 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_bc = self._no_slip.momentum_bc(cv_minus.momentum, normal)
 
         t_bc = self._thermally_coupled.temperature_bc(
-            dcoll, dd_bdry, state_minus.temperature)
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
         internal_energy_bc = gas_model.eos.get_internal_energy(
             temperature=t_bc,
@@ -545,9 +571,6 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             momentum=mom_bc,
             species_mass=cv_minus.species_mass)
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
         kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
 
         return _replace_kappa(
@@ -608,7 +631,11 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
     def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
-        return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        return self._thermally_coupled.temperature_plus(
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
     def grad_temperature_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
@@ -658,9 +685,14 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
 
-        t_plus = self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+        t_plus = self._thermally_coupled.temperature_plus(
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
         internal_energy_plus = (
             cv_minus.mass
@@ -694,10 +726,14 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_bc = self._slip.momentum_bc(cv_minus.momentum, normal)
 
         t_bc = self._thermally_coupled.temperature_bc(
-            dcoll, dd_bdry, state_minus.temperature)
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
         internal_energy_bc = (
             cv_minus.mass
@@ -715,9 +751,6 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
             momentum=mom_bc,
             species_mass=cv_minus.species_mass)
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
         kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
 
         return _replace_kappa(
@@ -756,7 +789,11 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
     def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
-        return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        return self._thermally_coupled.temperature_plus(
+            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
     def grad_temperature_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
