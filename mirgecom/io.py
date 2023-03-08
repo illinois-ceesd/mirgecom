@@ -87,15 +87,19 @@ def read_and_distribute_yaml_data(mpi_comm=None, file_path=None):
     import yaml
 
     input_data = None
+    if file_path is None:
+        return input_data
+
     rank = 0
+
     if mpi_comm is not None:
         rank = mpi_comm.Get_rank()
 
-    if file_path is not None and rank == 0:
+    if rank == 0:
         with open(file_path) as f:
             input_data = yaml.load(f, Loader=yaml.FullLoader)
 
     if mpi_comm is not None:
-        mpi_comm.bcast(input_data, root=0)
+        input_data = mpi_comm.bcast(input_data, root=0)
 
     return input_data
