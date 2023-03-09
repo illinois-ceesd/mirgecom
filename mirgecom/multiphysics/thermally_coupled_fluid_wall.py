@@ -316,29 +316,14 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
-
         mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
 
-        t_plus = self._thermally_coupled.temperature_plus(
-            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
-
-        internal_energy_plus = (
-            cv_minus.mass
-            * gas_model.eos.get_internal_energy(
-                temperature=t_plus,
-                species_mass_fractions=cv_minus.species_mass_fractions))
-        total_energy_plus = (
-            internal_energy_plus
-            # Kinetic energy is the same
-            + gas_model.eos.kinetic_energy(cv_minus))
-
+        # Don't modify the energy, even though t_plus != t_minus; energy will
+        # be advected in/out of the wall, which doesn't make sense
         cv_plus = make_conserved(
             state_minus.dim,
             mass=cv_minus.mass,
-            energy=total_energy_plus,
+            energy=cv_minus.energy,
             momentum=mom_plus,
             species_mass=cv_minus.species_mass)
 
@@ -507,29 +492,14 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
-
         mom_plus = self._no_slip.momentum_plus(cv_minus.momentum, normal)
 
-        t_plus = self._thermally_coupled.temperature_plus(
-            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
-
-        internal_energy_plus = (
-            cv_minus.mass
-            * gas_model.eos.get_internal_energy(
-                temperature=t_plus,
-                species_mass_fractions=cv_minus.species_mass_fractions))
-        total_energy_plus = (
-            internal_energy_plus
-            # Kinetic energy is the same
-            + gas_model.eos.kinetic_energy(cv_minus))
-
+        # Don't modify the energy, even though t_plus != t_minus; energy will
+        # be advected in/out of the wall, which doesn't make sense
         cv_plus = make_conserved(
             state_minus.dim,
             mass=cv_minus.mass,
-            energy=total_energy_plus,
+            energy=cv_minus.energy,
             momentum=mom_plus,
             species_mass=cv_minus.species_mass)
 
@@ -685,29 +655,14 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
-
         mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
 
-        t_plus = self._thermally_coupled.temperature_plus(
-            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
-
-        internal_energy_plus = (
-            cv_minus.mass
-            * gas_model.eos.get_internal_energy(
-                temperature=t_plus,
-                species_mass_fractions=cv_minus.species_mass_fractions))
-        total_energy_plus = (
-            internal_energy_plus
-            # Kinetic energy is the same
-            + gas_model.eos.kinetic_energy(cv_minus))
-
+        # Don't modify the energy, even though t_plus != t_minus; energy will
+        # be advected in/out of the wall, which doesn't make sense
         cv_plus = make_conserved(
             state_minus.dim,
             mass=cv_minus.mass,
-            energy=total_energy_plus,
+            energy=cv_minus.energy,
             momentum=mom_plus,
             species_mass=cv_minus.species_mass)
 
