@@ -163,6 +163,8 @@ def grad_cv_operator(
         CV object with vector components representing the gradient of the fluid
         conserved variables.
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
@@ -264,6 +266,8 @@ def grad_t_operator(
         Array of :class:`~meshmode.dof_array.DOFArray` representing the gradient of
         the fluid temperature.
     """
+    assert comm_tag is not None, "comm_tag can not be 'None'"
+
     boundaries = normalize_boundaries(boundaries)
 
     if not isinstance(dd.domain_tag, VolumeDomainTag):
@@ -319,12 +323,12 @@ def grad_t_operator(
         dcoll, dd_vol_quad, dd_allfaces_quad, vol_state_quad.temperature, t_flux_bnd)
 
 
-def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
+def ns_operator(dcoll, gas_model, state, boundaries, *, comm_tag, time=0.0,
                 inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                 gradient_numerical_flux_func=num_flux_central,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
-                dd=DD_VOLUME_ALL, comm_tag=None,
+                dd=DD_VOLUME_ALL,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None,
@@ -340,6 +344,9 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
     boundaries
         Dictionary of boundary functions keyed by btags
+
+    comm_tag: Hashable
+        Tag for distributed communication
 
     time
         Time
@@ -375,9 +382,6 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     dd: grudge.dof_desc.DOFDesc
         the DOF descriptor of the discretization on which *state* lives. Must be a
         volume on the base discretization.
-
-    comm_tag: Hashable
-        Tag for distributed communication
 
     operator_states_quad
         Optional iterable container providing the full fluid states
@@ -430,8 +434,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     # otherwise they stay on the interpolatory/base domain.
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            dcoll, state, gas_model, boundaries, comm_tag, quadrature_tag,
+            dd=dd_vol)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad

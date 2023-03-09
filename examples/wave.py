@@ -47,6 +47,10 @@ from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_mempool_usage)
 
 
+class WaveTag:
+    pass
+
+
 def bump(actx, nodes, t=0):
     """Create a bump."""
     dim = len(nodes)
@@ -140,7 +144,7 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
     vis = make_visualizer(dcoll)
 
     def rhs(t, w):
-        return wave_operator(dcoll, c=wave_speed, w=w)
+        return wave_operator(dcoll, c=wave_speed, w=w, comm_tag=WaveTag)
 
     compiled_rhs = actx.compile(rhs)
     fields = force_evaluation(actx, fields)

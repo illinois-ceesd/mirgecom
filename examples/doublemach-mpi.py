@@ -71,6 +71,14 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class EulerTag:
+    pass
+
+
+class AVLaplacianTag:
+    pass
+
+
 def get_doublemach_mesh():
     """Generate or import a grid using `gmsh`.
 
@@ -405,9 +413,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_state = make_fluid_state(state, gas_model)
         return (
             euler_operator(dcoll, state=fluid_state, time=t,
-                           boundaries=boundaries,
+                           boundaries=boundaries, comm_tag=EulerTag,
                            gas_model=gas_model, quadrature_tag=quadrature_tag)
-            + av_laplacian_operator(dcoll, fluid_state=fluid_state,
+            + av_laplacian_operator(dcoll, comm_tag=AVLaplacianTag,
+                                    fluid_state=fluid_state,
                                     boundaries=boundaries,
                                     time=t, gas_model=gas_model,
                                     alpha=alpha, s0=s0, kappa=kappa,

@@ -67,6 +67,10 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class EulerTag:
+    pass
+
+
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, rst_filename=None,
@@ -382,7 +386,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         cv, tseed = state
         fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tseed)
         return make_obj_array(
-            [euler_operator(dcoll, state=fluid_state, time=t,
+            [euler_operator(dcoll, comm_tag=EulerTag, state=fluid_state, time=t,
                             boundaries=boundaries, gas_model=gas_model),
              0*tseed])
 

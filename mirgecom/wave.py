@@ -60,7 +60,7 @@ class _WaveTag:
     pass
 
 
-def wave_operator(dcoll, c, w, *, comm_tag=None):
+def wave_operator(dcoll, c, w, *, comm_tag):
     """Compute the RHS of the wave equation.
 
     Parameters

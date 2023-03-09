@@ -433,8 +433,9 @@ class _FluidTemperatureTag:
 
 
 def make_operator_fluid_states(
-        dcoll, volume_state, gas_model, boundaries, quadrature_tag=DISCR_TAG_BASE,
-        dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None):
+        dcoll, volume_state, gas_model, boundaries, comm_tag,
+        quadrature_tag=DISCR_TAG_BASE,
+        dd=DD_VOLUME_ALL, limiter_func=None):
     """Prepare gas model-consistent fluid states for use in fluid operators.
 
     This routine prepares a model-consistent fluid state for each of the volume and
@@ -466,6 +467,9 @@ def make_operator_fluid_states(
         Dictionary of boundary functions, one for each valid
         :class:`~grudge.dof_desc.BoundaryDomainTag`.
 
+    comm_tag: Hashable
+        Tag for distributed communication
+
     quadrature_tag
         An identifier denoting a particular quadrature discretization to use during
         operator evaluations.
@@ -473,9 +477,6 @@ def make_operator_fluid_states(
     dd: grudge.dof_desc.DOFDesc
         the DOF descriptor of the discretization on which *volume_state* lives. Must
         be a volume on the base discretization.
-
-    comm_tag: Hashable
-        Tag for distributed communication
 
     limiter_func:
 

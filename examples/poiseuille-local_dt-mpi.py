@@ -71,6 +71,10 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class NSTag:
+    pass
+
+
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_overintegration=False, lazy=False,
@@ -432,7 +436,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
+        return ns_operator(dcoll, comm_tag=NSTag, gas_model=gas_model,
+                           boundaries=boundaries,
                            state=fluid_state, time=t,
                            quadrature_tag=quadrature_tag)
 
