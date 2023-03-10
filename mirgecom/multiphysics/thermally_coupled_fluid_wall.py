@@ -213,7 +213,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
 
-    def kappa_plus(self, dcoll, dd_bdry):
+    def kappa_plus(self, dcoll, dd_bdry, kappa_minus):
         return _project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
@@ -249,7 +249,7 @@ class _ThermallyCoupledUpwindBoundaryComponent:
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
 
-    def kappa_plus(self, dcoll, dd_bdry):
+    def kappa_plus(self, dcoll, dd_bdry, kappa_minus):
         return _project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
@@ -316,6 +316,10 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
 
         # Don't modify the energy, even though t_plus != t_minus; energy will
@@ -327,7 +331,7 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
             momentum=mom_plus,
             species_mass=cv_minus.species_mass)
 
-        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry)
+        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry, kappa_minus)
 
         return _replace_kappa(
             make_fluid_state(
@@ -492,6 +496,10 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_plus = self._no_slip.momentum_plus(cv_minus.momentum, normal)
 
         # Don't modify the energy, even though t_plus != t_minus; energy will
@@ -503,7 +511,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
             momentum=mom_plus,
             species_mass=cv_minus.species_mass)
 
-        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry)
+        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry, kappa_minus)
 
         return _replace_kappa(
             make_fluid_state(
@@ -655,6 +663,10 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
         cv_minus = state_minus.cv
 
+        kappa_minus = (
+            # Make sure it has an array context
+            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
         mom_plus = self._slip.momentum_plus(cv_minus.momentum, normal)
 
         # Don't modify the energy, even though t_plus != t_minus; energy will
@@ -666,7 +678,7 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
             momentum=mom_plus,
             species_mass=cv_minus.species_mass)
 
-        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry)
+        kappa_plus = self._thermally_coupled.kappa_plus(dcoll, dd_bdry, kappa_minus)
 
         return _replace_kappa(
             make_fluid_state(
