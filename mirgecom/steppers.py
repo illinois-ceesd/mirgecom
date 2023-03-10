@@ -76,7 +76,7 @@ def _is_unevaluated(actx, ary):
 def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
                                 t=0.0, istep=0, pre_step_callback=None,
                                 post_step_callback=None, force_eval=None,
-                                local_dt=False, max_steps=None):
+                                local_dt=False, max_steps=None, compile_rhs=True):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -117,6 +117,8 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
     local_dt
         An optional boolean indicating whether *dt* is uniform or cell-local in
         the domain.
+    compile_rhs
+        An optional boolean indicating whether *rhs* can be compiled.
 
     Returns
     -------
@@ -143,7 +145,10 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
 
     state = force_evaluation(actx, state)
 
-    compiled_rhs = _compile_rhs(actx, rhs)
+    if compile_rhs:
+        maybe_compiled_rhs = _compile_rhs(actx, rhs)
+    else:
+        maybe_compiled_rhs = rhs
 
     while marching_loc < marching_limit:
         if max_steps is not None:
@@ -156,7 +161,7 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         if force_eval:
             state = force_evaluation(actx, state)
 
-        state = timestepper(state=state, t=t, dt=dt, rhs=compiled_rhs)
+        state = timestepper(state=state, t=t, dt=dt, rhs=maybe_compiled_rhs)
 
         if force_eval is None:
             if _is_unevaluated(actx, state):
@@ -193,7 +198,7 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
 def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
                         component_id="state", t=0.0, istep=0,
                         pre_step_callback=None, post_step_callback=None,
-                        force_eval=None):
+                        force_eval=None, compile_rhs=True):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
@@ -229,6 +234,8 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
         An optional boolean indicating whether to force lazy evaluation between
         timesteps. By default, attempts to deduce whether this is necessary based
         on the behavior of the timestepper.
+    compile_rhs
+        An optional boolean indicating whether *rhs* can be compiled.
 
     Returns
     -------
@@ -246,9 +253,12 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
     if t_final <= t:
         return istep, t, state
 
-    compiled_rhs = _compile_rhs(actx, rhs)
+    if compile_rhs:
+        maybe_compiled_rhs = _compile_rhs(actx, rhs)
+    else:
+        maybe_compiled_rhs = rhs
     stepper_cls = generate_singlerate_leap_advancer(timestepper, component_id,
-                                                    compiled_rhs, t, dt, state)
+                                                    maybe_compiled_rhs, t, dt, state)
 
     while t < t_final:
 
@@ -339,7 +349,8 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
 
 def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
                   max_steps=None, component_id="state", pre_step_callback=None,
-                  post_step_callback=None, force_eval=None, local_dt=False):
+                  post_step_callback=None, force_eval=None, local_dt=False,
+                  compile_rhs=True):
     """Determine what stepper to use and advance the state from (t) to (t_final).
 
     Parameters
@@ -386,6 +397,8 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
     local_dt
         An optional boolean indicating whether *dt* is uniform or cell-local in
         the domain.
+    compile_rhs
+        An optional boolean indicating whether *rhs* can be compiled.
 
     Returns
     -------
@@ -419,6 +432,7 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
                 force_eval=force_eval,
+                compile_rhs=compile_rhs,
             )
     else:
         (current_step, current_t, current_state) = \
@@ -428,7 +442,8 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 istep=istep, force_eval=force_eval,
-                max_steps=max_steps, local_dt=local_dt
+                max_steps=max_steps, local_dt=local_dt,
+                compile_rhs=compile_rhs,
             )
 
     return current_step, current_t, current_state
