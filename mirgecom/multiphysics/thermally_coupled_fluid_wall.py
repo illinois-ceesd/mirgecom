@@ -261,6 +261,8 @@ class _ThermallyCoupledUpwindBoundaryComponent:
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
         # Only the heat flux is upwinded
+        # FIXME: Should this use the weighted version from
+        # _ThermallyCoupledHarmonicMeanBoundaryComponent?
         return (t_minus + t_plus)/2
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
