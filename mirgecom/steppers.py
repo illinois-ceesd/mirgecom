@@ -76,7 +76,7 @@ def _is_unevaluated(actx, ary):
 def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
                                 t=0.0, istep=0, pre_step_callback=None,
                                 post_step_callback=None, force_eval=None,
-                                local_dt=False, max_steps=None, compile_rhs=None):
+                                local_dt=False, max_steps=None, compile_rhs=True):
     """Advance state from some time (t) to some time (t_final).
 
     Parameters
@@ -198,7 +198,7 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
 def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
                         component_id="state", t=0.0, istep=0,
                         pre_step_callback=None, post_step_callback=None,
-                        force_eval=None, compile_rhs=None):
+                        force_eval=None, compile_rhs=True):
     """Advance state from some time *t* to some time *t_final* using :mod:`leap`.
 
     Parameters
