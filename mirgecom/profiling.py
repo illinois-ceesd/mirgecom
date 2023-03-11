@@ -32,10 +32,10 @@ import numpy as np
 from dataclasses import dataclass
 import pytools
 from logpyle import LogManager
-from mirgecom.logging_quantities import KernelProfile
+from mirgecom.logging_quantities import KernelProfile, MemPoolType
 from mirgecom.utils import StatisticsAccumulator
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -92,7 +92,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
        will be able to profile these kernels.
     """
 
-    def __init__(self, queue, allocator=None,
+    def __init__(self, queue: cl.CommandQueue, allocator: Optional[MemPoolType] = None,
                  logmgr: Optional[LogManager] = None) -> None:
         super().__init__(queue, allocator)
 
@@ -116,20 +116,20 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
         if cl.array.ARRAY_KERNEL_EXEC_HOOK is None:
             cl.array.ARRAY_KERNEL_EXEC_HOOK = self.array_kernel_exec_hook
 
-    def clone(self):
+    def clone(self) -> PyOpenCLProfilingArrayContext:
         """Return a semantically equivalent but distinct version of *self*."""
         from warnings import warn
         warn("Cloned PyOpenCLProfilingArrayContexts can not "
              "profile elementwise PyOpenCL kernels.")
         return type(self)(self.queue, self.allocator, self.logmgr)
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Release resources and undo monkey patching."""
         del self.profile_events[:]
         self.profile_results.clear()
         self.kernel_stats.clear()
 
-    def array_kernel_exec_hook(self, knl, queue, gs, ls, *actual_args, wait_for):
+    def array_kernel_exec_hook(self, knl: cl.ElementwiseKernel, queue: cl.CommandQueue, gs: int, ls: int, *actual_args: Any, wait_for: List[cl.Event]) -> cl.Event:
         """Extract data from the elementwise array kernel."""
         evt = knl(queue, gs, ls, *actual_args, wait_for=wait_for)
 
@@ -384,7 +384,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             return args_tuple
 
-    def call_loopy(self, t_unit, **kwargs) -> dict:
+    def call_loopy(self, t_unit: lp.TranslationUnit, **kwargs: Any) -> Dict[Any, Any]:
         """Execute the loopy kernel and profile it."""
         try:
             t_unit = self._loopy_transform_cache[t_unit]

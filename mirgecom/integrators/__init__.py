@@ -26,6 +26,8 @@ THE SOFTWARE.
 
 from .explicit_rk import rk4_step                          # noqa: F401
 from .lsrk import euler_step, lsrk54_step, lsrk144_step    # noqa: F401
+from mirgecom.gas_model import FluidState
+from typing import Callable
 
 __doc__ = """
 .. automodule:: mirgecom.integrators.explicit_rk
@@ -33,7 +35,7 @@ __doc__ = """
 """
 
 
-def lsrk4_step(state, t, dt, rhs):
+def lsrk4_step(state: FluidState, t: float, dt: float, rhs: Callable[[float, FluidState], FluidState]) -> FluidState:
     """Call lsrk54_step with backwards-compatible interface."""
     from warnings import warn
     warn("Do not call lsrk4; it is now callled lsrk54_step. This function will "

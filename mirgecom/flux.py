@@ -31,7 +31,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import numpy as np  # noqa
+import numpy as np
+from meshmode.dof_array import DOFArray
 
 
 # These low-level flux functions match the presentation of them in
@@ -42,7 +43,7 @@ import numpy as np  # noqa
 #
 # {{{ low-level flux interfaces
 
-def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam):
+def num_flux_lfr(f_minus_normal: np.ndarray, f_plus_normal: np.ndarray, q_minus: np.ndarray, q_plus: np.ndarray, lam: DOFArray) -> np.ndarray:
     r"""Compute Lax-Friedrichs/Rusanov flux after [Hesthaven_2008]_, Section 6.6.
 
     The Lax-Friedrichs/Rusanov flux is calculated as:
@@ -84,7 +85,7 @@ def num_flux_lfr(f_minus_normal, f_plus_normal, q_minus, q_plus, lam):
     return (f_minus_normal + f_plus_normal + lam*(q_minus - q_plus))/2
 
 
-def num_flux_central(f_minus_normal, f_plus_normal):
+def num_flux_central(f_minus_normal: np.ndarray, f_plus_normal: np.ndarray) -> np.ndarray:
     r"""Central low-level numerical flux.
 
     The central flux is calculated as:
@@ -110,7 +111,7 @@ def num_flux_central(f_minus_normal, f_plus_normal):
     return (f_plus_normal + f_minus_normal)/2
 
 
-def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus):
+def num_flux_hll(f_minus_normal: np.ndarray, f_plus_normal: np.ndarray, q_minus: DOFArray, q_plus: np.ndarray, s_minus: DOFArray, s_plus: DOFArray) -> np.ndarray:
     r"""HLL low-level numerical flux.
 
     The Harten, Lax, van Leer approximate Riemann numerical flux is calculated as:

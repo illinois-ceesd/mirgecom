@@ -48,7 +48,7 @@ THE SOFTWARE.
 """
 
 
-def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.):
+def get_pyrometheus_wrapper_class(pyro_class, temperature_niter: int = 5, zero_level: float = 0.0):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Dynamically creates a class that inherits from a
@@ -131,8 +131,8 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
     return PyroWrapper
 
 
-def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5,
-                                               zero_level=0.):
+def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter: int = 5,
+                                               zero_level: float = 0.0):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Cantera-based interface that creates a Pyrometheus mechanism
@@ -156,8 +156,8 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
 
 
 def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
-                                                temperature_niter=5,
-                                                zero_level=0.):
+                                                temperature_niter: int = 5,
+                                                zero_level: float = 0.0):
     """Grab a pyrometheus mechanism class from the mech name."""
     from mirgecom.mechanisms import get_mechanism_input
     mech_input_source = get_mechanism_input(mechanism_name)
@@ -170,8 +170,8 @@ def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
 
 
 # backwards compat
-def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5,
-                                     zero_level=0.):
+def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter: int = 5,
+                                     zero_level: float = 0.0):
     """Deprecate this interface to get_pyrometheus_mechanism_class."""
     from warnings import warn
     warn("make_pyrometheus_mechanism_class is deprecated."
@@ -180,8 +180,8 @@ def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5,
         cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level)
 
 
-def make_pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5,
-                                       zero_level=0.):
+def make_pyro_thermochem_wrapper_class(cantera_soln,  temperature_niter: int = 5,
+                                       zero_level: float = 0.0):
     """Deprecate this interface to pyro_wrapper_class_from_cantera."""
     from warnings import warn
     warn("make_pyrometheus_mechanism is deprecated."

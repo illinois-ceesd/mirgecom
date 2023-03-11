@@ -30,10 +30,13 @@ THE SOFTWARE.
 
 import grudge.op as op
 
-from grudge.dof_desc import DISCR_TAG_BASE
+from grudge.dof_desc import DISCR_TAG_BASE, DOFDesc
+from grudge.discretization import DiscretizationCollection
+from numpy import ndarray
 
 
-def grad_operator(dcoll, dd_vol, dd_allfaces, u, flux):
+def grad_operator(dcoll: DiscretizationCollection, dd_vol: DOFDesc,
+                  dd_allfaces: DOFDesc, u: ndarray, flux: ndarray) -> ndarray:
     r"""Compute a DG gradient for the input *u* with flux given by *flux*.
 
     Parameters
@@ -65,7 +68,8 @@ def grad_operator(dcoll, dd_vol, dd_allfaces, u, flux):
         - op.face_mass(dcoll, dd_allfaces, flux))
 
 
-def div_operator(dcoll, dd_vol, dd_allfaces, v, flux):
+def div_operator(dcoll: DiscretizationCollection, dd_vol: DOFDesc,
+                 dd_allfaces: DOFDesc, v: ndarray, flux: ndarray) -> ndarray:
     r"""Compute DG divergence of vector-valued func *v* with flux given by *flux*.
 
     Parameters

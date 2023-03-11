@@ -27,8 +27,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Callable
+from mirgecom.gas_model import FluidState
 
-def rk4_step(state, t, dt, rhs):
+
+def rk4_step(state: FluidState, t: float, dt: float, rhs: Callable[[float, FluidState], FluidState]) -> FluidState:
     """Take one step using the fourth-order Classical Runge-Kutta method."""
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)

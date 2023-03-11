@@ -33,16 +33,18 @@ THE SOFTWARE.
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
-from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_MODAL
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_MODAL, DOFDesc
 
 import numpy as np
 from meshmode.transform_metadata import FirstAxisIsElementsTag
 from meshmode.dof_array import DOFArray
+from typing import Optional
 
 
-def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
-                             mmin=0.0, mmax=None, modify_average=False,
-                             dd=DD_VOLUME_ALL):
+def bound_preserving_limiter(dcoll: DiscretizationCollection, field: DOFArray,
+                             mmin: float = 0.0, mmax: Optional[float] = None,
+                             modify_average: bool = False,
+                             dd: DOFDesc = DD_VOLUME_ALL) -> np.ndarray:
     r"""Implement a slope limiter for bound-preserving properties.
 
     The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
@@ -93,7 +95,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     actx = field.array_context
 
     # Compute cell averages of the state
-    def cancel_polynomials(grp):
+    def cancel_polynomials(grp: DOFDesc) -> DOFDesc:
         return actx.from_numpy(np.asarray([1 if sum(mode_id) == 0
                                            else 0 for mode_id in grp.mode_ids()]))
 

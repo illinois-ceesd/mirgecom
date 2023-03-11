@@ -58,8 +58,11 @@ THE SOFTWARE.
 """
 
 from functools import partial
+import numpy as np
 
 from meshmode.discretization.connection import FACE_RESTR_ALL
+
+from arraycontext import ArrayOrContainer
 
 from grudge.trace_pair import (
     TracePair,
@@ -70,7 +73,10 @@ from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
     DISCR_TAG_BASE,
+    DOFDesc,
 )
+from grudge.discretization import DiscretizationCollection
+from grudge.trace_pair import TracePair
 
 import grudge.op as op
 
@@ -89,8 +95,11 @@ from mirgecom.flux import num_flux_central
 from mirgecom.operators import (
     div_operator, grad_operator
 )
-from mirgecom.gas_model import make_operator_fluid_states
+from mirgecom.gas_model import make_operator_fluid_states, GasModel, FluidState
 from mirgecom.utils import normalize_boundaries
+from mirgecom.fluid import ConservedVars
+
+from typing import Callable, Hashable, Dict, Optional, Any, Tuple, Union
 
 
 class _NSGradCVTag:
@@ -101,7 +110,7 @@ class _NSGradTemperatureTag:
     pass
 
 
-def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
+def _gradient_flux_interior(dcoll: DiscretizationCollection, numerical_flux_func: Callable, tpair: TracePair) -> ArrayOrContainer:
     """Compute interior face flux for gradient operator."""
     from arraycontext import outer
     actx = tpair.int.array_context
@@ -113,12 +122,13 @@ def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
 
 
 def grad_cv_operator(
-        dcoll, gas_model, boundaries, state, *, time=0.0,
-        numerical_flux_func=num_flux_central,
-        quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
+        dcoll: DiscretizationCollection, gas_model: GasModel, boundaries: Dict[Any, Any], state: FluidState, *,
+        time: float = 0.0,
+        numerical_flux_func: Callable = num_flux_central,
+        quadrature_tag: Hashable = DISCR_TAG_BASE, dd: DOFDesc=DD_VOLUME_ALL, comm_tag: Hashable = None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        operator_states_quad=None):
+        operator_states_quad: Optional[Tuple[FluidState, TracePair, Dict[Any, Any]]] = None) -> np.ndarray:
     r"""Compute the gradient of the fluid conserved variables.
 
     Parameters
@@ -215,12 +225,12 @@ def grad_cv_operator(
 
 
 def grad_t_operator(
-        dcoll, gas_model, boundaries, state, *, time=0.0,
-        numerical_flux_func=num_flux_central,
-        quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
+        dcoll: DiscretizationCollection, gas_model: GasModel, boundaries: Dict[Any, Any], state: FluidState, *, time: float = 0.0,
+        numerical_flux_func: Callable = num_flux_central,
+        quadrature_tag: Hashable = DISCR_TAG_BASE, dd: DOFDesc = DD_VOLUME_ALL, comm_tag: Hashable = None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        operator_states_quad=None):
+        operator_states_quad: Optional[Tuple[FluidState, TracePair, Dict[Any, Any]]] = None) -> np.ndarray:
     r"""Compute the gradient of the fluid temperature.
 
     Parameters
@@ -319,16 +329,16 @@ def grad_t_operator(
         dcoll, dd_vol_quad, dd_allfaces_quad, vol_state_quad.temperature, t_flux_bnd)
 
 
-def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
-                inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                gradient_numerical_flux_func=num_flux_central,
-                viscous_numerical_flux_func=viscous_facial_flux_central,
-                return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
-                dd=DD_VOLUME_ALL, comm_tag=None,
+def ns_operator(dcoll: DiscretizationCollection, gas_model: GasModel, state: FluidState, boundaries: Dict[Any, Any], *, time: float = 0.0,
+                inviscid_numerical_flux_func: Callable = inviscid_facial_flux_rusanov,
+                gradient_numerical_flux_func: Callable = num_flux_central,
+                viscous_numerical_flux_func: Callable =  viscous_facial_flux_central,
+                return_gradients: bool = False, quadrature_tag: Hashable = DISCR_TAG_BASE,
+                dd: DOFDesc = DD_VOLUME_ALL, comm_tag: Hashable = None,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
-                operator_states_quad=None,
-                grad_cv=None, grad_t=None):
+                operator_states_quad: Optional[Tuple[FluidState, TracePair, Dict[Any, Any]]] = None,
+                grad_cv: Optional[np.ndarray] = None, grad_t: Optional[np.ndarray] = None) -> Union[Tuple[np.ndarray, np.ndarray, np.ndarray], np.ndarray]:
     r"""Compute RHS of the Navier-Stokes equations.
 
     Parameters

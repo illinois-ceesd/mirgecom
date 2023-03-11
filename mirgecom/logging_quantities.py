@@ -47,20 +47,25 @@ from arraycontext.container import get_container_context_recursively
 from meshmode.array_context import PyOpenCLArrayContext
 from grudge.discretization import DiscretizationCollection
 import pyopencl as cl
+from mirgecom.eos import GasEOS
+from mirgecom.gas_model import FluidState
 
-from typing import Optional, Callable, Union, Tuple
+from typing import Optional, Callable, Union, Tuple, TYPE_CHECKING
 import numpy as np
 
-from grudge.dof_desc import DD_VOLUME_ALL
+from grudge.dof_desc import DD_VOLUME_ALL, DOFDesc
 import grudge.op as oper
 from typing import List
 
 MemPoolType = Union[cl.tools.MemoryPool, cl.tools.SVMPool]
 
+if TYPE_CHECKING:
+    from mpi4py.MPI import Comm
+
 
 def initialize_logmgr(enable_logmgr: bool,
                       filename: Optional[str] = None, mode: str = "wu",
-                      mpi_comm=None) -> Optional[LogManager]:
+                      mpi_comm: Optional[Comm] = None) -> Optional[LogManager]:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
     if not enable_logmgr:
         return None
@@ -90,7 +95,7 @@ def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> Non
     logmgr.set_constant("cl_platform_version", dev.platform.version)
 
 
-def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
+def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue) -> None:
     """Deprecated. Do not use in new code."""
     from warnings import warn
     warn("logmgr_add_device_name is deprecated and will disappear in Q3 2021. "
@@ -115,8 +120,8 @@ def logmgr_add_mempool_usage(logmgr: LogManager, pool: MemPoolType) -> None:
     logmgr.add_quantity(MempoolMemoryUsage(pool))
 
 
-def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
-        extract_vars_for_logging, units_for_logging, dd=DD_VOLUME_ALL) -> None:
+def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll: DiscretizationCollection, dim: int,
+        extract_vars_for_logging: Callable, units_for_logging: Callable, dd: DOFDesc = DD_VOLUME_ALL) -> None:
     """Add default discretization quantities to the logmgr."""
     if dd != DD_VOLUME_ALL:
         suffix = f"_{dd.domain_tag.tag}"
@@ -192,7 +197,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: Optional[str] = No
 
 # {{{ State handling
 
-def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
+def set_sim_state(mgr: LogManager, dim: int, state: FluidState, eos: GasEOS) -> None:
     """Update the simulation state of all :class:`StateConsumer` of the log manager.
 
     Parameters
@@ -235,7 +240,7 @@ class StateConsumer:
     .. automethod:: set_state_vars
     """
 
-    def __init__(self, extract_vars_for_logging: Callable):
+    def __init__(self, extract_vars_for_logging: Callable) -> None:
         """Store the function to extract state variables.
 
         Parameters
@@ -263,8 +268,9 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     """
 
     def __init__(self, dcoll: DiscretizationCollection, quantity: str, op: str,
-                 extract_vars_for_logging, units_logging, name: Optional[str] = None,
-                 axis: Optional[int] = None, dd=DD_VOLUME_ALL):
+                 extract_vars_for_logging: Callable, units_logging: Callable,
+                 name: Optional[str] = None,
+                 axis: Optional[int] = None, dd: DOFDesc = DD_VOLUME_ALL) -> None:
         unit = units_logging(quantity)
 
         if name is None:
@@ -293,11 +299,11 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
             raise ValueError(f"unknown operation {op}")
 
     @property
-    def default_aggregator(self):
+    def default_aggregator(self) -> Callable:  # type: ignore[override]
         """Rank aggregator to use."""
         return self.rank_aggr
 
-    def __call__(self):
+    def __call__(self) -> Optional[float]:
         """Return the requested quantity."""
         if self.state_vars is None:
             return None
@@ -305,11 +311,12 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         quantity = self.state_vars[self.quantity]
 
         actx = get_container_context_recursively(quantity)
+        assert actx
 
         if self.axis is not None:  # e.g. momentum
             quantity = quantity[self.axis]
 
-        return actx.to_numpy(self._discr_reduction(quantity))[()]
+        return actx.to_numpy(self._discr_reduction(quantity))[()]  # type: ignore[index]
 
 # }}}
 
@@ -370,7 +377,7 @@ class PythonMemoryUsage(PostLogQuantity):
     Uses :mod:`psutil` to track memory usage. Virtually no overhead.
     """
 
-    def __init__(self, name: Optional[str] = None):
+    def __init__(self, name: Optional[str] = None) -> None:
 
         if name is None:
             name = "memory_usage_python"

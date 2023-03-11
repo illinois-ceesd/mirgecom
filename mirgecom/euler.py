@@ -59,24 +59,31 @@ from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
     DISCR_TAG_BASE,
+    DOFDesc,
 )
+from grudge.discretization import DiscretizationCollection
+from grudge.trace_pair import TracePair
 
-from mirgecom.gas_model import make_operator_fluid_states
+from mirgecom.gas_model import make_operator_fluid_states, FluidState, GasModel
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux_rusanov,
     inviscid_flux_on_element_boundary
 )
+from mirgecom.fluid import ConservedVars
 
 from mirgecom.operators import div_operator
 from mirgecom.utils import normalize_boundaries
+from mirgecom.eos import GasEOS
+from typing import Dict, Any, Hashable, Tuple, Optional, Callable
 
 
-def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
-                   inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                   quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
-                   comm_tag=None,
-                   operator_states_quad=None):
+def euler_operator(dcoll: DiscretizationCollection, state: FluidState,
+                   gas_model: GasModel, boundaries: Dict[Any, Any], time: float = 0.0,
+                   inviscid_numerical_flux_func: Callable = inviscid_facial_flux_rusanov,
+                   quadrature_tag: Hashable = DISCR_TAG_BASE, dd: DOFDesc = DD_VOLUME_ALL,
+                   comm_tag: Hashable = None,
+                   operator_states_quad: Optional[Tuple[FluidState, TracePair, Dict[Any, Any]]] = None) -> np.ndarray:
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -173,7 +180,7 @@ def units_for_logging(quantity: str) -> str:
     return NAME_TO_UNITS[quantity]
 
 
-def extract_vars_for_logging(dim: int, state, eos) -> dict:
+def extract_vars_for_logging(dim: int, state: ConservedVars, eos: GasEOS) -> Dict[Any, Any]:
     """Extract state vars."""
     dv = eos.dependent_vars(state)
 

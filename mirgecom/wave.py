@@ -33,6 +33,7 @@ from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair, interior_trace_pairs
 import grudge.op as op
+from typing import Optional, Hashable
 
 
 def _flux(dcoll, c, w_tpair):
@@ -60,7 +61,7 @@ class _WaveTag:
     pass
 
 
-def wave_operator(dcoll, c, w, *, comm_tag=None):
+def wave_operator(dcoll, c, w, *, comm_tag: Optional[Hashable] = None):
     """Compute the RHS of the wave equation.
 
     Parameters

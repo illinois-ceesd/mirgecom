@@ -156,7 +156,7 @@ def _check_gpu_oversubscription() -> None:
                      f"Duplicate PCIe IDs: {dup}.")
 
 
-def mpi_entry_point(func) -> Callable:
+def mpi_entry_point(func: Callable) -> Callable:
     """
     Return a decorator that designates a function as the "main" function for MPI.
 
@@ -165,7 +165,7 @@ def mpi_entry_point(func) -> Callable:
     hook to call `MPI_Finalize()` on exit.
     """
     @wraps(func)
-    def wrapped_func(*args, **kwargs) -> None:
+    def wrapped_func(*args: Any, **kwargs: Any) -> None:
         if "mpi4py.run" not in sys.modules:
             raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
                         "mpi4py <args>').")
@@ -227,7 +227,7 @@ def pudb_remote_debug_on_single_rank(func: Callable) -> Callable:
 
 def enable_rank_labeled_print() -> None:
     """Enable prepending the rank number to every message printed with print()."""
-    def rank_print(*args, **kwargs):
+    def rank_print(*args: Any, **kwargs: Any) -> None:
         """Prepends the rank number to the print function."""
         if "mpi4py.MPI" in sys.modules:
             from mpi4py import MPI
@@ -235,7 +235,7 @@ def enable_rank_labeled_print() -> None:
         else:
             out_str = "[ ]"
 
-        __builtins__["oldprint"](out_str, *args, **kwargs)
+        __builtins__["oldprint"](out_str, *args, **kwargs)  # type: ignore[index]
 
     if "oldprint" not in __builtins__:  # type: ignore[operator]
         __builtins__["oldprint"] = __builtins__["print"]  # type: ignore[index]
