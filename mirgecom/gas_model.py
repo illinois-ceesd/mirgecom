@@ -219,6 +219,13 @@ class FluidState:
         return self._get_mixture_property("species_enthalpies")
 
 
+    def __mul__(self, o):
+        raise NotImplementedError()
+
+    def __rmul__(self, o):
+        raise NotImplementedError()
+
+
 @dataclass_array_container
 @dataclass(frozen=True)
 class ViscousFluidState(FluidState):

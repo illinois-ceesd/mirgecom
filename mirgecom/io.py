@@ -32,13 +32,15 @@ from functools import partial
 import grudge.op as op
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from grudge.dof_desc import DD_VOLUME_ALL
+from grudge.dof_desc import DD_VOLUME_ALL, DOFDesc
+from grudge.discretization import DiscretizationCollection
+from mirgecom.eos import GasDependentVars
 
 
-def make_init_message(*, dim, order, dt, t_final,
-                      nstatus, nviz, cfl, constant_cfl,
-                      initname, eosname, casename,
-                      nelements=0, global_nelements=0):
+def make_init_message(*, dim: int, order: int, dt: float, t_final: float,
+                      nstatus: int, nviz: int, cfl: float, constant_cfl: bool,
+                      initname: str, eosname: str, casename: str,
+                      nelements: int = 0, global_nelements: int = 0) -> str:
     """Create a summary of some general simulation parameters and inputs."""
     return (
         f"Initialization for Case({casename})\n"
@@ -55,7 +57,9 @@ def make_init_message(*, dim, order, dt, t_final,
 
 
 def make_status_message(
-        *, dcoll, t, step, dt, cfl, dependent_vars, fluid_dd=DD_VOLUME_ALL):
+        *, dcoll: DiscretizationCollection, t: float, step: int, dt: float,
+        cfl: float, dependent_vars: GasDependentVars,
+        fluid_dd: DOFDesc = DD_VOLUME_ALL) -> str:
     r"""Make simulation status and health message."""
     dv = dependent_vars
     _min = partial(op.nodal_min, dcoll, fluid_dd)
@@ -69,11 +73,12 @@ def make_status_message(
     return statusmsg
 
 
-def make_rank_fname(basename, rank=0, step=0, t=0):
+def make_rank_fname(basename: str, rank: int = 0, step: int = 0,
+                    t: float = 0) -> str:
     """Create a rank-specific filename."""
     return f"{basename}-{step:09d}-{{rank:04d}}.vtu"
 
 
-def make_par_fname(basename, step=0, t=0):
+def make_par_fname(basename: str, step: int = 0, t: float = 0) -> str:
     r"""Make parallel visualization filename."""
     return f"{basename}-{step:09d}.pvtu"

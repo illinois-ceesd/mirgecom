@@ -30,14 +30,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import sys
-if sys.version_info < (3, 9):
-    # importlib.resources either doesn't exist or lacks the files()
-    # function, so use the PyPI version:
-    import importlib_resources  # pylint: disable=import-error
-else:
-    # importlib.resources has files(), so use that:
-    import importlib.resources as importlib_resources
+from importlib.abc import Traversable
+from importlib.resources import files
 
 
 def get_mechanisms_pkgname() -> str:
@@ -55,7 +49,7 @@ def get_mechanism_cti_file_name(mechanism_name: str) -> str:
     return f"{mechanism_name}.cti"
 
 
-def import_mechdata():
+def import_mechdata() -> Traversable:
     """Import the mechanism data as a mechanism data resource.
 
     Returns
@@ -65,7 +59,7 @@ def import_mechdata():
         container (think directory) of the thermochemistry mechanism data
         (think YAML files).
     """
-    return importlib_resources.files(get_mechanisms_pkgname())
+    return files(get_mechanisms_pkgname())
 
 
 def get_mechanism_cti(mechanism_name: str) -> str:

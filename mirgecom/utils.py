@@ -30,10 +30,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Optional
+from typing import Optional, Dict, Any
+from arraycontext import ArrayContext
 
 
-def asdict_shallow(dc_instance) -> dict:
+def asdict_shallow(dc_instance: Any) -> Dict[Any, Any]:
     """Convert a dataclass into a dict.
 
     What :func:`dataclasses.asdict` should have been: no
@@ -113,14 +114,14 @@ class StatisticsAccumulator:
         return self._min * self.scale_factor
 
 
-def force_evaluation(actx, x):
+def force_evaluation(actx: ArrayContext, x: Any) -> Any:
     """Force evaluation of a (possibly lazy) array."""
     if actx is None:
         return x
     return actx.freeze_thaw(x)
 
 
-def normalize_boundaries(boundaries):
+def normalize_boundaries(boundaries: Dict[Any, Any]) -> Dict[Any, Any]:
     """
     Normalize the keys of *boundaries*.
 

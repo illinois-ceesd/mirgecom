@@ -30,16 +30,21 @@ THE SOFTWARE.
 
 import pickle
 from meshmode.dof_array import array_context_for_pickling
+from arraycontext import ArrayContext
+from typing import Optional, TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from mpi4py.MPI import Comm
 
 
-def read_restart_data(actx, filename):
+def read_restart_data(actx: ArrayContext, filename: str) -> Any:
     """Read the raw restart data dictionary from the given pickle restart file."""
     with array_context_for_pickling(actx):
         with open(filename, "rb") as f:
             return pickle.load(f)
 
 
-def write_restart_file(actx, restart_data, filename, comm=None):
+def write_restart_file(actx: ArrayContext, restart_data: Any, filename: str, comm: Optional[Comm] = None) -> None:
     """Pickle the simulation data into a file for use in restarting."""
     rank = 0
     if comm:

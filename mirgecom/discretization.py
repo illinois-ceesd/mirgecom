@@ -30,16 +30,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
+from arraycontext import ArrayContext
+from typing import Optional, TYPE_CHECKING
+from grudge.discretization import DiscretizationCollection
+from meshmode.mesh import Mesh
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from mpi4py.MPI import Comm
 
 
 # Centralize the discretization collection creation routine so that
 # we can replace it more easily when we refactor the drivers and
 # examples to use discretization collections, and change it centrally
 # when we want to change it.
-def create_discretization_collection(actx, volume_meshes, order, *,
-        mpi_communicator=None, quadrature_order=-1):
+def create_discretization_collection(actx: ArrayContext, volume_meshes: Mesh,
+        order: int, *, mpi_communicator: Optional[Comm] = None,
+        quadrature_order: int = -1) -> DiscretizationCollection:
     """Create and return a grudge DG discretization collection."""
     if mpi_communicator is not None:
         from warnings import warn
