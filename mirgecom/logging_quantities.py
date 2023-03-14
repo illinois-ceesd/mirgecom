@@ -73,6 +73,14 @@ def initialize_logmgr(enable_logmgr: bool,
     add_simulation_quantities(logmgr)
 
     try:
+        from logpyle import GCStats
+        logmgr.add_quantity(GCStats())
+    except ImportError:
+        from warnings import warn
+        warn("GCStats not found, not collecting GC statistics. Please update your "
+             "logpyle installation.")
+
+    try:
         logmgr.add_quantity(PythonMemoryUsage())
     except ImportError:
         from warnings import warn
