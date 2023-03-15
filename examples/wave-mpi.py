@@ -252,12 +252,13 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
-    # Turn off profiling to not overwhelm CI
-    use_profiling = False
-    use_logging = True
 
     import argparse
     parser = argparse.ArgumentParser(description="Wave (MPI version)")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed performance profiling")
+    parser.add_argument("--log", action="store_true",
+        help="enable logging")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     args = parser.parse_args()
@@ -266,6 +267,7 @@ if __name__ == "__main__":
     from grudge.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
-    main(actx_class, use_profiling=use_profiling, use_logmgr=use_logging, lazy=lazy)
+    main(actx_class, use_profiling=args.profiling, use_logmgr=args.logging,
+         lazy=lazy)
 
 # vim: foldmethod=marker
