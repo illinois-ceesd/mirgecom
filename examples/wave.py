@@ -191,7 +191,7 @@ if __name__ == "__main__":
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=False)
 
-    main(actx_class, use_profiling=args.profile,
-         use_logmgr=args.logging, lazy=args.lazy)
+    main(actx_class, use_profiling=args.profiling,
+         use_logmgr=args.log, lazy=args.lazy)
 
 # vim: foldmethod=marker
