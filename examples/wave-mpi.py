@@ -267,7 +267,6 @@ if __name__ == "__main__":
     from grudge.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
-    main(actx_class, use_profiling=args.profiling, use_logmgr=args.logging,
-         lazy=lazy)
+    main(actx_class, use_profiling=args.profiling, use_logmgr=args.log, lazy=lazy)
 
 # vim: foldmethod=marker
