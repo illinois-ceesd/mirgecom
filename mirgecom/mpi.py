@@ -166,7 +166,8 @@ def mpi_entry_point(func) -> Callable:
     """
     @wraps(func)
     def wrapped_func(*args, **kwargs) -> None:
-        # We enforce this so that an exception raised on one rank terminates all ranks.
+        # We enforce this so that an exception raised on one rank terminates
+        # all ranks.
         if "mpi4py.run" not in sys.modules:
             raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
                         "mpi4py <args>').")
@@ -184,7 +185,8 @@ def mpi_entry_point(func) -> Callable:
         cl.get_platforms()
 
         # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
-        # some MPI runtimes. This must be set *before* the first import of mpi4py.MPI.
+        # some MPI runtimes. This must be set *before* the first import
+        # of mpi4py.MPI.
         import mpi4py
         mpi4py.rc.recv_mprobe = False
 
