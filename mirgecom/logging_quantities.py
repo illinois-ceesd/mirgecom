@@ -34,6 +34,7 @@ __doc__ = """
 .. autofunction:: logmgr_add_cl_device_info
 .. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
+.. autofunction:: logmgr_add_mempool_usage
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
 .. autofunction:: logmgr_set_time
@@ -47,12 +48,14 @@ from meshmode.array_context import PyOpenCLArrayContext
 from grudge.discretization import DiscretizationCollection
 import pyopencl as cl
 
-from typing import Optional, Callable
+from typing import Optional, Callable, Union, Tuple
 import numpy as np
 
 from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as oper
 from typing import List
+
+MemPoolType = Union[cl.tools.MemoryPool, cl.tools.SVMPool]
 
 
 def initialize_logmgr(enable_logmgr: bool,
@@ -70,6 +73,14 @@ def initialize_logmgr(enable_logmgr: bool,
     add_simulation_quantities(logmgr)
 
     try:
+        from logpyle import GCStats
+        logmgr.add_quantity(GCStats())
+    except ImportError:
+        from warnings import warn
+        warn("GCStats not found, not collecting GC statistics. Please update your "
+             "logpyle installation.")
+
+    try:
         logmgr.add_quantity(PythonMemoryUsage())
     except ImportError:
         from warnings import warn
@@ -79,7 +90,7 @@ def initialize_logmgr(enable_logmgr: bool,
     return logmgr
 
 
-def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue):
+def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> None:
     """Add information about the OpenCL device to the log."""
     dev = queue.device
     logmgr.set_constant("cl_device_name", str(dev))
@@ -96,15 +107,24 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa:
     logmgr_add_cl_device_info(logmgr, queue)
 
 
-def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
+def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue) \
+        -> None:
     """Add the OpenCL device memory usage to the log."""
     if not (queue.device.type & cl.device_type.GPU):
         return
     logmgr.add_quantity(DeviceMemoryUsage())
 
 
+def logmgr_add_mempool_usage(logmgr: LogManager, pool: MemPoolType) -> None:
+    """Add the memory pool usage to the log."""
+    if (not isinstance(pool, cl.tools.MemoryPool)
+            and not isinstance(pool, cl.tools.SVMPool)):
+        return
+    logmgr.add_quantity(MempoolMemoryUsage(pool))
+
+
 def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
-        extract_vars_for_logging, units_for_logging, dd=DD_VOLUME_ALL):
+        extract_vars_for_logging, units_for_logging, dd=DD_VOLUME_ALL) -> None:
     """Add default discretization quantities to the logmgr."""
     if dd != DD_VOLUME_ALL:
         suffix = f"_{dd.domain_tag.tag}"
@@ -409,5 +429,24 @@ class DeviceMemoryUsage(PostLogQuantity):
             return None
         else:
             return (self.total.value - self.free.value) / 1024 / 1024
+
+
+class MempoolMemoryUsage(MultiPostLogQuantity):
+    """Logging support for memory pool usage."""
+
+    def __init__(self, pool: MemPoolType, names: Optional[List[str]] = None) -> None:
+        if names is None:
+            names = ["memory_usage_mempool_managed", "memory_usage_mempool_active"]
+
+        descs = ["Memory pool managed", "Memory pool active"]
+
+        super().__init__(names, ["MByte", "MByte"], descriptions=descs)
+
+        self.pool = pool
+
+    def __call__(self) -> Tuple[float, float]:
+        """Return the memory pool usage in MByte."""
+        return (self.pool.managed_bytes/1024/1024,
+                self.pool.active_bytes/1024/1024)
 
 # }}}

@@ -268,7 +268,9 @@ def viscous_flux(state, grad_cv, grad_t):
     """
     if not state.is_viscous:
         import warnings
-        warnings.warn("Viscous fluxes requested for inviscid state.")
+        warnings.warn(
+            "Viscous fluxes requested for inviscid state.",
+            stacklevel=2)
         return 0
 
     viscous_mass_flux = 0 * state.momentum_density
