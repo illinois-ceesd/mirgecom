@@ -179,9 +179,9 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Wave (non-MPI version)")
-    parser.add_argument("--profile", action="store_true",
+    parser.add_argument("--profiling", action="store_true",
         help="enable kernel profiling")
-    parser.add_argument("--logging", action="store_true",
+    parser.add_argument("--log", action="store_true",
         help="enable logging")
     parser.add_argument("--lazy", action="store_true",
         help="enable lazy evaluation")
@@ -191,7 +191,7 @@ if __name__ == "__main__":
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=False)
 
-    main(actx_class, use_profiling=args.profile,
-         use_logmgr=args.logging, lazy=args.lazy)
+    main(actx_class, use_profiling=args.profiling,
+         use_logmgr=args.log, lazy=args.lazy)
 
 # vim: foldmethod=marker
