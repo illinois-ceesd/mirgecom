@@ -32,7 +32,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import euler_operator
+from mirgecom.euler import euler_operator,  entropy_stable_euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
@@ -68,9 +68,12 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None, lazy=False,
-         rst_filename=None):
+def main(actx_class, use_logmgr=True, ctx_factory=cl.create_some_context, 
+          use_leap=False, use_profiling=False, casename=None, lazy=False,
+          use_overintegration=False, use_esdg=False,
+          rst_filename=None):
+         
+    """Drive the example."""
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -101,6 +104,20 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+        
+    if use_esdg and not actx.supports_nonscalar_broadcasting:
+        raise RuntimeError(
+            f"{actx} is not a suitable array context for using flux-differencing. "
+            "The underlying array context must be capable of performing basic "
+            "array broadcasting operations. Use PytatoPyOpenCLArrayContext instead."
+        )
+    from mirgecom.simutil import get_reasonable_memory_pool
+    alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
+    else:
+        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
     # timestepping control
     current_step = 0
@@ -109,7 +126,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.01
+    t_final = 1.0
     current_cfl = 1.0
     current_dt = .001
     current_t = 0
@@ -147,13 +164,19 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
+        from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+        from meshmode.discretization.poly_element import \
+        default_simplex_group_factory, QuadratureSimplexGroupFactory
 
     order = 3
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     vis_timer = None
-
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
@@ -184,7 +207,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = IdealSingleGas()
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
+    vel[0] = 1.0
     initializer = Vortex2D(center=orig, velocity=vel)
     gas_model = GasModel(eos=eos)
 
@@ -198,7 +221,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     boundaries = {
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
     }
-
+    if use_esdg:
+        operator_rhs = entropy_stable_euler_operator
+    else:
+        operator_rhs = euler_operator
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -276,11 +302,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .2, 1.02):
+           or check_range_local(dcoll, "vol", pressure, .2, 1.2):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        exittol = .1
+        exittol = 1.0
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
@@ -356,7 +382,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return euler_operator(dcoll, state=fluid_state, time=t,
+        return operator_rhs(dcoll, state=fluid_state, time=t,
                               boundaries=boundaries, gas_model=gas_model)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
@@ -393,6 +419,10 @@ if __name__ == "__main__":
     import argparse
     casename = "vortex"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations"),
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -419,7 +449,13 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
+#    main(use_logmgr=args.log, use_overintegration=args.overintegration,
+#         use_esdg=args.esdg, use_leap=args.leap, use_profiling=args.profiling,
+#         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+
     main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
-         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
+         use_profiling=args.profiling,
+         use_overintegration=args.overintegration, 
+         use_esdg=args.esdg, casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
