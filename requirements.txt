@@ -10,15 +10,15 @@ psutil
 pyyaml
 
 # The following packages will be git cloned by emirge:
---editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
-#--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
+--editable git+https://github.com/inducer/pymbolic.git@{2022-02-01}#egg=pymbolic
+#--editable git+https://github.com/inducer/pyopencl.git@{2022-02-01}#egg=pyopencl
 --editable git+https://github.com/kaushikcfd/loopy.git@pytato-array-context-transforms#egg=loopy
---editable git+https://github.com/inducer/dagrt.git#egg=dagrt
---editable git+https://github.com/inducer/leap.git#egg=leap
---editable git+https://github.com/inducer/modepy.git#egg=modepy
---editable git+https://github.com/inducer/arraycontext.git#egg=arraycontext
+--editable git+https://github.com/inducer/dagrt.git@{2022-02-01}#egg=dagrt
+--editable git+https://github.com/inducer/leap.git@{2022-02-01}#egg=leap
+--editable git+https://github.com/inducer/modepy.git@{2022-02-01}#egg=modepy
+--editable git+https://github.com/inducer/arraycontext.git@{2022-02-01}#egg=arraycontext
 --editable git+https://github.com/kaushikcfd/meshmode.git@pytato-array-context-transforms#egg=meshmode
 --editable git+https://github.com/inducer/grudge.git@flux-differencing#egg=grudge
---editable git+https://github.com/inducer/pytato.git#egg=pytato
---editable git+https://github.com/ecisneros8/pyrometheus.git#egg=pyrometheus
---editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
+--editable git+https://github.com/inducer/pytato.git@{2022-02-01}#egg=pytato
+--editable git+https://github.com/ecisneros8/pyrometheus.git@{2022-02-01}#egg=pyrometheus
+--editable git+https://github.com/illinois-ceesd/logpyle.git@{2022-02-01}#egg=logpyle
