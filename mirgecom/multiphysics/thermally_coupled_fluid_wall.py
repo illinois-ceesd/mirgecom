@@ -121,6 +121,16 @@ def _project_from_base(dcoll, dd_bdry, field):
         return field
 
 
+def _harmonic_mean(actx, x, y):
+    x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+    return 2*x*y/x_plus_y
+
+
+def _replace_kappa(state, kappa):
+    new_tv = replace(state.tv, thermal_conductivity=kappa)
+    return replace(state, tv=new_tv)
+
+
 # Note: callback function inputs have no default on purpose so that they can't be
 # accidentally omitted
 def _interface_viscous_flux(
@@ -235,6 +245,8 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc)
 
+        self._t_plus = t_plus
+
         self._slip = _SlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
 
@@ -267,6 +279,7 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
         mom_bc = self._slip.momentum_bc(cv_minus.momentum, normal)
 
+        t_minus = state_minus.temperature
         t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
         t_bc = (t_minus + t_plus)/2.0
 
@@ -357,10 +370,13 @@ def _diffusion_facial_flux_upwind_with_radiation(
     # Stefan-Boltzmann constant
     sigma = 5.67e-8
 
+    #computing a centered flux "int + ext - radiation"
     from mirgecom.diffusion import diffusion_flux
-    flux_without_penalty = (
+    flux_without_penalty = 0.5*(
+        np.dot(diffusion_flux(kappa_tpair.int, grad_u_tpair.int), normal) + 
         np.dot(diffusion_flux(kappa_tpair.ext, grad_u_tpair.ext), normal)
-        - epsilon_minus * sigma * u_tpair.int**4)
+        - epsilon_minus * sigma * u_tpair.int**4
+    )
 
     # TODO: Figure out what this is really supposed to be
     # MJS: Not sure if interior penalty even makes sense for this version
