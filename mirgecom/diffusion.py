@@ -251,6 +251,68 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
             penalty_amount=penalty_amount)
 
 
+class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
+    r"""
+    Prescribed flux boundary condition for the diffusion operator.
+
+    For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
+    external data
+
+    .. math::
+
+        u^+ = u^-
+
+    when computing the boundary fluxes for $\nabla u$, and applies directly
+    the prescribed flux when computing $\nabla \cdot (\kappa \nabla u)$. This
+    is not the same as prescribing the gradient of $u$.
+
+    .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
+    """
+    def __init__(self, function):
+        """
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        value: float or meshmode.dof_array.DOFArray
+            the value(s) of $g$ along the boundary
+        """
+        self._function = function
+
+    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+
+    def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
+            grad_u_minus, lengthscales_minus, *, penalty_amount=None, **kwargs):
+        actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        grad_u_tpair = TracePair(dd_bdry,
+            interior=grad_u_minus,
+            exterior=grad_u_minus)
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
+        #Note the flipped sign here to match the diffusion notation
+        return - self._function(kappa_tpair, u_tpair, grad_u_tpair,
+            lengthscales_tpair, normal, penalty_amount, **kwargs) \
+            + u_minus*0.0
+
+
 class _DiffusionKappa1Tag:
     pass
 
