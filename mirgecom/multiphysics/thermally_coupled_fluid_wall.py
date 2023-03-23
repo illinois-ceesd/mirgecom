@@ -4,11 +4,9 @@ Couples a fluid subdomain governed by the compressible Navier-Stokes equations
 (:module:`mirgecom.navierstokes) with a wall subdomain governed by the heat
 equation (:module:`mirgecom.diffusion`) by enforcing continuity of temperature
 and heat flux across their interface.
-
 .. autofunction:: get_interface_boundaries
 .. autofunction:: coupled_grad_t_operator
 .. autofunction:: coupled_ns_heat_operator
-
 .. autoclass:: InterfaceFluidSlipBoundary
 .. autoclass:: InterfaceFluidBoundary
 .. autoclass:: InterfaceFluidSlipRadiationBoundary
@@ -27,10 +25,8 @@ in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
-
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -57,7 +53,7 @@ import grudge.op as op
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
     _SlipBoundaryComponent,
-    _NoSlipBoundaryComponent,
+    # _NoSlipBoundaryComponent,
     _ImpermeableBoundaryComponent,
     _inviscid_flux_for_prescribed_state_mengaldo,
     _viscous_flux_for_prescribed_state_mengaldo
@@ -74,16 +70,14 @@ from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
     ns_operator,
 )
-from mirgecom.artificial_viscosity import av_laplacian_operator
+# from mirgecom.artificial_viscosity import av_laplacian_operator
 from mirgecom.diffusion import (
     DiffusionBoundary,
     grad_operator as wall_grad_t_operator,
     diffusion_operator,
     diffusion_flux,
-    average_grad_facial_flux
+    grad_facial_flux
 )
-
-import sys
 
 
 class _TemperatureInterVolTag:
@@ -138,11 +132,10 @@ def _replace_kappa(state, kappa):
 
 # Note: callback function inputs have no default on purpose so that they can't be
 # accidentally omitted
-def _interface_viscous_flux(
-        dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, grad_t_minus, *,
-        penalty_amount, lengthscales,
-        state_bc_func, temperature_plus_func, grad_cv_bc_func,
-        grad_temperature_bc_func, **kwargs):
+def _interface_viscous_flux(dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+        grad_t_minus, *, penalty_amount, lengthscales, state_bc_func,
+        temperature_plus_func, grad_cv_bc_func, grad_temperature_bc_func,
+        **kwargs):
     """Return the boundary flux for the divergence of the viscous flux.
 
     Returns the standard Mengaldo viscous flux plus a temperature interior penalty
@@ -179,52 +172,10 @@ def _interface_viscous_flux(
         energy=flux_without_penalty.energy + tau * (t_plus - t_minus))
 
 
-# Note: callback function inputs have no default on purpose so that they can't be
-# accidentally omitted
-# TRR: except sigma, the Stefan-Boltzmann constant... =)
-def _interface_viscous_flux_with_radiation(
-        dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-        grad_t_minus, *, penalty_amount, lengthscales, epsilon_plus,
-        state_bc_func, temperature_plus_func, grad_cv_bc_func,
-        grad_temperature_bc_func, sigma=5.67e-8, **kwargs):
-    """Return the boundary flux for the divergence of the viscous flux.
-
-    Returns the standard Mengaldo viscous flux with the heat flux modified
-    to include radiation from the wall, plus a temperature interior
-    penalty term on the energy.
-
-    Parameters
-    ----------
-    sigma: float. Defaults to the Stefan-Boltzmann constant.
-    """
-    dd_bdry = as_dofdesc(dd_bdry)
-
-    t_plus = temperature_plus_func(
-        dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus,
-        **kwargs)
-
-    flux_without_radiation = _interface_viscous_flux(
-        dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus,
-        grad_cv_minus=grad_cv_minus, grad_t_minus=grad_t_minus,
-        penalty_amount=penalty_amount, lengthscales=lengthscales,
-        state_bc_func=state_bc_func,
-        # FIXME: Not sure if this optimization is necessary
-        temperature_plus_func=lambda *a, **kw: t_plus,
-        grad_cv_bc_func=grad_cv_bc_func,
-        grad_temperature_bc_func=grad_temperature_bc_func,
-        **kwargs)
-
-#    return replace(
-#        flux_without_radiation,
-#        energy=flux_without_radiation.energy - epsilon_plus * sigma * t_plus**4)
-
-    return flux_without_radiation
-
 # FIXME Only slip wall for now..
 # TRR: I think we can unify both slip and no-slip instead of different classes
 class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
-    r"""
-    Interface boundary condition for the fluid side.
+    r"""Interface boundary condition for the fluid side.
 
     The heat flux is evaluated similarly to an isothermal wall, where the
     external temperature is that of the wall $T^+ = T_w$ and the gradient
@@ -243,7 +194,7 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
                 _inviscid_flux_for_prescribed_state_mengaldo,
                 state_plus_func=self.state_plus),
             viscous_flux_func=partial(
-                _interface_viscous_flux_with_radiation,
+                _interface_viscous_flux,
                 penalty_amount=heat_flux_penalty_amount,
                 lengthscales=lengthscales,
                 epsilon_plus=epsilon_plus,
@@ -261,8 +212,8 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
         self._slip = _SlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
 
-    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Evaluate the external "plus" state."""
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus,
+                   **kwargs):  # noqa D102
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
@@ -282,8 +233,8 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
 
-    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Evaluate the state at the boundary."""
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus,
+                 **kwargs):  # noqa D102
         actx = state_minus.array_context
         dd_bdry = as_dofdesc(dd_bdry)
         normal = actx.thaw(dcoll.normal(dd_bdry))
@@ -335,7 +286,6 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
         Specify the velocity gradients on the external state to ensure zero
         energy and momentum flux due to shear stresses.
-
         Gradients of species mass fractions are set to zero in the normal direction
         to ensure zero flux of species across the boundary.
         """
@@ -361,7 +311,10 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
     def grad_temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus,
                             grad_cv_minus, grad_t_minus, **kwargs):
-        """Get grad(T) on the boundary uses the internal/minus value (aka fluid)."""
+        """Get grad(T) on the boundary uses the internal/minus value (aka fluid).
+
+        This is the same logic of an isothermal BC.
+        """
         return _project_from_base(dcoll, dd_bdry, grad_t_minus)
 
 
@@ -370,21 +323,12 @@ def _diffusion_facial_flux_upwind_with_radiation(
         normal, *, penalty_amount=None, sigma=5.67e-8):
     r"""Prescribed the net heat flux into the wall.
 
-    The net heat flux is the difference from the heat conduction from the
-    fluid minus the energy irradiated away, given by
-
-    .. math::
-
-        \kappa_f \nabla T_f - \epsilon \sigma T**4$.
-
     Parameters
     ----------
     epsilon: float or meshmode.dof_array.DOFArray.
         Wall emissivity.
-
     sigma: float.
         Defaults to the Stefan-Boltzmann constant.
-
     """
     # FIXME *shrug*
     if penalty_amount is None:
@@ -399,7 +343,7 @@ def _diffusion_facial_flux_upwind_with_radiation(
     flux_on_fluid_side = (
         np.dot(diffusion_flux(kappa_tpair.ext, grad_u_tpair.ext), normal)
         - epsilon_minus * sigma * u_tpair.int**4)
-    flux_without_penalty = -0.5*(flux_on_solid_side + flux_on_fluid_side)
+    flux_without_penalty = 0.5*(flux_on_solid_side + flux_on_fluid_side)
 
     # TODO: Figure out what this is really supposed to be
     # MJS: Not sure if interior penalty even makes sense for this version
@@ -411,7 +355,19 @@ def _diffusion_facial_flux_upwind_with_radiation(
 
 
 class InterfaceWallRadiationBoundary(DiffusionBoundary):
-    """Interface boundary condition for the wall side, with radiation."""
+    r"""Interface boundary condition for the wall side, with radiation.
+
+    The temperature gradient on the wall side is calculated using the
+    external/plus value from the fluid.
+
+    The heat flux is the average of the conduction on the solid (minus side)
+    and the conduction on the fluid minus the radiation (plus side), given by
+
+    ..math ::
+
+        \frac{1}{2} ( - \kappa_w \nabla_w - \kappa_f \nabla T_f
+            + \epsilon \sigma T**4$ ).
+    """
 
     # FIXME: Incomplete docs
     def __init__(self, kappa_plus, u_plus, epsilon_minus, grad_u_plus=None):
@@ -432,7 +388,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
-        return average_grad_facial_flux(kappa_tpair, u_tpair, normal)
+        return grad_facial_flux(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
@@ -527,13 +483,13 @@ def get_interface_boundaries(
     """Get the fluid-wall interface boundaries."""
     if interface_radiation:
         if wall_epsilon is None:
-            raise ValueError(
-                "Argument 'wall_epsilon' is required if using radiation at the "
-                "interface.")
-        if interface_noslip:
-            fluid_bc_class = InterfaceFluidRadiationBoundary
-        else:
-            fluid_bc_class = InterfaceFluidSlipRadiationBoundary
+            raise ValueError("Argument 'wall_epsilon' is required if using"
+                "radiation at the interface.")
+#        if interface_noslip:
+#            fluid_bc_class = InterfaceFluidRadiationBoundary
+#        else:
+#            fluid_bc_class = InterfaceFluidSlipRadiationBoundary
+        fluid_bc_class = InterfaceFluidSlipRadiationBoundary
 
         def make_fluid_bc(kappa_plus, t_plus, grad_t_plus=None, lengthscales=None):
             return fluid_bc_class(
