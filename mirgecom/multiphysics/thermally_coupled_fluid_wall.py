@@ -79,7 +79,8 @@ from mirgecom.diffusion import (
     DiffusionBoundary,
     grad_operator as wall_grad_t_operator,
     diffusion_operator,
-    diffusion_flux
+    diffusion_flux,
+    average_grad_facial_flux
 )
 
 import sys
@@ -213,10 +214,11 @@ def _interface_viscous_flux_with_radiation(
         grad_temperature_bc_func=grad_temperature_bc_func,
         **kwargs)
 
-    return replace(
-        flux_without_radiation,
-        energy=flux_without_radiation.energy - epsilon_plus * sigma * t_plus**4)
+#    return replace(
+#        flux_without_radiation,
+#        energy=flux_without_radiation.energy - epsilon_plus * sigma * t_plus**4)
 
+    return flux_without_radiation
 
 # FIXME Only slip wall for now..
 # TRR: I think we can unify both slip and no-slip instead of different classes
@@ -397,7 +399,7 @@ def _diffusion_facial_flux_upwind_with_radiation(
     flux_on_fluid_side = (
         np.dot(diffusion_flux(kappa_tpair.ext, grad_u_tpair.ext), normal)
         - epsilon_minus * sigma * u_tpair.int**4)
-    flux_without_penalty = 0.5*(flux_on_solid_side + flux_on_fluid_side)
+    flux_without_penalty = -0.5*(flux_on_solid_side + flux_on_fluid_side)
 
     # TODO: Figure out what this is really supposed to be
     # MJS: Not sure if interior penalty even makes sense for this version
@@ -430,15 +432,13 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
-        from mirgecom.diffusion import average_grad_facial_flux
         return average_grad_facial_flux(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, penalty_amount=None):  # noqa: D102
         if self.grad_u_plus is None:
-            raise ValueError(
-                "Boundary does not have external gradient data.")
+            raise ValueError("Boundary does not have external gradient data.")
 
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
