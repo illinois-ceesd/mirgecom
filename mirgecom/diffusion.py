@@ -54,19 +54,36 @@ import grudge.op as op
 from mirgecom.utils import normalize_boundaries
 
 
-def grad_facial_flux(kappa_tpair, u_tpair, normal):
-#    r"""Compute the numerical flux for $\nabla u$."""
-#    actx = u_tpair.int.array_context
-#    ext_weight = actx.np.where(
-#        actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0*kappa_tpair.int),
-#        kappa_tpair.ext / (kappa_tpair.int + kappa_tpair.ext),
-#        0*kappa_tpair.int)
-#    return -((1 - ext_weight) * u_tpair.int + ext_weight * u_tpair.ext) * normal
+def weighted_grad_facial_flux(kappa_tpair, u_tpair, normal):
+    r"""Compute the numerical flux for $\nabla u$.
 
+    Uses an average weighted by the conductivities
+
+    .. math::
+
+        \bar{u} = \frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+}
+
+    """
+    actx = u_tpair.int.array_context
+    ext_weight = actx.np.where(
+        actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0.0*kappa_tpair.int),
+        kappa_tpair.ext / (kappa_tpair.int + kappa_tpair.ext),
+        0.0*kappa_tpair.int)
+    return -((1.0 - ext_weight) * u_tpair.int + ext_weight * u_tpair.ext) * normal
+
+
+def average_grad_facial_flux(kappa_tpair, u_tpair, normal):
+    r"""Compute the numerical flux for $\nabla u$ using simple averaging.
+
+    .. math::
+
+        \bar{u} = \frac{1}{2} (u^- + u^+)
+    """
     return -u_tpair.avg * normal
 
 
 def diffusion_flux(kappa, grad_u):
+    r"""Return the diffusive flux $- \kappa (\nabla u)$."""
     return -kappa * grad_u
 
 
@@ -74,15 +91,15 @@ def diffusion_facial_flux(
         kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal, *,
         penalty_amount=None):
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$."""
+    # FIXME *shrug*
     if penalty_amount is None:
-        # *shrug*
         penalty_amount = 0.05
 
     actx = u_tpair.int.array_context
 
     def harmonic_mean(x, y):
-        x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
-        return 2*x*y/x_plus_y
+        x_plus_y = actx.np.where(actx.np.greater(x + y, 0.0*x), x + y, 0.0*x+1.0)
+        return 2.0*x*y/x_plus_y
 
     kappa_harmonic_mean = harmonic_mean(kappa_tpair.int, kappa_tpair.ext)
 
@@ -156,9 +173,10 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
             exterior=kappa_minus)
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
-            exterior=2*self.value-u_minus)
+            exterior=2.0*self.value-u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
-        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+        # XXX using the kappa-weighted average.
+        return weighted_grad_facial_flux(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
@@ -169,7 +187,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
             exterior=kappa_minus)
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
-            exterior=2*self.value-u_minus)
+            exterior=2.0*self.value-u_minus)
         grad_u_tpair = TracePair(dd_bdry,
             interior=grad_u_minus,
             exterior=grad_u_minus)
@@ -228,7 +246,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
             interior=u_minus,
             exterior=u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
-        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+        # XXX using the kappa-weighted average.
+        return weighted_grad_facial_flux(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
@@ -245,7 +264,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
             interior=grad_u_minus,
             exterior=(
                 grad_u_minus
-                + 2 * (self.value - np.dot(grad_u_minus, normal)) * normal))
+                + 2.0 * (self.value - np.dot(grad_u_minus, normal)) * normal))
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
         return diffusion_facial_flux(
@@ -254,8 +273,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
 
 class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Prescribed flux boundary condition for the diffusion operator.
+    r"""Prescribed flux boundary condition for the diffusion operator.
 
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
     external data
@@ -272,47 +290,43 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
     """
-    def __init__(self, function):
+
+    def __init__(self, bnd_func):
         """
         Initialize the boundary condition.
 
         Parameters
         ----------
-        value: float or meshmode.dof_array.DOFArray
-            the value(s) of $g$ along the boundary
+        bnd_func: function to prescribe $g$ along the boundary
         """
-        self._function = function
+        self._function = bnd_func
 
-    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):
+    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):  # noqa: D102
         actx = u_minus.array_context
-        kappa_tpair = TracePair(dd_bdry,
-            interior=kappa_minus,
-            exterior=kappa_minus)
-        u_tpair = TracePair(dd_bdry,
-            interior=u_minus,
-            exterior=u_minus)
+        kappa_tpair = TracePair(
+            dd_bdry, interior=kappa_minus, exterior=kappa_minus)
+        u_tpair = TracePair(
+            dd_bdry, interior=u_minus, exterior=u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
-        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+        # XXX using the kappa-weighted average.
+        return weighted_grad_facial_flux(kappa_tpair, u_tpair, normal)
 
-    def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
-            grad_u_minus, lengthscales_minus, *, penalty_amount=None, **kwargs):
+    def get_diffusion_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
+            lengthscales_minus, *, penalty_amount=None, **kwargs):  # noqa: D102
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
-        kappa_tpair = TracePair(dd_bdry,
-            interior=kappa_minus,
-            exterior=kappa_minus)
-        u_tpair = TracePair(dd_bdry,
-            interior=u_minus,
-            exterior=u_minus)
-        grad_u_tpair = TracePair(dd_bdry,
-            interior=grad_u_minus,
-            exterior=grad_u_minus)
+        kappa_tpair = TracePair(
+            dd_bdry, interior=kappa_minus, exterior=kappa_minus)
+        u_tpair = TracePair(
+            dd_bdry, interior=u_minus, exterior=u_minus)
+        grad_u_tpair = TracePair(
+            dd_bdry, interior=grad_u_minus, exterior=grad_u_minus)
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
-        #Note the flipped sign here to match the diffusion notation
+        # Note the flipped sign here to match the diffusion notation
         return - self._function(kappa_tpair, u_tpair, grad_u_tpair,
-            lengthscales_tpair, normal, penalty_amount, **kwargs) \
-            + u_minus*0.0
+            lengthscales_tpair, normal, penalty_amount, **kwargs) + u_minus*0.0
 
 
 class _DiffusionKappa1Tag:
@@ -409,9 +423,10 @@ def grad_operator(
         kappa_tpair_quad = interp_to_surf_quad(kappa_tpair)
         u_tpair_quad = interp_to_surf_quad(u_tpair)
         normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
+        # XXX using the kappa-weighted average.
         return op.project(
             dcoll, dd_trace_quad, dd_allfaces_quad,
-            grad_facial_flux(kappa_tpair_quad, u_tpair_quad, normal_quad))
+            weighted_grad_facial_flux(kappa_tpair_quad, u_tpair_quad, normal_quad))
 
     def boundary_flux(bdtag, bdry):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
