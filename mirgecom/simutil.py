@@ -24,7 +24,7 @@ Mesh and element utilities
 
 .. autofunction:: distribute_mesh
 .. autofunction:: geometric_mesh_partitioner
-.. autofunction:: get_number_of_nodes
+.. autofunction:: get_number_of_tetrahedron_nodes
 
 Simulation support utilities
 ----------------------------
@@ -83,17 +83,21 @@ from typing import List, Dict, Optional
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
+import pyopencl as cl
 
 logger = logging.getLogger(__name__)
 
 
-def get_number_of_nodes(dim, order):
+def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     """Get number of nodes (modes) in *dim* Tetrahedron of *order*."""
     # number of {nodes, modes} see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
     # DOI: 10.1007/978-0-387-72067-8
-    return int(np.math.factorial(dim+order)
-               / (np.math.factorial(dim) * np.math.factorial(order)))
+    nnodes = int(np.math.factorial(dim+order)
+                 / (np.math.factorial(dim) * np.math.factorial(order)))
+    if include_faces:
+        nnodes = nnodes + (dim+1)*get_number_of_tetrahedron_nodes(dim-1, order)
+    return nnodes
 
 
 def check_step(step, interval):
@@ -1100,10 +1104,29 @@ def force_evaluation(actx, expn):
     return actx.thaw(actx.freeze(expn))
 
 
-def get_reasonable_memory_pool(ctx, queue):
-    """Return an SVM or buffer memory pool based on what the device supports."""
+def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
+                               force_buffer: bool = False,
+                               force_non_pool: bool = False):
+    """Return an SVM or buffer memory pool based on what the device supports.
+
+    By default, it prefers SVM allocations over CL buffers, and memory
+    pools over direct allocations.
+    """
     from pyopencl.characterize import has_coarse_grain_buffer_svm
     import pyopencl.tools as cl_tools
+
+    if force_buffer and force_non_pool:
+        logger.info(f"Using non-pooled CL buffer allocations on {queue.device}.")
+        return cl_tools.DeferredAllocator(ctx)
+
+    if force_buffer:
+        logger.info(f"Using pooled CL buffer allocations on {queue.device}.")
+        return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
+
+    if force_non_pool and has_coarse_grain_buffer_svm(queue.device):
+        logger.info(f"Using non-pooled SVM allocations on {queue.device}.")
+        return cl_tools.SVMAllocator(  # pylint: disable=no-member
+            ctx, alignment=0, queue=queue)
 
     if has_coarse_grain_buffer_svm(queue.device) and hasattr(cl_tools, "SVMPool"):
         logger.info(f"Using SVM-based memory pool on {queue.device}.")
@@ -1128,7 +1151,10 @@ def configurate(config_key, config_object=None, default_value=None):
         d = config_object if isinstance(config_object, dict) else\
             config_object.__dict__
         if config_key in d:
-            return d[config_key]
+            value = d[config_key]
+            if default_value is not None:
+                return type(default_value)(value)
+            return value
     return default_value
 
 
@@ -1138,7 +1164,7 @@ def compare_files_vtu(
         file_type: str,
         tolerance: float = 1e-12,
         field_tolerance: Optional[Dict[str, float]] = None
-        ):
+        ) -> None:
     """Compare files of vtu type.
 
     Parameters
