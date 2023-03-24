@@ -54,14 +54,14 @@ import grudge.op as op
 from mirgecom.utils import normalize_boundaries
 
 
-def grad_facial_flux(kappa_tpair, u_tpair, normal):
-    r"""Compute the numerical flux for $\nabla u$ using simple averaging.
+#def grad_facial_flux(kappa_tpair, u_tpair, normal):
+#    r"""Compute the numerical flux for $\nabla u$ using simple averaging.
 
-    .. math::
+#    .. math::
 
-        \bar{u} = \frac{1}{2} (u^- + u^+)
-    """
-    return -u_tpair.avg * normal
+#        \bar{u} = \frac{1}{2} (u^- + u^+)
+#    """
+#    return -u_tpair.avg * normal
 
 
 def weighted_grad_facial_flux(kappa_tpair, u_tpair, normal):
@@ -74,13 +74,13 @@ def weighted_grad_facial_flux(kappa_tpair, u_tpair, normal):
         \bar{u} = \frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+}
 
     """
-#    actx = u_tpair.int.array_context
-#    ext_weight = actx.np.where(
-#        actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0.0*kappa_tpair.int),
-#        kappa_tpair.ext / (kappa_tpair.int + kappa_tpair.ext),
-#        0.0*kappa_tpair.int)
-#    return -((1.0 - ext_weight) * u_tpair.int + ext_weight * u_tpair.ext) * normal
-    return -u_tpair.avg * normal
+    actx = u_tpair.int.array_context
+    ext_weight = actx.np.where(
+        actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0.0*kappa_tpair.int),
+        kappa_tpair.ext / (kappa_tpair.int + kappa_tpair.ext),
+        0.0*kappa_tpair.int)
+    return -((1.0 - ext_weight) * u_tpair.int + ext_weight * u_tpair.ext) * normal
+#    return -u_tpair.avg * normal
 
 
 def average_grad_facial_flux(kappa_tpair, u_tpair, normal):

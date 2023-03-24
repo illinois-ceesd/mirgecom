@@ -76,7 +76,7 @@ from mirgecom.diffusion import (
     grad_operator as wall_grad_t_operator,
     diffusion_operator,
     diffusion_flux,
-    grad_facial_flux
+    average_grad_facial_flux,
 )
 
 
@@ -393,7 +393,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
-        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+        return average_grad_facial_flux(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
