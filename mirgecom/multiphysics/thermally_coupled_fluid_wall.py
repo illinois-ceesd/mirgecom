@@ -320,7 +320,7 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
 
 def _diffusion_facial_flux_upwind_with_radiation(
         kappa_tpair, u_tpair, grad_u_tpair, epsilon_minus, lengthscales_tpair,
-        normal, *, penalty_amount=None, sigma=5.67e-8):
+        normal, *, penalty_amount=None, sigma=None):
     r"""Prescribed the net heat flux into the wall.
 
     Parameters
@@ -336,18 +336,21 @@ def _diffusion_facial_flux_upwind_with_radiation(
 
     actx = u_tpair.int.array_context
 
-    # FIXME not entirely sure about this. Needs to keep eyes on it
-    # computing a centered flux "int + ext - radiation"
+    # FIXME not entirely sure about this. Need to keep an eye on it...
+    # Computing a centered flux "int + ext - radiation"
+    # TRR: I disagree about the signs here, but that may be because of the
+    # normal orientation...
     flux_on_solid_side = \
         np.dot(diffusion_flux(kappa_tpair.int, grad_u_tpair.int), normal)
     flux_on_fluid_side = (
         np.dot(diffusion_flux(kappa_tpair.ext, grad_u_tpair.ext), normal)
-        - epsilon_minus * sigma * u_tpair.int**4)
+        + epsilon_minus * sigma * u_tpair.int**4)
     flux_without_penalty = 0.5*(flux_on_solid_side + flux_on_fluid_side)
 
     # TODO: Figure out what this is really supposed to be
     # MJS: Not sure if interior penalty even makes sense for this version
-    # TRR: I think this is useful to avoid the non-optimal convergence in odd orders
+    # TRR: I think this may be useful to avoid the non-optimal convergence
+    #      in odd orders
     kappa_harmonic_mean = _harmonic_mean(actx, kappa_tpair.int, kappa_tpair.ext)
     tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
 
@@ -370,12 +373,14 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
     """
 
     # FIXME: Incomplete docs
-    def __init__(self, kappa_plus, u_plus, epsilon_minus, grad_u_plus=None):
+    def __init__(self, kappa_plus, u_plus, epsilon_minus, grad_u_plus=None,
+                 sigma=None):
         """Initialize InterfaceWallRadiationBoundary."""
         self.kappa_plus = kappa_plus
         self.u_plus = u_plus
         self.epsilon_minus = epsilon_minus
         self.grad_u_plus = grad_u_plus
+        self.sigma = sigma
 
     def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):  # noqa: D102
         actx = u_minus.array_context
@@ -415,7 +420,8 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
 
         return _diffusion_facial_flux_upwind_with_radiation(
             kappa_tpair, u_tpair, grad_u_tpair, self.epsilon_minus,
-            lengthscales_tpair, normal, penalty_amount=penalty_amount)
+            lengthscales_tpair, normal, penalty_amount=penalty_amount,
+            sigma=self.sigma)
 
 
 def _kappa_inter_volume_trace_pairs(
@@ -471,6 +477,7 @@ def get_interface_boundaries(
         *,
         interface_noslip=True,
         interface_radiation=False,
+        sigma=None,
         wall_epsilon=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
@@ -499,7 +506,7 @@ def get_interface_boundaries(
 
         def make_wall_bc(kappa_plus, t_plus, grad_t_plus=None):
             return InterfaceWallRadiationBoundary(
-                kappa_plus, t_plus, wall_epsilon, grad_t_plus)
+                kappa_plus, t_plus, wall_epsilon, grad_t_plus, sigma=sigma)
 #    else:
 #        if interface_noslip:
 #            fluid_bc_class = InterfaceFluidBoundary
@@ -607,6 +614,7 @@ def coupled_grad_t_operator(
         time=0.,
         interface_noslip=True,
         interface_radiation=False,
+        sigma=None,
         wall_epsilon=None,
         quadrature_tag=DISCR_TAG_BASE,
         fluid_numerical_flux_func=num_flux_central,
@@ -645,6 +653,7 @@ def coupled_grad_t_operator(
                 fluid_state, wall_kappa, wall_temperature,
                 interface_noslip=interface_noslip,
                 interface_radiation=interface_radiation,
+                sigma=sigma,
                 wall_epsilon=wall_epsilon,
                 _kappa_inter_vol_tpairs=_kappa_inter_vol_tpairs,
                 _temperature_inter_vol_tpairs=_temperature_inter_vol_tpairs)
@@ -682,6 +691,7 @@ def coupled_ns_heat_operator(
         time=0.,
         interface_noslip=True,
         interface_radiation=False,
+        sigma=5.67e-8,
         wall_epsilon=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
@@ -731,6 +741,7 @@ def coupled_ns_heat_operator(
             wall_temperature=wall_temperature,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
+            sigma=sigma,
             wall_epsilon=wall_epsilon,
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs)
@@ -752,6 +763,7 @@ def coupled_ns_heat_operator(
         time=time,
         interface_noslip=interface_noslip,
         interface_radiation=interface_radiation,
+        sigma=sigma,
         wall_epsilon=wall_epsilon,
         quadrature_tag=quadrature_tag,
         fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
@@ -772,6 +784,7 @@ def coupled_ns_heat_operator(
             wall_grad_temperature=wall_grad_temperature,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
+            sigma=sigma,
             wall_epsilon=wall_epsilon,
             wall_penalty_amount=wall_penalty_amount,
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
@@ -805,6 +818,7 @@ def coupled_ns_heat_operator(
 #            dcoll, fluid_all_boundaries, fluid_state, quadrature_tag=quadrature_tag,
 #            dd=fluid_dd, **av_kwargs)
 
+    # XXX is sigma necessary here?
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
