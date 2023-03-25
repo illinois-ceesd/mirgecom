@@ -299,7 +299,7 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         Parameters
         ----------
-        bnd_func: 
+        bnd_func:
             function to prescribe $g$ along the boundary
         """
         self._function = bnd_func
