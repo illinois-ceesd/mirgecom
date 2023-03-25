@@ -23,7 +23,6 @@ Boundary Conditions
 .. autoclass:: PressureOutflowBoundary
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
-.. autoclass:: SymmetryBoundary
 .. autoclass:: LinearizedOutflowBoundary
 """
 
@@ -722,8 +721,6 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: grad_cv_bc
@@ -1458,8 +1455,6 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: temperature_plus
@@ -1568,8 +1563,6 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
     .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: grad_cv_bc
@@ -1671,255 +1664,6 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
     def grad_av_plus(self, grad_av_minus, **kwargs):
         """Get the exterior solution on the boundary for artificial viscosity."""
         return -grad_av_minus
-
-
-class SymmetryBoundary(PrescribedFluidBoundary):
-    r"""Boundary condition implementing symmetry boundary.
-
-    a.k.a. Reflective inviscid wall boundary
-
-    This class implements an adiabatic reflective slip boundary given
-    by
-    $\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-}, (\rho\vec{V})^{-}
-    - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}}) \hat{\mathbf{n}}]$
-    wherein the normal component of velocity at the boundary is 0, and
-    tangential components are preserved. These perfectly reflecting
-    conditions are used by the forward-facing step case in
-    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
-    boundary conditions described in detail in [Poinsot_1992]_.
-
-    For the gradients, the no-shear condition implies that cross-terms are absent
-    and that temperature gradients are null due to the adiabatic condition.
-
-    .. automethod:: __init__
-    .. automethod:: inviscid_flux
-    .. automethod:: viscous_flux
-    .. automethod:: state_plus
-    .. automethod:: state_bc
-    .. automethod:: grad_cv_bc
-    .. automethod:: grad_temperature_bc
-    .. automethod:: grad_av_plus
-    """
-
-    def __init__(self, dim=None):
-        """Initialize the boundary condition object."""
-        self.inviscid_flux = partial(
-            _inviscid_flux_for_prescribed_state_mengaldo,
-            state_plus_func=self.state_plus)
-
-        self.viscous_flux = partial(
-            _viscous_flux_for_prescribed_state_mengaldo,
-            state_bc_func=self.state_bc,
-            grad_cv_bc_func=self.grad_cv_bc,
-            grad_temperature_bc_func=self.grad_temperature_bc)
-
-        PrescribedFluidBoundary.__init__(
-            self,
-            boundary_state_func=self.state_bc,
-            inviscid_flux_func=self.inviscid_flux,
-            viscous_flux_func=self.viscous_flux,
-            boundary_gradient_cv_func=self.grad_cv_bc,
-            boundary_gradient_temperature_func=self.grad_temperature_bc)
-
-        self._adiabatic = _AdiabaticBoundaryComponent()
-        self._slip = _SlipBoundaryComponent()
-        self._impermeable = _ImpermeableBoundaryComponent()
-
-    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state with opposite normal momentum."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
-
-        mom_plus = self._slip.momentum_plus(state_minus.momentum_density, normal)
-
-        # Energy is the same, don't need to compute
-        cv_plus = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=state_minus.energy_density,
-            momentum=mom_plus,
-            species_mass=state_minus.species_mass_density)
-
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
-
-    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state with zero normal-velocity."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
-
-        mom_bc = self._slip.momentum_bc(state_minus.momentum_density, normal)
-
-        energy_bc = (
-            gas_model.eos.internal_energy(state_minus.cv)
-            + 0.5*np.dot(mom_bc, mom_bc)/state_minus.mass_density)
-
-        cv_bc = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=energy_bc,
-            momentum=mom_bc,
-            species_mass=state_minus.species_mass_density)
-
-        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
-
-    def grad_cv_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, **kwargs):
-        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        dim = state_minus.dim
-        dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
-
-        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
-            state_minus, grad_cv_minus, normal)
-
-        # extrapolate density and remove its normal gradient (symmetry condition)
-        mass_bc = state_minus.mass_density
-        grad_mass_bc = grad_cv_minus.mass \
-            - np.dot(grad_cv_minus.mass, normal)*normal
-
-        from mirgecom.fluid import velocity_gradient
-        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
-
-        # modify velocity gradient at the boundary:
-        # first, remove normal component of velocity
-        v_bc = state_minus.velocity - np.dot(state_minus.velocity, normal)*normal
-
-        if dim == 1:
-            grad_v_bc = grad_v_minus
-
-        if dim == 2:
-
-            # then force zero shear stress by removing normal derivative
-            # of tangential velocity
-            # see documentation for detailed explanation
-            aux_matrix = np.zeros((2, 2))
-            n1 = normal[0]
-            n2 = normal[1]
-            idx11 = 1 - n1**2*n2**2
-            idx12 = +n1**3*n2
-            idx13 = -n1*n2**3
-            idx14 = +n1**2*n2**2
-            idx21 = -n1*n2**3
-            idx22 = +n1**2*n2**2
-            idx23 = 1 - n2**4
-            idx24 = +n1*n2**3
-            idx31 = +n1**3*n2
-            idx32 = 1 - n1**4
-            idx33 = +n1**2*n2**2
-            idx34 = -n1**3*n2
-            idx41 = +n1**2*n2**2
-            idx42 = -n1**3*n2
-            idx43 = +n1*n2**3
-            idx44 = 1 - n1**2*n2**2
-
-            aux_matrix = make_obj_array([idx11, idx21, idx31, idx41,
-                                         idx12, idx22, idx32, idx42,
-                                         idx13, idx23, idx33, idx43,
-                                         idx14, idx24, idx34, idx44]).reshape((4, 4))
-
-            grad_v_bc = (aux_matrix@(grad_v_minus).reshape((4, 1))).reshape((2, 2))
-
-        if dim == 3:
-
-            normal_set = _get_normal_axes(normal)
-
-            n_1_x = normal_set[0][0]
-            n_1_y = normal_set[0][1]
-            n_1_z = normal_set[0][2]
-
-            t_1_x = normal_set[1][0]
-            t_1_y = normal_set[1][1]
-            t_1_z = normal_set[1][2]
-
-            t_2_x = normal_set[2][0]
-            t_2_y = normal_set[2][1]
-            t_2_z = normal_set[2][2]
-
-            zeros = n_1_x*0.0
-
-            matrix_1 = make_obj_array([
-                n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z, zeros, zeros,
-                zeros, n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z, zeros,
-                zeros, zeros, n_1_x, zeros, zeros, n_1_y, zeros, zeros, n_1_z,
-                t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z, zeros, zeros,
-                zeros, t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z, zeros,
-                zeros, zeros, t_1_x, zeros, zeros, t_1_y, zeros, zeros, t_1_z,
-                t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z, zeros, zeros,
-                zeros, t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z, zeros,
-                zeros, zeros, t_2_x, zeros, zeros, t_2_y, zeros, zeros, t_2_z
-                ]).reshape((9, 9))
-
-            matrix_2 = make_obj_array([
-                n_1_x, n_1_y, n_1_z, zeros, zeros, zeros, zeros, zeros, zeros,
-                t_1_x, t_1_y, t_1_z, zeros, zeros, zeros, zeros, zeros, zeros,
-                t_2_x, t_2_y, t_2_z, zeros, zeros, zeros, zeros, zeros, zeros,
-                zeros, zeros, zeros, n_1_x, n_1_y, n_1_z, zeros, zeros, zeros,
-                zeros, zeros, zeros, t_1_x, t_1_y, t_1_z, zeros, zeros, zeros,
-                zeros, zeros, zeros, t_2_x, t_2_y, t_2_z, zeros, zeros, zeros,
-                zeros, zeros, zeros, zeros, zeros, zeros, n_1_x, n_1_y, n_1_z,
-                zeros, zeros, zeros, zeros, zeros, zeros, t_1_x, t_1_y, t_1_z,
-                zeros, zeros, zeros, zeros, zeros, zeros, t_2_x, t_2_y, t_2_z,
-                ]).reshape((9, 9))
-
-            m_forw = matrix_1@matrix_2
-
-            # the inverse transformation is the transpose for an orthogonal matrix
-            m_back = m_forw.T
-
-            # remove normal derivative of tangential velocities (2 components)
-            m_back[1] = make_obj_array([
-                zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
-            m_back[2] = make_obj_array([
-                zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros, zeros])
-
-            m_slip = m_forw*m_back
-
-            grad_v_bc = (m_slip@grad_v_minus.reshape((9, 1))).reshape((3, 3))
-
-        # finally, product rule for momentum
-        grad_momentum_density_bc = (mass_bc*grad_v_bc
-            + np.outer(v_bc, grad_cv_minus.mass))
-
-        return make_conserved(
-            grad_cv_minus.dim,
-            mass=grad_mass_bc,
-            energy=grad_cv_minus.energy,  # gradient of energy is useless
-            momentum=grad_momentum_density_bc,
-            species_mass=grad_species_mass_bc)
-
-    def grad_temperature_bc(
-            self, dcoll, dd_bdry, gas_model, grad_t_minus, **kwargs):
-        """Return grad(temperature) to be used in viscous flux."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        normal = grad_t_minus[0].array_context.thaw(dcoll.normal(dd_bdry))
-
-        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
-
-    # FIXME: Remove this?
-    def grad_av_plus(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary for artificial viscosity."""
-        # Grab some boundary-relevant data
-        dim, = grad_av_minus.mass.shape
-        actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-
-        # Subtract 2*boundary-normal component of q
-        # to enforce q=0 on the boundary
-        s_mom_normcomp = np.outer(nhat,
-                                  np.dot(grad_av_minus.momentum, nhat))
-        s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
-
-        # flip components to set a Neumann condition
-        return make_conserved(
-            dim,
-            mass=-grad_av_minus.mass,
-            energy=-grad_av_minus.energy,
-            momentum=-s_mom_flux,
-            species_mass=-grad_av_minus.species_mass)
 
 
 class LinearizedOutflowBoundary(PrescribedFluidBoundary):

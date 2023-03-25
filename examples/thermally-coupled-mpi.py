@@ -535,7 +535,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         wall_rhs = (
             wall_time_scale
             * wall_energy_rhs/(wall_density * wall_heat_capacity))
-        from dataclasses import replace
+        # from dataclasses import replace
         # fluid_rhs = replace(
         #     fluid_rhs,
         #     energy=fluid_rhs.energy + (

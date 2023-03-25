@@ -293,10 +293,9 @@ and :mod:`~mirgecom.navierstokes`, go to calculate the flux for the divergence o
 inviscid physical transport fluxes, they call the
 :meth:`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
-:meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_wall_state`, and returns the
+:meth:`~mirgecom.boundary._SlipBoundaryComponent.momentum_bc`, and returns the
 numerical flux ${h}^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
  
-
 Viscous fluxes (diffusion terms)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -310,6 +309,10 @@ numerical flux scheme as in the volume:
 .. math::
 
    \b{H}^*_s = \b{H}_s(\b{Q}^-, \b{Q}_{bc})
+
+FIXME:
+
+Add no-shear condition
 
 The solution of the auxiliary equations yields $\nabla{\b{Q}}^-$, and the gradients for
 the species fractions $Y$ and temperature $T$, are calculated using the product rule:
@@ -339,8 +342,8 @@ in the volume by:
    h_v^* = h_v(\b{Q}^-, \b{Q}_{bc}, \nabla{\b{Q}}^-, \nabla{\b{Q}}^+)
 
 
-Adiabatic No-slip Wall
-----------------------
+Adiabatic or Isothermal No-slip Wall
+------------------------------------
 
 The no-slip boundary condition essentially means that the fluid velocity at the wall
 is equal to that of the wall itself:

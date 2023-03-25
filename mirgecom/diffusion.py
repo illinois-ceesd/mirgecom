@@ -1,12 +1,14 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
-.. autofunction:: grad_facial_flux
+.. autofunction:: weighted_grad_facial_flux
+.. autofunction:: average_grad_facial_flux
 .. autofunction:: diffusion_facial_flux
 .. autofunction:: grad_operator
 .. autofunction:: diffusion_operator
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
+.. autoclass:: PrescribedFluxDiffusionBoundary
 """
 
 __copyright__ = """
@@ -297,7 +299,8 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         Parameters
         ----------
-        bnd_func: function to prescribe $g$ along the boundary
+        bnd_func: 
+            function to prescribe $g$ along the boundary
         """
         self._function = bnd_func
 

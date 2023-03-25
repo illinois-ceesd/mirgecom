@@ -1,15 +1,29 @@
-r"""Operator for thermally-coupled fluid and wall.
+""":mod:`mirgecom.multiphysics.thermally_coupled_fluid_wall` for fluid-wall coupling.
 
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
-(:module:`mirgecom.navierstokes) with a wall subdomain governed by the heat
-equation (:module:`mirgecom.diffusion`) by enforcing continuity of temperature
+(:module:mirgecom.navierstokes) with a wall subdomain governed by the heat
+equation (:module:mirgecom.diffusion) by enforcing continuity of temperature
 and heat flux across their interface.
+
+Helper Functions
+^^^^^^^^^^^^^^^^
+
+.. autofunction:: _harmonic_mean
 .. autofunction:: get_interface_boundaries
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
 .. autofunction:: coupled_grad_t_operator
 .. autofunction:: coupled_ns_heat_operator
+
+Boundary Conditions
+^^^^^^^^^^^^^^^^^^^
+
 .. autoclass:: InterfaceFluidSlipBoundary
 .. autoclass:: InterfaceFluidBoundary
 .. autoclass:: InterfaceFluidSlipRadiationBoundary
+.. autoclass:: InterfaceFluidRadiationBoundary
 .. autoclass:: InterfaceWallBoundary
 .. autoclass:: InterfaceWallRadiationBoundary
 """
