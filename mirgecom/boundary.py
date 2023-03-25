@@ -1490,7 +1490,8 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         self._no_slip = _NoSlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
 
-    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus,
+                   **kwargs):  # noqa D400
         """
         Return state that cancels interior velocity and has the respective
         internal energy.

@@ -75,9 +75,9 @@ from grudge.dof_desc import (
 import grudge.op as op
 
 from mirgecom.inviscid import (
-    inviscid_flux,
+    # inviscid_flux,
     inviscid_facial_flux_rusanov,
-    inviscid_flux_on_element_boundary
+    # inviscid_flux_on_element_boundary
 )
 from mirgecom.viscous import (
     viscous_flux,
@@ -498,7 +498,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
         # Compute the volume contribution of the inviscid flux terms
         # using field values on the quadrature grid
-#XXX        - inviscid_flux(state=vol_state_quad)
+        # XXX - inviscid_flux(state=vol_state_quad)
     )
 
     # Compute the boundary terms for the divergence operator
@@ -512,12 +512,12 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             numerical_flux_func=viscous_numerical_flux_func, time=time,
             dd=dd_vol)
 
-#XXX        # All surface contributions from the inviscid fluxes
-#XXX        - inviscid_flux_on_element_boundary(
-#XXX            dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
-#XXX            domain_bnd_states_quad, quadrature_tag=quadrature_tag,
-#XXX            numerical_flux_func=inviscid_numerical_flux_func, time=time,
-#XXX            dd=dd_vol)
+        # All surface contributions from the inviscid fluxes
+        # XXX - inviscid_flux_on_element_boundary(
+        # XXX    dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
+        # XXX    domain_bnd_states_quad, quadrature_tag=quadrature_tag,
+        # XXX    numerical_flux_func=inviscid_numerical_flux_func, time=time,
+        # XXX    dd=dd_vol)
 
     )
     ns_rhs = div_operator(dcoll, dd_vol_quad, dd_allfaces_quad, vol_term, bnd_term)
