@@ -120,6 +120,7 @@ def _project_from_base(dcoll, dd_bdry, field):
         return field
 
 
+# FIXME this function is already in "diffusion"
 def _harmonic_mean(actx, x, y):
     x_plus_y = actx.np.where(actx.np.greater(x + y, 0.0*x), x + y, 0.0*x+1.0)
     return 2.0*x*y/x_plus_y
@@ -157,7 +158,6 @@ def _interface_viscous_flux(dcoll, dd_bdry, gas_model, state_minus, grad_cv_minu
         **kwargs)
 
     lengthscales = _project_from_base(dcoll, dd_bdry, lengthscales)
-
     tau = penalty_amount * state_bc.thermal_conductivity / lengthscales
 
     t_minus = state_minus.temperature
@@ -247,14 +247,12 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
         t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
         t_bc = (t_minus + t_plus)/2.0  # XXX Maybe use t_bc as t_plus?
 
-        internal_energy_bc = (
-            cv_minus.mass
-            * gas_model.eos.get_internal_energy(
-                temperature=t_bc,
-                species_mass_fractions=cv_minus.species_mass_fractions))
         total_energy_bc = (
-            internal_energy_bc
-            + 0.5*np.dot(mom_bc, mom_bc)/cv_minus.mass)
+            cv_minus.mass * gas_model.eos.get_internal_energy(
+                temperature=t_bc,
+                species_mass_fractions=cv_minus.species_mass_fractions)
+            + 0.5*np.dot(mom_bc, mom_bc)/cv_minus.mass
+        )
 
         cv_bc = make_conserved(
             state_minus.dim,
@@ -268,10 +266,10 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
             state_minus.tv.thermal_conductivity + 0.*state_minus.mass_density)
         kappa_bc = _project_from_base(dcoll, dd_bdry, kappa_minus)
 
-        # The thermal conductivity "kappa_bc" uses "kappa_minus",
+        # TODO: The thermal conductivity "kappa_bc" uses "kappa_minus",
         # but for a temperature-dependent kappa, the math will use t_bc,
         # which is the average. They SHOULD be the same, but it wont due to
-        # (small) discretization errors. Commenting this out just in case...
+        # (small) discretization errors. Pointing this out just in case...
         return _replace_kappa(
             make_fluid_state(
                 cv=cv_bc, gas_model=gas_model,
@@ -281,8 +279,7 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, state_bc, grad_cv_minus,
             **kwargs):
-        """
-        Return external grad(CV) used in the boundary calculation of viscous flux.
+        """Return grad(CV) used in the boundary calculation of viscous flux.
 
         Specify the velocity gradients on the external state to ensure zero
         energy and momentum flux due to shear stresses.
@@ -306,18 +303,23 @@ class InterfaceFluidSlipRadiationBoundary(PrescribedFluidBoundary):
             species_mass=grad_species_mass_bc)
 
     def temperature_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get T on the external/plus side (aka wall)."""
+        """Return T to compute the temperature gradient on the fluid side.
+        
+        The external/plus side uses the value at the wall.
+        """
         return _project_from_base(dcoll, dd_bdry, self._t_plus)
 
     def grad_temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus,
                             grad_cv_minus, grad_t_minus, **kwargs):
-        """Get grad(T) on the boundary uses the internal/minus value (aka fluid).
+        """Return grad(T) used in the boundary calculation of viscous flux.
 
+        The grad(T) on the boundary only uses the internal/minus value (aka fluid).
         This is the same logic of an isothermal BC.
         """
         return _project_from_base(dcoll, dd_bdry, grad_t_minus)
 
 
+# TODO move this to "diffusion" ???
 def _diffusion_facial_flux_upwind_with_radiation(
         kappa_tpair, u_tpair, grad_u_tpair, epsilon_minus, lengthscales_tpair,
         normal, *, penalty_amount=None, sigma=None):
