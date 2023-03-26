@@ -717,8 +717,15 @@ def _viscous_flux_for_prescribed_state_mengaldo(
 class AdiabaticSlipBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing inviscid slip boundary.
 
-    This class implements an adiabatic slip wall consistent with the prescription
-    by [Mengaldo_2014]_.
+    a.k.a. Reflective inviscid wall boundary
+
+    This class implements an adiabatic reflective slip boundary given by
+    $\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-}, (\rho\vec{V})^{-}
+    - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}}) \hat{\mathbf{n}}]$
+    wherein the normal component of velocity at the wall is 0, and tangential
+    components are preserved. This class implements an adiabatic slip wall
+    consistent with the prescription by [Mengaldo_2014]_ and correspond to the
+    characteristic boundary conditions described in detail in [Poinsot_1992]_.  
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -753,7 +760,16 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         self._impermeable = _ImpermeableBoundaryComponent()
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state that cancels normal-component velocity."""
+        """Get the exterior solution on the boundary.
+
+        The exterior solution is set such that there will be vanishing
+        flux through the boundary, preserving mass, momentum (magnitude) and
+        energy.
+        rho_plus = rho_minus
+        v_plus = v_minus - 2 * (v_minus . n_hat) * n_hat
+        mom_plus = rho_plus * v_plus
+        E_plus = E_minus
+        """
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
