@@ -1446,7 +1446,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: state_plus
+    .. automethod:: state_plus_inviscid
     .. automethod:: state_bc
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
@@ -1459,7 +1459,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
             boundary_state_func=self.state_bc,
             inviscid_flux_func=partial(
                 _inviscid_flux_for_prescribed_state_mengaldo,
-                state_plus_func=self.state_plus),
+                state_plus_func=self.state_plus_inviscid),
             viscous_flux_func=partial(
                 _viscous_flux_for_prescribed_state_mengaldo,
                 state_bc_func=self.state_bc,
@@ -1473,15 +1473,21 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         self._no_slip = _NoSlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
 
-    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state that cancels interior velocity."""
+    def state_plus_inviscid(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        r"""
+        Return state that cancels interior velocity.
+
+        Specialized for the inviscid operator in the sense that $(\rho E)$ is left
+        unmodified (even though $T$ is modified). This ensures that energy is not
+        advected through the wall.
+        """
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
         mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density, normal)
 
-        # Don't modify the energy, even though t_plus != t_minus; energy will
-        # be advected in/out of the wall, which doesn't make sense
+        # Don't modify the energy, even though we modify the temperature; energy will
+        # be advected through the wall, which doesn't make sense
         cv_plus = make_conserved(
             state_minus.dim,
             mass=state_minus.mass_density,
