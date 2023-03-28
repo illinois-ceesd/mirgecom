@@ -328,7 +328,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None,
-                grad_cv=None, grad_t=None):
+                grad_cv=None, grad_t=None, inviscid_terms_on=True):
     r"""Compute RHS of the Navier-Stokes equations.
 
     Parameters
@@ -396,6 +396,10 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         Optional array containing the gradient of the fluid temperature. If not
         provided, the operator will calculate it with
         :func:`~mirgecom.navierstokes.grad_t_operator`.
+
+    inviscid_terms_on
+        Optional boolean to turn OFF invsicid contributions to this operator.
+        Defaults to True.
 
     Returns
     -------
@@ -486,41 +490,31 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
     # {{{ === Navier-Stokes RHS ===
 
-    # Compute the volume term for the divergence operator
-    vol_term = (
-
-        # Compute the volume contribution of the viscous flux terms
-        # using field values on the quadrature grid
-        viscous_flux(state=vol_state_quad,
+    # Physical viscous flux in the element volume
+    vol_term = viscous_flux(state=vol_state_quad,
                      # Interpolate gradients to the quadrature grid
                      grad_cv=op.project(dcoll, dd_vol, dd_vol_quad, grad_cv),
                      grad_t=op.project(dcoll, dd_vol, dd_vol_quad, grad_t))
 
-        # Compute the volume contribution of the inviscid flux terms
-        # using field values on the quadrature grid
-        - inviscid_flux(state=vol_state_quad)
-    )
+    # Physical viscous flux (f .dot. n) is the boundary term for the div op
+    bnd_term = viscous_flux_on_element_boundary(
+        dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
+        domain_bnd_states_quad, grad_cv, grad_cv_interior_pairs,
+        grad_t, grad_t_interior_pairs, quadrature_tag=quadrature_tag,
+        numerical_flux_func=viscous_numerical_flux_func, time=time,
+        dd=dd_vol)
 
-    # Compute the boundary terms for the divergence operator
-    bnd_term = (
-
-        # All surface contributions from the viscous fluxes
-        viscous_flux_on_element_boundary(
-            dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
-            domain_bnd_states_quad, grad_cv, grad_cv_interior_pairs,
-            grad_t, grad_t_interior_pairs, quadrature_tag=quadrature_tag,
-            numerical_flux_func=viscous_numerical_flux_func, time=time,
-            dd=dd_vol)
-
-        # All surface contributions from the inviscid fluxes
-        - inviscid_flux_on_element_boundary(
+    # Add corresponding inviscid parts if enabled
+    if inviscid_terms_on:
+        vol_term = vol_term - inviscid_flux(state=vol_state_quad)
+        bnd_term = bnd_term - inviscid_flux_on_element_boundary(
             dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
             domain_bnd_states_quad, quadrature_tag=quadrature_tag,
             numerical_flux_func=inviscid_numerical_flux_func, time=time,
             dd=dd_vol)
 
-    )
     ns_rhs = div_operator(dcoll, dd_vol_quad, dd_allfaces_quad, vol_term, bnd_term)
+
     if return_gradients:
         return ns_rhs, grad_cv, grad_t
     return ns_rhs
