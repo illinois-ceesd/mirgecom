@@ -1480,7 +1480,8 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
         mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density, normal)
 
-        # FIXME: Should we be setting the internal energy here?
+        # Don't modify the energy, even though t_plus != t_minus; energy will
+        # be advected in/out of the wall, which doesn't make sense
         cv_plus = make_conserved(
             state_minus.dim,
             mass=state_minus.mass_density,
