@@ -395,8 +395,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._bnd_temperature_func:
             self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
-            # self._grad_num_flux_func = num_flux_central
-            self._grad_num_flux_func = _ldg_bnd_flux_for_grad
+            self._grad_num_flux_func = num_flux_central
         if not self._cv_gradient_flux_func:
             self._cv_gradient_flux_func = self._gradient_flux_for_prescribed_cv
         if not self._temperature_grad_flux_func:
@@ -1466,6 +1465,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
                 state_bc_func=self.state_bc,
                 grad_cv_bc_func=self.grad_cv_bc,
                 grad_temperature_bc_func=None),
+            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
             boundary_temperature_func=self.temperature_bc,
             boundary_gradient_cv_func=self.grad_cv_bc)
 
@@ -1566,6 +1566,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
                 state_bc_func=self.state_bc,
                 grad_cv_bc_func=self.grad_cv_bc,
                 grad_temperature_bc_func=self.grad_temperature_bc),
+            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc)
 
@@ -1670,6 +1671,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                 state_bc_func=self.state_bc,
                 grad_cv_bc_func=self.grad_cv_bc,
                 grad_temperature_bc_func=self.grad_temperature_bc),
+            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
             boundary_gradient_cv_func=self.grad_cv_bc,
             boundary_gradient_temperature_func=self.grad_temperature_bc)
 
