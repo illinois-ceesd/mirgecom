@@ -1,35 +1,12 @@
-""":mod:`mirgecom.phenolics` provides common utilities for TPS simulation.
+"""
+TODO list
 
-Conserved Quantities Handling
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-.. autoclass:: WallConservedVars
-.. autofunction:: make_conserved
+1 - get the material properties
+2 - evaluate Newton iterations to compute the temperature
+3 - operator and heat conduction???
 """
 
-__copyright__ = """
-Copyright (C) 2023 University of Illinois Board of Trustees
-"""
-
-__license__ = """
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in
-all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-THE SOFTWARE.
-"""
+##############################################################################
 
 import numpy as np  # noqa
 from meshmode.dof_array import DOFArray  # noqa
@@ -39,6 +16,7 @@ from arraycontext import (
     with_container_arithmetic,
     get_container_context_recursively
 )
+from abc import ABCMeta, abstractmethod
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -48,7 +26,7 @@ from arraycontext import (
                            rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
-class WallConservedVars:
+class PhenolicsConservedVars:
     r"""."""
 
     solid_species_mass: np.ndarray
@@ -67,9 +45,39 @@ class WallConservedVars:
         return len(self.solid_species_mass)
 
 
+
+def initializer(composite, solid_species_mass, gas_density, gas_species_mass=None,
+                energy=None, temperature=None, progress=0.0):
+
+    tau = 1.0 - progress
+
+    if energy is None and temperature is None:
+        raise ValueError("Must specify one of 'energy' or 'temperature'")
+
+    if isinstance(tau, DOFArray) is False:
+        tau = tau + 0*gas_density
+
+    if isinstance(temperature, DOFArray) is False:
+        temperature = temperature + 0.0*gas_density
+
+    if energy is None:
+        solid_density = sum(solid_species_mass)
+        solid_cp = composite.solid_heat_capacity(temperature, tau)
+        gas_cp = 0.0
+        energy = (solid_density*solid_cp*temperature + 
+                    gas_density*gas_cp*temperature)
+
+    if gas_species_mass is None:
+        gas_species_mass = gas_density*1.0
+
+    return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
+        energy=energy, gas_density=gas_density, gas_species_mass=gas_species_mass                    
+    )
+
+
 def make_conserved(solid_species_mass, gas_density, gas_species_mass, energy):
-    return WallConservedVars(solid_species_mass=solid_species_mass, energy=energy,
-         gas_density=gas_density, gas_species_mass=gas_species_mass                    
+    return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
+        energy=energy, gas_density=gas_density, gas_species_mass=gas_species_mass                    
     )
 
 
@@ -84,6 +92,7 @@ class PhenolicsDependentVars:
     .. attribute:: temperature
     .. attribute:: pressure
     .. attribute:: velocity
+    ... and so on...
     """
 
     temperature: DOFArray
@@ -96,94 +105,72 @@ class PhenolicsDependentVars:
     thermal_conductivity: np.ndarray
     species_diffusivity: np.ndarray
 
-
-class PhenolicsEOS(metaclass=ABCMeta):
-    r"""Abstract interface to equation of state class.
-
-    .. automethod:: 
-    """
-
-    @abstractmethod
-    def pressure(self, cv: ConservedVars, temperature: DOFArray):
-        """Get the gas pressure."""
-
-    @abstractmethod
-    def temperature(self, cv: ConservedVars,
-                    temperature_seed: Optional[DOFArray] = None) -> DOFArray:
-        """Get the gas temperature."""
-
-    @abstractmethod
-    def gas_const(self, cv: ConservedVars):
-        r"""Get the specific gas constant ($R_s$)."""
-
-    @abstractmethod
-    def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray):
-        r"""Get the specific heat capacity at constant pressure ($C_p$)."""
-
-    @abstractmethod
-    def viscosity(self, cv: ConservedVars) -> DOFArray:
-        r"""Get the gas dynamic viscosity, $\mu$."""
-
-    @abstractmethod
-    def thermal_conductivity(self, cv: ConservedVars) -> DOFArray:
-        r"""Get the gas thermal_conductivity, $\kappa$."""
-
-    @abstractmethod
-    def species_diffusivity(self, cv: ConservedVars) -> DOFArray:
-        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-
-    @abstractmethod
-    def emissivity(self, cv: ConservedVars, temperature: DOFArray):
-        r"""."""
-
-    @abstractmethod
-    def permeability(self, cv: ConservedVars, temperature: DOFArray):
-        r"""."""
-
-    @abstractmethod
-    def progress(self, cv: ConservedVars, temperature: DOFArray):
-        r"""."""
-
-    #FIXME
-    def dependent_vars(self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> PhenolicsDependentVars:
-        """Get an agglomerated array of the dependent variables."""
-        temperature = self.temperature(cv, temperature_seed)
-        return PhenolicsDependentVars(
-            progress=
-            temperature=temperature,
-            pressure=self.pressure(cv, temperature),
-            viscosity=
-            thermal_conductivity=
-            species_diffusivity=
-            emissivity=
-            permeability=
-        )
+    emissivity: DOFArray
+    permeability: DOFArray
+    volume_fraction: DOFArray
+    solid_density: DOFArray
 
 
-class SimpleEquationOfState(PhenolicsEOS):
+class PhenolicsEOS():
 
     def __init__(self, composite):
         self._degradation_model = composite
 
-    def heat_capacity_cp(self, cv, temperature):
-        return 
+    def gas_const(self, wv, temperature):
+        return temperature*0.0
 
-    def gas_const(self, cv, temperature):
-        """Get specific gas constant R."""
-        return 
+    def pressure(self, wv, temperature, tau):
+        return temperature*0.0
 
-    def pressure(self, cv, temperature):
-        return 
+    def velocity(self, wv, temperature, tau):
+        return temperature*0.0
 
-    def permeability(self, cv, temperature):
-        return 
+    def viscosity(self, wv, temperature, tau):
+        return temperature*0.0
 
-    def emissivity(self, cv, temperature):
-        return 
+    def thermal_conductivity(self, wv, temperature, tau):
+        return self._degradation_model.solid_thermal_conductivity(temperature, tau)
 
-    def progress(self, cv, temperature):
-        return 
+    def species_diffusivity(self, wv, temperature, tau):
+        return temperature*0.0
 
+    def heat_capacity_cp(self, wv, temperature, tau):
+        return self._degradation_model.solid_heat_capacity(temperature, tau)
 
-    
+    def permeability(self, wv, temperature, tau):
+        return self._degradation_model.solid_permeability(temperature, tau)
+
+    def volume_fraction(self, wv, temperature, tau):
+        return self._degradation_model.solid_volume_fraction(temperature, tau)
+
+    def emissivity(self, wv, temperature, tau):
+        return self._degradation_model.solid_emissivity(temperature, tau)
+
+    def progress(self, wv):
+        return 280.0/(280.0 - 220.0)*( 1.0 - 220.0/self.solid_density(wv) )
+
+    def solid_density(self, wv):
+        return sum(wv.solid_species_mass)
+
+    def temperature(self, wv, tseed):
+        # do some Newton iterations here
+        return 0.0 + tseed*0.0
+
+    def dependent_vars(self, wv: PhenolicsConservedVars,
+            temperature_seed: DOFArray) -> PhenolicsDependentVars:
+        """Get an agglomerated array of the dependent variables."""
+        progress = self.progress(wv)
+        temperature = self.temperature(wv, temperature_seed)
+        return PhenolicsDependentVars(
+            progress=progress,
+            temperature=temperature,
+            pressure=self.pressure(wv, temperature, progress),
+            velocity=self.velocity(wv, temperature, progress),
+            viscosity=self.viscosity(wv, temperature, progress),
+            thermal_conductivity=self.thermal_conductivity(wv, temperature, progress),
+            emissivity=self.emissivity(wv, temperature, progress),
+            permeability=self.permeability(wv, temperature, progress),
+            volume_fraction=self.volume_fraction(wv, temperature, progress),
+            species_diffusivity=temperature*0.0,
+            solid_density=self.solid_density(wv)
+        )

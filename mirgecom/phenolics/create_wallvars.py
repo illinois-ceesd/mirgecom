@@ -126,15 +126,30 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     import mirgecom.phenolics.phenolics as wall 
     
     solid_species_mass = np.empty((3,), dtype=object)
-    for i in range(3):
-        solid_species_mass[i] = i + nodes[0]*0.0
+    solid_species_mass[0] =  30.0 + nodes[0]*0.0
+    solid_species_mass[1] =  90.0 + nodes[0]*0.0
+    solid_species_mass[2] = 160.0 + nodes[0]*0.0
 
-    gas_species_mass = 3.141592 + nodes[0]*0.0
+    gas_species_mass = 280.0 + nodes[0]*0.0
     gas_density = gas_species_mass*1.0
     energy = 10.0 + nodes[0]*0.0
-    wall_vars = wall.make_conserved(solid_species_mass, gas_density, 
-                gas_species_mass, energy)
+#    wall_vars = wall.make_conserved(solid_species_mass, gas_density, 
+#                gas_species_mass, energy)
     
+    import mirgecom.phenolics.tacot as my_composite
+    wall_vars = wall.initializer(composite=my_composite,
+        solid_species_mass=solid_species_mass,
+        gas_density=gas_density, temperature=300.0, progress=0.0)
+
+    eos = wall.PhenolicsEOS(composite=my_composite)
+
+    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=300.0+nodes[0]*0.0)
+
+    print(wdv.progress)
+
+    import sys
+    sys.exit()
+
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     vis_timer = None
