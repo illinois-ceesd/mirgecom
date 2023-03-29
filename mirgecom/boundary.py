@@ -71,6 +71,17 @@ from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from abc import ABCMeta, abstractmethod
 
 
+# FIXME: Currently, PrescribedFluidBoundary is given free rein to call the callbacks
+# that were passed to it wherever it wants. However, some BCs require different
+# boundary states for different operators, so it may be preferable to give individual
+# BCs more fine-grained control over how their callbacks are used. One way to do this
+# could be to implement the flux "template" functions (e.g.
+# _viscous_flux_for_prescribed_state) as standalone functions instead of base class
+# methods. Then the specific BC class can supply exactly the right boundary value
+# callback for each flux. See _viscous_flux_for_prescribed_state_mengaldo for an
+# example of this.
+
+
 # Make sure PrescribedFluidBoundary isn't calling a callback that it's not meant to
 def _do_not_call(*args, **kwargs):
     raise AssertionError
