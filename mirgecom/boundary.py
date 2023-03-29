@@ -764,7 +764,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         self._impermeable = _ImpermeableBoundaryComponent()
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state that cancels normal-component velocity."""
+        """Return state with opposite normal-component velocity."""
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
@@ -822,8 +822,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         """
         Compute temperature gradient on the boundary.
 
-        Impose the opposite normal component to enforce zero energy flux
-        from conduction.
+        Impose zero normal component to enforce zero energy flux from conduction.
         """
         dd_bdry = as_dofdesc(dd_bdry)
         normal = grad_t_minus[0].array_context.thaw(dcoll.normal(dd_bdry))
@@ -1474,7 +1473,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
     def state_plus_inviscid(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         r"""
-        Return state that cancels interior velocity.
+        Return state with opposite velocity.
 
         Specialized for the inviscid operator in the sense that $(\rho E)$ is left
         unmodified (even though $T$ is modified). This ensures that energy is not
@@ -1562,7 +1561,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
         self._impermeable = _ImpermeableBoundaryComponent()
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state that cancels interior velocity."""
+        """Return state with opposite velocity."""
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
