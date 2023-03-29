@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 
 #    # FIXME
 #    class Bprime_table():
@@ -40,26 +41,28 @@ THE SOFTWARE.
 
 
 #    # FIXME
-#    class pyrolysis():
+class pyrolysis():
 
-#        def __init__(self):
-#            self._Tcrit = np.array([ 333.3, 555.6])
-#            self._Fij = np.array([0.025, 0.075])
-#            self._n_phases = 2
+    def __init__(self):
+        self._Tcrit = np.array([ 333.3, 555.6])
+        self._Fij = np.array([0.025, 0.075])
+        self._n_phases = 2
 
-#        def get_sources(self, temperature, xi):
-#        
-#            N = T.shape[0]
+    def get_sources(self, temperature, xi):
 
-#            #include the fiber in the RHS but dont do anything more for now (ignore oxidation, for instance)
-#            rhs = np.zeros((self._n_phases+1,N))
+        actx = temperature.array_context
 
-#            rhs[0] = actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
-#                0.0, - (30. * (( xi[0] -  0.0 )/30.)**3) *  12000 * np.exp( - 8556.00/temperature )
-#            )
-#            rhs[1] = actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
-#                0.0, - (90. * (( xi[1] - 60.0 )/90.)**3) * 4.48e9 * np.exp( -20444.44/temperature )
-#            )
+        #include the fiber in the RHS but dont do anything more for now (ignore oxidation, for instance)
+        rhs = xi*0.0
+
+        rhs[0] = actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
+            0.0, - (30. * (( xi[0] -  0.0 )/30.)**3) *  12000 * actx.np.exp( - 8556.00/temperature )
+        )
+        rhs[1] = actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
+            0.0, - (90. * (( xi[1] - 60.0 )/90.)**3) * 4.48e9 * actx.np.exp( -20444.44/temperature )
+        )
+
+        return rhs
 
 
 def solid_enthalpy(temperature, tau):
@@ -77,7 +80,7 @@ def solid_heat_capacity(temperature, tau):
 
     actx = temperature.array_context
 
-    virgin = actx.np.where(temperature <= 2222.0,
+    virgin = actx.np.where(actx.np.less(temperature, 2222.0),
         4.12265891689180e-14*temperature**5 - 4.43093718060442e-10*temperature**4 + 1.87206033562391e-06*temperature**3 \
             - 3.95146486560366e-03*temperature**2 + 4.29108093873644e+00*temperature + 1.39759434036202e+01,
         2008.8139143251735

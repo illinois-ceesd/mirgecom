@@ -19,6 +19,8 @@ from arraycontext import (
 )
 from abc import ABCMeta, abstractmethod
 
+import sys  # noqa
+
 
 @with_container_arithmetic(bcast_obj_array=False,
                            bcast_container_types=(DOFArray, np.ndarray),
@@ -44,7 +46,6 @@ class PhenolicsConservedVars:
     def nphase(self):
         """Return the number of phases in the composite material."""
         return len(self.solid_species_mass)
-
 
 
 def initializer(composite, solid_species_mass, gas_density, gas_species_mass=None,
@@ -83,10 +84,7 @@ def make_conserved(solid_species_mass, gas_density, gas_species_mass, energy):
 @dataclass_array_container
 @dataclass(frozen=True)
 class PhenolicsDependentVars:
-    """State-dependent quantities for :class:`GasEOS`.
-
-    Prefer individual methods for model use, use this
-    structure for visualization or probing.
+    """State-dependent quantities.
 
     .. attribute:: temperature
     .. attribute:: pressure
