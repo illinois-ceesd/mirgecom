@@ -827,6 +827,8 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         dd_bdry = as_dofdesc(dd_bdry)
         normal = grad_t_minus[0].array_context.thaw(dcoll.normal(dd_bdry))
 
+        # NOTE: In the previous version of the code, this was computing a "plus"
+        # state (i.e., the normal gradient was flipped instead of zeroed)
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
     # FIXME: Remove this?
