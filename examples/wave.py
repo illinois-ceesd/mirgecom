@@ -43,7 +43,8 @@ from logpyle import IntervalTimer, set_dt
 
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
-                                         logmgr_add_device_memory_usage)
+                                         logmgr_add_device_memory_usage,
+                                         logmgr_add_mempool_usage)
 
 
 def bump(actx, nodes, t=0):
@@ -121,6 +122,7 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_add_mempool_usage(logmgr, alloc)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
 
@@ -170,13 +172,16 @@ def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):
             set_dt(logmgr, dt)
             logmgr.tick_after()
 
+    if logmgr:
+        logmgr.close()
+
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Wave (non-MPI version)")
-    parser.add_argument("--profile", action="store_true",
+    parser.add_argument("--profiling", action="store_true",
         help="enable kernel profiling")
-    parser.add_argument("--logging", action="store_true",
+    parser.add_argument("--log", action="store_true",
         help="enable logging")
     parser.add_argument("--lazy", action="store_true",
         help="enable lazy evaluation")
@@ -186,7 +191,7 @@ if __name__ == "__main__":
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=False)
 
-    main(actx_class, use_profiling=args.profile,
-         use_logmgr=args.logging, lazy=args.lazy)
+    main(actx_class, use_profiling=args.profiling,
+         use_logmgr=args.log, lazy=args.lazy)
 
 # vim: foldmethod=marker

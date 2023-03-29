@@ -279,7 +279,7 @@ class FluidManufacturedSolution(FluidCase):
         super().__init__(dim)
         if lx is None:
             lx = (2.*np.pi,)*self._dim
-            warnings.warn(f"Set {lx=}")
+            warnings.warn(f"Set {lx=}", stacklevel=2)
         if len(lx) != self._dim:
             raise ValueError("Improper dimension for lx.")
         self._gamma = gamma
