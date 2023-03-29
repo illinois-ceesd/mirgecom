@@ -359,7 +359,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
                   dv: GasDependentVars,
                   eos: GasEOS) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return (dv.smoothness*self.av_viscosity(cv, dv, eos)
+        return (dv.smoothness_mu*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.viscosity(cv, dv))
 
     def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
@@ -371,7 +371,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
 
         $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
         """
-        return (dv.smoothness*self.av_viscosity(cv, dv, eos)
+        return (dv.smoothness_mu*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.volume_viscosity(cv, dv))
 
     def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
@@ -379,7 +379,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
                              eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         mu = self.av_viscosity(cv, dv, eos)
-        av_kappa = (dv.smoothness*mu
+        av_kappa = (dv.smoothness_mu*mu
                     * eos.heat_capacity_cp(cv, dv.temperature)/self._av_prandtl)
         return av_kappa + self._physical_transport.thermal_conductivity(
             cv, dv, eos)
