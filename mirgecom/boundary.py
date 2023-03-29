@@ -63,7 +63,7 @@ from grudge.trace_pair import TracePair
 import grudge.op as op
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
-from mirgecom.gas_model import make_fluid_state
+from mirgecom.gas_model import make_fluid_state, replace_fluid_state
 from pytools.obj_array import make_obj_array
 
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
@@ -771,16 +771,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, normal)
 
         # Energy is the same, don't need to compute
-        cv_plus = state_minus.cv.replace(momentum=mom_plus)
-
-        # we'll need this when we go to production
-        """
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
-        """
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state with zero normal-component velocity for an adiabatic wall."""
@@ -793,18 +784,10 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
             gas_model.eos.internal_energy(state_minus.cv)
             + 0.5*np.dot(mom_bc, mom_bc)/state_minus.mass_density)
 
-        cv_bc = state_minus.cv.replace(
+        return replace_fluid_state(
+            state_minus, gas_model,
             energy=energy_bc,
             momentum=mom_bc)
-
-        # we'll need this when we go to production
-        """
-        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
-        """
-        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, state_bc, grad_cv_minus,
@@ -1504,10 +1487,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
         # Don't modify the energy, even though we modify the temperature; energy will
         # be advected through the wall, which doesn't make sense
-        cv_plus = state_minus.cv.replace(momentum=mom_plus)
-
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state with zero-velocity."""
@@ -1525,12 +1505,10 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         # Velocity is pinned to 0 here, no kinetic energy
         total_energy_bc = state_minus.mass_density*internal_energy_bc
 
-        cv_bc = state_minus.cv.replace(
+        return replace_fluid_state(
+            state_minus, gas_model,
             energy=total_energy_bc,
             momentum=mom_bc)
-
-        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
 
     def temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -1591,10 +1569,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
         mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density, normal)
 
         # Energy is the same, don't need to compute
-        cv_plus = state_minus.cv.replace(momentum=mom_plus)
-
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state with zero-velocity."""
@@ -1605,10 +1580,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
         # FIXME: Should we modify kinetic energy here? If not, add a comment
         # explaining why
-        cv_bc = state_minus.cv.replace(momentum=mom_bc)
-
-        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_bc)
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, **kwargs):
@@ -1681,10 +1653,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, normal)
 
         # Energy is the same, don't need to compute
-        cv_plus = state_minus.cv.replace(momentum=mom_plus)
-
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state with zero normal-velocity."""
@@ -1697,12 +1666,10 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             gas_model.eos.internal_energy(state_minus.cv)
             + 0.5*np.dot(mom_bc, mom_bc)/state_minus.mass_density)
 
-        cv_bc = state_minus.cv.replace(
+        return replace_fluid_state(
+            state_minus, gas_model,
             energy=energy_bc,
             momentum=mom_bc)
-
-        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, state_bc, grad_cv_minus,
