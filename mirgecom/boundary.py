@@ -597,6 +597,8 @@ class DummyBoundary(PrescribedFluidBoundary):
 
 
 class _SlipBoundaryComponent:
+    """Helper class for slip boundaries, consistent with [Mengaldo_2014]_."""
+
     def momentum_plus(self, mom_minus, normal):
         return mom_minus - 2.0*np.dot(mom_minus, normal)*normal
 
@@ -622,6 +624,8 @@ class _SlipBoundaryComponent:
 
 
 class _NoSlipBoundaryComponent:
+    """Helper class for no-slip boundaries, consistent with [Mengaldo_2014]_."""
+
     def momentum_plus(self, mom_minus, normal):
         return -mom_minus
 
@@ -630,11 +634,15 @@ class _NoSlipBoundaryComponent:
 
 
 class _AdiabaticBoundaryComponent:
+    """Helper class for adiabatic boundaries, consistent with [Mengaldo_2014]_."""
+
     def grad_temperature_bc(self, grad_t_minus, normal):
         return grad_t_minus - np.dot(grad_t_minus, normal)*normal
 
 
 class _IsothermalBoundaryComponent:
+    """Helper class for isothermal boundaries, consistent with [Mengaldo_2014]_."""
+
     def __init__(self, t_bc):
         self._t_bc = t_bc
 
@@ -643,6 +651,8 @@ class _IsothermalBoundaryComponent:
 
 
 class _ImpermeableBoundaryComponent:
+    """Helper class for impermeable boundaries, consistent with [Mengaldo_2014]_."""
+
     def grad_species_mass_bc(self, state_minus, grad_cv_minus, normal):
         nspecies = len(state_minus.species_mass_density)
 
