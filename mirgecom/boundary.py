@@ -71,6 +71,11 @@ from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from abc import ABCMeta, abstractmethod
 
 
+# Make sure PrescribedFluidBoundary isn't calling a callback that it's not meant to
+def _do_not_call(*args, **kwargs):
+    raise AssertionError
+
+
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
     return external_quantity
 
@@ -720,7 +725,10 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         """Initialize the boundary condition object."""
         PrescribedFluidBoundary.__init__(
             self,
-            boundary_state_func=self.state_bc,
+            boundary_state_func=self.state_bc,  # For grad(CV)
+            boundary_gradient_cv_func=_do_not_call,
+            boundary_gradient_temperature_func=_do_not_call,
+            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
             inviscid_flux_func=partial(
                 _inviscid_flux_for_prescribed_state_mengaldo,
                 state_plus_func=self.state_plus),
@@ -728,9 +736,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
                 _viscous_flux_for_prescribed_state_mengaldo,
                 state_bc_func=self.state_bc,
                 grad_cv_bc_func=self.grad_cv_bc,
-                grad_temperature_bc_func=self.grad_temperature_bc),
-            boundary_gradient_cv_func=self.grad_cv_bc,
-            boundary_gradient_temperature_func=self.grad_temperature_bc)
+                grad_temperature_bc_func=self.grad_temperature_bc))
 
         self._adiabatic = _AdiabaticBoundaryComponent()
         self._slip = _SlipBoundaryComponent()
@@ -1456,7 +1462,10 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         """Initialize the boundary condition object."""
         PrescribedFluidBoundary.__init__(
             self,
-            boundary_state_func=self.state_bc,
+            boundary_state_func=self.state_bc,  # For grad(CV)
+            boundary_temperature_func=self.temperature_bc,  # For grad(T)
+            boundary_gradient_cv_func=_do_not_call,
+            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
             inviscid_flux_func=partial(
                 _inviscid_flux_for_prescribed_state_mengaldo,
                 state_plus_func=self.state_plus_inviscid),
@@ -1464,10 +1473,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
                 _viscous_flux_for_prescribed_state_mengaldo,
                 state_bc_func=self.state_bc,
                 grad_cv_bc_func=self.grad_cv_bc,
-                grad_temperature_bc_func=None),
-            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
-            boundary_temperature_func=self.temperature_bc,
-            boundary_gradient_cv_func=self.grad_cv_bc)
+                grad_temperature_bc_func=None))
 
         self._isothermal = _IsothermalBoundaryComponent(wall_temperature)
         self._no_slip = _NoSlipBoundaryComponent()
@@ -1563,7 +1569,10 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
         """Initialize the boundary condition object."""
         PrescribedFluidBoundary.__init__(
             self,
-            boundary_state_func=self.state_bc,
+            boundary_state_func=self.state_bc,  # For grad(CV)
+            boundary_gradient_cv_func=_do_not_call,
+            boundary_gradient_temperature_func=_do_not_call,
+            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
             inviscid_flux_func=partial(
                 _inviscid_flux_for_prescribed_state_mengaldo,
                 state_plus_func=self.state_plus),
@@ -1571,10 +1580,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
                 _viscous_flux_for_prescribed_state_mengaldo,
                 state_bc_func=self.state_bc,
                 grad_cv_bc_func=self.grad_cv_bc,
-                grad_temperature_bc_func=self.grad_temperature_bc),
-            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
-            boundary_gradient_cv_func=self.grad_cv_bc,
-            boundary_gradient_temperature_func=self.grad_temperature_bc)
+                grad_temperature_bc_func=self.grad_temperature_bc))
 
         self._adiabatic = _AdiabaticBoundaryComponent()
         self._no_slip = _NoSlipBoundaryComponent()
@@ -1668,7 +1674,10 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             "AdiabaticSlipBoundary instead.", DeprecationWarning, stacklevel=2)
         PrescribedFluidBoundary.__init__(
             self,
-            boundary_state_func=self.state_bc,
+            boundary_state_func=self.state_bc,  # For grad(CV)
+            boundary_gradient_cv_func=_do_not_call,
+            boundary_gradient_temperature_func=_do_not_call,
+            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
             inviscid_flux_func=partial(
                 _inviscid_flux_for_prescribed_state_mengaldo,
                 state_plus_func=self.state_plus),
@@ -1676,10 +1685,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
                 _viscous_flux_for_prescribed_state_mengaldo,
                 state_bc_func=self.state_bc,
                 grad_cv_bc_func=self.grad_cv_bc,
-                grad_temperature_bc_func=self.grad_temperature_bc),
-            gradient_numerical_flux_func=_ldg_bnd_flux_for_grad,
-            boundary_gradient_cv_func=self.grad_cv_bc,
-            boundary_gradient_temperature_func=self.grad_temperature_bc)
+                grad_temperature_bc_func=self.grad_temperature_bc))
 
         self._adiabatic = _AdiabaticBoundaryComponent()
         self._slip = _SlipBoundaryComponent()
