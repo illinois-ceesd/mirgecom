@@ -1,15 +1,16 @@
 """
 TODO list
 
-1 - get the material properties
-2 - evaluate Newton iterations to compute the temperature
+X - get the material properties
+X - evaluate Newton iterations to compute the temperature
 3 - operator and heat conduction???
+4 - get the gas data... How to handle the tabulated interpolation?
 """
 
 ##############################################################################
 
-import numpy as np  # noqa
-from meshmode.dof_array import DOFArray  # noqa
+import numpy as np
+from meshmode.dof_array import DOFArray
 from dataclasses import dataclass, fields, field
 from arraycontext import (
     dataclass_array_container,
@@ -62,10 +63,8 @@ def initializer(composite, solid_species_mass, gas_density, gas_species_mass=Non
 
     if energy is None:
         solid_density = sum(solid_species_mass)
-        solid_cp = composite.solid_heat_capacity(temperature, tau)
-        gas_cp = 0.0
-        energy = (solid_density*solid_cp*temperature + 
-                    gas_density*gas_cp*temperature)
+        energy = solid_density*composite.solid_enthalpy(temperature, tau)
+                    #+ gas (internal and kinetic)?
 
     if gas_species_mass is None:
         gas_species_mass = gas_density*1.0
@@ -116,26 +115,35 @@ class PhenolicsEOS():
     def __init__(self, composite):
         self._degradation_model = composite
 
+    # FIXME
     def gas_const(self, wv, temperature):
         return temperature*0.0
 
+    # FIXME
     def pressure(self, wv, temperature, tau):
         return temperature*0.0
 
+    # FIXME
     def velocity(self, wv, temperature, tau):
         return temperature*0.0
 
+    # FIXME
     def viscosity(self, wv, temperature, tau):
         return temperature*0.0
 
-    def thermal_conductivity(self, wv, temperature, tau):
-        return self._degradation_model.solid_thermal_conductivity(temperature, tau)
-
+    # FIXME
     def species_diffusivity(self, wv, temperature, tau):
         return temperature*0.0
 
-    def heat_capacity_cp(self, wv, temperature, tau):
+    #~~~~~~~~~~~~ solid 
+    def enthalpy(self, temperature, tau):
+        return self._degradation_model.solid_enthalpy(temperature, tau)
+
+    def heat_capacity_cp(self, temperature, tau):
         return self._degradation_model.solid_heat_capacity(temperature, tau)
+
+    def thermal_conductivity(self, wv, temperature, tau):
+        return self._degradation_model.solid_thermal_conductivity(temperature, tau)
 
     def permeability(self, wv, temperature, tau):
         return self._degradation_model.solid_permeability(temperature, tau)
@@ -152,25 +160,50 @@ class PhenolicsEOS():
     def solid_density(self, wv):
         return sum(wv.solid_species_mass)
 
-    def temperature(self, wv, tseed):
-        # do some Newton iterations here
-        return 0.0 + tseed*0.0
+    def temperature(self, wv, tseed, tau):
+        """Temperature assumes thermal equilibrium between solid and fluid."""
+
+        niter = 10
+        T = tseed
+
+        rho_solid = self.solid_density(wv)
+        e = wv.energy
+        for ii in range(0, niter):
+
+            #M = gas.molar_mass(T)
+            #eps_rho_e_g = wv[1]*( gas.h(T) - R/M*T )
+            eps_rho_e_s = rho_solid*( self.enthalpy(T, tau) )
+
+            #f_prime_g = wv[1]*( gas.cp(T) - R/M*( 1.0 - T/M*gas.dMdT(T) ) )
+            f_prime_s = rho_solid*( self.heat_capacity_cp(T, tau) )
+
+            #f = eps_rho_e_g + eps_rho_e_s
+            #f_prime = f_prime_s + f_prime_g
+
+            f = eps_rho_e_s
+            f_prime = f_prime_s
+
+            T = T - (f - e)/f_prime
+
+        return T
 
     def dependent_vars(self, wv: PhenolicsConservedVars,
             temperature_seed: DOFArray) -> PhenolicsDependentVars:
         """Get an agglomerated array of the dependent variables."""
         progress = self.progress(wv)
-        temperature = self.temperature(wv, temperature_seed)
+        temperature = self.temperature(wv, temperature_seed, progress)
         return PhenolicsDependentVars(
             progress=progress,
             temperature=temperature,
             pressure=self.pressure(wv, temperature, progress),
             velocity=self.velocity(wv, temperature, progress),
             viscosity=self.viscosity(wv, temperature, progress),
+            species_diffusivity=self.species_diffusivity(wv, temperature, progress),
+            #enthalpy
+            #heat_capacity
             thermal_conductivity=self.thermal_conductivity(wv, temperature, progress),
             emissivity=self.emissivity(wv, temperature, progress),
             permeability=self.permeability(wv, temperature, progress),
             volume_fraction=self.volume_fraction(wv, temperature, progress),
-            species_diffusivity=temperature*0.0,
             solid_density=self.solid_density(wv)
         )

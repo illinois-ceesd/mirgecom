@@ -58,6 +58,8 @@ from mirgecom.logging_quantities import (
     set_sim_state
 )
 
+import sys
+
 logger = logging.getLogger(__name__)
 
 
@@ -121,6 +123,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nodes = actx.thaw(dcoll.nodes())
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+#    from mirgecom.phenolics.gas import gas_properties
+#    gas = gas_properties()
+#    gas_data = gas._data
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # soln setup and init
     import mirgecom.phenolics.phenolics as wall 
@@ -130,25 +138,20 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     solid_species_mass[1] =  90.0 + nodes[0]*0.0
     solid_species_mass[2] = 160.0 + nodes[0]*0.0
 
-    gas_species_mass = 280.0 + nodes[0]*0.0
-    gas_density = gas_species_mass*1.0
-    energy = 10.0 + nodes[0]*0.0
-#    wall_vars = wall.make_conserved(solid_species_mass, gas_density, 
-#                gas_species_mass, energy)
-    
+    gas_density = 1.0 + nodes[0]*0.0
+
+    temperature = 100*nodes[0] + 800.0
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     import mirgecom.phenolics.tacot as my_composite
     wall_vars = wall.initializer(composite=my_composite,
         solid_species_mass=solid_species_mass,
-        gas_density=gas_density, temperature=300.0, progress=0.0)
+        gas_density=gas_density, temperature=temperature, progress=0.0)
 
     eos = wall.PhenolicsEOS(composite=my_composite)
 
-    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=300.0+nodes[0]*0.0)
-
-    print(wdv.progress)
-
-    import sys
-    sys.exit()
+    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature-10.0)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -156,11 +159,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     visualizer = make_visualizer(dcoll)
 
     from mirgecom.simutil import write_visfile
-    def my_write_viz(step, t, wall_vars):
+    def my_write_viz(step, t, wall_vars, dep_vars):
 
         viz_fields = [("species_mass", wall_vars.gas_species_mass),
                       ("gas_density", wall_vars.gas_density),
                       ("energy", wall_vars.energy),
+                      ("DV", dep_vars),
                      ]
 
         viz_fields.extend((
@@ -173,7 +177,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
 
-    my_write_viz(step=0, t=0.0, wall_vars=wall_vars)
+    my_write_viz(step=0, t=0.0, wall_vars=wall_vars, dep_vars=wdv)
 
 
 
