@@ -771,12 +771,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, normal)
 
         # Energy is the same, don't need to compute
-        cv_plus = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=state_minus.energy_density,
-            momentum=mom_plus,
-            species_mass=state_minus.species_mass_density)
+        cv_plus = state_minus.cv.replace(momentum=mom_plus)
 
         # we'll need this when we go to production
         """
@@ -798,12 +793,9 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
             gas_model.eos.internal_energy(state_minus.cv)
             + 0.5*np.dot(mom_bc, mom_bc)/state_minus.mass_density)
 
-        cv_bc = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
+        cv_bc = state_minus.cv.replace(
             energy=energy_bc,
-            momentum=mom_bc,
-            species_mass=state_minus.species_mass_density)
+            momentum=mom_bc)
 
         # we'll need this when we go to production
         """
@@ -839,10 +831,7 @@ class AdiabaticSlipBoundary(PrescribedFluidBoundary):
         grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
             state_minus, grad_cv_minus, normal)
 
-        return make_conserved(
-            grad_cv_minus.dim,
-            mass=grad_cv_minus.mass,
-            energy=grad_cv_minus.energy,
+        return grad_cv_minus.replace(
             momentum=grad_mom_bc,
             species_mass=grad_species_mass_bc)
 
@@ -1515,12 +1504,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
 
         # Don't modify the energy, even though we modify the temperature; energy will
         # be advected through the wall, which doesn't make sense
-        cv_plus = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=state_minus.energy_density,
-            momentum=mom_plus,
-            species_mass=state_minus.species_mass_density)
+        cv_plus = state_minus.cv.replace(momentum=mom_plus)
 
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
@@ -1541,12 +1525,9 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         # Velocity is pinned to 0 here, no kinetic energy
         total_energy_bc = state_minus.mass_density*internal_energy_bc
 
-        cv_bc = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
+        cv_bc = state_minus.cv.replace(
             energy=total_energy_bc,
-            momentum=mom_bc,
-            species_mass=state_minus.species_mass_density)
+            momentum=mom_bc)
 
         return make_fluid_state(cv=cv_bc, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
@@ -1564,12 +1545,7 @@ class IsothermalWallBoundary(PrescribedFluidBoundary):
         grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
             state_minus, grad_cv_minus, normal)
 
-        return make_conserved(
-            grad_cv_minus.dim,
-            mass=grad_cv_minus.mass,
-            energy=grad_cv_minus.energy,
-            momentum=grad_cv_minus.momentum,
-            species_mass=grad_species_mass_bc)
+        return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
 
 class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
@@ -1615,12 +1591,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
         mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density, normal)
 
         # Energy is the same, don't need to compute
-        cv_plus = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=state_minus.energy_density,
-            momentum=mom_plus,
-            species_mass=state_minus.species_mass_density)
+        cv_plus = state_minus.cv.replace(momentum=mom_plus)
 
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
@@ -1634,12 +1605,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 
         # FIXME: Should we modify kinetic energy here? If not, add a comment
         # explaining why
-        cv_bc = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=state_minus.energy_density,
-            momentum=mom_bc,
-            species_mass=state_minus.species_mass_density)
+        cv_bc = state_minus.cv.replace(momentum=mom_bc)
 
         return make_fluid_state(cv=cv_bc, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
@@ -1653,12 +1619,7 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
         grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
             state_minus, grad_cv_minus, normal)
 
-        return make_conserved(
-            grad_cv_minus.dim,
-            mass=grad_cv_minus.mass,
-            energy=grad_cv_minus.energy,
-            momentum=grad_cv_minus.momentum,
-            species_mass=grad_species_mass_bc)
+        return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
     def grad_temperature_bc(
             self, dcoll, dd_bdry, gas_model, grad_t_minus, **kwargs):
@@ -1720,12 +1681,7 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, normal)
 
         # Energy is the same, don't need to compute
-        cv_plus = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=state_minus.energy_density,
-            momentum=mom_plus,
-            species_mass=state_minus.species_mass_density)
+        cv_plus = state_minus.cv.replace(momentum=mom_plus)
 
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
@@ -1741,12 +1697,9 @@ class SymmetryBoundary(PrescribedFluidBoundary):
             gas_model.eos.internal_energy(state_minus.cv)
             + 0.5*np.dot(mom_bc, mom_bc)/state_minus.mass_density)
 
-        cv_bc = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
+        cv_bc = state_minus.cv.replace(
             energy=energy_bc,
-            momentum=mom_bc,
-            species_mass=state_minus.species_mass_density)
+            momentum=mom_bc)
 
         return make_fluid_state(cv=cv_bc, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
@@ -1775,10 +1728,8 @@ class SymmetryBoundary(PrescribedFluidBoundary):
         grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
             state_minus, grad_cv_minus, normal)
 
-        return make_conserved(
-            grad_cv_minus.dim,
+        return grad_cv_minus.replace(
             mass=grad_mass_bc,
-            energy=grad_cv_minus.energy,  # gradient of energy is useless
             momentum=grad_mom_bc,
             species_mass=grad_species_mass_bc)
 
