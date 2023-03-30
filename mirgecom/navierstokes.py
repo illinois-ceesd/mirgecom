@@ -398,8 +398,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         :func:`~mirgecom.navierstokes.grad_t_operator`.
 
     inviscid_terms_on
-        Optional boolean to turn OFF invsicid contributions to this operator.
-        Defaults to True.
+        Optional boolean to en/disable inviscid terms in this operator.
+        Defaults to ON (True).
 
     Returns
     -------
