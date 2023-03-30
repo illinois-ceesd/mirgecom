@@ -366,7 +366,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     return_gradients
         Optional boolean (defaults to false) indicating whether to return
         $\nabla(\text{CV})$ and $\nabla(T)$ along with the RHS for the Navier-Stokes
-        equations.  Useful for debugging and visualization.
+        equations. Useful for debugging and visualization.
 
     quadrature_tag
         An identifier denoting a particular quadrature discretization to use during
