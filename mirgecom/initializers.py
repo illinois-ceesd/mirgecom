@@ -65,13 +65,13 @@ def make_pulse(amp, r0, w, r):
 
     Parameters
     ----------
-    amp: float
+    amp
         specifies the value of $a_0$, the pulse amplitude
-    r0: numpy.ndarray
+    r0
         specifies the value of $\mathbf{r}_0$, the pulse location
-    w: float
+    w
         specifies the value of $w$, the rms pulse width
-    r: Object array of DOFArrays
+    r
         specifies the nodal coordinates
 
     Returns

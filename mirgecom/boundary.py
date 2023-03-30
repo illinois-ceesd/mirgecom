@@ -678,7 +678,7 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
     r"""Characteristics outflow BCs for linearized Euler equations.
 
     Implement non-reflecting outflow based on characteristic variables for
-    the Euler equations assuming small perturbations based on [Giles_1988].
+    the Euler equations assuming small perturbations based on [Giles_1988]_.
     The equations assume an uniform, steady flow and linerize the Euler eqs.
     in this reference state, yielding a linear equation in the form
 
