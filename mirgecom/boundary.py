@@ -17,6 +17,7 @@ Boundary Conditions
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipMovingBoundary
 .. autoclass:: IsothermalNoSlipBoundary
+.. autoclass:: LinearizedOutflowBoundary
 """
 
 __copyright__ = """
@@ -53,6 +54,7 @@ import grudge.op as op
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import make_fluid_state
+from pytools.obj_array import make_obj_array
 
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
 
@@ -670,3 +672,99 @@ class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
         will get the correct $T_\text{wall}$ BC.
         """
         return 2*self._wall_temp - state_minus.temperature
+
+
+class LinearizedOutflowBoundary(PrescribedFluidBoundary):
+    r"""Characteristics outflow BCs for linearized Euler equations.
+
+    Implement non-reflecting outflow based on characteristic variables for
+    the Euler equations assuming small perturbations based on [Giles_1988]_.
+    The equations assume an uniform, steady flow and linerize the Euler eqs.
+    in this reference state, yielding a linear equation in the form
+
+    .. math::
+        \frac{\partial U}{\partial t} + A \frac{\partial U}{\partial x} +
+        B \frac{\partial U}{\partial y} = 0
+
+    where where U is the vector of perturbation (primitive) variables and
+    the coefficient matrices A and B are constant matrices based on the
+    uniform, steady variables.
+
+    Using the linear hyperbolic system theory, this equation can be further
+    simplified by ignoring the y-axis terms (tangent) such that wave propagation
+    occurs only along the x-axis direction (normal). Then, the eigendecomposition
+    results in a orthogonal system where the wave have characteristic directions
+    of propagations and enable the creation of non-reflecting outflow boundaries.
+
+    This can also be applied for Navier-Stokes equations in regions where
+    viscous effects are not dominant, such as the far-field.
+    """
+
+    def __init__(self, free_stream_state=None,
+                 free_stream_density=None,
+                 free_stream_velocity=None,
+                 free_stream_pressure=None,
+                 free_stream_species_mass_fractions=None):
+        """Initialize the boundary condition object."""
+        if free_stream_state is None:
+            self._ref_mass = free_stream_density
+            self._ref_velocity = free_stream_velocity
+            self._ref_pressure = free_stream_pressure
+            self._spec_mass_fracs = free_stream_species_mass_fractions
+        else:
+            self._ref_mass = free_stream_state.cv.mass
+            self._ref_velocity = free_stream_state.velocity
+            self._ref_pressure = free_stream_state.pressure
+            self._spec_mass_fracs = free_stream_state.cv.species_mass_fractions
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.outflow_state
+        )
+
+    def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Non-reflecting outflow."""
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+
+        rtilde = state_minus.cv.mass - self._ref_mass
+        utilde = state_minus.velocity[0] - self._ref_velocity[0]
+        vtilde = state_minus.velocity[1] - self._ref_velocity[1]
+        ptilde = state_minus.dv.pressure - self._ref_pressure
+
+        un_tilde = +utilde*nhat[0] + vtilde*nhat[1]
+        ut_tilde = -utilde*nhat[1] + vtilde*nhat[0]
+
+        a = state_minus.speed_of_sound
+
+        c1 = -rtilde*a**2 + ptilde
+        c2 = self._ref_mass*a*ut_tilde
+        c3 = self._ref_mass*a*un_tilde + ptilde
+        c4 = 0.0  # zero-out the last characteristic variable
+        r_tilde_bnd = 1.0/(a**2)*(-c1 + 0.5*c3 + 0.5*c4)
+        un_tilde_bnd = 1.0/(self._ref_mass*a)*(0.5*c3 - 0.5*c4)
+        ut_tilde_bnd = 1.0/(self._ref_mass*a)*c2
+        p_tilde_bnd = 0.5*c3 + 0.5*c4
+
+        mass = r_tilde_bnd + self._ref_mass
+        u_x = self._ref_velocity[0] + (nhat[0]*un_tilde_bnd - nhat[1]*ut_tilde_bnd)
+        u_y = self._ref_velocity[1] + (nhat[1]*un_tilde_bnd + nhat[0]*ut_tilde_bnd)
+        pressure = p_tilde_bnd + self._ref_pressure
+
+        kin_energy = 0.5*mass*(u_x**2 + u_y**2)
+        if state_minus.is_mixture:
+            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            temperature = self._ref_pressure/(self._ref_mass*gas_const)
+            int_energy = mass*gas_model.eos.get_internal_energy(
+                temperature, self._spec_mass_fracs)
+        else:
+            int_energy = pressure/(gas_model.eos.gamma() - 1.0)
+
+        boundary_cv = (
+            make_conserved(dim=state_minus.dim, mass=mass,
+                           energy=kin_energy + int_energy,
+                           momentum=make_obj_array([u_x*mass, u_y*mass]),
+                           species_mass=state_minus.cv.species_mass)
+        )
+
+        return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)

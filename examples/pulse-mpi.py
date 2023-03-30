@@ -30,9 +30,9 @@ import numpy as np
 from functools import partial
 import pyopencl as cl
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+#from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
@@ -44,9 +44,12 @@ from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.boundary import (
+    AdiabaticSlipBoundary,
+    LinearizedOutflowBoundary
+)
 from mirgecom.initializers import (
-    Lump,
+    Uniform,
     AcousticPulse
 )
 from mirgecom.eos import IdealSingleGas
@@ -145,8 +148,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         box_ll = -1
         box_ur = 1
         nel_1d = 16
-        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        generate_mesh = partial(generate_regular_rect_mesh,
+            a=(box_ll,)*dim, b=(box_ur,)*dim,
+            nelements_per_axis=(nel_1d,)*dim,
+            boundary_tag_to_face={
+                "linearized": ["-x", "+x"],
+                "solid_wall": ["-y", "+y"]})
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
@@ -182,14 +189,25 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos)
-    vel = np.zeros(shape=(dim,))
+    velocity = np.zeros(shape=(dim,))
+    velocity[0] = 0.1
     orig = np.zeros(shape=(dim,))
-    initializer = Lump(dim=dim, center=orig, velocity=vel, rhoamp=0.0)
-    wall = AdiabaticSlipBoundary()
-    boundaries = {BTAG_ALL: wall}
+    initializer = Uniform(dim=dim, velocity=velocity)
     uniform_state = initializer(nodes)
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1.0, width=.1,
-                                   center=orig)
+
+    # Hard wall
+    wall = AdiabaticSlipBoundary()
+
+    # Linearized outflow
+    linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=1.0,
+        free_stream_velocity=velocity, free_stream_pressure=1.0)
+
+    # boundaries
+    boundaries = {BoundaryDomainTag("linearized"): linear_outflow_bnd,
+                  BoundaryDomainTag("solid_wall"): wall}
+
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -246,7 +264,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.5):
+           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
