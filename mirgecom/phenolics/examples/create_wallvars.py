@@ -124,9 +124,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
     
-#    from mirgecom.phenolics.gas import gas_properties
-#    gas = gas_properties()
-#    gas_data = gas._data
+    from mirgecom.phenolics.gas import gas_properties
+    my_gas = gas_properties()
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -140,18 +139,41 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     gas_density = 1.0 + nodes[0]*0.0
 
-    temperature = 100*nodes[0] + 800.0
+    temperature = 100*nodes[0] + 800.0 + 0.1
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     import mirgecom.phenolics.tacot as my_composite
+
     wall_vars = wall.initializer(composite=my_composite,
         solid_species_mass=solid_species_mass,
         gas_density=gas_density, temperature=temperature, progress=0.0)
 
-    eos = wall.PhenolicsEOS(composite=my_composite)
+    eos = wall.PhenolicsEOS(composite=my_composite, gas=my_gas)
 
-    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature-10.0)
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    gas_data = my_gas._data
+    bounds = gas_data[:,0]
+
+    idx = temperature*0.0
+    for i in range(bounds.shape[0]-1):
+        aux = actx.np.where(
+                actx.np.greater(temperature, bounds[i] + 1e-7),
+                    actx.np.where(actx.np.less(temperature, bounds[i+1]),
+                        i,
+                        0),
+                    0
+                )
+
+        idx = idx + aux
+
+    print(idx)
+    sys.exit()
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature-10.0, idx=idx)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 

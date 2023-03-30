@@ -160,15 +160,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_presc_func(u_tpair, kappa_tpair, grad_u_tpair, normal, **kwargs):
         time = kwargs['time']
 
-        if time >= 0.0 and time < 0.1:
-            conv_coeff_0 = 0.3*(time/0.1)
-            h_e = 1.5e6*(time/0.1)
+        flux = actx.np.where(actx.np.less(time, 0.1),
+            0.3*(time/0.1)*1.5e6*(time/0.1),
+            0.3*1.5e6
+        )
 
-        if time >= 0.1 and time < 60.1:
-            conv_coeff_0 = 0.3
-            h_e = 1.5e6
-
-        return conv_coeff_0*h_e - 0.8*5.567e-8*u_tpair.int**4
+        return flux - 0.8*5.567e-8*u_tpair.int**4
 
     boundaries = {
         BoundaryDomainTag("prescribed"): PrescribedFluxDiffusionBoundary(my_presc_func),
@@ -177,6 +174,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     }
 
 #######################################
+
+    #~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    from mirgecom.phenolics.gas import gas_properties
+    my_gas = gas_properties()
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -192,26 +194,35 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     temperature = 300.0 + nodes[0]*0.0
 
+    solid_species_mass = force_evaluation(actx, solid_species_mass)
+    gas_density = force_evaluation(actx, gas_density)
+    temperature = force_evaluation(actx, temperature)
+
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     import mirgecom.phenolics.tacot as my_composite
+#    import mirgecom.phenolics.simple as my_composite
 
     if restart_file:
         t = restart_data["t"]
         istep = restart_data["step"]
         wall_vars = restart_data["wall_vars"]
-        if logmgr:
-            from mirgecom.logging_quantities import logmgr_set_time
-            logmgr_set_time(logmgr, istep, t)
     else:
         # Set the current state from time 0
         wall_vars = wall.initializer(composite=my_composite,
             solid_species_mass=solid_species_mass,
             gas_density=gas_density, temperature=temperature, progress=0.0)
 
-    eos = wall.PhenolicsEOS(composite=my_composite)
+    if logmgr:
+        from mirgecom.logging_quantities import logmgr_set_time
+        logmgr_set_time(logmgr, istep, t)
 
-    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature)
+    eos = wall.PhenolicsEOS(composite=my_composite, gas=my_gas)
+
+    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature, idx=None)
+       
+    wall_vars = force_evaluation(actx, wall_vars)
+    wdv = force_evaluation(actx, wdv)
 
 #######################################
 
@@ -221,9 +232,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
-            ("dt.max", "dt: {value:1.5e} s, "),
-            ("t_sim.max", "sim time: {value:1.5e} s, "),
-            ("t_step.max", "--- step walltime: {value:5g} s\n")
+            ("dt.max", "dt: {value:1.3e} s, "),
+            ("t_sim.max", "sim time: {value:7.3f} s, "),
+            ("t_step.max", "step walltime: {value:5g} s\n")
             ])
 
         try:
@@ -241,31 +252,31 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 #######################################
 
-    def _energy_rhs(t, wv, wdv):
-        """."""
-        kappa = wdv.thermal_conductivity
-        temperature = wdv.temperature
-        return diffusion_operator(dcoll, kappa=kappa,
-            boundaries=boundaries, u=temperature, time=t)
-
     pyrolysis = my_composite.pyrolysis()
-    def _pyrolysis_rhs(t, wv, wdv):
-        """."""
-        temperature = wdv.temperature
-        return pyrolysis.get_sources(temperature, wv.solid_species_mass)
-
     def _rhs(t, state):
 
         wv, tseed = state
-        wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed)
+        wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed, idx=None)
 
-        return make_obj_array([
-            wall.make_conserved(solid_species_mass=_pyrolysis_rhs(t, wv, wdv),
-                                gas_density=zeros,
-                                gas_species_mass=zeros,
-                                energy=_energy_rhs(t, wv, wdv)),
-            tseed*0.0
-        ])
+        kappa = wdv.thermal_conductivity
+        temperature = wdv.temperature
+
+        #~~~~~
+        energy_rhs = diffusion_operator(dcoll, kappa=kappa,
+            boundaries=boundaries, u=temperature, time=t)
+
+        viscous_rhs = wall.make_conserved(solid_species_mass=wv.solid_species_mass*0.0,
+            gas_density=zeros, gas_species_mass=zeros, energy=energy_rhs)
+
+        #~~~~~
+        pyrolysis_rhs = pyrolysis.get_sources(temperature, wv.solid_species_mass)
+
+        #FIXME dont know why, but thisis returning a tuple...
+        source_terms = wall.make_conserved(solid_species_mass=pyrolysis_rhs,
+            gas_density=zeros, gas_species_mass=zeros, energy=zeros),
+
+        #~~~~~
+        return make_obj_array([viscous_rhs + source_terms[0], tseed*0.0])
 
     compiled_rhs = actx.compile(_rhs)
 
@@ -309,9 +320,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 ###############################################
 
+    from warnings import warn
+    warn("Running gc.collect() to work around memory growth issue ")
+    import gc
+    gc.collect()
+
     from pytools.obj_array import make_obj_array
 
     my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
+    print('Solution file' + str(istep))
 
     while t < t_final:
 
@@ -327,21 +344,23 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         wall_vars, tseed = state
 
-        wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
+        wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=tseed, idx=None)
 
         t += dt
         istep += 1
 
         if check_naninf_local(dcoll, "vol", wdv.temperature):
             logmgr.info(f"{rank=}: NANs/INFs in temperature data.")
-            #my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
 
         if istep%100 == 0:
             my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
 
-        if istep%1000 == 0:
-            my_write_restart(step=istep, t=t, wall_vars=wall_vars,
-                         tseed=wdv.temperature)
+        if istep%100 == 0:
+            gc.collect()
+
+#        if istep%1000 == 0:
+#            my_write_restart(step=istep, t=t, wall_vars=wall_vars,
+#                         tseed=wdv.temperature)
 
         if logmgr:
             set_dt(logmgr, dt)
