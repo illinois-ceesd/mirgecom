@@ -1611,8 +1611,23 @@ class AdiabaticNoslipWallBoundary(PrescribedFluidBoundary):
 class SymmetryBoundary(PrescribedFluidBoundary):
     r"""Boundary condition implementing symmetry boundary.
 
+    a.k.a. Reflective inviscid wall boundary
+
     This class is deprecated and should be replaced by
     :class:`~mirgecom.boundary.AdiabaticSlipBoundary`.
+
+    This class implements an adiabatic reflective slip boundary given
+    by
+    $\mathbf{q^{+}} = [\rho^{-}, (\rho{E})^{-}, (\rho\vec{V})^{-}
+    - 2((\rho\vec{V})^{-}\cdot\hat{\mathbf{n}}) \hat{\mathbf{n}}]$
+    wherein the normal component of velocity at the wall is 0, and
+    tangential components are preserved. These perfectly reflecting
+    conditions are used by the forward-facing step case in
+    [Hesthaven_2008]_, Section 6.6, and correspond to the characteristic
+    boundary conditions described in detail in [Poinsot_1992]_.
+
+    For the gradients, the no-shear condition implies that cross-terms are absent
+    and that temperature gradients are null due to the adiabatic condition.
 
     .. automethod:: __init__
     .. automethod:: state_plus
