@@ -71,12 +71,12 @@ def make_pulse(amp, r0, w, r):
         specifies the value of $\mathbf{r}_0$, the pulse location
     w: float
         specifies the value of $w$, the rms pulse width
-    r: Object array of :class:`~meshmode.dof_array.DOFArray`
+    r: numpy.ndarray
         specifies the nodal coordinates
 
     Returns
     -------
-    G: float
+    G: numpy.ndarray
         The values of the exponential function
     """
     dim = len(r)
