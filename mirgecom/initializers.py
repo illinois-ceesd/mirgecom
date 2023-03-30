@@ -67,7 +67,7 @@ def make_pulse(amp, r0, w, r):
     ----------
     amp: float
         specifies the value of $a_0$, the pulse amplitude
-    r0: float array
+    r0: np.ndarray
         specifies the value of $\mathbf{r}_0$, the pulse location
     w: float
         specifies the value of $w$, the rms pulse width
