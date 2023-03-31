@@ -33,7 +33,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import SimpleTransport, PowerLawTransport
 from mirgecom.simutil import get_sim_timestep
 from mirgecom.navierstokes import ns_operator
 
@@ -119,6 +119,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
     timestepper = rk4_step
     debug = False
+
+    use_powerlaw_transport = False
 
     # Some i/o frequencies
     nstatus = 1
@@ -229,12 +231,18 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # {{{ Create Pyrometheus thermochemistry object & EOS
 
-    # {{{ Initialize simple transport model
+    # {{{ Initialize transport model
+    spec_ones = np.ones(nspecies)
     kappa = 1e-5
-    spec_diffusivity = 1e-5 * np.ones(nspecies)
+    const_diffus = 1e-5 * spec_ones
     sigma = 1e-5
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
-                                      species_diffusivity=spec_diffusivity)
+    lewis = 1. * spec_ones
+    lewis[cantera_soln.species_index("H2")] = 0.2
+    transport_model = (
+        PowerLawTransport(lewis=lewis) if use_powerlaw_transport else
+        SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
+                        species_diffusivity=const_diffus)
+    )
     # }}}
 
     # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
