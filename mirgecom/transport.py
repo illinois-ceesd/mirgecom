@@ -290,8 +290,7 @@ class PowerLawTransport(TransportModel):
 
         The species diffusivities can be either
         (1) specified directly or
-        (2) based on the user-imposed Lewis number $Le$ as an array with
-            shape "nspecies".
+        (2) using user-imposed Lewis number $Le$ w/shape "nspecies"
 
         In the latter, it is then evaluate based on the heat capacity at
         constant pressure $C_p$ and the thermal conductivity $\kappa$ as:
