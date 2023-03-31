@@ -262,6 +262,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         temperature = wdv.temperature
 
         #~~~~~
+        #inviscid RHS
+
+        #~~~~~
         energy_rhs = diffusion_operator(dcoll, kappa=kappa,
             boundaries=boundaries, u=temperature, time=t)
 
@@ -271,7 +274,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         #~~~~~
         pyrolysis_rhs = pyrolysis.get_sources(temperature, wv.solid_species_mass)
 
-        #FIXME dont know why, but thisis returning a tuple...
+        #FIXME dont know why, but this is returning a tuple...
         source_terms = wall.make_conserved(solid_species_mass=pyrolysis_rhs,
             gas_density=zeros, gas_species_mass=zeros, energy=zeros),
 
