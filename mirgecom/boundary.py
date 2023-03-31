@@ -635,9 +635,10 @@ class IsothermalWallBoundary(FluidBoundary):
 
     .. automethod:: state_bc
     .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
     .. automethod:: inviscid_state_plus
     .. automethod:: viscous_state_plus
-    .. automethod:: isothermal_wall_state
     """
 
     def __init__(self, wall_temperature=300):
