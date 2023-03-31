@@ -747,7 +747,7 @@ class IsothermalWallBoundary(FluidBoundary):
         return f_ext@normal
 
     def cv_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return flux to be used in grad operator when calculating grad(CV)"""
+        """Return flux to be used in grad operator when calculating grad(CV)."""
         # Mengaldo Eqn (50)+
         state_bc = self.state_bc(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
         actx = state_minus.array_context
@@ -757,7 +757,7 @@ class IsothermalWallBoundary(FluidBoundary):
 
     def temperature_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                                   **kwargs):
-        """Return flux to be used in grad operator when calculating grad(T)"""
+        """Return flux to be used in grad operator when calculating grad(T)."""
         # Mengaldo Eqn (50)+
         temperature_bc = self.temperature_bc(state_minus, **kwargs)
         actx = state_minus.array_context
