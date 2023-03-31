@@ -16,7 +16,7 @@ Boundary Conditions
 .. autoclass:: DummyBoundary
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipMovingBoundary
-.. autoclass:: IsothermalNoSlipBoundary
+.. autoclass:: IsothermalWallBoundary
 """
 
 __copyright__ = """
@@ -621,52 +621,146 @@ class AdiabaticNoslipMovingBoundary(PrescribedFluidBoundary):
         return -grad_av_minus
 
 
-class IsothermalNoSlipBoundary(PrescribedFluidBoundary):
-    r"""Isothermal no-slip viscous wall boundary.
+class IsothermalWallBoundary(FluidBoundary):
+    r"""Isothermal viscous wall boundary.
 
-    .. automethod:: isothermal_noslip_state
+    This class implements an isothermal no-slip wall consistent with the prescription
+    by [Mengaldo_2014]_.
+
+    .. automethod:: __init__
+    .. automethod:: inviscid_divergence_flux
+    .. automethod:: viscous_divergence_flux
+    .. automethod:: cv_gradient_flux
+    .. automethod:: temperature_gradient_flux
+
+    .. automethod:: state_bc
     .. automethod:: temperature_bc
+    .. automethod:: inviscid_state_plus
+    .. automethod:: viscous_state_plus
+    .. automethod:: isothermal_wall_state
     """
 
     def __init__(self, wall_temperature=300):
         """Initialize the boundary condition object."""
         self._wall_temp = wall_temperature
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.isothermal_noslip_state,
-            boundary_temperature_func=self.temperature_bc
-        )
-
-    def isothermal_noslip_state(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        r"""Get the interior and exterior solution (*state_minus*) on the boundary.
-
-        Sets the external state s.t. $v^+ = -v^-$, giving vanishing contact velocity
-        in the approximate Riemann solver used to compute the inviscid flux.
-        """
-        temperature_wall = self._wall_temp + 0*state_minus.mass_density
-        velocity_plus = -state_minus.velocity
-        mass_frac_plus = state_minus.species_mass_fractions
-
-        internal_energy_plus = gas_model.eos.get_internal_energy(
-            temperature=temperature_wall, species_mass_fractions=mass_frac_plus
-        )
-
-        total_energy_plus = state_minus.mass_density*(internal_energy_plus
-                                           + .5*np.dot(velocity_plus, velocity_plus))
-
-        cv_plus = make_conserved(
-            state_minus.dim, mass=state_minus.mass_density, energy=total_energy_plus,
-            momentum=-state_minus.momentum_density,
-            species_mass=state_minus.species_mass_density
-        )
-        tseed = state_minus.temperature if state_minus.is_mixture else None
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=tseed)
 
     def temperature_bc(self, state_minus, **kwargs):
-        r"""Get temperature value to weakly prescribe wall bc.
+        """Get temperature value used in grad(T)."""
+        return 0.*state_minus.temperature + self._wall_temp
 
-        Returns $2*T_\text{wall} - T^-$ so that a central gradient flux
-        will get the correct $T_\text{wall}$ BC.
-        """
-        return 2*self._wall_temp - state_minus.temperature
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return BC fluid state."""
+        # Mengaldo Eqn (48)
+        temperature_bc = self.temperature_bc(state_minus, **kwargs)
+        mom_bc = 0*state_minus.momentum_density
+        mass_frac_bc = state_minus.species_mass_fractions
+        rho_bc = state_minus.mass_density
+        ie_bc = gas_model.eos.get_internal_energy(
+            temperature=temperature_bc, species_mass_fractions=mass_frac_bc)
+        energy_bc = rho_bc * ie_bc
+        cv_bc = make_conserved(
+            state_minus.dim, mass=rho_bc, energy=energy_bc, momentum=mom_bc,
+            species_mass=rho_bc*mass_frac_bc)
+
+        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
+                                temperature_seed=temperature_bc)
+
+    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
+        if state_minus.nspecies > 0:
+            from mirgecom.fluid import species_mass_fraction_gradient
+            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+                                                          grad_cv_minus)
+            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+            grad_species_mass_plus = 0.*grad_y_plus
+
+            for i in range(state_minus.nspecies):
+                grad_species_mass_plus[i] = \
+                    (state_minus.mass_density*grad_y_plus[i]
+                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
+        return make_conserved(grad_cv_minus.dim,
+                              mass=grad_cv_minus.mass,
+                              energy=grad_cv_minus.energy,
+                              momentum=grad_cv_minus.momentum,
+                              species_mass=grad_species_mass_plus)
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus,
+                            grad_cv_minus, grad_t_minus):
+        """Return BC on grad(temperature)."""
+        # Mengaldo Eqns (50-51)
+        return grad_t_minus
+
+    def inviscid_state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return fluid state to use in calculation of inviscid flux."""
+        # Mengaldo Eqn (45)
+        rho_plus = state_minus.mass_density
+        mom_plus = -state_minus.momentum_density
+        ener_plus = state_minus.energy_density
+        rhoy_plus = state_minus.species_mass_density
+        cv_plus = make_conserved(state_minus.dim, mass=rho_plus, momentum=mom_plus,
+                                 energy=ener_plus, species_mass=rhoy_plus)
+        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature)
+
+    def viscous_state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return fluid state to use in calculation of viscous flux."""
+        # Mengaldo Eqn (50)
+        return self.state_bc(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+
+    def inviscid_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
+        """Return Riemann flux using state with mom opposite of interior state."""
+        # Mengaldo Eqn (46)
+        dd_bdry = as_dofdesc(dd_bdry)
+        state_plus = self.inviscid_state_plus(
+            dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+        state_pair = TracePair(dd_bdry, interior=state_minus, exterior=state_plus)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(state_pair, gas_model, normal)
+
+    def viscous_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                                grad_cv_minus, grad_t_minus,
+                                numerical_flux_func=viscous_facial_flux_central,
+                                **kwargs):
+        """Return the boundary flux for the divergence of the viscous flux."""
+        # Mengaldo Eqn (51)
+        dd_bdry = as_dofdesc(dd_bdry)
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        state_bc = self.state_bc(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+        grad_cv_bc = self.grad_cv_bc(state_minus=state_minus,
+                                     grad_cv_minus=grad_cv_minus,
+                                     normal=normal, **kwargs)
+
+        grad_t_bc = self.grad_temperature_bc(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+            grad_t_minus=grad_t_minus)
+
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
+        f_ext = viscous_flux(state=state_bc, grad_cv=grad_cv_bc,
+                             grad_t=grad_t_bc)
+        return f_ext@normal
+
+    def cv_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return flux to be used in grad operator when calculating grad(CV)"""
+        # Mengaldo Eqn (50)+
+        state_bc = self.state_bc(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        from arraycontext import outer
+        return outer(state_bc.cv, nhat)
+
+    def temperature_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                                  **kwargs):
+        """Return flux to be used in grad operator when calculating grad(CV)"""
+        # Mengaldo Eqn (50)+
+        temperature_bc = self.temperature_bc(state_minus, **kwargs)
+        actx = state_minus.array_context
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        from arraycontext import outer
+        return outer(temperature_bc, nhat)
