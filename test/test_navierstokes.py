@@ -940,6 +940,184 @@ class VarMuSolution(FluidManufacturedSolution):
         return super().get_boundaries(dcoll, actx, t)
 
 
+class MoserSolution(FluidManufacturedSolution):
+    """CNS manufactured solution from [Moser_2017]__."""
+
+    def __init__(self, dim, q_coeff=None, lx=None, gamma=1.4,
+                 gas_const=287., alpha=0.0, beta=1e-5, sigma=1e-1, n=.666,
+                 nspecies=0, d_alpha=None, mu=0, kappa=0):
+        """Initialize it."""
+        super().__init__(dim=dim, lx=lx, gamma=gamma, gas_const=gas_const)
+        self._alpha = alpha
+        self._beta = beta
+        self._sigma = sigma
+        self._n = n
+        self._mu = mu
+        self._kappa = kappa
+        self._nspecies = nspecies
+        self._d_alpha = d_alpha
+
+    def _phi(a, b, c, d, e, f, g, r, t):
+        x, y, z = r
+        a_0, a_x, a_y, a_z, a_xy, a_xz, a_yz = a
+        f_0, f_x, f_y, f_z, f_xy, f_xz, f_yz = f
+        g_0, g_x, g_y, g_z, g_xy, g_xz, g_yz = g
+        b_x, b_y, b_z, b_xy, b_xz, b_yz = b
+        c_x, c_y, c_z, c_xy, c_xz, c_yz = c
+        d_xy, d_xz, d_yz = d
+        e_xy, e_xz, e_yz = e
+        return \
+            (a_0 * mm.cos(f_0 * t + g_0)
+             + (a_x * mm.cos(b_x * 2*np.pi*x/self._lx + c_x)
+                *mm.cos(f_x * t + g_x))
+             + (a_xy * mm.cos(b_xy * 2*np.pi*x/self._lx + c_xy)
+                *mm.cos(d_xy * 2*np.pi*y/self._ly + e_xy)
+                *mm.cos(f_xy * t + g_xy))
+             + (a_xz * mm.cos(b_xz * 2*np.pi*x/self._lx + c_xz)
+                *mm.cos(d_xz * 2*np.pi*z/self._lz + e_xz)
+                *mm.cos(f_xz * t + g_xz))
+             + (a_y * mm.cos(b_y * 2*np.pi*y/self._ly + c_y)
+                *mm.cos(f_y * t + g_y))
+             + (a_yz * mm.cos(b_yz * 2*np.pi*y/self._ly + c_yz)
+                *mm.cos(d_yz * 2*np.pi*z/self._lz + e_yz)
+                *mm.cos(f_yz * t + g_yz))
+             + (a_z * mm.cos(b_z * 2*np.pi*z/self._lz + c_z)
+                * mm.cos(f_z * t + g_z)))
+
+    def _get_channel_solution(self, x, t):
+
+        tone = mm.cos(t - t)
+        xone = mm.cos(x[0] - x[0])
+
+        # RHO soln parameters
+        #        0,  x,   y,    z,    xy,   xz,   yz 
+        a_rho = [1., 0., 1./7., 0., 1./11., 0., 1./31.]
+        f_rho = [0., 0., 1., 0., 3., 0., 2.]
+        g_rho = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
+
+        #        x    y     z   xy   xz  yz
+        b_rho = [0,, 1./2., 0., 3.0, 0., 2.]
+        c_rho = [0., 0., 0., 0., 0., 0., 0.]
+
+        #        xy    xz    yz
+        d_rho = [3., 0., 2.]
+        e_rho = [0., 0., 0.]
+
+        rho = self._phi(a=a_rho, b=b_rho, c=c_rho, d=d_rho, e=e_rho, f=f_rho,
+                        g=r_rho, r=x, t=t)*tone
+
+        # vx=velocity[0] soln parameters
+        #        0,  x,   y,    z,    xy,   xz,   yz 
+        a_vx = [0., 0., 53., 0., 53./37., 0., 53./41.]
+        f_vx = [0., 0., 1., 0., 3., 0., 2.]
+        g_vx = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
+
+        #        x    y     z   xy   xz  yz
+        b_vx = [0,, 1./2., 0., 3.0, 0., 2.]
+        c_vx = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+
+        #        xy    xz    yz
+        d_vx = [3., 0., 2.]
+        e_vx = [-np.pi/2., 0., -np.pi/2.]
+
+        u = self._phi(a=a_vx, b=b_vx, c=c_vx, d=d_vx, e=e_vx, f=f_vx,
+                      g=r_vx, r=x, t=t)*tone
+
+        # vy=velocity[1] soln parameters
+        #        0,  x,   y,    z,    xy,   xz,   yz 
+        a_vy = [0., 0., 2., 0., 3., 0., 5.]
+        f_vy = [0., 0., 1., 0., 3., 0., 2.]
+        g_vy = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
+
+        #        x    y     z   xy   xz  yz
+        b_vy = [0,, 1./2., 0., 3.0, 0., 2.]
+        c_vy = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+
+        #        xy    xz    yz
+        d_vy = [3., 0., 2.]
+        e_vy = [-np.pi/2., 0., -np.pi/2.]
+
+        v = self._phi(a=a_vy, b=b_vy, c=c_vy, d=d_vy, e=e_vy, f=f_vy,
+                      g=r_vy, r=x, t=t)*tone
+
+        # vz=velocity[2] soln parameters
+        #        0,  x,   y,    z,    xy,   xz,   yz 
+        a_vz = [0., 0., 7., 0., 11., 0., 13.]
+        f_vz = [0., 0., 1., 0., 3., 0., 2.]
+        g_vz = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
+
+        #        x    y     z   xy   xz  yz
+        b_vz = [0,, 1./2., 0., 3.0, 0., 2.]
+        c_vz = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+
+        #        xy    xz    yz
+        d_vz = [3., 0., 2.]
+        e_vz = [-np.pi/2., 0., -np.pi/2.]
+
+        w = self._phi(a=a_vz, b=b_vz, c=c_vz, d=d_vz, e=e_vz, f=f_vz,
+                      g=r_vz, r=x, t=t)*tone
+
+        # Temperature soln parameters
+        #        0,  x,   y,    z,    xy,   xz,   yz 
+        a_tmpr = [300., 0., 300./13., 0., 300./17., 0., 300./37.]
+        f_tmpr = [0., 0., 1., 0., 3., 0., 2.]
+        g_tmpr = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
+
+        #        x    y     z   xy   xz  yz
+        b_tmpr = [0,, 1./2., 0., 3.0, 0., 2.]
+        c_tmpr = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+
+        #        xy    xz    yz
+        d_tmpr = [3., 0., 2.]
+        e_tmpr = [-np.pi/2., 0., -np.pi/2.]
+
+        tmptr = self._phi(a=a_tmpr, b=b_tmpr, c=c_tmpr, d=d_tmpr, e=e_tmpr, f=f_tmpr,
+                          g=r_tmpr, r=x, t=t)*tone
+        press = rho * self._gas_const * tmptr
+
+        if self._dim == 1:
+            velocity = make_obj_array([u])
+        if self._dim == 2:
+            velocity = make_obj_array([u, v])
+        if self._dim == 3:
+            velocity = make_obj_array([u, v, w])
+
+        energy = press / (self._gamma - 1) + rho*np.dot(velocity, velocity)/2.
+        mom = rho*velocity
+
+        species_mass = None
+        if self._nspecies > 0:
+            spec = make_obj_array([xone/self._nspecies
+                            for _ in range(self._nspecies)])
+            species_mass = density*spec
+
+        return (make_conserved(dim=self._dim, mass=density, momentum=mom,
+                               energy=energy, species_mass=species_mass),
+                press, tmptr)
+
+    def get_transport_properties(self, sym_soln, sym_pressure, sym_temperature):
+        if self._n == 0:
+            mu = self._mu
+            kappa = self._kappa
+        else:
+            mu = self._alpha * sym_temperature*self._n
+            kappa = self._sigma * mu * self._gas_const / (self._gamma - 1)
+
+        return mu, kappa
+
+    def get_mesh(self, n):
+        """Get the mesh."""
+        return super().get_mesh(n)
+
+    def get_boundaries(self, dcoll, actx, t):
+        """Get the boundaries."""
+        return super().get_boundaries(dcoll, actx, t)
+
+    def get_solution(self, x, t):
+        """Return the symbolically-compatible solution."""
+        return self._get_channel_solution(x, t)
+
+
 @pytest.mark.parametrize("order", [1])
 @pytest.mark.parametrize(("dim", "u_0", "v_0", "w_0"),
                          [(1, 800, 0, 0),
@@ -1001,10 +1179,221 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
     #                                  thermal_conductivity=kappa)
     transport_model = PowerLawTransport(alpha=alpha, beta=beta, sigma=sigma,
                                         n=tn, species_diffusivity=diffusivity)
-
     gas_model = GasModel(eos=eos, transport=transport_model)
 
     man_soln = RoySolution(dim=dim, q_coeff=q_coeff, x_coeff=x_coeff, lx=None,
+                           alpha=alpha, beta=beta, sigma=sigma, mu=mu, kappa=kappa,
+                           nspecies=nspecies)
+
+    sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
+    sym_mu, sym_kappa = man_soln.get_transport_properties(sym_cv, sym_prs, sym_tmp)
+    
+    logger.info(f"{sym_cv=}\n"
+                f"{sym_cv.mass=}\n"
+                f"{sym_cv.energy=}\n"
+                f"{sym_cv.momentum=}\n"
+                f"{sym_cv.species_mass=}")
+
+    dcv_dt = sym_diff(sym_t)(sym_cv)
+    print(f"{dcv_dt=}")
+
+    from mirgecom.symbolic_fluid import sym_ns
+    sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu=sym_mu, kappa=sym_kappa,
+                        species_diffusivities=diffusivity)
+    from pymbolic.mapper.analysis import get_num_nodes
+
+    nnodes_mass = get_num_nodes(sym_ns_rhs.mass)
+    nnodes_mom = get_num_nodes(sym_ns_rhs.momentum[0])
+    nnodes_ener = get_num_nodes(sym_ns_rhs.energy)
+
+    nnodes_dmassdt = get_num_nodes(dcv_dt.mass)
+    nnodes_dmomdt = get_num_nodes(dcv_dt.momentum[0])
+    nnodes_denerdt = get_num_nodes(dcv_dt.energy)
+
+    print(f"{nnodes_mass=},{nnodes_mom=},{nnodes_ener=},{nnodes_dmassdt=},{nnodes_dmomdt=},{nnodes_denerdt=}")
+
+    # assert False
+
+    sym_ns_source = dcv_dt - sym_ns_rhs
+
+    tol = 1e-12
+
+    sym_source = sym_ns_source
+
+    logger.info(f"{sym_source=}")
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec = EOCRecorder()
+
+    n0 = 4
+
+    def _evaluate_source(t, x):
+        return evaluate(sym_source, t=t, x=x)
+
+    def _evaluate_soln(t, x):
+        return evaluate(sym_cv, t=t, x=x)
+
+    # eval_source = actx.compile(_evaluate_source)
+    # eval_soln = actx.compile(_evaluate_soln)
+
+    for n in [n0, 2*n0, 4*n0]:
+
+        mesh = man_soln.get_mesh(n)
+
+        dcoll = create_discretization_collection(actx, mesh, order)
+        nodes = actx.thaw(dcoll.nodes())
+
+        from grudge.dt_utils import characteristic_lengthscales
+        char_len = actx.to_numpy(
+            op.norm(dcoll, characteristic_lengthscales(actx, dcoll), np.inf)
+        )
+
+        source_eval = evaluate(sym_source, t=0, x=nodes)
+        # source_eval = eval_source(0, nodes)
+        cv_exact = evaluate(sym_cv, t=0, x=nodes)
+        # cv_exact = eval_soln(0, nodes)
+        import time as perftime
+        t0 = perftime.perf_counter()
+        print(f"{source_eval=}")
+        t1 = perftime.perf_counter() - t0
+        print(f"{cv_exact=}")
+        perftime.perf_counter()
+        t2 = perftime.perf_counter() - t1
+        print(f"{t1=},{t2=}")
+        # Sanity check the dependent quantities
+        # tmp_exact = evaluate(sym_tmp, t=0, x=nodes)
+        # tmp_eos = eos.temperature(cv=cv_exact)
+        # prs_exact = evaluate(sym_prs, t=0, x=nodes)
+        # prs_eos = eos.pressure(cv=cv_exact)
+        # prs_resid = (prs_exact - prs_eos)/prs_exact
+        # tmp_resid = (tmp_exact - tmp_eos)/tmp_exact
+        # prs_err = actx.to_numpy(op.norm(dcoll, prs_resid, np.inf))
+        # tmp_err = actx.to_numpy(op.norm(dcoll, tmp_resid, np.inf))
+
+        # print(f"{prs_exact=}\n{prs_eos=}")
+        # print(f"{tmp_exact=}\n{tmp_eos=}")
+
+        # assert prs_err < tol
+        # assert tmp_err < tol
+
+        if isinstance(source_eval.mass, DOFArray):
+            from mirgecom.simutil import componentwise_norms
+            source_norms = componentwise_norms(dcoll, source_eval)
+        else:
+            source_norms = source_eval
+
+        logger.info(f"{source_norms=}")
+        logger.info(f"{source_eval=}")
+
+        def _boundary_state_func(dcoll, dd_bdry, gas_model,
+                                 state_minus, time=0, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
+            nodes = actx.thaw(bnd_discr.nodes())
+            t0 = perftime.perf_counter()
+            boundary_cv = evaluate(sym_cv, x=nodes, t=time)
+            t_bnd = perftime.perf_counter() - t0
+            print(f"{t_bnd=}")
+            # boundary_cv = eval_soln(time, nodes)
+            return make_fluid_state(boundary_cv, gas_model)
+
+        boundaries = {
+            BTAG_ALL:
+            PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)
+        }
+
+        from mirgecom.simutil import max_component_norm
+        err_scale = max_component_norm(dcoll, cv_exact)
+
+        def get_rhs(t, cv):
+            from mirgecom.gas_model import make_fluid_state
+            fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
+            # source = eval_source(t, nodes)
+            t0 = perftime.perf_counter()
+            mms_source = evaluate(sym_source, t=t, x=nodes)
+            t_src = perftime.perf_counter() - t0
+            t0 = perftime.perf_counter()
+            print(f"{t_src=}")
+            # assert False
+            ns_rhs = \
+                ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
+                            gas_model=gas_model, comm_tag=_TestCommTag)
+            t_rhs = perftime.perf_counter() - t0
+            print(f"{t_rhs=}")
+            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")
+
+            return ns_rhs + mms_source
+
+        t = 0.
+        from mirgecom.integrators import rk4_step
+        dt = 1e-9
+        nsteps = 10
+        cv = cv_exact
+        print(f"{cv.dim=}")
+        print(f"{cv=}")
+
+        for iloop in range(nsteps):
+            print(f"{iloop=}")
+            cv = rk4_step(cv, t, dt, get_rhs)
+            t += dt
+            # assert False
+
+        soln_resid = compare_fluid_solutions(dcoll, cv, cv_exact)
+        cv_err_scales = componentwise_norms(dcoll, cv_exact)
+
+        max_err = soln_resid[0]/cv_err_scales.mass
+        max_err = max(max_err, soln_resid[1]/cv_err_scales.energy)
+        for i in range(dim):
+            max_err = max(soln_resid[2+i]/cv_err_scales.momentum[i], max_err)
+        max_err = actx.to_numpy(max_err)
+        print(f"{max_err=}")
+        eoc_rec.add_data_point(char_len, max_err)
+
+    logger.info(
+        f"{eoc_rec=}"
+    )
+
+    assert (
+        eoc_rec.order_estimate() >= order - 0.5
+        or eoc_rec.max_error() < tol
+    )
+
+
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+def test_moser_mms(actx_factory, order):
+    """CNS manufactured solution test from [Roy_2017]_."""
+    actx = actx_factory()
+    dim = 3
+
+    sym_x = pmbl.make_sym_vector("x", dim)
+    sym_t = pmbl.var("t")
+
+    gas_const = 287.
+    prandtl = 1.0
+    gamma = 1.4
+    alpha = 0.0
+    beta = 1e-5
+    sigma = 1e-1
+    tn = .666
+    nspecies = 4
+
+    diffusivity = np.empty((0,), dtype=object)
+    if nspecies > 0:
+        diffusivity = np.zeros(nspecies)
+
+    mu = 1.0
+    kappa = gamma * gas_const * mu / ((gamma - 1) * prandtl)
+
+    eos = IdealSingleGas(gas_const=gas_const)
+    transport_model = SimpleTransport(viscosity=mu,
+                                      thermal_conductivity=kappa)
+    # transport_model = PowerLawTransport(alpha=alpha, beta=beta, sigma=sigma,
+    #                                    n=tn, species_diffusivity=diffusivity)
+    gas_model = GasModel(eos=eos, transport=transport_model)
+
+        self._lx, self._ly, self._lz = [4*np.pi, 2., 4.*np.pi/3.]
+        
+    man_soln = MoserSolution(dim=dim, lx=(4*np.pi, 2., 4*np.pi/3.),
                            alpha=alpha, beta=beta, sigma=sigma, mu=mu, kappa=kappa,
                            nspecies=nspecies)
 
