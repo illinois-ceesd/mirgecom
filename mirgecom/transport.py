@@ -232,7 +232,8 @@ class PowerLawTransport(TransportModel):
 
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
-            thermal conductivity and the species diffusivities.
+            thermal conductivity and the species diffusivities. The input array
+            must have a shape of "nspecies".
         """
         if species_diffusivity is None and lewis is None:
             species_diffusivity = np.empty((0,), dtype=object)
@@ -296,9 +297,12 @@ class PowerLawTransport(TransportModel):
                             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$.
 
-        The species diffusivities can be specified directly or based on the
-        user-imposed Lewis number $Le$ of the mixture and the heat capacity at
-        constant pressure $C_p$:
+        The species diffusivities can be either
+        (1) specified directly or
+        (2) using user-imposed Lewis number $Le$ w/shape "nspecies"
+
+        In the latter, it is then evaluate based on the heat capacity at
+        constant pressure $C_p$ and the thermal conductivity $\kappa$ as:
 
         .. math::
 
