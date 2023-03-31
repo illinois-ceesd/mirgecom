@@ -560,8 +560,8 @@ class ArtificialViscosityTransportDiv(TransportModel):
         mu = self.av_viscosity(cv, dv, eos)
         av_kappa = (dv.smoothness*mu
                     * eos.heat_capacity_cp(cv, dv.temperature)/self._av_prandtl)
-        return av_kappa + self._physical_transport.thermal_conductivity(
-            cv, dv, eos)
+        return \
+            av_kappa + self._physical_transport.thermal_conductivity(cv, dv, eos)
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
