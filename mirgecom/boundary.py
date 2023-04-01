@@ -307,13 +307,22 @@ class FluidBoundary(metaclass=ABCMeta):
 class MengaldoBoundaryCondition(FluidBoundary):
     r"""Abstract interface to fluid boundary treatment.
 
+    Base class implementations
+    --------------------------
     .. automethod:: inviscid_divergence_flux
     .. automethod:: viscous_divergence_flux
     .. automethod:: cv_gradient_flux
     .. automethod:: temperature_gradient_flux
+
+    Abstract Mengaldo interface
+    ---------------------------
+    .. automethod:: state_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: temperature_bc
+    .. automethod:: grad_temperature_bc
+    .. automethod:: state_plus
     """
 
-    @abstractmethod
     def inviscid_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                                  numerical_flux_func, **kwargs):
         """Get the inviscid boundary flux for the divergence operator.
@@ -359,7 +368,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         :class:`mirgecom.fluid.ConservedVars`
         """
         dd_bdry = as_dofdesc(dd_bdry)
-        state_plus = self.inviscid_state_plus(
+        state_plus = self.state_plus(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
             state_minus=state_minus, **kwargs)
         boundary_state_pair = TracePair(dd=dd_bdry,
@@ -368,15 +377,23 @@ class MengaldoBoundaryCondition(FluidBoundary):
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
         return numerical_flux_func(boundary_state_pair, gas_model, normal)
 
-
-    @abstractmethod
     def viscous_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                                 grad_cv_minus, grad_t_minus,
                                 numerical_flux_func, **kwargs):
-        """Get the viscous boundary flux for the divergence operator.
+        r"""Get the viscous boundary flux for the divergence operator.
 
         This routine returns the facial flux used in the divergence
-        of the viscous fluid transport flux.
+        of the viscous fluid transport flux, ($f_v$). The Mengaldo boundary
+        treatment sends back the face-normal component of the physical
+        viscous flux calculated with the boundary conditions:
+
+        .. math::
+            f_v = F_v\left(\text{CV}_\text{bc}, (\nabla{\text{CV}})_\text{bc},
+            T_\text{bc}, (\nabla{T})_\text{bc}\right) \cdot \nhat
+
+        where $F_v(.,.,.)$ is the viscous flux function and it is called with
+        the boundary conditions of $\text{CV}$, $\nabla\text{CV}$, temperature,
+        and temperature gradient.
 
         Parameters
         ----------
@@ -421,13 +438,37 @@ class MengaldoBoundaryCondition(FluidBoundary):
         -------
         :class:`mirgecom.fluid.ConservedVars`
         """
+        dd_bdry = as_dofdesc(dd_bdry)
 
-    @abstractmethod
+        from mirgecom.viscous import viscous_flux
+        actx = state_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
+                                 gas_model=gas_model,
+                                 state_minus=state_minus, **kwargs)
+
+        grad_cv_bc = self.grad_cv_bc(state_minus=state_minus,
+                                     grad_cv_minus=grad_cv_minus,
+                                     normal=normal, **kwargs)
+
+        grad_t_bc = self.grad_temperature_bc(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+            grad_t_minus=grad_t_minus)
+
+        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
+        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
+        f_ext = viscous_flux(state=state_bc, grad_cv=grad_cv_bc,
+                             grad_t=grad_t_bc)
+        return f_ext@normal
+
     def cv_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get the boundary flux for the gradient of the fluid conserved variables.
+        r"""Get the boundary flux for the gradient of the fluid conserved variables.
 
         This routine returns the facial flux used by the gradient operator to
-        compute the gradient of the fluid solution on a domain boundary.
+        compute the gradient of the fluid solution on a domain boundary. The
+        Mengaldo boundary treatment sends back $\text{CV}_bc\cdot\nhat$.
 
         Parameters
         ----------
@@ -491,7 +532,8 @@ class MengaldoBoundaryCondition(FluidBoundary):
         -------
         numpy.ndarray
         """
-    
+
+
 # This class is a FluidBoundary that provides default implementations of
 # the abstract methods in FluidBoundary. This class will be eliminated
 # by resolution of https://github.com/illinois-ceesd/mirgecom/issues/576.
