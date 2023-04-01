@@ -58,7 +58,7 @@ from grudge.trace_pair import TracePair
 import grudge.op as op
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
-from mirgecom.gas_model import make_fluid_state
+from mirgecom.gas_model import make_fluid_state, replace_fluid_state
 from pytools.obj_array import make_obj_array
 
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
@@ -125,6 +125,72 @@ def _get_rotation_matrix(principal_direction):
 
     comps = make_obj_array(comps)
     return comps.reshape(dim, dim)
+
+
+class _SlipBoundaryComponent:
+    """Helper class for slip boundaries, consistent with [Mengaldo_2014]_."""
+
+    def momentum_plus(self, mom_minus, normal):
+        return mom_minus - 2.0*np.dot(mom_minus, normal)*normal
+
+    def momentum_bc(self, mom_minus, normal):
+        # set the normal momentum to 0
+        return mom_minus - np.dot(mom_minus, normal)*normal
+
+    def grad_velocity_bc(
+            self, state_minus, state_bc, grad_cv_minus, normal):
+        from mirgecom.fluid import velocity_gradient
+        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
+
+        # rotate the velocity gradient tensor into the normal direction
+        rotation_matrix = _get_rotation_matrix(normal)
+        grad_v_normal = rotation_matrix@grad_v_minus@rotation_matrix.T
+
+        # set the normal component of the tangential velocity to 0
+        for i in range(state_minus.dim-1):
+            grad_v_normal[i+1][0] = 0.*grad_v_normal[i+1][0]
+
+        # get the gradient on the boundary in the global coordiate space
+        return rotation_matrix.T@grad_v_normal@rotation_matrix
+
+
+class _NoSlipBoundaryComponent:
+    """Helper class for no-slip boundaries, consistent with [Mengaldo_2014]_."""
+
+    def momentum_plus(self, mom_minus, **kwargs):
+        return -mom_minus
+
+    def momentum_bc(self, mom_minus, **kwargs):
+        return 0.*mom_minus
+
+
+class _AdiabaticBoundaryComponent:
+    """Helper class for adiabatic boundaries, consistent with [Mengaldo_2014]_."""
+
+    def grad_temperature_bc(self, grad_t_minus, normal):
+        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
+
+
+class _ImpermeableBoundaryComponent:
+    """Helper class for impermeable boundaries, consistent with [Mengaldo_2014]_."""
+
+    def grad_species_mass_bc(self, state_minus, grad_cv_minus, normal):
+        nspecies = len(state_minus.species_mass_density)
+
+        grad_species_mass_bc = 1.*grad_cv_minus.species_mass
+        if nspecies > 0:
+            from mirgecom.fluid import species_mass_fraction_gradient
+            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+                                                          grad_cv_minus)
+            grad_y_bc = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+            grad_species_mass_bc = 0.*grad_y_bc
+
+            for i in range(nspecies):
+                grad_species_mass_bc[i] = \
+                    (state_minus.mass_density*grad_y_bc[i]
+                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
+        return grad_species_mass_bc
 
 
 # Bare minimum interface to work in CNS Operator
@@ -394,7 +460,8 @@ class MengaldoBoundaryCondition(FluidBoundary):
         """
 
     @abstractmethod
-    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
         """Get the boundary condition on the fluid state.
 
         This routine returns the exact value of the boundary condition
@@ -616,7 +683,8 @@ class MengaldoBoundaryCondition(FluidBoundary):
                                  gas_model=gas_model,
                                  state_minus=state_minus, **kwargs)
 
-        grad_cv_bc = self.grad_cv_bc(state_minus=state_minus,
+        grad_cv_bc = self.grad_cv_bc(dcoll, dd_bdry, gas_model,
+                                     state_minus=state_minus,
                                      grad_cv_minus=grad_cv_minus,
                                      normal=normal, **kwargs)
 
@@ -999,6 +1067,10 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
     .. automethod:: grad_temperature_bc
     .. automethod:: adiabatic_slip_grad_av
     """
+    def __init__(self):
+        self._slip = _SlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
+        self._adiabatic = _AdiabaticBoundaryComponent()
 
     def state_plus(
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
@@ -1008,26 +1080,9 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         # Grab a unit normal to the boundary
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
-        cv_minus = state_minus.cv
         # set the normal momentum to 0
-        mom_plus = cv_minus.momentum - 2.0*np.dot(cv_minus.momentum, nhat)*nhat
-
-        cv_plus = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=state_minus.energy_density,
-            momentum=mom_plus,
-            species_mass=state_minus.species_mass_density
-        )
-
-        # we'll need this when we go to production
-        """
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
-        """
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        mom_plus = self._slip.momentum_plus(state_minus.momentum_density, nhat)
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
     def state_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
@@ -1037,33 +1092,17 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         # Grab a unit normal to the boundary
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
-        cv_minus = state_minus.cv
         # set the normal momentum to 0
-        mom_plus = cv_minus.momentum - np.dot(cv_minus.momentum, nhat)*nhat
+        mom_bc = self._slip.momentum_bc(state_minus.momentum_density, nhat)
 
-        # subtract off the total energy lost from modifying the velocity
-        # this keeps the temperature on the plus side equal to the minus
-        internal_energy_plus = (state_minus.energy_density
-            - 0.5*np.dot(cv_minus.momentum, cv_minus.momentum)/cv_minus.mass)
-        total_energy_plus = (internal_energy_plus
-                             + 0.5*np.dot(mom_plus, mom_plus)/cv_minus.mass)
+        energy_bc = (
+            gas_model.eos.internal_energy(state_minus.cv)
+            + 0.5*np.dot(mom_bc, mom_bc)/state_minus.mass_density)
 
-        cv_plus = make_conserved(
-            state_minus.dim,
-            mass=state_minus.mass_density,
-            energy=total_energy_plus,
-            momentum=mom_plus,
-            species_mass=state_minus.species_mass_density
-        )
-
-        # we'll need this when we go to production
-        """
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
-        """
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        return replace_fluid_state(
+            state_minus, gas_model,
+            energy=energy_bc,
+            momentum=mom_bc)
 
     def temperature_bc(self, state_minus, **kwargs):
         """Return farfield temperature for use in grad(temperature)."""
@@ -1076,10 +1115,12 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         Impose the opposite normal component to enforce zero energy flux
         from conduction.
         """
-        return (grad_t_minus
-                - 2.*np.dot(grad_t_minus, normal)*normal)
+        # NOTE: In the previous version of the code, this was computing a "plus"
+        # state (i.e., the normal gradient was flipped instead of zeroed)
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
-    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
         """
         Return external grad(CV) used in the boundary calculation of viscous flux.
 
@@ -1089,64 +1130,25 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         Gradients of species mass fractions are set to zero in the normal direction
         to ensure zero flux of species across the boundary.
         """
-        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
-        if state_minus.nspecies > 0:
-            from mirgecom.fluid import species_mass_fraction_gradient
-            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-                                                          grad_cv_minus)
-            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-            grad_species_mass_plus = 0.*grad_y_plus
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        state_bc = self.state_bc(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, **kwargs)
 
-            for i in range(state_minus.nspecies):
-                grad_species_mass_plus[i] = \
-                    (state_minus.mass_density*grad_y_plus[i]
-                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+        grad_v_bc = self._slip.grad_velocity_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
 
-        # velocity from state_bc - which we can't call here (no dcoll, grr)
-        vel_plus = state_minus.velocity - np.dot(state_minus.velocity, normal)*normal
+        grad_mom_bc = (
+            state_bc.mass_density * grad_v_bc
+            + np.outer(state_bc.velocity, grad_cv_minus.mass))
 
-        from mirgecom.fluid import velocity_gradient
-        grad_v_minus = velocity_gradient(state_minus.cv, grad_cv_minus)
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
 
-        # rotate the velocity gradient tensor into the normal direction
-        rotation_matrix = _get_rotation_matrix(normal)
-        grad_v_normal = rotation_matrix@grad_v_minus@rotation_matrix.T
-
-        # set the normal component of the tangential velocity to 0
-        for i in range(state_minus.dim-1):
-            grad_v_normal[i+1][0] = 0.*grad_v_normal[i+1][0]
-
-        # get the gradient on the plus side in the global coordiate space
-        grad_v_plus = rotation_matrix.T@grad_v_normal@rotation_matrix
-
-        # construct grad(mom)
-        grad_mom_plus = (state_minus.mass_density*grad_v_plus
-                         + np.outer(vel_plus, grad_cv_minus.mass))
-
-        return make_conserved(grad_cv_minus.dim,
-                              mass=grad_cv_minus.mass,
-                              energy=grad_cv_minus.energy,
-                              momentum=grad_mom_plus,
-                              species_mass=grad_species_mass_plus)
-
-    def adiabatic_slip_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary for artificial viscosity."""
-        # Grab some boundary-relevant data
-        dim, = grad_av_minus.mass.shape
-        actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-
-        # Subtract 2*wall-normal component of q
-        # to enforce q=0 on the wall
-        s_mom_normcomp = np.outer(nhat,
-                                  np.dot(grad_av_minus.momentum, nhat))
-        s_mom_flux = grad_av_minus.momentum - 2*s_mom_normcomp
-
-        # flip components to set a neumann condition
-        return make_conserved(dim, mass=-grad_av_minus.mass,
-                              energy=-grad_av_minus.energy,
-                              momentum=-s_mom_flux,
-                              species_mass=-grad_av_minus.species_mass)
+        return grad_cv_minus.replace(
+            momentum=grad_mom_bc,
+            species_mass=grad_species_mass_bc)
 
 
 class FarfieldBoundary(PrescribedFluidBoundary):
@@ -1397,7 +1399,8 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
         """Get temperature value used in grad(T)."""
         return state_minus.temperature
 
-    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
         return grad_cv_minus
 
@@ -1417,9 +1420,11 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
         state_plus = self.outflow_state_for_diffusion(dcoll=dcoll,
             dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus)
 
-        grad_cv_plus = self.grad_cv_bc(state_minus=state_minus,
+        grad_cv_plus = self.grad_cv_bc(dcoll, dd_bdry, gas_model,
+                                       state_minus=state_minus,
                                        grad_cv_minus=grad_cv_minus,
                                        normal=normal, **kwargs)
+
         grad_t_plus = self.grad_temperature_bc(grad_t_minus, normal)
 
         # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
@@ -1642,6 +1647,8 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
     def __init__(self, wall_temperature=300):
         """Initialize the boundary condition object."""
         self._wall_temp = wall_temperature
+        self._no_slip = _NoSlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -1650,42 +1657,33 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
         # Mengaldo Eqn (48)
-        temperature_bc = self.temperature_bc(state_minus, **kwargs)
-        mom_bc = 0*state_minus.momentum_density
-        mass_frac_bc = state_minus.species_mass_fractions
-        rho_bc = state_minus.mass_density
-        ie_bc = gas_model.eos.get_internal_energy(
-            temperature=temperature_bc, species_mass_fractions=mass_frac_bc)
-        energy_bc = rho_bc * ie_bc
-        cv_bc = make_conserved(
-            state_minus.dim, mass=rho_bc, energy=energy_bc, momentum=mom_bc,
-            species_mass=rho_bc*mass_frac_bc)
+        dd_bdry = as_dofdesc(dd_bdry)
 
-        return make_fluid_state(cv=cv_bc, gas_model=gas_model,
-                                temperature_seed=temperature_bc)
+        mom_bc = self._no_slip.momentum_bc(state_minus.momentum_density)
+        t_bc = self.temperature_bc(state_minus, **kwargs)
 
-    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+        internal_energy_bc = gas_model.eos.get_internal_energy(
+            temperature=t_bc,
+            species_mass_fractions=state_minus.species_mass_fractions)
+
+        # Velocity is pinned to 0 here, no kinetic energy
+        total_energy_bc = state_minus.mass_density*internal_energy_bc
+
+        return replace_fluid_state(
+            state_minus, gas_model,
+            energy=total_energy_bc,
+            momentum=mom_bc)
+
+    def grad_cv_bc(
+            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, normal,
+            **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
-        if state_minus.nspecies > 0:
-            from mirgecom.fluid import species_mass_fraction_gradient
-            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-                                                          grad_cv_minus)
-            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-            grad_species_mass_plus = 0.*grad_y_plus
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
 
-            for i in range(state_minus.nspecies):
-                grad_species_mass_plus[i] = \
-                    (state_minus.mass_density*grad_y_plus[i]
-                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+        return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
-        return make_conserved(grad_cv_minus.dim,
-                              mass=grad_cv_minus.mass,
-                              energy=grad_cv_minus.energy,
-                              momentum=grad_cv_minus.momentum,
-                              species_mass=grad_species_mass_plus)
-
-    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
+    def grad_temperature_bc(self, grad_t_minus, **kwargs):
         # def grad_temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus,
         #                        grad_cv_minus, grad_t_minus):
         """Return BC on grad(temperature)."""
@@ -1695,14 +1693,10 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return fluid state to use in calculation of inviscid flux."""
         # Mengaldo Eqn (45)
-        rho_plus = state_minus.mass_density
-        mom_plus = -state_minus.momentum_density
-        ener_plus = state_minus.energy_density
-        rhoy_plus = state_minus.species_mass_density
-        cv_plus = make_conserved(state_minus.dim, mass=rho_plus, momentum=mom_plus,
-                                 energy=ener_plus, species_mass=rhoy_plus)
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+        mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density)
+        # Don't modify the energy, even though we modify the temperature; energy will
+        # be advected through the wall, which doesn't make sense
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
 
 class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
@@ -1718,65 +1712,55 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
     .. automethod:: grad_temperature_bc
     .. automethod:: adiabatic_noslip_grad_av
     """
-
-    def state_plus(self, dcoll, dd_bdry, gas_model,
-                                           state_minus, **kwargs):
-        """Return state with zero-velocity."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        mom_plus = -state_minus.momentum_density
-        cv_plus = make_conserved(
-            state_minus.dim, mass=state_minus.mass_density,
-            energy=state_minus.energy_density, momentum=mom_plus,
-            species_mass=state_minus.species_mass_density
-        )
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
-
-    def state_bc(self, dcoll, dd_bdry, gas_model,
-                            state_minus, **kwargs):
-        """Return state with zero-velocity."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        mom_plus = 0.*state_minus.momentum_density
-        cv_plus = make_conserved(
-            state_minus.dim, mass=state_minus.mass_density,
-            energy=state_minus.energy_density, momentum=mom_plus,
-            species_mass=state_minus.species_mass_density
-        )
-        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+    def __init__(self):
+        self._no_slip = _NoSlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
+        self._adiabatic = _AdiabaticBoundaryComponent()
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
         return state_minus.temperature
 
-    def grad_cv_bc(self, state_minus, grad_cv_minus, normal, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return state with zero-velocity."""
+        dd_bdry = as_dofdesc(dd_bdry)
+        mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density)
+        return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
+
+    def state_bc(self, dcoll, dd_bdry, gas_model,
+                            state_minus, **kwargs):
+        """Return state with zero-velocity."""
+        dd_bdry = as_dofdesc(dd_bdry)
+
+        mom_bc = self._no_slip.momentum_bc(state_minus.momentum_density)
+        t_bc = self.temperature_bc(state_minus)
+
+        internal_energy_bc = gas_model.eos.get_internal_energy(
+            temperature=t_bc,
+            species_mass_fractions=state_minus.species_mass_fractions)
+
+        # Velocity is pinned to 0 here, no kinetic energy
+        total_energy_bc = state_minus.mass_density*internal_energy_bc
+
+        return replace_fluid_state(
+            state_minus, gas_model,
+            energy=total_energy_bc,
+            momentum=mom_bc)
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        grad_species_mass_plus = 1.*grad_cv_minus.species_mass
-        if state_minus.nspecies > 0:
-            from mirgecom.fluid import species_mass_fraction_gradient
-            grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-                                                          grad_cv_minus)
-            grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-            grad_species_mass_plus = 0.*grad_y_plus
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
-            for i in range(state_minus.nspecies):
-                grad_species_mass_plus[i] = \
-                    (state_minus.mass_density*grad_y_plus[i]
-                     + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
 
-        return make_conserved(grad_cv_minus.dim,
-                              mass=grad_cv_minus.mass,
-                              energy=grad_cv_minus.energy,
-                              momentum=grad_cv_minus.momentum,
-                              species_mass=grad_species_mass_plus)
+        return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
-        return grad_t_minus - np.dot(grad_t_minus, normal)*normal
-
-    def adiabatic_noslip_grad_av(self, grad_av_minus, **kwargs):
-        """Get the exterior solution on the boundary for artificial viscosity."""
-        return -grad_av_minus
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
 
 class LinearizedOutflowBoundary(PrescribedFluidBoundary):
