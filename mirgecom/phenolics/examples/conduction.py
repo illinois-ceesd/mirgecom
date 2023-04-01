@@ -165,6 +165,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             0.3*1.5e6
         )
 
+        #FIXME make emissivity a function of "tau"
         return flux - 0.8*5.567e-8*u_tpair.int**4
 
     boundaries = {
@@ -177,31 +178,30 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
     
-    from mirgecom.phenolics.gas import gas_properties
-    my_gas = gas_properties()
+    import mirgecom.phenolics.phenolics as wall
+    import mirgecom.phenolics.tacot as my_composite
+    from mirgecom.phenolics.gas import GasProperties
+    my_gas = GasProperties()
+
+    eos = wall.PhenolicsEOS(composite=my_composite, gas=my_gas)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # soln setup and init
-    import mirgecom.phenolics.phenolics as wall
-    
     solid_species_mass = np.empty((3,), dtype=object)
-    solid_species_mass[0] =  30.0 + nodes[0]*0.0
-    solid_species_mass[1] =  90.0 + nodes[0]*0.0
-    solid_species_mass[2] = 160.0 + nodes[0]*0.0
+    solid_species_mass[0] = 30.0 + nodes[0]*0.0
+    solid_species_mass[1] = 90.0 + nodes[0]*0.0
+    solid_species_mass[2] = 160. + nodes[0]*0.0
 
-    gas_density = 0.0 + nodes[0]*0.0
+    pressure = 0.0 + nodes[0]*0.0
 
     temperature = 300.0 + nodes[0]*0.0
 
-    solid_species_mass = force_evaluation(actx, solid_species_mass)
-    gas_density = force_evaluation(actx, gas_density)
+    pressure = force_evaluation(actx, pressure)
     temperature = force_evaluation(actx, temperature)
+    solid_species_mass = force_evaluation(actx, solid_species_mass)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    import mirgecom.phenolics.tacot as my_composite
-#    import mirgecom.phenolics.simple as my_composite
 
     if restart_file:
         t = restart_data["t"]
@@ -209,9 +209,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         wall_vars = restart_data["wall_vars"]
     else:
         # Set the current state from time 0
-        wall_vars = wall.initializer(composite=my_composite,
+        wall_vars = wall.initializer(eos=eos,
             solid_species_mass=solid_species_mass,
-            gas_density=gas_density, temperature=temperature, progress=0.0)
+            pressure=pressure, temperature=temperature, progress=0.0)
 
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
@@ -219,7 +219,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     eos = wall.PhenolicsEOS(composite=my_composite, gas=my_gas)
 
-    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature, idx=None)
+    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature)
        
     wall_vars = force_evaluation(actx, wall_vars)
     wdv = force_evaluation(actx, wdv)
@@ -252,34 +252,31 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 #######################################
 
-    pyrolysis = my_composite.pyrolysis()
+    pyrolysis = my_composite.Pyrolysis()
     def _rhs(t, state):
 
         wv, tseed = state
-        wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed, idx=None)
+        wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed)
 
         kappa = wdv.thermal_conductivity
         temperature = wdv.temperature
 
         #~~~~~
-        #inviscid RHS
-
-        #~~~~~
         energy_rhs = diffusion_operator(dcoll, kappa=kappa,
             boundaries=boundaries, u=temperature, time=t)
 
-        viscous_rhs = wall.make_conserved(solid_species_mass=wv.solid_species_mass*0.0,
-            gas_density=zeros, gas_species_mass=zeros, energy=energy_rhs)
+        viscous_rhs = wall.make_conserved(
+            solid_species_mass=wv.solid_species_mass*0.0,
+            gas_density=zeros, energy=energy_rhs)
 
         #~~~~~
         pyrolysis_rhs = pyrolysis.get_sources(temperature, wv.solid_species_mass)
 
-        #FIXME dont know why, but this is returning a tuple...
         source_terms = wall.make_conserved(solid_species_mass=pyrolysis_rhs,
-            gas_density=zeros, gas_species_mass=zeros, energy=zeros),
+            gas_density=zeros, energy=zeros)
 
         #~~~~~
-        return make_obj_array([viscous_rhs + source_terms[0], tseed*0.0])
+        return make_obj_array([viscous_rhs + source_terms, tseed*0.0])
 
     compiled_rhs = actx.compile(_rhs)
 
@@ -290,8 +287,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.simutil import write_visfile
     def my_write_viz(step, t, wall_vars, dep_vars):
 
-        viz_fields = [("species_mass", wall_vars.gas_species_mass),
-                      #("gas_density", wall_vars.gas_density),
+        viz_fields = [("gas_density", wall_vars.gas_density),
                       #("energy", wall_vars.energy),
                       ("DV", dep_vars),
                      ]
@@ -347,7 +343,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         wall_vars, tseed = state
 
-        wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=tseed, idx=None)
+        wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
 
         t += dt
         istep += 1

@@ -124,36 +124,35 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
     
+    import mirgecom.phenolics.phenolics as wall
+    import mirgecom.phenolics.tacot as my_composite
     from mirgecom.phenolics.gas import GasProperties
     my_gas = GasProperties()
+
+    eos = wall.PhenolicsEOS(composite=my_composite, gas=my_gas)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # soln setup and init
-    import mirgecom.phenolics.phenolics as wall
     
     solid_species_mass = np.empty((3,), dtype=object)
     solid_species_mass[0] =  30.0 + nodes[0]*0.0
     solid_species_mass[1] =  90.0 + nodes[0]*0.0
     solid_species_mass[2] = 160.0 + nodes[0]*0.0
 
-    gas_density = 1.0 + nodes[0]*0.0
+    pressure = 101325.0 + nodes[0]*0.0
 
     temperature = 100*nodes[0] + 800.0
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    import mirgecom.phenolics.tacot as my_composite
-
-    wall_vars = wall.initializer(composite=my_composite,
+    wall_vars = wall.initializer(eos=eos,
         solid_species_mass=solid_species_mass,
-        gas_density=gas_density, temperature=temperature, progress=0.0)
-
-    eos = wall.PhenolicsEOS(composite=my_composite, gas=my_gas)
+        pressure=pressure, temperature=temperature, progress=0.0)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    wdv = eos.dependent_vars(wv=wall_vars, eos=eos,
+    wdv = eos.dependent_vars(wv=wall_vars,
             temperature_seed=temperature-10.0)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -164,8 +163,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.simutil import write_visfile
     def my_write_viz(step, t, wall_vars, dep_vars):
 
-        viz_fields = [("species_mass", wall_vars.gas_species_mass),
-                      ("gas_density", wall_vars.gas_density),
+        viz_fields = [("gas_density", wall_vars.gas_density),
                       ("energy", wall_vars.energy),
                       ("DV", dep_vars),
                      ]

@@ -1,4 +1,8 @@
-""":mod:`mirgecom.phenolics.phenolics` handles phenolics modeling."""
+""":mod:`mirgecom.phenolics.phenolics` handles phenolics modeling.
+
+Additional details are provided in
+https://github.com/illinois-ceesd/phenolics-notes
+"""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -24,13 +28,12 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
-from dataclasses import dataclass  # , fields, field
+from dataclasses import dataclass
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
     get_container_context_recursively
 )
-# from abc import ABCMeta, abstractmethod
 
 import sys  # noqa
 
@@ -45,9 +48,13 @@ import sys  # noqa
 class PhenolicsConservedVars:
     r"""."""
 
+    # the "epsilon_density" of each phase in the solid
     solid_species_mass: np.ndarray
+
+    # it includes the epsilon/void fraction
     gas_density: DOFArray
-    gas_species_mass: DOFArray
+
+    # bulk energy = solid + gas energy
     energy: DOFArray
 
     @property
@@ -61,38 +68,43 @@ class PhenolicsConservedVars:
         return len(self.solid_species_mass)
 
 
-def initializer(composite, solid_species_mass, gas_density, gas_species_mass=None,
-                energy=None, temperature=None, progress=0.0):
+def initializer(eos, solid_species_mass, temperature, gas_density=None,
+                pressure=None, progress=0.0):
     """Initialize state of composite material."""
-    tau = 1.0 - progress
-
-    if energy is None and temperature is None:
-        raise ValueError("Must specify one of 'energy' or 'temperature'")
-
-    if isinstance(tau, DOFArray) is False:
-        tau = tau + 0*gas_density
+    if gas_density is None and pressure is None:
+        raise ValueError("Must specify one of 'gas_density' or 'pressure'")
 
     if isinstance(temperature, DOFArray) is False:
-        temperature = temperature + 0.0*gas_density
+        raise ValueError("Temperature does not have the proper shape")
 
-    if energy is None:
-        solid_density = sum(solid_species_mass)
-        energy = solid_density*composite.solid_enthalpy(temperature, tau)
-        # + gas (internal and kinetic)?
+    zeros = temperature*0.0
 
-    if gas_species_mass is None:
-        gas_species_mass = gas_density*1.0
+    # progress ratio
+    if isinstance(progress, DOFArray) is False:
+        tau = zeros + 1.0 - progress
+    else:
+        tau = 1.0 - progress
+
+    # gas constant
+    Rg = 8314.46261815324/eos.gas_molar_mass(temperature)  # noqa N806
+
+    if gas_density is None:
+        eps_gas = eos.void_fraction(temperature, tau)
+        eps_rho_gas = eps_gas*pressure/(Rg*temperature)
+
+    eps_rho_solid = sum(solid_species_mass)
+    bulk_energy = (
+        eps_rho_solid*eos.solid_enthalpy(temperature, tau)
+        + eps_rho_gas*(eos.gas_enthalpy(temperature) - Rg*temperature)
+    )
 
     return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
-        energy=energy, gas_density=gas_density,
-        gas_species_mass=gas_species_mass)
+        energy=bulk_energy, gas_density=eps_rho_gas)
 
 
-def make_conserved(solid_species_mass, gas_density, gas_species_mass,
-                   energy):  # noqa D103
+def make_conserved(solid_species_mass, gas_density, energy):  # noqa D103
     return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
-        energy=energy, gas_density=gas_density,
-        gas_species_mass=gas_species_mass)
+        energy=energy, gas_density=gas_density)
 
 
 @dataclass_array_container
@@ -102,32 +114,41 @@ class PhenolicsDependentVars:
 
     .. attribute:: temperature
     .. attribute:: pressure
-    .. attribute:: velocity
-    ... and so on...
+    .. attribute:: molar_mass
+    .. attribute:: viscosity
+    .. attribute:: thermal_conductivity
+    .. attribute:: progress
+    .. attribute:: emissivity
+    .. attribute:: permeability
+    .. attribute:: void_fraction
+    .. attribute:: solid_density
     """
 
     temperature: DOFArray
 
-#    pressure: DOFArray
-#    velocity: DOFArray
+    pressure: DOFArray
     molar_mass: DOFArray
     viscosity: DOFArray
-    thermal_conductivity: DOFArray
+
+#    velocity: DOFArray
 #    species_diffusivity: np.ndarray
 
+    thermal_conductivity: DOFArray
+
     progress: DOFArray
-    emissivity: DOFArray
+#    emissivity: DOFArray
     permeability: DOFArray
-    volume_fraction: DOFArray
+    void_fraction: DOFArray
     solid_density: DOFArray
 
 
+# TODO maybe split this in two, one for "gas" and another for "solid"??
 class PhenolicsEOS():
     """."""
 
     def __init__(self, composite, gas):
         """Initialize EOS for composite."""
-        self._degradation_model = composite
+        self._composite_model = composite
         self._gas_data = gas
 
     # ~~~~~~~~~~~~ gas
@@ -140,8 +161,13 @@ class PhenolicsEOS():
         return self._gas_data.gas_viscosity(temp)
 
 #    # FIXME
-#    def pressure(self, wv, temperature, tau):
-#        return temperature*0.0
+    def pressure_diffusivity(self, temp, tau):
+        return temp*0.0
+
+    def pressure(self, wv, temp, tau):
+        Rg = 8314.46261815324/self.gas_molar_mass(temp)  # noqa N806
+        eps_gas = self.void_fraction(temp, tau)
+        return (1.0/eps_gas)*wv.gas_density*Rg*temp
 
 #    # FIXME
 #    def velocity(self, wv, temperature, tau):
@@ -156,21 +182,25 @@ class PhenolicsEOS():
         """Return the solid density, obtained by the sum of all phases."""
         return sum(wv.solid_species_mass)
 
-    def thermal_conductivity(self, temp, tau):
-        r"""Return the solid thermal conductivity, $f(\tau, T)$."""
-        return self._degradation_model.solid_thermal_conductivity(temp, tau)
-
     def permeability(self, temp, tau):
         r"""Return the wall permeability, $f(\tau, T)$."""
-        return self._degradation_model.solid_permeability(temp, tau)
+        return self._composite_model.solid_permeability(temp, tau)
 
     def emissivity(self, temp, tau):
         r"""Return the wall emissivity, $f(\tau, T)$."""
-        return self._degradation_model.solid_emissivity(temp, tau)
+        return self._composite_model.solid_emissivity(temp, tau)
 
-    def volume_fraction(self, temp, tau):
-        r"""Return the volumetric fraction of solid parts, $f(\tau, T)$."""
-        return self._degradation_model.solid_volume_fraction(temp, tau)
+    # ~~~~~~~~~~~~ bulk gas+solid properties
+    def thermal_conductivity(self, temp, tau):
+        r"""Return the bulk thermal conductivity, $f(\tau, T)$."""
+        return (
+            self._composite_model.solid_thermal_conductivity(temp, tau)
+            # + gas
+        )
+
+    def void_fraction(self, temp, tau):
+        r"""Return the volumetric fraction filed with gas, $f(\tau, T)$."""
+        return 1.0 - self._composite_model.solid_volume_fraction(temp, tau)
 
     # ~~~~~~~~~~~~ auxiliary functions
     def gas_enthalpy(self, temp):
@@ -187,11 +217,11 @@ class PhenolicsEOS():
 
     def solid_enthalpy(self, temp, tau):
         """Return the solid enthalpy."""
-        return self._degradation_model.solid_enthalpy(temp, tau)
+        return self._composite_model.solid_enthalpy(temp, tau)
 
     def solid_heat_capacity_cp(self, temp, tau):
         """Return the solid heat capacity."""
-        return self._degradation_model.solid_heat_capacity(temp, tau)
+        return self._composite_model.solid_heat_capacity(temp, tau)
 
     def eval_tau(self, wv):
         r"""Progress ratio of the phenolics decomposition.
@@ -202,7 +232,7 @@ class PhenolicsEOS():
         """
         return 280.0/(280.0 - 220.0)*(1.0 - 220.0/self.solid_density(wv))
 
-    def eval_temperature(self, wv, eos, tseed, tau):
+    def eval_temperature(self, wv, tseed, tau):
         """Temperature assumes thermal equilibrium between solid and fluid.
 
         Performing Newton iteration to evaluate the temperature based on the
@@ -213,17 +243,22 @@ class PhenolicsEOS():
         niter = 3
         temp = tseed*1.0
 
+        rho_gas = wv.gas_density
         rho_solid = self.solid_density(wv)
         rhoe = wv.energy
         for _ in range(0, niter):
 
-            # M = gas.molar_mass(T)
-            eps_rho_e = (0.0
-                # wv[1]*( gas.h(T) - R/M*T )
+            # gas constant R/M
+            molar_mass = self.gas_molar_mass(temp)
+            Rg = 8314.46261815324/molar_mass  # noqa N806
+
+            eps_rho_e = (
+                rho_gas*(self.gas_enthalpy(temp) - Rg*temp)
                 + rho_solid*self.solid_enthalpy(temp, tau))
 
-            bulk_cp = (0.0
-                # wv[1]*( gas.cp(T) - R/M*( 1.0 - T/M*gas.dMdT(T) ) )
+            bulk_cp = (
+                rho_gas*(self.gas_heat_capacity(temp)
+                         - Rg*(1.0 - temp/molar_mass*self.gas_dMdT(temp)))
                 + rho_solid*self.solid_heat_capacity_cp(temp, tau))
 
             temp = temp - (eps_rho_e - rhoe)/bulk_cp
@@ -231,15 +266,14 @@ class PhenolicsEOS():
         return temp
 
     def dependent_vars(self, wv: PhenolicsConservedVars,
-            eos,
             temperature_seed: DOFArray) -> PhenolicsDependentVars:
         """Get the dependent variables."""
         tau = self.eval_tau(wv)
-        temperature = self.eval_temperature(wv, eos, temperature_seed, tau)
+        temperature = self.eval_temperature(wv, temperature_seed, tau)
         return PhenolicsDependentVars(
             progress=1.0-tau,
             temperature=temperature,
-            # pressure
+            pressure=self.pressure(wv, temperature, tau),
             # velocity
             viscosity=self.gas_viscosity(temperature),
             molar_mass=self.gas_molar_mass(temperature),
@@ -247,8 +281,8 @@ class PhenolicsEOS():
             # enthalpy
             # heat_capacity
             thermal_conductivity=self.thermal_conductivity(temperature, tau),
-            emissivity=self.emissivity(temperature, tau),
+            #emissivity=self.emissivity(temperature, tau),
             permeability=self.permeability(temperature, tau),
-            volume_fraction=self.volume_fraction(temperature, tau),
+            void_fraction=self.void_fraction(temperature, tau),
             solid_density=self.solid_density(wv)
         )
