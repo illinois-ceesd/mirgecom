@@ -1694,8 +1694,6 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
         """Return fluid state to use in calculation of inviscid flux."""
         # Mengaldo Eqn (45)
         mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density)
-        # Don't modify the energy, even though we modify the temperature; energy will
-        # be advected through the wall, which doesn't make sense
         return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
 
