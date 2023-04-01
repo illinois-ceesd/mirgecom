@@ -1,49 +1,55 @@
+"""Evaluate gas properties based on tabulated data."""
 
 import numpy as np
-
 from scipy.interpolate import CubicSpline
 
-def eval_spline(x, x_bnds, coeffs):
 
+def eval_spline(x, x_bnds, coeffs):
+    """Evaluate spline."""
     actx = x.array_context
 
     val = x*0.0
-    nidx = len(x_bnds)
-    for i in range(0,nidx-1):
+    for i in range(0, len(x_bnds)-1):
         val = actx.np.where(x < x_bnds[i+1],
                     actx.np.where(x >= x_bnds[i],
-                        coeffs[0,i]*(x-x_bnds[i])**3 + coeffs[1,i]*(x-x_bnds[i])**2 + coeffs[2,i]*(x-x_bnds[i]) + coeffs[3,i],
+                        coeffs[0, i]*(x-x_bnds[i])**3
+                            + coeffs[1, i]*(x-x_bnds[i])**2
+                            + coeffs[2, i]*(x-x_bnds[i])
+                            + coeffs[3, i],
                         0.0),
                     0.0) + val
 
     return val
+
 
 def eval_spline_derivative(x, x_bnds, coeffs):
-
+    """Evaluate derivative of a spline."""
     actx = x.array_context
 
     val = x*0.0
-    nidx = len(x_bnds)
-    for i in range(0,nidx-1):
+    for i in range(0, len(x_bnds)-1):
         val = actx.np.where(x < x_bnds[i+1],
                     actx.np.where(x >= x_bnds[i],
-                        3.0*coeffs[0,i]*(x-x_bnds[i])**2 + 2.0*coeffs[1,i]*(x-x_bnds[i]) + coeffs[2,i],
+                        3.0*coeffs[0, i]*(x-x_bnds[i])**2
+                            + 2.0*coeffs[1, i]*(x-x_bnds[i])
+                            + coeffs[2, i],
                         0.0),
                     0.0) + val
 
     return val
 
 
-class gas_properties():
-    """ Simplified model of the pyrolysis gas.
+class GasProperties():
+    """Simplified model of the pyrolysis gas using tabulated data.
 
-        This section is to be used when species conservation is not employed.
-        The output gas is assumed to be in chemical equilibrium."""
+    This section is to be used when species conservation is not employed.
+    The output gas is assumed to be in chemical equilibrium.
+    """
 
-    def __init__(self, Pr=1.0, Le=1.0):
+    def __init__(self, prandtl=1.0, lewis=1.0):
 
-        self._prandtl = Pr
-        self._lewis = Le
+        self._prandtl = prandtl
+        self._lewis = lewis
 
         #    T     , M      ,  Cp    , gamma  ,  enthalpy, viscosity
         gas_data = np.array([
@@ -83,36 +89,41 @@ class gas_properties():
         ])
 
         self._data = gas_data
-#        gamma = gas_data[:,3]
-
-        self._cs_molar_mass = CubicSpline(gas_data[:,0], gas_data[:,1])
-
-        self._cs_enthalpy = CubicSpline(gas_data[:,0], gas_data[:,4]*1000.0)
-
-        self._cs_viscosity = CubicSpline(gas_data[:,0], gas_data[:,5]*1e-4)
+        self._cs_molar_mass = CubicSpline(gas_data[:, 0], gas_data[:, 1])
+        self._cs_enthalpy = CubicSpline(gas_data[:, 0], gas_data[:, 4]*1000.0)
+        self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 5]*1e-4)
 
     def gas_enthalpy(self, temperature):
+        """Return the gas enthalpy."""
         coeffs = self._cs_enthalpy.c
         bnds = self._cs_enthalpy.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_heat_capacity(self,temperature):
+    def gas_heat_capacity(self, temperature):
+        """Return the gas heat capacity."""
         coeffs = self._cs_enthalpy.c
         bnds = self._cs_enthalpy.x
         return eval_spline_derivative(temperature, bnds, coeffs)
 
     def gas_molar_mass(self, temperature):
+        """Return the gas molar mass."""
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_dMdT(self, temperature):
+    def gas_dMdT(self, temperature):  # noqa N802
+        """Return the partial derivative of molar mass wrt temperature."""
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         return eval_spline_derivative(temperature, bnds, coeffs)
 
     def gas_viscosity(self, temperature):
+        """Return gas viscosity."""
         coeffs = self._cs_viscosity.c
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
+    # TODO
+    def gas_thermal_conductivity(self, temperature):
+        """Return gas thermal conductivity."""
+        return temperature*0.0

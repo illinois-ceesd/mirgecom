@@ -1,23 +1,36 @@
-"""
-TODO list
+""":mod:`mirgecom.phenolics.phenolics` handles phenolics modeling."""
 
-X - get the material properties
-X - evaluate Newton iterations to compute the temperature
-X - operator and heat conduction???
-4 - get the gas data... How to handle the tabulated interpolation?
+__copyright__ = """
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
-##############################################################################
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
 
 import numpy as np
 from meshmode.dof_array import DOFArray
-from dataclasses import dataclass, fields, field
+from dataclasses import dataclass  # , fields, field
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
     get_container_context_recursively
 )
-from abc import ABCMeta, abstractmethod
+# from abc import ABCMeta, abstractmethod
 
 import sys  # noqa
 
@@ -50,7 +63,7 @@ class PhenolicsConservedVars:
 
 def initializer(composite, solid_species_mass, gas_density, gas_species_mass=None,
                 energy=None, temperature=None, progress=0.0):
-
+    """Initialize state of composite material."""
     tau = 1.0 - progress
 
     if energy is None and temperature is None:
@@ -65,20 +78,21 @@ def initializer(composite, solid_species_mass, gas_density, gas_species_mass=Non
     if energy is None:
         solid_density = sum(solid_species_mass)
         energy = solid_density*composite.solid_enthalpy(temperature, tau)
-                    #+ gas (internal and kinetic)?
+        # + gas (internal and kinetic)?
 
     if gas_species_mass is None:
         gas_species_mass = gas_density*1.0
 
     return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
-        energy=energy, gas_density=gas_density, gas_species_mass=gas_species_mass                    
-    )
+        energy=energy, gas_density=gas_density,
+        gas_species_mass=gas_species_mass)
 
 
-def make_conserved(solid_species_mass, gas_density, gas_species_mass, energy):
+def make_conserved(solid_species_mass, gas_density, gas_species_mass,
+                   energy):  # noqa D103
     return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
-        energy=energy, gas_density=gas_density, gas_species_mass=gas_species_mass                    
-    )
+        energy=energy, gas_density=gas_density,
+        gas_species_mass=gas_species_mass)
 
 
 @dataclass_array_container
@@ -109,15 +123,20 @@ class PhenolicsDependentVars:
 
 
 class PhenolicsEOS():
+    """."""
 
     def __init__(self, composite, gas):
+        """Initialize EOS for composite."""
         self._degradation_model = composite
         self._gas_data = gas
 
+    # ~~~~~~~~~~~~ gas
     def gas_molar_mass(self, temp):
+        """Return the gas molar mass."""
         return self._gas_data.gas_molar_mass(temp)
 
     def gas_viscosity(self, temp):
+        """Return the gas viscosity."""
         return self._gas_data.gas_viscosity(temp)
 
 #    # FIXME
@@ -132,74 +151,104 @@ class PhenolicsEOS():
 #    def species_diffusivity(self, wv, temperature, tau):
 #        return temperature*0.0
 
-    #~~~~~~~~~~~~ solid 
-    def enthalpy(self, temp, tau):
-        return self._degradation_model.solid_enthalpy(temp, tau)
-
-    def heat_capacity_cp(self, temp, tau):
-        return self._degradation_model.solid_heat_capacity(temp, tau)
+    # ~~~~~~~~~~~~ solid
+    def solid_density(self, wv):
+        """Return the solid density, obtained by the sum of all phases."""
+        return sum(wv.solid_species_mass)
 
     def thermal_conductivity(self, temp, tau):
+        r"""Return the solid thermal conductivity, $f(\tau, T)$."""
         return self._degradation_model.solid_thermal_conductivity(temp, tau)
 
     def permeability(self, temp, tau):
+        r"""Return the wall permeability, $f(\tau, T)$."""
         return self._degradation_model.solid_permeability(temp, tau)
 
-    def volume_fraction(self, temp, tau):
-        return self._degradation_model.solid_volume_fraction(temp, tau)
-
     def emissivity(self, temp, tau):
+        r"""Return the wall emissivity, $f(\tau, T)$."""
         return self._degradation_model.solid_emissivity(temp, tau)
 
-    def progress(self, wv):
-        return 280.0/(280.0 - 220.0)*( 1.0 - 220.0/self.solid_density(wv) )
+    def volume_fraction(self, temp, tau):
+        r"""Return the volumetric fraction of solid parts, $f(\tau, T)$."""
+        return self._degradation_model.solid_volume_fraction(temp, tau)
 
-    def solid_density(self, wv):
-        return sum(wv.solid_species_mass)
+    # ~~~~~~~~~~~~ auxiliary functions
+    def gas_enthalpy(self, temp):
+        """Return the gas enthalpy."""
+        return self._gas_data.gas_enthalpy(temp)
+
+    def gas_heat_capacity(self, temp):
+        """Return the gas heat capacity."""
+        return self._gas_data.gas_viscosity(temp)
+
+    def gas_dMdT(self, temp):  # noqa N802
+        """Return the partial derivative of molar mass wrt temperature."""
+        return self._gas_data.gas_dMdT(temp)
+
+    def solid_enthalpy(self, temp, tau):
+        """Return the solid enthalpy."""
+        return self._degradation_model.solid_enthalpy(temp, tau)
+
+    def solid_heat_capacity_cp(self, temp, tau):
+        """Return the solid heat capacity."""
+        return self._degradation_model.solid_heat_capacity(temp, tau)
+
+    def eval_tau(self, wv):
+        r"""Progress ratio of the phenolics decomposition.
+
+        Where $\tau=1$, the material is locally virgin. On the other hand, if
+        $\tau=0$, then the pyrolysis is locally complete and only charred
+        material exists.
+        """
+        return 280.0/(280.0 - 220.0)*(1.0 - 220.0/self.solid_density(wv))
 
     def eval_temperature(self, wv, eos, tseed, tau):
-        """Temperature assumes thermal equilibrium between solid and fluid."""
+        """Temperature assumes thermal equilibrium between solid and fluid.
 
+        Performing Newton iteration to evaluate the temperature based on the
+        internal energy/enthalpy and heat capacity.
+
+        Add equation...
+        """
         niter = 3
-        T = tseed*1.0
+        temp = tseed*1.0
 
         rho_solid = self.solid_density(wv)
-        e = wv.energy
-        for ii in range(0, niter):
+        rhoe = wv.energy
+        for _ in range(0, niter):
 
-            #M = gas.molar_mass(T)
-            eps_rho_e_g = 0.0 #wv[1]*( gas.h(T) - R/M*T )
-            eps_rho_e_s = rho_solid*( self.enthalpy(T, tau) )
+            # M = gas.molar_mass(T)
+            eps_rho_e = (0.0
+                # wv[1]*( gas.h(T) - R/M*T )
+                + rho_solid*self.solid_enthalpy(temp, tau))
 
-            f_prime_g = 0.0 #wv[1]*( gas.cp(T) - R/M*( 1.0 - T/M*gas.dMdT(T) ) )
-            f_prime_s = rho_solid*( self.heat_capacity_cp(T, tau) )
+            bulk_cp = (0.0
+                # wv[1]*( gas.cp(T) - R/M*( 1.0 - T/M*gas.dMdT(T) ) )
+                + rho_solid*self.solid_heat_capacity_cp(temp, tau))
 
-            f = eps_rho_e_s + eps_rho_e_g
-            f_prime = f_prime_s + f_prime_g
+            temp = temp - (eps_rho_e - rhoe)/bulk_cp
 
-            T = T - (f - e)/f_prime
-
-        return T
+        return temp
 
     def dependent_vars(self, wv: PhenolicsConservedVars,
             eos,
             temperature_seed: DOFArray) -> PhenolicsDependentVars:
-        """Get an agglomerated array of the dependent variables."""
-        progress = self.progress(wv)
-        temperature = self.eval_temperature(wv, eos, temperature_seed, progress)
+        """Get the dependent variables."""
+        tau = self.eval_tau(wv)
+        temperature = self.eval_temperature(wv, eos, temperature_seed, tau)
         return PhenolicsDependentVars(
-            progress=progress,
+            progress=1.0-tau,
             temperature=temperature,
-            #pressure=self.pressure(wv, temperature, progress),
-            #velocity=self.velocity(wv, temperature, progress),
+            # pressure
+            # velocity
             viscosity=self.gas_viscosity(temperature),
             molar_mass=self.gas_molar_mass(temperature),
-            #species_diffusivity=self.species_diffusivity(wv, temperature, progress),
-            #enthalpy
-            #heat_capacity
-            thermal_conductivity=self.thermal_conductivity(temperature, progress),
-            emissivity=self.emissivity(temperature, progress),
-            permeability=self.permeability(temperature, progress),
-            volume_fraction=self.volume_fraction(temperature, progress),
+            # species_diffusivity
+            # enthalpy
+            # heat_capacity
+            thermal_conductivity=self.thermal_conductivity(temperature, tau),
+            emissivity=self.emissivity(temperature, tau),
+            permeability=self.permeability(temperature, tau),
+            volume_fraction=self.volume_fraction(temperature, tau),
             solid_density=self.solid_density(wv)
         )

@@ -6,7 +6,7 @@ import sys
 
 from scipy.interpolate import CubicSpline
 
-from mirgecom.phenolics.gas import gas_properties
+from mirgecom.phenolics.gas import GasProperties
 
 
 def eval_spline(x, x_bnds, coeffs):

@@ -71,12 +71,6 @@ class pyrolysis():
         return rhs
 
 
-#def solid_enthalpy(temperature, tau):
-#    return 2e6 + 1500*temperature
-
-#def solid_heat_capacity(temperature, tau):       
-#    return 1500 + temperature*0.0
-
 def solid_enthalpy(temperature, tau):
 
     T2 = temperature**2

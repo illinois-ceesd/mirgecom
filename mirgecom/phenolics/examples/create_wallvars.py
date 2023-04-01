@@ -124,8 +124,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
     
-    from mirgecom.phenolics.gas import gas_properties
-    my_gas = gas_properties()
+    from mirgecom.phenolics.gas import GasProperties
+    my_gas = GasProperties()
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
