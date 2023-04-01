@@ -8,6 +8,35 @@ from scipy.interpolate import CubicSpline
 
 from mirgecom.phenolics.gas import gas_properties
 
+
+def eval_spline(x, x_bnds, coeffs):
+
+    val = x*0.0
+    nidx = len(x_bnds)
+    for i in range(0,nidx-1):
+        val = np.where(x < x_bnds[i+1],
+                    np.where(x >= x_bnds[i],
+                        coeffs[0,i]*(x-x_bnds[i])**3 + coeffs[1,i]*(x-x_bnds[i])**2 + coeffs[2,i]*(x-x_bnds[i]) + coeffs[3,i],
+                        0.0),
+                    0.0) + val
+
+    return val
+
+def eval_spline_derivative(x, x_bnds, coeffs):
+
+    val = x*0.0
+    nidx = len(x_bnds)
+    for i in range(0,nidx-1):
+        val = np.where(x < x_bnds[i+1],
+                    np.where(x >= x_bnds[i],
+                        3.0*coeffs[0,i]*(x-x_bnds[i])**2 + 2.0*coeffs[1,i]*(x-x_bnds[i]) + coeffs[2,i],
+                        0.0),
+                    0.0) + val
+
+    return val
+
+
+
 gas_py = gas_properties()
 gas_data = gas_py._data
 
@@ -22,41 +51,47 @@ T = np.linspace(200,3200.0,201)
 
 N = T.shape[0]
 
-skip=6
-print(x)
-#idx = [0, 5, 10, 15, 16, 20, 25, 27, 30, 33, 36, 40, 43, 48, 53, 55, 57]
-idx = [0, 6, 12, 18, 20, 22, 24, 26, 28, 31, 33, 36, 38, 40, 43,
-        48, 53, 55, 57, 60, 63, 69, 72]
-idx.extend(list(range(78,121,skip)))
-print(np.array([x[idx],idx]).T)
-print(len(x[idx]))
+#idx = [0, 6, 12, 18, 20, 22, 24, 26, 28, 31, 33, 36, 38, 40, 43,
+#        48, 53, 55, 57, 60, 63, 69, 72]
+#idx.extend(list(range(78,127,6)))
+##print(np.array([x[idx],idx]).T)
+##print(len(x[idx]))
 
+"""."""
 plt.plot(x, h, marker='o')
-cs = CubicSpline(x[idx], h[idx])
-gas_enthalpy = cs(T)
+cs = CubicSpline(x, h)
+gas_enthalpy = eval_spline(T, cs.x, cs.c)
 plt.plot(T, gas_enthalpy, marker='x')
+mirgecom = gas_py.gas_enthalpy(T)
+plt.plot(T, mirgecom, marker='+')
 plt.show()
 
 plt.plot(x, Cp, marker='o')
-cs = cs.derivative(nu=1)
-heat_capacity = cs(T)
+heat_capacity = eval_spline_derivative(T, cs.x, cs.c)
 plt.plot(T, heat_capacity, marker='x')
+mirgecom = gas_py.gas_heat_capacity(T)
+plt.plot(T, mirgecom, marker='+')
 plt.show()
 
+"""."""
 plt.plot(x, mu, marker='o')
-cs = CubicSpline(x[idx], mu[idx])
-viscosity = cs(T)
+cs = CubicSpline(x, mu)
+viscosity = eval_spline(T, cs.x, cs.c)
 plt.plot(T, viscosity, marker='x')
+mirgecom = gas_py.gas_viscosity(T)
+plt.plot(T, mirgecom, marker='+')
 plt.show()
 
+"""."""
 plt.plot(x, M, marker='o')
-cs = CubicSpline(x[idx], M[idx])
-molar_mass = cs(T)
+cs = CubicSpline(x, M)
+molar_mass = eval_spline(T, cs.x, cs.c)
 plt.plot(T, molar_mass, marker='x')
+mirgecom = gas_py.gas_molar_mass(T)
+plt.plot(T, mirgecom, marker='+')
 plt.show()
 
-cs = cs.derivative(nu=1)
-dMdT = cs(T)
+dMdT = eval_spline_derivative(T, cs.x, cs.c)
 plt.plot(T, dMdT, marker='x')
 plt.show()
 

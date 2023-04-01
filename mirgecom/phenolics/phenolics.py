@@ -93,15 +93,15 @@ class PhenolicsDependentVars:
     """
 
     temperature: DOFArray
+
 #    pressure: DOFArray
 #    velocity: DOFArray
-    progress: DOFArray
-
-    #XXX why are these nd.array and not DOFArray?
-#    viscosity: np.ndarray
-    thermal_conductivity: np.ndarray
+    molar_mass: DOFArray
+    viscosity: DOFArray
+    thermal_conductivity: DOFArray
 #    species_diffusivity: np.ndarray
 
+    progress: DOFArray
     emissivity: DOFArray
     permeability: DOFArray
     volume_fraction: DOFArray
@@ -114,9 +114,11 @@ class PhenolicsEOS():
         self._degradation_model = composite
         self._gas_data = gas
 
-#    # FIXME
-#    def gas_const(self, wv, temperature):
-#        return temperature*0.0
+    def gas_molar_mass(self, temp):
+        return self._gas_data.gas_molar_mass(temp)
+
+    def gas_viscosity(self, temp):
+        return self._gas_data.gas_viscosity(temp)
 
 #    # FIXME
 #    def pressure(self, wv, temperature, tau):
@@ -125,11 +127,6 @@ class PhenolicsEOS():
 #    # FIXME
 #    def velocity(self, wv, temperature, tau):
 #        return temperature*0.0
-
-#    # FIXME
-#    def viscosity(self, temperature, idx):
-#        return temperature*0.0
-#        #return self._gas_data.gas_viscosity(idx, temperature)
 
 #    # FIXME
 #    def species_diffusivity(self, wv, temperature, tau):
@@ -142,16 +139,16 @@ class PhenolicsEOS():
     def heat_capacity_cp(self, temp, tau):
         return self._degradation_model.solid_heat_capacity(temp, tau)
 
-    def thermal_conductivity(self, wv, temp, tau):
+    def thermal_conductivity(self, temp, tau):
         return self._degradation_model.solid_thermal_conductivity(temp, tau)
 
-    def permeability(self, wv, temp, tau):
+    def permeability(self, temp, tau):
         return self._degradation_model.solid_permeability(temp, tau)
 
-    def volume_fraction(self, wv, temp, tau):
+    def volume_fraction(self, temp, tau):
         return self._degradation_model.solid_volume_fraction(temp, tau)
 
-    def emissivity(self, wv, temp, tau):
+    def emissivity(self, temp, tau):
         return self._degradation_model.solid_emissivity(temp, tau)
 
     def progress(self, wv):
@@ -160,7 +157,7 @@ class PhenolicsEOS():
     def solid_density(self, wv):
         return sum(wv.solid_species_mass)
 
-    def eval_temperature(self, wv, tseed, tau):
+    def eval_temperature(self, wv, eos, tseed, tau):
         """Temperature assumes thermal equilibrium between solid and fluid."""
 
         niter = 3
@@ -185,22 +182,24 @@ class PhenolicsEOS():
         return T
 
     def dependent_vars(self, wv: PhenolicsConservedVars,
-            temperature_seed: DOFArray, idx) -> PhenolicsDependentVars:
+            eos,
+            temperature_seed: DOFArray) -> PhenolicsDependentVars:
         """Get an agglomerated array of the dependent variables."""
         progress = self.progress(wv)
-        temperature = self.eval_temperature(wv, temperature_seed, progress)
+        temperature = self.eval_temperature(wv, eos, temperature_seed, progress)
         return PhenolicsDependentVars(
             progress=progress,
             temperature=temperature,
             #pressure=self.pressure(wv, temperature, progress),
             #velocity=self.velocity(wv, temperature, progress),
-            #viscosity=self.viscosity(temperature, idx),
+            viscosity=self.gas_viscosity(temperature),
+            molar_mass=self.gas_molar_mass(temperature),
             #species_diffusivity=self.species_diffusivity(wv, temperature, progress),
             #enthalpy
             #heat_capacity
-            thermal_conductivity=self.thermal_conductivity(wv, temperature, progress),
-            emissivity=self.emissivity(wv, temperature, progress),
-            permeability=self.permeability(wv, temperature, progress),
-            volume_fraction=self.volume_fraction(wv, temperature, progress),
+            thermal_conductivity=self.thermal_conductivity(temperature, progress),
+            emissivity=self.emissivity(temperature, progress),
+            permeability=self.permeability(temperature, progress),
+            volume_fraction=self.volume_fraction(temperature, progress),
             solid_density=self.solid_density(wv)
         )

@@ -130,7 +130,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # soln setup and init
-    import mirgecom.phenolics.phenolics as wall 
+    import mirgecom.phenolics.phenolics as wall
     
     solid_species_mass = np.empty((3,), dtype=object)
     solid_species_mass[0] =  30.0 + nodes[0]*0.0
@@ -139,7 +139,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     gas_density = 1.0 + nodes[0]*0.0
 
-    temperature = 100*nodes[0] + 800.0 + 0.1
+    temperature = 100*nodes[0] + 800.0
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -153,27 +153,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    gas_data = my_gas._data
-    bounds = gas_data[:,0]
-
-    idx = temperature*0.0
-    for i in range(bounds.shape[0]-1):
-        aux = actx.np.where(
-                actx.np.greater(temperature, bounds[i] + 1e-7),
-                    actx.np.where(actx.np.less(temperature, bounds[i+1]),
-                        i,
-                        0),
-                    0
-                )
-
-        idx = idx + aux
-
-    print(idx)
-    sys.exit()
-
-    #~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature-10.0, idx=idx)
+    wdv = eos.dependent_vars(wv=wall_vars, eos=eos,
+            temperature_seed=temperature-10.0)
 
     #~~~~~~~~~~~~~~~~~~~~~~~~~~
 
