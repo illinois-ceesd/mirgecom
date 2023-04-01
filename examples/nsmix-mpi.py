@@ -47,8 +47,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (  # noqa
-    SymmetryBoundary,
-    IsothermalWallBoundary,
+    IsothermalWallBoundary
 )
 from mirgecom.initializers import MixtureInitializer
 from mirgecom.eos import PyrometheusMixture
@@ -268,7 +267,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                      pressure=can_p, temperature=can_t,
                                      massfractions=can_y, velocity=velocity)
 
-    #    my_boundary = SymmetryBoundary(dim=dim)
     my_boundary = IsothermalWallBoundary(wall_temperature=can_t)
     visc_bnds = {BTAG_ALL: my_boundary}
 

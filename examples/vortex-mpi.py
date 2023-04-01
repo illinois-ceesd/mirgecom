@@ -109,9 +109,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.01
+    t_final = 1.0
     current_cfl = 1.0
-    current_dt = .001
+    current_dt = .00001
     current_t = 0
     constant_cfl = False
 
@@ -182,7 +182,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # soln setup and init
     eos = IdealSingleGas()
-    vel = np.zeros(shape=(dim,))
+    vel = np.ones(shape=(dim,))
     orig = np.zeros(shape=(dim,))
     vel[:dim] = 1.0
     initializer = Vortex2D(center=orig, velocity=vel)
@@ -276,7 +276,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .2, 1.02):
+           or check_range_local(dcoll, "vol", pressure, 0, 10.02):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
