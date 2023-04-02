@@ -391,7 +391,7 @@ class FluidBoundary(metaclass=ABCMeta):
 
 
 class MengaldoBoundaryCondition(FluidBoundary):
-    r"""Abstract interface to fluid boundary treatment described in [Mengaldo_2014]_.
+    r"""Abstract interface to Megaldo fluid boundary treatment.
 
     Mengaldo boundary conditions are those described by [Mengaldo_2014]_, and
     with slight mods for flow boundaries from [Poinsot_1992]_ where noted.
@@ -517,8 +517,6 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
     @abstractmethod
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
-        # def grad_temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus,
-        #                        grad_cv_minus, grad_t_minus):
         r"""Get the boundary condition on the temperature gradient.
 
         This routine returns the boundary condition on the gradient of the
