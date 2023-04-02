@@ -144,10 +144,6 @@ def _identical_grad_temperature(dcoll, dd_bdry, grad_t_minus, **kwargs):
     return grad_t_minus
 
 
-def _identical_grad_av(grad_av_minus, **kwargs):
-    return grad_av_minus
-
-
 class _SlipBoundaryComponent:
     """Helper class for slip boundaries, consistent with [Mengaldo_2014]_."""
 
@@ -818,7 +814,6 @@ class PrescribedFluidBoundary(FluidBoundary):
     .. automethod:: viscous_divergence_flux
     .. automethod:: cv_gradient_flux
     .. automethod:: temperature_gradient_flux
-    .. automethod:: av_flux
     """
 
     def __init__(self,
@@ -840,8 +835,6 @@ class PrescribedFluidBoundary(FluidBoundary):
                  boundary_gradient_cv_func=None,
                  # Returns the boundary value for grad(temperature)
                  boundary_gradient_temperature_func=None,
-                 # For artificial viscosity - grad fluid soln on boundary
-                 boundary_grad_av_func=None,
                  ):
         """Initialize the PrescribedFluidBoundary and methods."""
         self._bnd_state_func = boundary_state_func
@@ -853,11 +846,6 @@ class PrescribedFluidBoundary(FluidBoundary):
         self._viscous_flux_func = viscous_flux_func
         self._bnd_grad_cv_func = boundary_gradient_cv_func
         self._bnd_grad_temperature_func = boundary_gradient_temperature_func
-        self._av_num_flux_func = num_flux_central
-        self._bnd_grad_av_func = boundary_grad_av_func
-
-        if not self._bnd_grad_av_func:
-            self._bnd_grad_av_func = _identical_grad_av
 
         if not self._inviscid_flux_func and not self._bnd_state_func:
             from warnings import warn
@@ -1032,23 +1020,6 @@ class PrescribedFluidBoundary(FluidBoundary):
                                        grad_t_minus=grad_t_minus,
                                        numerical_flux_func=numerical_flux_func,
                                        **kwargs)
-
-    # {{{ Boundary interface for artificial viscosity
-
-    def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
-        """Get the diffusive fluxes for the AV operator API."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
-        actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-        grad_av_plus = self._bnd_grad_av_func(
-            dcoll=dcoll, dd_bdry=dd_bdry, grad_av_minus=grad_av_minus, **kwargs)
-        bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
-                                  exterior=grad_av_plus)
-        num_flux = self._av_num_flux_func(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
-        return self._boundary_quantity(dcoll, dd_bdry, num_flux, **kwargs)
-
-    # }}}
 
 
 class DummyBoundary(PrescribedFluidBoundary):
