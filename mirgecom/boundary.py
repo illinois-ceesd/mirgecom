@@ -495,7 +495,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         # def grad_temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus,
         #                        grad_cv_minus, grad_t_minus):
-        """Get the boundary condition on the temperature gradient.
+        r"""Get the boundary condition on the temperature gradient.
 
         This routine returns the boundary condition on the gradient of the
         temperature, $(\nabla{T})_\text{bc}$.  This value is used in the
@@ -538,7 +538,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
     @abstractmethod
     def temperature_bc(self, state_minus, **kwargs):
-        """Get boundary contition on the temperature.
+        r"""Get boundary contition on the temperature.
 
         This routine returns the temperature boundary condition, $T_\text{bc}$.
         This value is used in the calcuation of the temperature gradient,
@@ -1068,6 +1068,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
     .. automethod:: grad_temperature_bc
     .. automethod:: adiabatic_slip_grad_av
     """
+
     def __init__(self):
         self._slip = _SlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
@@ -1716,6 +1717,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
     .. automethod:: grad_temperature_bc
     .. automethod:: adiabatic_noslip_grad_av
     """
+
     def __init__(self):
         self._no_slip = _NoSlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
