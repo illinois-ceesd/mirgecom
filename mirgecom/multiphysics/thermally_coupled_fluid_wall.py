@@ -178,7 +178,6 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.get_external_state,
-            boundary_grad_av_func=self.get_external_grad_av,
             boundary_temperature_func=self.get_external_t,
             boundary_gradient_temperature_func=self.get_external_grad_t,
             inviscid_flux_func=self.inviscid_wall_flux,
