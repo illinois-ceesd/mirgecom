@@ -1,3 +1,12 @@
+"""Evaluate composite data.
+
+Pyrolysis-Handling Functions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: Pyrolysis
+
+"""
+
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
 """
@@ -23,6 +32,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from meshmode.dof_array import DOFArray
 
 
 #    # FIXME
@@ -42,15 +52,29 @@ import numpy as np
 
 
 class Pyrolysis():
-    """."""
+    """Pyrolysis class.
+
+    .. automethod:: get_sources
+    """
 
     def __init__(self):
         self._Tcrit = np.array([333.3, 555.6])
         # self._Fij = np.array([0.025, 0.075])
         # self._n_phases = 2
 
-    def get_sources(self, temperature, xi):
+    def get_sources(self, temperature: DOFArray, xi):
+        r"""Return the source terms of pyrolysis decomposition.
 
+        The source terms follow as Arrhenius-like equation given by
+
+        .. math::
+
+            \dot{\omega}_i^p = \mathcal{A}_{i} T^{n_{i}}
+            \exp\left(- \frac{E_{i}}{RT} \right)
+            \left( \frac{\epsilon_i \rho_i -
+                \epsilon^c_i \rho^c_i}{\epsilon^0_i \rho^0_i} \right)^{m_i}
+
+        """
         actx = temperature.array_context
 
         rhs = np.empty((3,), dtype=object)

@@ -1,7 +1,45 @@
-"""Evaluate gas properties based on tabulated data."""
+"""Evaluate gas properties based on tabulated data.
+
+Gas-Handling Functions
+^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: GasProperties
+
+Helper Functions
+================
+
+.. autofunction:: eval_spline
+.. autofunction:: eval_spline_derivative
+
+"""
+
+
+__copyright__ = """
+Copyright (C) 2023 University of Illinois Board of Trustees
+"""
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+
 
 import numpy as np
 from scipy.interpolate import CubicSpline
+from meshmode.dof_array import DOFArray
 
 
 def eval_spline(x, x_bnds, coeffs):
@@ -42,11 +80,12 @@ def eval_spline_derivative(x, x_bnds, coeffs):
 class GasProperties():
     """Simplified model of the pyrolysis gas using tabulated data.
 
-    This section is to be used when species conservation is not employed.
-    The output gas is assumed to be in chemical equilibrium.
+    This section is to be used when species conservation is not employed and
+    the output gas is assumed to be in chemical equilibrium.
     """
 
     def __init__(self, prandtl=1.0, lewis=1.0):
+        """Return gas tabulated data and interpolating functions."""
 
         self._prandtl = prandtl
         self._lewis = lewis

@@ -107,10 +107,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     t_final = 60.0
 
     order = 2
-    dt = 1.0e-7
+    dt = 1.0e-5
 
     nviz = 100
     ngarbage = 100
+    nrestart = 1000
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -239,9 +240,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr_add_device_memory_usage(logmgr, queue)
 
         logmgr.add_watches([
-            ("step.max", "step = {value}, "),
+            ("step.max", "step = {value:8d}, "),
             ("dt.max", "dt: {value:1.3e} s, "),
-            ("t_sim.max", "sim time: {value:7.3f} s, "),
+            ("t_sim.max", "sim time: {value:12.8f} s, "),
             ("t_step.max", "step walltime: {value:5g} s\n")
             ])
 
@@ -260,7 +261,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     pyrolysis = my_composite.Pyrolysis()
 
+    # FIXME create a new operator to put all this stuff
     def _rhs(t, state):
+
+        PressureScalingFactor = 0.01
 
         wv, tseed = state
         wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed)
@@ -270,12 +274,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         pressure = wdv.pressure
 
         # ~~~~~
-        mu = wdv.gas_viscosity
-        epsilon = wdv.void_fraction
-        permeability = wdv.solid_permeability
-
+        gas_pressure_diffusivity = eos.gas_pressure_diffusivity(temperature, tau)
         pressure_rhs, grad_pressure = diffusion_operator(dcoll,
-            kappa=wv.gas_density*permeability/(mu*epsilon),
+            kappa=wv.gas_density*gas_pressure_diffusivity,
             boundaries=pressure_boundaries, u=pressure, time=t,
             return_grad_u=True)
 
@@ -284,19 +285,23 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         viscous_rhs = wall.make_conserved(
             solid_species_mass=wv.solid_species_mass*0.0,
-            gas_density=pressure_rhs,
+            gas_density=PressureScalingFactor*pressure_rhs,
             energy=energy_rhs)
 
         # ~~~~~
-        velocity = -permeability/(mu*epsilon)*grad_pressure
+        # FIXME : add inviscid terms in the RHS
+        velocity = -gas_pressure_diffusivity*grad_pressure
 
         # ~~~~~
         resin_pyrolysis = pyrolysis.get_sources(temperature,
                                                 wv.solid_species_mass)
 
+        # flip sign due to mass conservation
+        gas_source_term = -PressureScalingFactor*sum(resin_pyrolysis)
+
         source_terms = wall.make_conserved(
             solid_species_mass=resin_pyrolysis,
-            gas_density=-sum(resin_pyrolysis),  # flip sign due to mass cons.
+            gas_density=gas_source_term,
             energy=zeros)
 
         # ~~~~~
@@ -340,6 +345,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    def _eval_dep_vars(wall_vars, tseed):
+        return eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
+
+    eval_dep_vars = actx.compile(_eval_dep_vars)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     from warnings import warn
     warn("Running gc.collect() to work around memory growth issue ")
     import gc
@@ -362,7 +374,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
             wall_vars, tseed = state
 
-            wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
+            #wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
+            wdv = eval_dep_vars(wall_vars, tseed)
 
             t += dt
             istep += 1
@@ -378,9 +391,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             if istep % ngarbage == 0:
                 gc.collect()
 
-    #        if istep%1000 == 0:
-    #            my_write_restart(step=istep, t=t, wall_vars=wall_vars,
-    #                         tseed=wdv.temperature)
+            if istep % nrestart == 0:
+                my_write_restart(step=istep, t=t, wall_vars=wall_vars,
+                             tseed=wdv.temperature)
 
         except MyRuntimeError:
             if rank == 0:
