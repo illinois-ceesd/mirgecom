@@ -148,8 +148,8 @@ class PhenolicsDependentVars:
     void_fraction: DOFArray
 
     pressure: DOFArray
-    molar_mass: DOFArray
-    viscosity: DOFArray
+    gas_molar_mass: DOFArray
+    gas_viscosity: DOFArray
 #    velocity: DOFArray
 #    species_diffusivity: np.ndarray
 
@@ -337,8 +337,8 @@ class PhenolicsEOS():
             void_fraction=self.void_fraction(tau),
             pressure=self.gas_pressure(wv, temperature, tau),
             # velocity
-            viscosity=self.gas_viscosity(temperature),
-            molar_mass=self.gas_molar_mass(temperature),
+            gas_viscosity=self.gas_viscosity(temperature),
+            gas_molar_mass=self.gas_molar_mass(temperature),
             # species_diffusivity
             # enthalpy
             # heat_capacity
