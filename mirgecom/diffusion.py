@@ -112,23 +112,24 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
         Parameters
         ----------
-        function: function prescribing the flux along the boundary
+        function
+            user-defined function prescribing the flux along the boundary
         """
         self.function = function
 
     def get_grad_flux(self, dcoll, dd_bdry, u_minus, **kwargs):
         """Flux for gradient evaluation."""
         actx = u_minus.array_context
-        ext_value = self.function(**kwargs)
+        ext_value = self.function(u_minus, **kwargs)
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
             exterior=2*ext_value-u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
         return grad_facial_flux(u_tpair, normal)
 
-    def get_diffusion_flux(
-            self, dcoll, dd_bdry, u_minus, kappa_minus, grad_u_minus, **kwargs):
-        """Flux for laplacian evaluation."""
+    def get_diffusion_flux(self, dcoll, dd_bdry, u_minus, kappa_minus,
+                           grad_u_minus, **kwargs):
+        """Flux for Laplacian evaluation."""
         actx = grad_u_minus[0].array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -167,69 +168,14 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     .. automethod:: get_diffusion_flux
     """
 
-    def __init__(self, value):
-        """
-        Initialize the boundary condition.
-
-        Parameters
-        ----------
-        value: float or meshmode.dof_array.DOFArray
-            the value(s) of $g$ along the boundary
-        """
-        self.value = value
-
-    def get_grad_flux(self, dcoll, dd_bdry, u_minus, **kwargs):
-        """Flux for gradient evaluation."""
-        actx = u_minus.array_context
-        u_tpair = TracePair(dd_bdry,
-            interior=u_minus,
-            exterior=u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        return grad_facial_flux(u_tpair, normal)
-
-    def get_diffusion_flux(
-            self, dcoll, dd_bdry, u_minus, kappa_minus, grad_u_minus, **kwargs):
-        """Flux for laplacian evaluation."""
-        actx = grad_u_minus[0].array_context
-        kappa_tpair = TracePair(dd_bdry,
-            interior=kappa_minus,
-            exterior=kappa_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        grad_u_tpair = TracePair(dd_bdry,
-            interior=grad_u_minus,
-            exterior=(
-                grad_u_minus
-                + 2 * (self.value - np.dot(grad_u_minus, normal)) * normal))
-        return diffusion_facial_flux(kappa_tpair, grad_u_tpair, normal)
-
-
-class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Prescribed flux boundary condition for the diffusion operator.
-
-    For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
-    external data
-
-    .. math::
-
-        u^+ = u^-
-
-    when computing the boundary fluxes for $\nabla u$, and applies directly
-    the prescribed flux when computing $\nabla \cdot (\kappa \nabla u)$. This
-    is not the same as prescribing the gradient of $u$.
-
-    .. automethod:: __init__
-    .. automethod:: get_grad_flux
-    .. automethod:: get_diffusion_flux
-    """
-
     def __init__(self, function):
         """
         Initialize the boundary condition.
 
         Parameters
         ----------
-        function: function prescribing the flux along the boundary
+        function
+            user-defined function to prescribe the gradient along the boundary
         """
         self.function = function
 
@@ -242,9 +188,70 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
         normal = actx.thaw(dcoll.normal(dd_bdry))
         return grad_facial_flux(u_tpair, normal)
 
-    def get_diffusion_flux(
-            self, dcoll, dd_bdry, u_minus, kappa_minus, grad_u_minus, **kwargs):
-        """Flux for laplacian evaluation."""
+    def get_diffusion_flux(self, dcoll, dd_bdry, u_minus, kappa_minus,
+                           grad_u_minus, **kwargs):
+        """Flux for Laplacian evaluation."""
+        actx = grad_u_minus[0].array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        grad_u_tpair = TracePair(dd_bdry,
+            interior=grad_u_minus,
+            exterior=(
+                grad_u_minus
+                + 2 * (self.function(u_minus, grad_u_minus, **kwargs)
+                       - np.dot(grad_u_minus, normal)) * normal))
+        return diffusion_facial_flux(kappa_tpair, grad_u_tpair, normal)
+
+
+class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
+    r"""Prescribed flux boundary condition for the diffusion operator.
+
+    For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
+    external data
+
+    .. math::
+
+        u^+ = u^-
+
+    when computing the boundary fluxes for $\nabla u$, and and uses the
+    prescribed flux to evaluate the numerical flux $f^*$ using
+
+    .. math::
+
+        f^*|_\Gamma = \frac{1}{2} (F_{presc} + F^-)
+
+    when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
+
+    .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
+    """
+
+    def __init__(self, function):
+        """
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        function
+            function prescribing the external flux
+        """
+        self.function = function
+
+    def get_grad_flux(self, dcoll, dd_bdry, u_minus, **kwargs):
+        """Flux for gradient evaluation."""
+        actx = u_minus.array_context
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return grad_facial_flux(u_tpair, normal)
+
+    def get_diffusion_flux(self, dcoll, dd_bdry, u_minus, kappa_minus,
+                           grad_u_minus, **kwargs):
+        """Flux for Laplacian evaluation."""
         actx = grad_u_minus[0].array_context
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
@@ -257,9 +264,8 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
             exterior=grad_u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        zeros = grad_u_minus[0]*0.0
-
-        # XXX average between the prescribed value and the internal value
+        # average between the prescribed value and the internal value
+        # FIXME maybe the minus in the prescribed function is due to the normal?
         return 0.5*(-kappa_tpair.int * np.dot(grad_u_tpair.int, normal) \
             - self.function(u_tpair, kappa_tpair, grad_u_tpair, normal, **kwargs)
         )

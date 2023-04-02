@@ -88,7 +88,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+        filename=f"{casename}.sqlite", mode="wo", mpi_comm=comm)
 
     if use_profiling:
         queue = cl.CommandQueue(

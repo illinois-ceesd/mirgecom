@@ -120,7 +120,7 @@ def solid_thermal_conductivity(temperature, tau):
     return virgin*tau + charr*(1.0 - tau)
 
 
-def solid_permeability(temperature, tau):
+def solid_permeability(tau):
     """."""
     virgin = 1.6e-11
     charr = 2.0e-11
@@ -134,7 +134,7 @@ def solid_tortuosity(temperature, tau):
     return virgin*tau + charr*(1.0 - tau)
 
 
-def solid_volume_fraction(temperature, tau):
+def solid_volume_fraction(tau):
     """."""
     fiber = 0.10
     virgin = 0.10
@@ -142,7 +142,7 @@ def solid_volume_fraction(temperature, tau):
     return virgin*tau + charr*(1.0 - tau) + fiber
 
 
-def solid_emissivity(temperature, tau):
+def solid_emissivity(tau):
     """."""
     virgin = 0.8
     charr = 0.9
