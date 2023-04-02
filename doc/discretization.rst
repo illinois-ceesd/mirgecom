@@ -293,8 +293,8 @@ and :mod:`~mirgecom.navierstokes`, go to calculate the flux for the divergence o
 inviscid physical transport fluxes, they call the
 :meth:`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
-:meth:`~mirgecom.boundary.AdiabaticSlipBoundary.state_plus`, and returns the
-numerical flux ${h}^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
+:meth:`~mirgecom.boundary.AdiabaticSlipBoundary.state_plus`, and returns the numerical flux
+${h}^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
  
 
 Viscous fluxes (diffusion terms)
