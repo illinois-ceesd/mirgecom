@@ -57,7 +57,6 @@ from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 import grudge.op as op
 from mirgecom.viscous import viscous_facial_flux_central
-from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import make_fluid_state, replace_fluid_state
 from pytools.obj_array import make_obj_array
 
