@@ -45,8 +45,7 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    #  AdiabaticNoslipMovingBoundary,
-    IsothermalNoSlipBoundary
+    IsothermalWallBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas  # , PyrometheusMixture
@@ -282,9 +281,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         BoundaryDomainTag("+1"):
             PrescribedFluidBoundary(boundary_state_func=_exact_boundary_solution),
         BoundaryDomainTag("-2"):
-            IsothermalNoSlipBoundary(wall_temperature=348.5),
+            IsothermalWallBoundary(wall_temperature=348.5),
         BoundaryDomainTag("+2"):
-            IsothermalNoSlipBoundary(wall_temperature=348.5)}
+            IsothermalWallBoundary(wall_temperature=348.5)}
 
     if rst_filename:
         current_t = restart_data["t"]
