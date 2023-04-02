@@ -529,9 +529,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
 
-            temperature_bc = wall.temperature_bc(
-                dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
-                state_minus=state_minus)
+            temperature_bc = wall.temperature_bc(state_minus=state_minus)
             print(f"{temperature_bc=}")
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
@@ -606,9 +604,10 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
     from mirgecom.transport import SimpleTransport
     from mirgecom.boundary import AdiabaticNoslipWallBoundary
 
-    gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
+    gas_model = GasModel(eos=IdealSingleGas(gas_const=4.0),
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
+    exp_temp = 1.0/4.0
 
     wall = AdiabaticNoslipWallBoundary()
 
@@ -668,6 +667,9 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
             print(f"{expected_adv_wall_cv=}")
             print(f"{expected_diff_wall_cv=}")
 
+            expected_wall_temperature = exp_temp + 0*state_minus.temperature
+
+            print(f"{expected_wall_temperature=}")
             cv_interior_pairs = interior_trace_pairs(dcoll, uniform_state.cv)
             cv_int_tpair = cv_interior_pairs[0]
 
@@ -700,6 +702,9 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
                            cv_grad_flux_wall)
 
             print(f"{cv_grad_flux_wall=}")
+
+            temperature_bc = wall.temperature_bc(state_minus)
+            print(f"{temperature_bc=}")
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
 
@@ -756,6 +761,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
             assert adv_wall_state.cv == expected_adv_wall_cv
             assert diff_wall_state.cv == expected_diff_wall_cv
+            assert actx.np.all(temperature_bc == expected_wall_temperature)
             for idim in range(dim):
                 assert actx.np.all(adv_wall_state.momentum_density[idim]
                                    == expected_adv_momentum[idim])
@@ -778,9 +784,11 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
     from mirgecom.transport import SimpleTransport
     from mirgecom.boundary import AdiabaticSlipBoundary
 
-    gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
+    gas_const = 4.0
+    gas_model = GasModel(eos=IdealSingleGas(gas_const=gas_const),
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
+    exp_temp = 1.0/gas_const
 
     wall = AdiabaticSlipBoundary()
 
@@ -823,8 +831,11 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
                                               uniform_state, gas_model)
+
+            print(f"{state_minus.temperature=}")
             bnd_normal = actx.thaw(dcoll.normal(BTAG_ALL))
             print(f"{bnd_normal=}")
+            expected_temp_boundary = exp_temp + 0*state_minus.temperature
 
             bnd_velocity = vel + 0*bnd_normal
             print(f"{bnd_velocity=}")
@@ -939,9 +950,12 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
                                                      grad_cv_minus=grad_cv_minus,
                                                      grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
+            temperature_bc = wall.temperature_bc(state_minus)
 
             assert adv_wall_state.cv == expected_adv_wall_cv
             assert diff_wall_state.cv == expected_diff_wall_cv
+            assert actx.np.all(temperature_bc == expected_temp_boundary)
+
             for idim in range(dim):
                 assert actx.np.all(adv_wall_state.momentum_density[idim]
                                    == expected_adv_momentum[idim])

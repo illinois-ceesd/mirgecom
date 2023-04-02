@@ -66,22 +66,6 @@ from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from abc import ABCMeta, abstractmethod
 
 
-# FIXME: Currently, PrescribedFluidBoundary is given free rein to call the callbacks
-# that were passed to it wherever it wants. However, some BCs require different
-# boundary states for different operators, so it may be preferable to give individual
-# BCs more fine-grained control over how their callbacks are used. One way to do this
-# could be to implement the flux "template" functions (e.g.
-# _viscous_flux_for_prescribed_state) as standalone functions instead of base class
-# methods. Then the specific BC class can supply exactly the right boundary value
-# callback for each flux. See _viscous_flux_for_prescribed_state_mengaldo for an
-# example of this.
-
-
-# Make sure PrescribedFluidBoundary isn't calling a callback that it's not meant to
-def _do_not_call(*args, **kwargs):
-    raise AssertionError
-
-
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
     return external_quantity
 
@@ -1076,8 +1060,8 @@ class DummyBoundary(PrescribedFluidBoundary):
 class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
     r"""Boundary condition implementing inviscid slip boundary.
 
-    def momentum_plus(self, mom_minus, normal):
-        return mom_minus - 2.0*np.dot(mom_minus, normal)*normal
+    This class implements an adiabatic slip wall consistent with the prescription
+    by [Mengaldo_2014]_.
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -1085,7 +1069,6 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
     .. automethod:: grad_temperature_bc
-    .. automethod:: adiabatic_slip_grad_av
     """
     def __init__(self):
         self._slip = _SlipBoundaryComponent()
@@ -1672,7 +1655,7 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
-        return self._isothermal.temperature_bc(state_minus)
+        return 0*state_minus.temperature + self._wall_temp
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -1724,10 +1707,10 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
     .. automethod:: grad_cv_bc
     .. automethod:: temperature_bc
     .. automethod:: state_plus
-    .. automethdo:: state_bc
+    .. automethod:: state_bc
     .. automethod:: grad_temperature_bc
-    .. automethod:: grad_av_plus
     """
+
     def __init__(self):
         self._no_slip = _NoSlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
@@ -1774,8 +1757,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
 
         return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
-    def grad_temperature_bc(
-            self, grad_t_minus, normal, **kwargs):
+    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
