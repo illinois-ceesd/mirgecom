@@ -37,27 +37,19 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
-    smoothness_indicator
+    smoothness_indicator,
+    AdiabaticNoSlipWallAV,
+    PrescribedFluidBoundaryAV
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    AdiabaticNoslipWallBoundary,
-    PrescribedFluidBoundary
-)
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.simutil import get_sim_timestep
-from meshmode.discretization.connection import FACE_RESTR_ALL
-from arraycontext import get_container_context_recursively
-from grudge.dof_desc import as_dofdesc
-from grudge.trace_pair import TracePair
-import grudge.op as op
 from logpyle import set_dt
-from mirgecom.flux import num_flux_central
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -121,29 +113,6 @@ def get_doublemach_mesh():
         mesh = read_gmsh(meshfile, force_ambient_dim=2)
 
     return mesh
-
-
-class AdiabaticWall(AdiabaticNoslipWallBoundary):
-    def _boundary_quantity(self, dcoll, dd_bdry, quantity, local=False, **kwargs):
-        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
-        dd_allfaces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
-        return quantity if local else op.project(dcoll,
-            dd_bdry, dd_allfaces, quantity)
-
-    def _identical_grad_av(self, grad_av_minus, **kwargs):
-        return grad_av_minus
-
-    def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
-        """Get the diffusive fluxes for the AV operator API."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
-        actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-        grad_av_plus = grad_av_minus
-        bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
-                                  exterior=grad_av_plus)
-        num_flux = num_flux_central(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
-        return self._boundary_quantity(dcoll, dd_bdry, num_flux, **kwargs)
 
 
 @mpi_entry_point
@@ -273,13 +242,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     boundaries = {
         BoundaryDomainTag("ic1"):
-            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
         BoundaryDomainTag("ic2"):
-            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
         BoundaryDomainTag("ic3"):
-            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        BoundaryDomainTag("wall"): AdiabaticWall(),
-        BoundaryDomainTag("out"): AdiabaticWall(),
+            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("wall"): AdiabaticNoSlipWallAV(),
+        BoundaryDomainTag("out"): AdiabaticNoSlipWallAV(),
     }
 
     if rst_filename:
