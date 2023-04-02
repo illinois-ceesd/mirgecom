@@ -66,6 +66,22 @@ from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from abc import ABCMeta, abstractmethod
 
 
+# FIXME: Currently, PrescribedFluidBoundary is given free rein to call the callbacks
+# that were passed to it wherever it wants. However, some BCs require different
+# boundary states for different operators, so it may be preferable to give individual
+# BCs more fine-grained control over how their callbacks are used. One way to do this
+# could be to implement the flux "template" functions (e.g.
+# _viscous_flux_for_prescribed_state) as standalone functions instead of base class
+# methods. Then the specific BC class can supply exactly the right boundary value
+# callback for each flux. See _viscous_flux_for_prescribed_state_mengaldo for an
+# example of this.
+
+
+# Make sure PrescribedFluidBoundary isn't calling a callback that it's not meant to
+def _do_not_call(*args, **kwargs):
+    raise AssertionError
+
+
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
     return external_quantity
 
@@ -125,6 +141,27 @@ def _get_rotation_matrix(principal_direction):
 
     comps = make_obj_array(comps)
     return comps.reshape(dim, dim)
+
+
+def _identical_state(state_minus, **kwargs):
+    return state_minus
+
+
+def _identical_temperature(
+        dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    return state_minus.temperature
+
+
+def _identical_grad_cv(grad_cv_minus, **kwargs):
+    return grad_cv_minus
+
+
+def _identical_grad_temperature(dcoll, dd_bdry, grad_t_minus, **kwargs):
+    return grad_t_minus
+
+
+def _identical_grad_av(grad_av_minus, **kwargs):
+    return grad_av_minus
 
 
 class _SlipBoundaryComponent:
@@ -835,7 +872,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         self._bnd_grad_av_func = boundary_grad_av_func
 
         if not self._bnd_grad_av_func:
-            self._bnd_grad_av_func = self._identical_grad_av
+            self._bnd_grad_av_func = _identical_grad_av
 
         if not self._inviscid_flux_func and not self._bnd_state_func:
             from warnings import warn
@@ -845,13 +882,12 @@ class PrescribedFluidBoundary(FluidBoundary):
             self._inviscid_flux_func = self._inviscid_flux_for_prescribed_state
 
         if not self._bnd_state_func:
-            self._bnd_state_func = self._identical_state
+            self._bnd_state_func = _identical_state
 
         if not self._bnd_temperature_func:
             self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
-            # self._grad_num_flux_func = num_flux_central
-            self._grad_num_flux_func = _ldg_bnd_flux_for_grad
+            self._grad_num_flux_func = num_flux_central
         if not self._cv_gradient_flux_func:
             self._cv_gradient_flux_func = self._gradient_flux_for_prescribed_cv
         if not self._temperature_grad_flux_func:
@@ -861,9 +897,9 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._viscous_flux_func:
             self._viscous_flux_func = self._viscous_flux_for_prescribed_state
         if not self._bnd_grad_cv_func:
-            self._bnd_grad_cv_func = self._identical_grad_cv
+            self._bnd_grad_cv_func = _identical_grad_cv
         if not self._bnd_grad_temperature_func:
-            self._bnd_grad_temperature_func = self._identical_grad_temperature
+            self._bnd_grad_temperature_func = _identical_grad_temperature
 
     def _boundary_quantity(self, dcoll, dd_bdry, quantity, local=False, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
@@ -893,19 +929,6 @@ class PrescribedFluidBoundary(FluidBoundary):
                                               state_minus=state_minus,
                                               **kwargs)
         return boundary_state.temperature
-
-    def _interior_temperature(self, dcoll, dd_bdry, gas_model, state_minus,
-                              **kwargs):
-        return state_minus.temperature
-
-    def _identical_state(self, state_minus, **kwargs):
-        return state_minus
-
-    def _identical_grad_cv(self, grad_cv_minus, **kwargs):
-        return grad_cv_minus
-
-    def _identical_grad_temperature(self, dcoll, dd_bdry, grad_t_minus, **kwargs):
-        return grad_t_minus
 
     # Returns the flux to be used by the gradient operator when computing the
     # gradient of the fluid solution on boundaries that prescribe CV(+).
@@ -1026,9 +1049,6 @@ class PrescribedFluidBoundary(FluidBoundary):
 
     # {{{ Boundary interface for artificial viscosity
 
-    def _identical_grad_av(self, grad_av_minus, **kwargs):
-        return grad_av_minus
-
     def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
         """Get the diffusive fluxes for the AV operator API."""
         dd_bdry = as_dofdesc(dd_bdry)
@@ -1056,8 +1076,8 @@ class DummyBoundary(PrescribedFluidBoundary):
 class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
     r"""Boundary condition implementing inviscid slip boundary.
 
-    This class implements an adiabatic slip wall consistent with the prescription
-    by [Mengaldo_2014]_.
+    def momentum_plus(self, mom_minus, normal):
+        return mom_minus - 2.0*np.dot(mom_minus, normal)*normal
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -1652,7 +1672,7 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
 
     def temperature_bc(self, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
-        return 0.*state_minus.temperature + self._wall_temp
+        return self._isothermal.temperature_bc(state_minus)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -1684,8 +1704,6 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
         return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
     def grad_temperature_bc(self, grad_t_minus, **kwargs):
-        # def grad_temperature_bc(self, dcoll, dd_bdry, gas_model, state_minus,
-        #                        grad_cv_minus, grad_t_minus):
         """Return BC on grad(temperature)."""
         # Mengaldo Eqns (50-51)
         return grad_t_minus
@@ -1708,7 +1726,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
     .. automethod:: state_plus
     .. automethdo:: state_bc
     .. automethod:: grad_temperature_bc
-    .. automethod:: adiabatic_noslip_grad_av
+    .. automethod:: grad_av_plus
     """
     def __init__(self):
         self._no_slip = _NoSlipBoundaryComponent()
@@ -1756,7 +1774,8 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
 
         return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
-    def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
+    def grad_temperature_bc(
+            self, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
