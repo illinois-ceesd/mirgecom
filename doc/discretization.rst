@@ -28,6 +28,7 @@ discussion.  The following references are useful:
 * [Ayuso_2009]_
 * Shock handling [Woodward_1984]_
 * Artificial viscosity [Persson_2012]_
+* Boundary Condtitions [Mengaldo_2014]_, and [Poinsot_1992]_
 
 *MIRGE-Com* currently employs a strategy akin to the BR1 algorithm outlined in
 [Bassi_1997]_, but with thermal terms and chemical reaction sources as outlined in
