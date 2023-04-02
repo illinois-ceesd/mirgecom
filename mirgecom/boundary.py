@@ -393,7 +393,6 @@ class FluidBoundary(metaclass=ABCMeta):
 class MengaldoBoundaryCondition(FluidBoundary):
     r"""Abstract interface to fluid boundary treatment described in [Mengaldo_2014]_.
 
-
     Mengaldo boundary conditions are those described by [Mengaldo_2014]_, and
     with slight mods for flow boundaries from [Poinsot_1992]_ where noted.
 
