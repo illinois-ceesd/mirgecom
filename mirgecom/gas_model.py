@@ -662,5 +662,6 @@ def replace_fluid_state(
         cv=new_cv,
         gas_model=gas_model,
         temperature_seed=new_tseed,
+        smoothness=state.smoothness,
         limiter_func=limiter_func,
         limiter_dd=limiter_dd)
