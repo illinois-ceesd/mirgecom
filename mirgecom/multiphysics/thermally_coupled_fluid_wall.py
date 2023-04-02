@@ -435,7 +435,6 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.get_external_state,
-            boundary_grad_av_func=self.get_external_grad_av,
             boundary_temperature_func=self.get_external_t,
             boundary_gradient_temperature_func=self.get_external_grad_t,
             inviscid_flux_func=self.inviscid_wall_flux,
@@ -508,38 +507,6 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         nhat = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
         return numerical_flux_func(state_pair, gas_model, nhat)
-
-    def get_external_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
-        # Grab some boundary-relevant data
-        actx = grad_av_minus.array_context
-
-        # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-
-        # Apply a Neumann condition on the energy gradient
-        # Should probably compute external energy gradient using external temperature
-        # gradient, but that is a can of worms
-        ext_grad_energy = \
-            grad_av_minus.energy - 2 * np.dot(grad_av_minus.energy, nhat) * nhat
-
-        # uh oh - we don't have the necessary data to compute grad_y from grad_av
-        # from mirgecom.fluid import species_mass_fraction_gradient
-        # grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-        #                                               grad_cv_minus)
-        # grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        # grad_species_mass_plus = 0.*grad_y_plus
-        # This re-stuffs grad_y+ back into grad_cv+, skipit; we did not split AVs
-        # for i in range(state_minus.nspecies):
-        #    grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
-        #        + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-        ext_grad_species_mass = (
-            grad_av_minus.species_mass
-            - np.outer(grad_av_minus.species_mass @ nhat, nhat))
-
-        return make_conserved(
-            grad_av_minus.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
-            momentum=grad_av_minus.momentum, species_mass=ext_grad_species_mass)
 
     def get_external_grad_cv(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
