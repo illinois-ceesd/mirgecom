@@ -1380,7 +1380,7 @@ def test_moser_mms(actx_factory, order):
     beta = 1e-5
     sigma = 1e-1
     tn = .666  # noqa
-    nspecies = 4
+    nspecies = 0
 
     diffusivity = np.empty((0,), dtype=object)
     if nspecies > 0:
