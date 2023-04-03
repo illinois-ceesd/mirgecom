@@ -128,31 +128,31 @@ def make_conserved(solid_species_mass, gas_density, energy):  # noqa D103
 class PhenolicsDependentVars:
     """State-dependent quantities.
 
-    .. attribute:: temperature
-    .. attribute:: pressure
-    .. attribute:: molar_mass
-    .. attribute:: viscosity
-    .. attribute:: thermal_conductivity
     .. attribute:: progress
-    .. attribute:: emissivity
-    .. attribute:: permeability
+    .. attribute:: temperature
     .. attribute:: void_fraction
+    .. attribute:: gas_pressure
+    .. attribute:: gas_molar_mass
+    .. attribute:: gas_viscosity
+    .. attribute:: thermal_conductivity
+    .. attribute:: solid_emissivity
+    .. attribute:: solid_permeability
     .. attribute:: solid_density
     """
 
-    temperature: DOFArray
+    tau: DOFArray
     progress: DOFArray
+    temperature: DOFArray
 
     thermal_conductivity: DOFArray
     void_fraction: DOFArray
 
-    pressure: DOFArray
+    gas_pressure: DOFArray
+    gas_enthalpy: DOFArray
     gas_molar_mass: DOFArray
     gas_viscosity: DOFArray
-#    velocity: DOFArray
-#    species_diffusivity: np.ndarray
 
-#    solid_emissivity: DOFArray
+    solid_emissivity: DOFArray
     solid_permeability: DOFArray
     solid_density: DOFArray
 
@@ -238,7 +238,8 @@ class PhenolicsEOS():
         progress ratio $\tau$."""
         return 1.0 - self._composite_model.solid_volume_fraction(tau)
 
-    def thermal_conductivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature: DOFArray,
+                             tau: DOFArray) -> DOFArray:
         r"""Return the bulk thermal conductivity, $f(\tau, T)$."""
         return (
             self._composite_model.solid_thermal_conductivity(temperature, tau)
@@ -252,7 +253,7 @@ class PhenolicsEOS():
 
     def gas_molar_mass(self, temperature: DOFArray) -> DOFArray:
         """Return the gas molar mass."""
-        return self._gas_data.gas_molar_mass(temp)
+        return self._gas_data.gas_molar_mass(temperature)
 
     def gas_viscosity(self, temperature: DOFArray) -> DOFArray:
         """Return the gas viscosity."""
@@ -334,18 +335,19 @@ class PhenolicsEOS():
         tau = self.eval_tau(wv)
         temperature = self.eval_temperature(wv, temperature_seed, tau)
         return PhenolicsDependentVars(
+            tau=tau,
             progress=1.0-tau,
             temperature=temperature,
             thermal_conductivity=self.thermal_conductivity(temperature, tau),
             void_fraction=self.void_fraction(tau),
-            pressure=self.gas_pressure(wv, temperature, tau),
+            gas_pressure=self.gas_pressure(wv, temperature, tau),
             # velocity
             gas_viscosity=self.gas_viscosity(temperature),
             gas_molar_mass=self.gas_molar_mass(temperature),
             # species_diffusivity
-            # enthalpy
+            gas_enthalpy=self.gas_enthalpy(temperature),
             # heat_capacity
             solid_density=self.solid_density(wv),
-            # solid_emissivity=self.emissivity(temperature, tau),
+            solid_emissivity=self.solid_emissivity(tau),
             solid_permeability=self.solid_permeability(tau)
         )
