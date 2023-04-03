@@ -15,6 +15,7 @@ Fluid State Handling Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: make_fluid_state
+.. autofunction:: replace_fluid_state
 .. autofunction:: project_fluid_state
 .. autofunction:: make_fluid_state_trace_pairs
 .. autofunction:: make_operator_fluid_states
@@ -660,3 +661,84 @@ def make_operator_fluid_states(
 
     return \
         volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad
+
+
+def replace_fluid_state(
+        state, gas_model, *, mass=None, energy=None, momentum=None,
+        species_mass=None, temperature_seed=None, limiter_func=None,
+        limiter_dd=None):
+    """Create a new fluid state from an existing one with modified data.
+
+    Parameters
+    ----------
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        The full fluid conserved and thermal state
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        The physical model for the gas/fluid.
+
+    mass: :class:`~meshmode.dof_array.DOFArray` or :class:`numpy.ndarray`
+
+        Optional :class:`~meshmode.dof_array.DOFArray` for scalars or object array of
+        :class:`~meshmode.dof_array.DOFArray` for vector quantities corresponding
+        to the mass continuity equation.
+
+    energy: :class:`~meshmode.dof_array.DOFArray` or :class:`numpy.ndarray`
+
+        Optional :class:`~meshmode.dof_array.DOFArray` for scalars or object array of
+        :class:`~meshmode.dof_array.DOFArray` for vector quantities corresponding
+        to the energy conservation equation.
+
+    momentum: :class:`numpy.ndarray`
+
+        Optional object array (:class:`numpy.ndarray`) with shape ``(ndim,)``
+        of :class:`~meshmode.dof_array.DOFArray` , or an object array with shape
+        ``(ndim, ndim)`` respectively for scalar or vector quantities corresponding
+        to the ndim equations of momentum conservation.
+
+    species_mass: :class:`numpy.ndarray`
+
+        Optional object array (:class:`numpy.ndarray`) with shape ``(nspecies,)``
+        of :class:`~meshmode.dof_array.DOFArray`, or an object array with shape
+        ``(nspecies, ndim)`` respectively for scalar or vector quantities
+        corresponding to the `nspecies` species mass conservation equations.
+
+    temperature_seed: :class:`~meshmode.dof_array.DOFArray` or float
+
+        Optional array or number with the temperature to use as a seed
+        for a temperature evaluation for the created fluid state
+
+    limiter_func:
+
+        Callable function to limit the fluid conserved quantities to physically
+        valid and realizable values.
+
+    Returns
+    -------
+    :class:`~mirgecom.gas_model.FluidState`
+
+        The new fluid conserved and thermal state
+    """
+    new_cv = state.cv.replace(
+        mass=(mass if mass is not None else state.cv.mass),
+        energy=(energy if energy is not None else state.cv.energy),
+        momentum=(momentum if momentum is not None else state.cv.momentum),
+        species_mass=(
+            species_mass if species_mass is not None else state.cv.species_mass))
+
+    new_tseed = (
+        temperature_seed
+        if temperature_seed is not None
+        else state.temperature)
+
+    return make_fluid_state(
+        cv=new_cv,
+        gas_model=gas_model,
+        temperature_seed=new_tseed,
+        smoothness_mu=state.smoothness_mu,
+        smoothness_kappa=state.smoothness_kappa,
+        smoothness_beta=state.smoothness_beta,
+        limiter_func=limiter_func,
+        limiter_dd=limiter_dd)

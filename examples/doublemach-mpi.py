@@ -37,21 +37,18 @@ from grudge.shortcuts import make_visualizer
 from mirgecom.euler import euler_operator
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
-    smoothness_indicator
+    smoothness_indicator,
+    AdiabaticNoSlipWallAV,
+    PrescribedFluidBoundaryAV
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    AdiabaticNoslipWallBoundary,
-    PrescribedFluidBoundary
-)
 from mirgecom.initializers import DoubleMachReflection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.simutil import get_sim_timestep
-
 from logpyle import set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
@@ -245,13 +242,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     boundaries = {
         BoundaryDomainTag("ic1"):
-            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
         BoundaryDomainTag("ic2"):
-            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
+            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
         BoundaryDomainTag("ic3"):
-            PrescribedFluidBoundary(boundary_state_func=_boundary_state),
-        BoundaryDomainTag("wall"): AdiabaticNoslipWallBoundary(),
-        BoundaryDomainTag("out"): AdiabaticNoslipWallBoundary(),
+            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
+        BoundaryDomainTag("wall"): AdiabaticNoSlipWallAV(),
+        BoundaryDomainTag("out"): AdiabaticNoSlipWallAV(),
     }
 
     if rst_filename:
