@@ -1365,7 +1365,9 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
 
     def inviscid_boundary_flux(self, dcoll, dd_bdry, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
@@ -1613,7 +1615,9 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
 
 
 class IsothermalWallBoundary(MengaldoBoundaryCondition):
@@ -1840,4 +1844,6 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
-                                smoothness=state_minus.smoothness)
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
