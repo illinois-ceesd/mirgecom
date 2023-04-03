@@ -77,7 +77,7 @@ class GasDependentVars:
     .. attribute:: speed_of_sound
     .. attribute:: smoothness_mu
     .. attribute:: smoothness_kappa
-    .. attribute:: smoothness_kappa
+    .. attribute:: smoothness_beta
     """
 
     temperature: DOFArray

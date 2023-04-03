@@ -28,6 +28,7 @@ discussion.  The following references are useful:
 * [Ayuso_2009]_
 * Shock handling [Woodward_1984]_
 * Artificial viscosity [Persson_2012]_
+* Boundary Condtitions [Mengaldo_2014]_, and [Poinsot_1992]_
 
 *MIRGE-Com* currently employs a strategy akin to the BR1 algorithm outlined in
 [Bassi_1997]_, but with thermal terms and chemical reaction sources as outlined in
@@ -293,8 +294,8 @@ and :mod:`~mirgecom.navierstokes`, go to calculate the flux for the divergence o
 inviscid physical transport fluxes, they call the
 :meth:`~mirgecom.boundary.FluidBoundary.inviscid_divergence_flux` function, which for this
 adiabatic slip boundary, sets the boundary state, $\b{Q}^+$ by calling
-:meth:`~mirgecom.boundary.AdiabaticSlipBoundary.adiabatic_slip_wall_state`, and returns the
-numerical flux ${h}^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
+:meth:`~mirgecom.boundary.AdiabaticSlipBoundary.state_plus`, and returns the numerical flux
+${h}^*_e = h_{e}(\b{Q}^-, \b{Q}^+)$.
  
 
 Viscous fluxes (diffusion terms)
