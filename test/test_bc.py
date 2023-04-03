@@ -774,7 +774,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 @pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
                                        inviscid_facial_flux_hll])
 def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
-    """Check SymmetryBoundary boundary treatment."""
+    """Check AdiabaticSlipBoundary for symmetry treatment."""
     actx = actx_factory()
     order = 1
 
