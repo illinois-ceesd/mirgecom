@@ -737,12 +737,8 @@ def replace_fluid_state(
         cv=new_cv,
         gas_model=gas_model,
         temperature_seed=new_tseed,
-<<<<<<< HEAD
         smoothness_mu=state.smoothness_mu,
         smoothness_kappa=state.smoothness_kappa,
         smoothness_beta=state.smoothness_beta,
-=======
-        smoothness=state.smoothness,
->>>>>>> physical-av
         limiter_func=limiter_func,
         limiter_dd=limiter_dd)
