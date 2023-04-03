@@ -956,8 +956,9 @@ class MoserSolution(FluidManufacturedSolution):
         self._kappa = kappa
         self._nspecies = nspecies
         self._d_alpha = d_alpha
+        self._lx, self._ly, self._lz = self._lx
 
-    def _phi(a, b, c, d, e, f, g, r, t):
+    def _phi(self, a, b, c, d, e, f, g, r, t):
         x, y, z = r
         a_0, a_x, a_y, a_z, a_xy, a_xz, a_yz = a
         f_0, f_x, f_y, f_z, f_xy, f_xz, f_yz = f
@@ -969,18 +970,18 @@ class MoserSolution(FluidManufacturedSolution):
         return \
             (a_0 * mm.cos(f_0 * t + g_0)
              + (a_x * mm.cos(b_x * 2*np.pi*x/self._lx + c_x)
-                *mm.cos(f_x * t + g_x))
+                * mm.cos(f_x * t + g_x))
              + (a_xy * mm.cos(b_xy * 2*np.pi*x/self._lx + c_xy)
-                *mm.cos(d_xy * 2*np.pi*y/self._ly + e_xy)
-                *mm.cos(f_xy * t + g_xy))
+                * mm.cos(d_xy * 2*np.pi*y/self._ly + e_xy)
+                * mm.cos(f_xy * t + g_xy))
              + (a_xz * mm.cos(b_xz * 2*np.pi*x/self._lx + c_xz)
-                *mm.cos(d_xz * 2*np.pi*z/self._lz + e_xz)
-                *mm.cos(f_xz * t + g_xz))
+                * mm.cos(d_xz * 2*np.pi*z/self._lz + e_xz)
+                * mm.cos(f_xz * t + g_xz))
              + (a_y * mm.cos(b_y * 2*np.pi*y/self._ly + c_y)
-                *mm.cos(f_y * t + g_y))
+                * mm.cos(f_y * t + g_y))
              + (a_yz * mm.cos(b_yz * 2*np.pi*y/self._ly + c_yz)
-                *mm.cos(d_yz * 2*np.pi*z/self._lz + e_yz)
-                *mm.cos(f_yz * t + g_yz))
+                * mm.cos(d_yz * 2*np.pi*z/self._lz + e_yz)
+                * mm.cos(f_yz * t + g_yz))
              + (a_z * mm.cos(b_z * 2*np.pi*z/self._lz + c_z)
                 * mm.cos(f_z * t + g_z)))
 
@@ -990,89 +991,89 @@ class MoserSolution(FluidManufacturedSolution):
         xone = mm.cos(x[0] - x[0])
 
         # RHO soln parameters
-        #        0,  x,   y,    z,    xy,   xz,   yz 
+        #        0,  x,   y,    z,    xy,   xz,   yz
         a_rho = [1., 0., 1./7., 0., 1./11., 0., 1./31.]
         f_rho = [0., 0., 1., 0., 3., 0., 2.]
         g_rho = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
 
         #        x    y     z   xy   xz  yz
-        b_rho = [0,, 1./2., 0., 3.0, 0., 2.]
-        c_rho = [0., 0., 0., 0., 0., 0., 0.]
+        b_rho = [0., 1./2., 0., 3.0, 0., 2.]
+        c_rho = [0., 0., 0., 0., 0., 0.]
 
         #        xy    xz    yz
         d_rho = [3., 0., 2.]
         e_rho = [0., 0., 0.]
 
         rho = self._phi(a=a_rho, b=b_rho, c=c_rho, d=d_rho, e=e_rho, f=f_rho,
-                        g=r_rho, r=x, t=t)*tone
+                        g=g_rho, r=x, t=t)*tone
 
         # vx=velocity[0] soln parameters
-        #        0,  x,   y,    z,    xy,   xz,   yz 
+        #        0,  x,   y,    z,    xy,   xz,   yz
         a_vx = [0., 0., 53., 0., 53./37., 0., 53./41.]
         f_vx = [0., 0., 1., 0., 3., 0., 2.]
         g_vx = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
 
         #        x    y     z   xy   xz  yz
-        b_vx = [0,, 1./2., 0., 3.0, 0., 2.]
-        c_vx = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+        b_vx = [0., 1./2., 0., 3.0, 0., 2.]
+        c_vx = [0., -np.pi/2., 0., -np.pi/2., 0., -np.pi/2.]
 
         #        xy    xz    yz
         d_vx = [3., 0., 2.]
         e_vx = [-np.pi/2., 0., -np.pi/2.]
 
         u = self._phi(a=a_vx, b=b_vx, c=c_vx, d=d_vx, e=e_vx, f=f_vx,
-                      g=r_vx, r=x, t=t)*tone
+                      g=g_vx, r=x, t=t)*tone
 
         # vy=velocity[1] soln parameters
-        #        0,  x,   y,    z,    xy,   xz,   yz 
+        #        0,  x,   y,    z,    xy,   xz,   yz
         a_vy = [0., 0., 2., 0., 3., 0., 5.]
         f_vy = [0., 0., 1., 0., 3., 0., 2.]
         g_vy = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
 
         #        x    y     z   xy   xz  yz
-        b_vy = [0,, 1./2., 0., 3.0, 0., 2.]
-        c_vy = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+        b_vy = [0., 1./2., 0., 3.0, 0., 2.]
+        c_vy = [0., -np.pi/2., 0., -np.pi/2., 0., -np.pi/2.]
 
         #        xy    xz    yz
         d_vy = [3., 0., 2.]
         e_vy = [-np.pi/2., 0., -np.pi/2.]
 
         v = self._phi(a=a_vy, b=b_vy, c=c_vy, d=d_vy, e=e_vy, f=f_vy,
-                      g=r_vy, r=x, t=t)*tone
+                      g=g_vy, r=x, t=t)*tone
 
         # vz=velocity[2] soln parameters
-        #        0,  x,   y,    z,    xy,   xz,   yz 
+        #        0,  x,   y,    z,    xy,   xz,   yz
         a_vz = [0., 0., 7., 0., 11., 0., 13.]
         f_vz = [0., 0., 1., 0., 3., 0., 2.]
         g_vz = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
 
         #        x    y     z   xy   xz  yz
-        b_vz = [0,, 1./2., 0., 3.0, 0., 2.]
-        c_vz = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+        b_vz = [0., 1./2., 0., 3.0, 0., 2.]
+        c_vz = [0., -np.pi/2., 0., -np.pi/2., 0., -np.pi/2.]
 
         #        xy    xz    yz
         d_vz = [3., 0., 2.]
         e_vz = [-np.pi/2., 0., -np.pi/2.]
 
         w = self._phi(a=a_vz, b=b_vz, c=c_vz, d=d_vz, e=e_vz, f=f_vz,
-                      g=r_vz, r=x, t=t)*tone
+                      g=g_vz, r=x, t=t)*tone
 
         # Temperature soln parameters
-        #        0,  x,   y,    z,    xy,   xz,   yz 
+        #        0,  x,   y,    z,    xy,   xz,   yz
         a_tmpr = [300., 0., 300./13., 0., 300./17., 0., 300./37.]
         f_tmpr = [0., 0., 1., 0., 3., 0., 2.]
         g_tmpr = [0., 0., np.pi/4.0 - 1./20., 0., np.pi/4., 0., np.pi/4. + 1./20.]
 
         #        x    y     z   xy   xz  yz
-        b_tmpr = [0,, 1./2., 0., 3.0, 0., 2.]
-        c_tmpr = [0., -np.pi/2., 0., 0., -np.pi/2., 0., -np.pi/2.]
+        b_tmpr = [0., 1./2., 0., 3.0, 0., 2.]
+        c_tmpr = [0., -np.pi/2., 0., -np.pi/2., 0., -np.pi/2.]
 
         #        xy    xz    yz
         d_tmpr = [3., 0., 2.]
         e_tmpr = [-np.pi/2., 0., -np.pi/2.]
 
         tmptr = self._phi(a=a_tmpr, b=b_tmpr, c=c_tmpr, d=d_tmpr, e=e_tmpr, f=f_tmpr,
-                          g=r_tmpr, r=x, t=t)*tone
+                          g=g_tmpr, r=x, t=t)*tone
         press = rho * self._gas_const * tmptr
 
         if self._dim == 1:
@@ -1089,9 +1090,9 @@ class MoserSolution(FluidManufacturedSolution):
         if self._nspecies > 0:
             spec = make_obj_array([xone/self._nspecies
                             for _ in range(self._nspecies)])
-            species_mass = density*spec
+            species_mass = rho*spec
 
-        return (make_conserved(dim=self._dim, mass=density, momentum=mom,
+        return (make_conserved(dim=self._dim, mass=rho, momentum=mom,
                                energy=energy, species_mass=species_mass),
                 press, tmptr)
 
@@ -1105,9 +1106,12 @@ class MoserSolution(FluidManufacturedSolution):
 
         return mu, kappa
 
-    def get_mesh(self, n):
-        """Get the mesh."""
-        return super().get_mesh(n)
+    def get_mesh(self, n=2, periodic=None):
+        """Return the mesh: [-pi, pi] by default."""
+        nx = (n,)*self._dim
+        a = (0., 0., 0.)
+        b = (4.*np.pi, 2., 4*np.pi/3.)
+        return _get_box_mesh(self.dim, a, b, nx, periodic=periodic)
 
     def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
@@ -1187,7 +1191,7 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
     sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
     sym_mu, sym_kappa = man_soln.get_transport_properties(sym_cv, sym_prs, sym_tmp)
-    
+
     logger.info(f"{sym_cv=}\n"
                 f"{sym_cv.mass=}\n"
                 f"{sym_cv.energy=}\n"
@@ -1210,7 +1214,8 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
     nnodes_dmomdt = get_num_nodes(dcv_dt.momentum[0])
     nnodes_denerdt = get_num_nodes(dcv_dt.energy)
 
-    print(f"{nnodes_mass=},{nnodes_mom=},{nnodes_ener=},{nnodes_dmassdt=},{nnodes_dmomdt=},{nnodes_denerdt=}")
+    print(f"{nnodes_mass=},{nnodes_mom=},{nnodes_ener=},{nnodes_dmassdt=}"
+          f",{nnodes_dmomdt=},{nnodes_denerdt=}")
 
     # assert False
 
@@ -1310,17 +1315,17 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
             fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
             # source = eval_source(t, nodes)
             t0 = perftime.perf_counter()
-            mms_source = evaluate(sym_source, t=t, x=nodes)
+            mms_source = evaluate(sym_source, t=t, x=nodes)  # noqa
             t_src = perftime.perf_counter() - t0
             t0 = perftime.perf_counter()
             print(f"{t_src=}")
             # assert False
             ns_rhs = \
-                ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
+                ns_operator(dcoll, boundaries=boundaries, state=fluid_state,  # noqa
                             gas_model=gas_model, comm_tag=_TestCommTag)
             t_rhs = perftime.perf_counter() - t0
             print(f"{t_rhs=}")
-            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")
+            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")  # noqa
 
             return ns_rhs + mms_source
 
@@ -1374,7 +1379,7 @@ def test_moser_mms(actx_factory, order):
     alpha = 0.0
     beta = 1e-5
     sigma = 1e-1
-    tn = .666
+    tn = .666  # noqa
     nspecies = 4
 
     diffusivity = np.empty((0,), dtype=object)
@@ -1391,15 +1396,13 @@ def test_moser_mms(actx_factory, order):
     #                                    n=tn, species_diffusivity=diffusivity)
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-        self._lx, self._ly, self._lz = [4*np.pi, 2., 4.*np.pi/3.]
-        
     man_soln = MoserSolution(dim=dim, lx=(4*np.pi, 2., 4*np.pi/3.),
                            alpha=alpha, beta=beta, sigma=sigma, mu=mu, kappa=kappa,
                            nspecies=nspecies)
 
     sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
     sym_mu, sym_kappa = man_soln.get_transport_properties(sym_cv, sym_prs, sym_tmp)
-    
+
     logger.info(f"{sym_cv=}\n"
                 f"{sym_cv.mass=}\n"
                 f"{sym_cv.energy=}\n"
@@ -1422,7 +1425,8 @@ def test_moser_mms(actx_factory, order):
     nnodes_dmomdt = get_num_nodes(dcv_dt.momentum[0])
     nnodes_denerdt = get_num_nodes(dcv_dt.energy)
 
-    print(f"{nnodes_mass=},{nnodes_mom=},{nnodes_ener=},{nnodes_dmassdt=},{nnodes_dmomdt=},{nnodes_denerdt=}")
+    print(f"{nnodes_mass=},{nnodes_mom=},{nnodes_ener=},{nnodes_dmassdt=},"
+          f"{nnodes_dmomdt=},{nnodes_denerdt=}")
 
     # assert False
 
@@ -1447,10 +1451,10 @@ def test_moser_mms(actx_factory, order):
 
     # eval_source = actx.compile(_evaluate_source)
     # eval_soln = actx.compile(_evaluate_soln)
-
+    periodic = (True, False, True)
     for n in [n0, 2*n0, 4*n0]:
 
-        mesh = man_soln.get_mesh(n)
+        mesh = man_soln.get_mesh(n, periodic=periodic)
 
         dcoll = create_discretization_collection(actx, mesh, order)
         nodes = actx.thaw(dcoll.nodes())
@@ -1522,17 +1526,17 @@ def test_moser_mms(actx_factory, order):
             fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
             # source = eval_source(t, nodes)
             t0 = perftime.perf_counter()
-            mms_source = evaluate(sym_source, t=t, x=nodes)
+            mms_source = evaluate(sym_source, t=t, x=nodes)  # noqa
             t_src = perftime.perf_counter() - t0
             t0 = perftime.perf_counter()
             print(f"{t_src=}")
             # assert False
             ns_rhs = \
-                ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
+                ns_operator(dcoll, boundaries=boundaries, state=fluid_state,  # noqa
                             gas_model=gas_model, comm_tag=_TestCommTag)
             t_rhs = perftime.perf_counter() - t0
             print(f"{t_rhs=}")
-            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")
+            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")  # noqa
 
             return ns_rhs + mms_source
 
