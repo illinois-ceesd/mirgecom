@@ -144,10 +144,6 @@ def _identical_grad_temperature(dcoll, dd_bdry, grad_t_minus, **kwargs):
     return grad_t_minus
 
 
-def _identical_grad_av(grad_av_minus, **kwargs):
-    return grad_av_minus
-
-
 class _SlipBoundaryComponent:
     """Helper class for slip boundaries, consistent with [Mengaldo_2014]_."""
 
@@ -712,9 +708,6 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
         grad_t_bc = self.grad_temperature_bc(grad_t_minus=grad_t_minus,
                                              normal=normal, **kwargs)
-        # dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-        # state_minus=state_minus, grad_cv_minus=grad_cv_minus,
-        # grad_t_minus=grad_t_minus)
 
         # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
         # *not* the numerical viscous flux as advised by [Bassi_1997]_.
@@ -853,11 +846,6 @@ class PrescribedFluidBoundary(FluidBoundary):
         self._viscous_flux_func = viscous_flux_func
         self._bnd_grad_cv_func = boundary_gradient_cv_func
         self._bnd_grad_temperature_func = boundary_gradient_temperature_func
-        self._av_num_flux_func = num_flux_central
-        self._bnd_grad_av_func = boundary_grad_av_func
-
-        if not self._bnd_grad_av_func:
-            self._bnd_grad_av_func = _identical_grad_av
 
         if not self._inviscid_flux_func and not self._bnd_state_func:
             from warnings import warn
@@ -1032,23 +1020,6 @@ class PrescribedFluidBoundary(FluidBoundary):
                                        numerical_flux_func=numerical_flux_func,
                                        **kwargs)
 
-    # {{{ Boundary interface for artificial viscosity
-
-    def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
-        """Get the diffusive fluxes for the AV operator API."""
-        dd_bdry = as_dofdesc(dd_bdry)
-        grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
-        actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-        grad_av_plus = self._bnd_grad_av_func(
-            dcoll=dcoll, dd_bdry=dd_bdry, grad_av_minus=grad_av_minus, **kwargs)
-        bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
-                                  exterior=grad_av_plus)
-        num_flux = self._av_num_flux_func(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
-        return self._boundary_quantity(dcoll, dd_bdry, num_flux, **kwargs)
-
-    # }}}
-
 
 class DummyBoundary(PrescribedFluidBoundary):
     """Boundary type that assigns boundary-adjacent solution to the boundary."""
@@ -1110,7 +1081,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
             momentum=mom_bc)
 
     def temperature_bc(self, state_minus, **kwargs):
-        """Return farfield temperature for use in grad(temperature)."""
+        """Return temperature for use in grad(temperature)."""
         return state_minus.temperature
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
@@ -1120,8 +1091,6 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         Impose the opposite normal component to enforce zero energy flux
         from conduction.
         """
-        # NOTE: In the previous version of the code, this was computing a "plus"
-        # state (i.e., the normal gradient was flipped instead of zeroed)
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
