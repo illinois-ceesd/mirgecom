@@ -708,9 +708,6 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
         grad_t_bc = self.grad_temperature_bc(grad_t_minus=grad_t_minus,
                                              normal=normal, **kwargs)
-        # dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-        # state_minus=state_minus, grad_cv_minus=grad_cv_minus,
-        # grad_t_minus=grad_t_minus)
 
         # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
         # *not* the numerical viscous flux as advised by [Bassi_1997]_.
@@ -1081,7 +1078,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
             momentum=mom_bc)
 
     def temperature_bc(self, state_minus, **kwargs):
-        """Return farfield temperature for use in grad(temperature)."""
+        """Return temperature for use in grad(temperature)."""
         return state_minus.temperature
 
     def grad_temperature_bc(self, grad_t_minus, normal, **kwargs):
@@ -1091,8 +1088,6 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         Impose the opposite normal component to enforce zero energy flux
         from conduction.
         """
-        # NOTE: In the previous version of the code, this was computing a "plus"
-        # state (i.e., the normal gradient was flipped instead of zeroed)
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
