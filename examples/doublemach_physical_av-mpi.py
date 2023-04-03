@@ -278,9 +278,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-    def get_fluid_state(cv, smoothness=None):
+    def get_fluid_state(cv, smoothness_mu=None):
         return make_fluid_state(cv=cv, gas_model=gas_model,
-                                smoothness=smoothness)
+                                smoothness_mu=smoothness_mu)
 
     create_fluid_state = actx.compile(get_fluid_state)
 
@@ -342,7 +342,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         no_smoothness = 0.*smoothness
 
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model,
-                                     smoothness=smoothness)
+                                     smoothness_mu=smoothness)
     force_evaluation(actx, current_state)
 
     def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
@@ -352,7 +352,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_fluid_state(cv=initializer(x_vec=nodes, eos=gas_model.eos,
                                                **kwargs),
                                 gas_model=gas_model,
-                                smoothness=state_minus.dv.smoothness)
+                                smoothness_mu=state_minus.dv.smoothness_mu)
 
     flow_boundary = PrescribedFluidBoundary(
         boundary_state_func=_boundary_state)
@@ -437,7 +437,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         exact_smoothness = smoothness_indicator(dcoll, exact_cv.mass,
                                                   kappa=kappa, s0=s0)
         exact_state = create_fluid_state(cv=exact_cv,
-                                         smoothness=exact_smoothness)
+                                         smoothness_mu=exact_smoothness)
 
         # try using the divergence to compute the smoothness field
         #exact_grad_cv = grad_cv_operator_compiled(fluid_state=exact_state,
@@ -453,7 +453,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         exact_smoothness = compute_smoothness(exact_cv, exact_grad_cv)
 
         exact_state = create_fluid_state(cv=exact_cv,
-                                         smoothness=exact_smoothness)
+                                         smoothness_mu=exact_smoothness)
         """
 
         viz_fields = [("cv", cv),
@@ -532,7 +532,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if any([do_viz, do_restart, do_health, do_status, constant_cfl]):
                 fluid_state = create_fluid_state(cv=state,
-                                                 smoothness=no_smoothness)
+                                                 smoothness_mu=no_smoothness)
                 if use_av > 1:
                     # recompute the dv to have the correct smoothness
                     if do_viz:
@@ -545,7 +545,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                         # not sure if it's really faster
                         # avoids re-computing the temperature
                         from dataclasses import replace
-                        new_dv = replace(fluid_state.dv, smoothness=smoothness)
+                        new_dv = replace(fluid_state.dv, smoothness_mu=smoothness)
                         fluid_state = replace(fluid_state, dv=new_dv)
                         new_tv = gas_model.transport.transport_vars(
                             cv=state, dv=new_dv, eos=gas_model.eos)
@@ -628,7 +628,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         smoothness = smoothness_indicator(dcoll, state.mass,
                                           kappa=kappa, s0=s0)
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model,
-                                       smoothness=smoothness)
+                                       smoothness_mu=smoothness)
 
         return (
             ns_operator(dcoll, state=fluid_state, time=t,
@@ -639,7 +639,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def _my_rhs_phys_visc_div_av(t, state):
 
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model,
-                                       smoothness=no_smoothness)
+                                       smoothness_mu=no_smoothness)
 
         # use the divergence to compute the smoothness field
         grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
@@ -647,7 +647,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         smoothness = compute_smoothness(state, grad_cv)
 
         from dataclasses import replace
-        new_dv = replace(fluid_state.dv, smoothness=smoothness)
+        new_dv = replace(fluid_state.dv, smoothness_mu=smoothness)
         fluid_state = replace(fluid_state, dv=new_dv)
         new_tv = gas_model.transport.transport_vars(
             cv=state, dv=new_dv, eos=gas_model.eos)
@@ -681,7 +681,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_state = create_fluid_state(cv=current_cv)
     else:
         current_state = create_fluid_state(cv=current_cv,
-                                           smoothness=no_smoothness)
+                                           smoothness_mu=no_smoothness)
 
         # use the divergence to compute the smoothness field
         current_grad_cv = grad_cv_operator_compiled(current_state,
@@ -689,7 +689,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         smoothness = compute_smoothness_compiled(current_cv,
                                                  current_grad_cv)
         from dataclasses import replace
-        new_dv = replace(current_state.dv, smoothness=smoothness)
+        new_dv = replace(current_state.dv, smoothness_mu=smoothness)
         current_state = replace(current_state, dv=new_dv)
 
     final_dv = current_state.dv
