@@ -811,7 +811,6 @@ class PrescribedFluidBoundary(FluidBoundary):
     .. automethod:: viscous_divergence_flux
     .. automethod:: cv_gradient_flux
     .. automethod:: temperature_gradient_flux
-    .. automethod:: av_flux
     """
 
     def __init__(self,
