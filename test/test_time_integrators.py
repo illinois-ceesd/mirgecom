@@ -34,7 +34,7 @@ from meshmode.array_context import (  # noqa
 
 from mirgecom.integrators import (
     euler_step, lsrk54_step, lsrk144_step,
-    rk4_step, ssprk34_step
+    rk4_step, ssprk43_step
 )
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ logger = logging.getLogger(__name__)
                           (lsrk54_step, 4),
                           (lsrk144_step, 4),
                           (rk4_step, 4),
-                          (ssprk34_step, 4)])
+                          (ssprk43_step, 4)])
 @pytest.mark.parametrize("local_dt", [True, False])
 def test_integrator_order(integrator, method_order, local_dt):
     """Test that time integrators have correct order."""
@@ -89,7 +89,7 @@ def test_integrator_order(integrator, method_order, local_dt):
                           (lsrk54_step, 4),
                           (lsrk144_step, 4),
                           (rk4_step, 4),
-                          (ssprk34_step, 4)])
+                          (ssprk43_step, 4)])
 @pytest.mark.parametrize("local_dt", [True, False])
 def test_state_advancer(integrator, method_order, local_dt):
     """Test that time integrators have correct order."""

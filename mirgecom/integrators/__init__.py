@@ -26,7 +26,7 @@ THE SOFTWARE.
 
 from .explicit_rk import rk4_step                          # noqa: F401
 from .lsrk import euler_step, lsrk54_step, lsrk144_step    # noqa: F401
-from .ssprk import ssprk34_step                            # noqa: F401
+from .ssprk import ssprk43_step                            # noqa: F401
 
 __doc__ = """
 .. automodule:: mirgecom.integrators.explicit_rk
