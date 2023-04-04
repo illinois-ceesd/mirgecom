@@ -56,13 +56,16 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
     couple of the methods to adapt it to :mod:`mirgecom`'s needs.
 
     - get_concentrations: overrides
-      :class:`~pyrometheus.thermochem_example.Thermochemistry` version of  the same
+      :class:`~pyrometheus.thermochem_example.Thermochemistry` version of the same
       function, pinning any concentrations less than the *zero_level* due to small or
-      slightly negative massfractions (which are OK) back to 0.
+      slightly negative mass fractions (which are OK) back to 0.
 
     - get_temperature: MIRGE-specific interface to use a hard-coded Newton solver
       to find a temperature from an input state. This routine hard-codes the number
       of Newton solve iterations to *temperature_niter*.
+
+    - get_heat_release:
+      evaluate heat release due to reactions.
 
     Parameters
     ----------
@@ -76,9 +79,11 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
     class PyroWrapper(pyro_class):
 
-        # This bit disallows negative concentrations and instead
-        # pins them to 0. mass_fractions can sometimes be slightly
+        # This bit disallows negative concentrations (or user-defined floor)
+        # and instead pins them to 0. Sometimes, mass_fractions can be slightly
         # negative and that's ok.
+        # This only affects chemistry-related evaluations and does not interfere
+        # with the actual fluid state.
         def get_concentrations(self, rho, mass_fractions):
             concs = self.iwts * rho * mass_fractions
             # ensure non-negative concentrations
@@ -88,7 +93,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
                                              zero, concs[i])
             return concs
 
-        # This is the temperature update for *get_temperature*.  Having this
+        # This is the temperature update for *get_temperature*. Having this
         # separated out allows it to be used in the fluid drivers for evaluating
         # convergence of the temperature calculation.
         def get_temperature_update_energy(self, e_in, t_in, y):
@@ -127,6 +132,19 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
                     energy, t_i, species_mass_fractions
                 )
             return t_i
+
+        # Compute heat release due to chemistry. Only used for visualization.
+        def get_heat_release(self, state):
+            w_dot = self.get_net_production_rates(state.cv.mass, state.temperature,
+                                                  state.species_mass_fractions)
+
+            h_a = self.get_species_enthalpies_rt(state.temperature)
+
+            heat_rls = state.cv.mass*0.0
+            for i in range(self.num_species):
+                heat_rls = heat_rls - h_a[i]*w_dot[i]/(self.wts[i])
+
+            return heat_rls*self.gas_constant*state.temperature
 
     return PyroWrapper
 
