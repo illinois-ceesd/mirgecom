@@ -39,7 +39,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.fluid import make_conserved
 
 from mirgecom.boundary import (  # noqa
-   IsothermalNoSlipBoundary,  # noqa
+    IsothermalWallBoundary,  # noqa
     AdiabaticSlipBoundary,  # noqa
     PrescribedFluidBoundary  # noqa
 )
