@@ -39,7 +39,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
 
 from mirgecom.boundary import (  # noqa
-   IsothermalNoSlipBoundary,  # noqa
+   IsothermalWallBoundary,  # noqa
     AdiabaticSlipBoundary,  # noqa
     PrescribedFluidBoundary  # noqa
 )
@@ -294,8 +294,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             return make_fluid_state(boundary_cv, gas_model)
 
         boundaries = {
-            BoundaryDomainTag("-2"): IsothermalNoSlipBoundary(wall_temperature=300.),
-            BoundaryDomainTag("+2"): IsothermalNoSlipBoundary(wall_temperature=300.)
+            BoundaryDomainTag("-2"): IsothermalWallBoundary(wall_temperature=300.),
+            BoundaryDomainTag("+2"): IsothermalWallBoundary(wall_temperature=300.)
         }
 
         from mirgecom.simutil import max_component_norm
