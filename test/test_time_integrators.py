@@ -32,10 +32,10 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
-from mirgecom.integrators import (euler_step,
-                                  lsrk54_step,
-                                  lsrk144_step,
-                                  rk4_step)
+from mirgecom.integrators import (
+    euler_step, lsrk54_step, lsrk144_step,
+    rk4_step, ssprk43_step
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,8 @@ logger = logging.getLogger(__name__)
                          [(euler_step, 1),
                           (lsrk54_step, 4),
                           (lsrk144_step, 4),
-                          (rk4_step, 4)])
+                          (rk4_step, 4),
+                          (ssprk43_step, 3)])
 @pytest.mark.parametrize("local_dt", [True, False])
 def test_integrator_order(integrator, method_order, local_dt):
     """Test that time integrators have correct order."""
@@ -87,7 +88,8 @@ def test_integrator_order(integrator, method_order, local_dt):
                          [(euler_step, 1),
                           (lsrk54_step, 4),
                           (lsrk144_step, 4),
-                          (rk4_step, 4)])
+                          (rk4_step, 4),
+                          (ssprk43_step, 3)])
 @pytest.mark.parametrize("local_dt", [True, False])
 def test_state_advancer(integrator, method_order, local_dt):
     """Test that time integrators have correct order."""
