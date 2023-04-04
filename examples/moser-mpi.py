@@ -115,6 +115,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
     print(f"{rank=}/{num_parts=}")
+
     # from mirgecom.simutil import global_reduce as _global_reduce
     # global_reduce = partial(_global_reduce, comm=comm)
 
@@ -141,12 +142,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     sym_t = pmbl.var("t")
 
     gas_const = 287.
-    prandtl = 1.0
     gamma = 1.4
-    alpha = 0.0
-    beta = 1e-5
-    sigma = 1e-1
-    tn = .666  # noqa
+    # tn = 2./3.
+    tn = 1.0
+    alpha = 0.
+    prandtl = .7
+    temperature_ref = 300.0
+    mu_ref = 1.852e-5
+    beta = mu_ref / temperature_ref**tn
+    # kappa_ref = gamma * gas_const * mu_ref / ((gamma - 1) * prandtl)
+    sigma = gamma/prandtl
+
     nspecies = 0
 
     diffusivity = np.empty((0,), dtype=object)
@@ -156,29 +162,33 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     mu = 1.0
     kappa = gamma * gas_const * mu / ((gamma - 1) * prandtl)
 
+    print(f"{gas_const=},{gamma=},mu{tn=},{alpha=}")
+    print(f"{prandtl=},{mu_ref=},mu{beta=},{temperature_ref=}")
+    print(f"{sigma=},{mu=},{kappa=}")
+
     eos = IdealSingleGas(gas_const=gas_const)
-    transport_model = SimpleTransport(viscosity=mu,
-                                      thermal_conductivity=kappa)
-    # transport_model = PowerLawTransport(alpha=alpha, beta=beta, sigma=sigma,
-    #                                    n=tn, species_diffusivity=diffusivity)
+    # transport_model = SimpleTransport(viscosity=mu,
+    #                                  thermal_conductivity=kappa)
+    transport_model = PowerLawTransport(alpha=alpha, beta=beta, sigma=sigma,
+                                        n=tn, species_diffusivity=diffusivity)
     gas_model = GasModel(eos=eos, transport=transport_model)
 
     from mms import MoserSolution
     man_soln = MoserSolution(dim=dim, lx=(4*np.pi, 2., 4*np.pi/3.),
-                           alpha=alpha, beta=beta, sigma=sigma, mu=mu, kappa=kappa,
-                           nspecies=nspecies)
+                             alpha=beta, beta=alpha, sigma=sigma, mu=mu, kappa=kappa,
+                             nspecies=nspecies, n=tn)
 
     sym_cv, sym_prs, sym_tmp = man_soln.get_solution(sym_x, sym_t)
     sym_mu, sym_kappa = man_soln.get_transport_properties(sym_cv, sym_prs, sym_tmp)
 
-    logger.info(f"{sym_cv=}\n"
-                f"{sym_cv.mass=}\n"
-                f"{sym_cv.energy=}\n"
-                f"{sym_cv.momentum=}\n"
-                f"{sym_cv.species_mass=}")
+    # logger.info(f"{sym_cv=}\n"
+    #            f"{sym_cv.mass=}\n"
+    #            f"{sym_cv.energy=}\n"
+    #            f"{sym_cv.momentum=}\n"
+    #            f"{sym_cv.species_mass=}")
 
     dcv_dt = sym_diff(sym_t)(sym_cv)
-    print(f"{dcv_dt=}")
+    # print(f"{dcv_dt=}")
 
     from mirgecom.symbolic_fluid import sym_ns
     sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu=sym_mu, kappa=sym_kappa,
@@ -204,12 +214,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     sym_source = sym_ns_source
 
-    logger.info(f"{sym_source=}")
+    # logger.info(f"{sym_source=}")
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    n0 = 4
+    # n0 = 8
 
     def _evaluate_source(t, x):
         return evaluate(sym_source, t=t, x=x)
@@ -220,7 +230,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # eval_source = actx.compile(_evaluate_source)
     # eval_soln = actx.compile(_evaluate_soln)
     periodic = (True, False, True)
-    for n in [n0, 2*n0, 4*n0]:
+    for n in [24, 36, 48]:
 
         mesh = man_soln.get_mesh(n, periodic=periodic)
 
@@ -238,9 +248,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         # cv_exact = eval_soln(0, nodes)
         import time as perftime
         t0 = perftime.perf_counter()
-        print(f"{source_eval=}")
+        # print(f"{source_eval=}")
         t1 = perftime.perf_counter() - t0
-        print(f"{cv_exact=}")
+        # print(f"{cv_exact=}")
         perftime.perf_counter()
         t2 = perftime.perf_counter() - t1
         print(f"{t1=},{t2=}")
@@ -255,8 +265,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         prs_err = actx.to_numpy(op.norm(dcoll, prs_resid, np.inf))
         tmp_err = actx.to_numpy(op.norm(dcoll, tmp_resid, np.inf))
 
-        print(f"{prs_exact=}\n{prs_eos=}")
-        print(f"{tmp_exact=}\n{tmp_eos=}")
+        # print(f"{prs_exact=}\n{prs_eos=}")
+        # print(f"{tmp_exact=}\n{tmp_eos=}")
 
         assert prs_err < tol
         assert tmp_err < tol
@@ -268,7 +278,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             source_norms = source_eval
 
         logger.info(f"{source_norms=}")
-        logger.info(f"{source_eval=}")
+        # logger.info(f"{source_eval=}")
 
         def _boundary_state_func(dcoll, dd_bdry, gas_model,
                                  state_minus, time=0, **kwargs):
@@ -298,42 +308,54 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             mms_source = evaluate(sym_source, t=t, x=nodes)  # noqa
             t_src = perftime.perf_counter() - t0
             t0 = perftime.perf_counter()
-            print(f"{t_src=}")
+            print(f"perf {t_src=}")
             # assert False
             ns_rhs = \
                 ns_operator(dcoll, boundaries=boundaries, state=fluid_state,  # noqa
                             gas_model=gas_model, comm_tag=_TestCommTag)
             t_rhs = perftime.perf_counter() - t0
-            print(f"{t_rhs=}")
-            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")  # noqa
+            print(f"perf {t_rhs=}")
+            # print(f"{ns_rhs=}")
+            # print(f"{mms_source=}")
             fluid_rhs = ns_rhs + mms_source
             print(f"{max_component_norm(dcoll, fluid_rhs/err_scale)=}")  # noqa            
+            print(f"{max_component_norm(dcoll, ns_rhs/err_scale)=}")  # noqa
+            print(f"{max_component_norm(dcoll, mms_source/err_scale)=}")  # noqa
             return fluid_rhs
 
         t = 0.
         from mirgecom.integrators import rk4_step
-        dt = 1e-9
+        dt = 1e-6
         nsteps = 10
         cv = cv_exact
-        print(f"{cv.dim=}")
-        print(f"{cv=}")
+        # print(f"{cv.dim=}")
+        # print(f"{cv=}")
 
         for iloop in range(nsteps):
             print(f"{iloop=}")
             cv = rk4_step(cv, t, dt, get_rhs)
             t += dt
-            # assert False
 
         cv_exact = evaluate(sym_cv, t=t, x=nodes)
         soln_resid = compare_fluid_solutions(dcoll, cv, cv_exact)
         cv_err_scales = componentwise_norms(dcoll, cv_exact)
 
         max_err = soln_resid[0]/cv_err_scales.mass
-        max_err = max(max_err, soln_resid[1]/cv_err_scales.energy)
+        max_err_mass = actx.to_numpy(max_err)
+        print(f"mass{max_err_mass=}")
+        max_err_ener = soln_resid[1]/cv_err_scales.energy
+        max_err = max(max_err, max_err_ener)
+        max_err_ener = actx.to_numpy(max_err_ener)
+        print(f"ener{max_err_ener=}")
         for i in range(dim):
-            max_err = max(soln_resid[2+i]/cv_err_scales.momentum[i], max_err)
+            max_err_mom = soln_resid[2+i]/cv_err_scales.momentum[i]
+            max_err = max(max_err, max_err_mom)
+            max_err_mom = actx.to_numpy(max_err_mom)
+            print(f"mom{i=}{max_err=}")
+
         max_err = actx.to_numpy(max_err)
         print(f"{max_err=}")
+
         eoc_rec.add_data_point(char_len, max_err)
 
     logger.info(eoc_rec.pretty_print())

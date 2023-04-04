@@ -766,14 +766,18 @@ class MoserSolution(FluidManufacturedSolution):
             mu = self._mu
             kappa = self._kappa
         else:
-            mu = self._alpha * sym_temperature*self._n
+            mu = self._alpha * sym_temperature  # **self._n
             kappa = self._sigma * mu * self._gas_const / (self._gamma - 1)
 
         return mu, kappa
 
     def get_mesh(self, n=2, periodic=None):
         """Return the mesh: [-pi, pi] by default."""
-        nx = (n,)*self._dim
+        nx = n
+        ny = int(n/6)
+        nz = int(n/3)
+
+        nx = (nx, ny, nz)
         a = (0., 0., 0.)
         b = (4.*np.pi, 2., 4*np.pi/3.)
         return _get_box_mesh(self.dim, a, b, nx, periodic=periodic)
