@@ -1,6 +1,6 @@
 """Timestepping routines for strong-stability preserving Runge-Kutta methods.
 
-.. autofunction:: ssprk43_step
+.. autofunction:: ssprk34_step
 """
 
 __copyright__ = """
@@ -26,7 +26,7 @@ THE SOFTWARE.
 """
 
 
-def ssprk43_step(state, t, dt, rhs):
+def ssprk34_step(state, t, dt, rhs):
     """Take one step using an explicit 4-stage, 3rd-order, SSPRK method."""
 
     def rhs_update(t, y):
