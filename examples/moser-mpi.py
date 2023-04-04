@@ -47,6 +47,7 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport, PowerLawTransport  # noqa
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
+from grudge.dof_desc import BoundaryDomainTag
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -293,8 +294,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             return make_fluid_state(boundary_cv, gas_model)
 
         boundaries = {
-            BTAG_ALL:
-            IsothermalNoSlipBoundary(wall_temperature=300.)
+            BoundaryDomainTag("-2"): IsothermalNoSlipBoundary(wall_temperature=300.),
+            BoundaryDomainTag("+2"): IsothermalNoSlipBoundary(wall_temperature=300.)
         }
 
         from mirgecom.simutil import max_component_norm
