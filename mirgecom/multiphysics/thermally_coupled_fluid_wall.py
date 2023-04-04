@@ -804,6 +804,7 @@ def coupled_grad_t_operator(
         *,
         time=0.,
         fluid_numerical_flux_func=num_flux_central,
+        interface_noslip=True,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -834,6 +835,7 @@ def coupled_grad_t_operator(
                 gas_model,
                 fluid_dd, wall_dd,
                 fluid_state, wall_kappa, wall_temperature,
+                interface_noslip=interface_noslip,
                 _kappa_inter_vol_tpairs=_kappa_inter_vol_tpairs,
                 _temperature_inter_vol_tpairs=_temperature_inter_vol_tpairs)
     else:
@@ -928,6 +930,7 @@ def coupled_ns_heat_operator(
         fluid_state, wall_kappa, wall_temperature,
         time=time,
         fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
+        interface_noslip=interface_noslip,
         quadrature_tag=quadrature_tag,
         _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
         _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
