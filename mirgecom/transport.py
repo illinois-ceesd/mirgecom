@@ -15,6 +15,7 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: PowerLawTransport
 .. autoclass:: MixtureAveragedTransport
 .. autoclass:: ArtificialViscosityTransportDiv
+.. autoclass:: ArtificialViscosityTransportDiv2
 
 Exceptions
 ^^^^^^^^^^
@@ -542,7 +543,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
                   dv: GasDependentVars,
                   eos: GasEOS) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return (dv.smoothness*self.av_viscosity(cv, dv, eos)
+        return (dv.smoothness_mu*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.viscosity(cv, dv))
 
     def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
@@ -554,7 +555,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
 
         $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
         """
-        return (dv.smoothness*self.av_viscosity(cv, dv, eos)
+        return (dv.smoothness_mu*self.av_viscosity(cv, dv, eos)
                 + self._physical_transport.volume_viscosity(cv, dv))
 
     def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
@@ -562,10 +563,112 @@ class ArtificialViscosityTransportDiv(TransportModel):
                              eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         mu = self.av_viscosity(cv, dv, eos)
-        av_kappa = (dv.smoothness*mu
+        av_kappa = (dv.smoothness_mu*mu
                     * eos.heat_capacity_cp(cv, dv.temperature)/self._av_prandtl)
         return \
             av_kappa + self._physical_transport.thermal_conductivity(cv, dv, eos)
+
+    def species_diffusivity(self, cv: ConservedVars,
+                            dv: Optional[GasDependentVars] = None,
+                            eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
+        return self._physical_transport.species_diffusivity(cv, dv, eos)
+
+
+class ArtificialViscosityTransportDiv2(TransportModel):
+    r"""Transport model for add artificial viscosity.
+
+    Inherits from (and implements) :class:`TransportModel`.
+
+    Takes a physical transport model and adds the artificial viscosity
+    contribution to it. Defaults to simple transport with inviscid settings.
+    This is equivalent to inviscid flow with artifical viscosity enabled.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: species_diffusivity
+    .. automethod:: thermal_conductivity
+    """
+
+    def __init__(self,
+                 av_mu, av_kappa, av_beta, av_prandtl,
+                 physical_transport=None,
+                 av_species_diffusivity=None):
+        """Initialize uniform, constant transport properties."""
+        if physical_transport is None:
+            self._physical_transport = SimpleTransport()
+        else:
+            self._physical_transport = physical_transport
+
+        if av_species_diffusivity is None:
+            av_species_diffusivity = np.empty((0,), dtype=object)
+
+        self._av_mu = av_mu
+        self._av_beta = av_beta
+        self._av_kappa = av_kappa
+        self._av_prandtl = av_prandtl
+
+    def av_mu(self, cv, dv, eos):
+        r"""Get the shear artificial viscosity for the gas."""
+        actx = cv.array_context
+        return (self._av_mu * cv.mass
+                * actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
+                               + dv.speed_of_sound**2))
+
+    def av_beta(self, cv, dv, eos):
+        r"""Get the shear artificial viscosity for the gas."""
+        actx = cv.array_context
+        return (self._av_beta * cv.mass
+                * actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
+                               + dv.speed_of_sound**2))
+
+    def av_kappa(self, cv, dv, eos):
+        r"""Get the shear artificial viscosity for the gas."""
+        actx = cv.array_context
+        return (self._av_kappa * cv.mass
+                * actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
+                               + dv.speed_of_sound**2))
+
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                       dv: GasDependentVars,
+                       eos: GasEOS) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        return (dv.smoothness_beta*self.av_beta(cv, dv, eos)
+                + self._physical_transport.bulk_viscosity(cv, dv))
+
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                  dv: GasDependentVars,
+                  eos: GasEOS) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$."""
+        return (dv.smoothness_mu*self.av_mu(cv, dv, eos)
+                + self._physical_transport.viscosity(cv, dv))
+
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                         dv: GasDependentVars,
+                         eos: GasEOS) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is:
+
+        $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
+        """
+        return (dv.smoothness_mu*self.av_mu(cv, dv, eos)
+                + self._physical_transport.volume_viscosity(cv, dv))
+
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+                             dv: GasDependentVars,
+                             eos: GasEOS) -> DOFArray:
+        r"""Get the gas thermal_conductivity, $\kappa$."""
+        cp = eos.heat_capacity_cp(cv, dv.temperature)
+        av_kappa = (
+            cp*(dv.smoothness_beta*self.av_beta(cv, dv, eos)/self._av_prandtl
+                + dv.smoothness_kappa*self.av_kappa(cv, dv, eos))
+        )
+
+        return (av_kappa
+                + self._physical_transport.thermal_conductivity(cv, dv, eos))
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
