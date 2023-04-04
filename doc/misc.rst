@@ -82,3 +82,5 @@ References
 .. [Zhang_2011] Z. Zhang and C.W. Shu (2011), Maximum-principle-satisfying and positivity-preserving \
     high-order schemes for conservation laws, Proceedings of the Royal Society A, 467 2134 \
     `(DOI) <https://doi.org/10.1098/rspa.2011.0153>`__
+.. [Giles_1988] Michael Giles (1988), Non-Reflecting Boundary Conditions for the Euler \
+    Equations, CFDL-TR-88-1

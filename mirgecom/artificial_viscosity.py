@@ -148,12 +148,91 @@ from grudge.dof_desc import (
 )
 
 from mirgecom.utils import normalize_boundaries
-
+from arraycontext import get_container_context_recursively
+from grudge.dof_desc import as_dofdesc
+from grudge.trace_pair import TracePair
 import grudge.op as op
+
+from mirgecom.boundary import (
+    AdiabaticNoslipWallBoundary,
+    PrescribedFluidBoundary
+)
 
 
 class _AVRTag:
     pass
+
+
+def _identical_grad_av(grad_av_minus, **kwargs):
+    return grad_av_minus
+
+
+class AdiabaticNoSlipWallAV(AdiabaticNoslipWallBoundary):
+    r"""Interface to a prescribed adiabatic noslip fluid boundary with AV.
+
+    .. automethod:: __init__
+    .. automethod:: av_flux
+    """
+
+    def __init__(self, boundary_grad_av_func=_identical_grad_av,
+                 av_num_flux_func=num_flux_central, **kwargs):
+        """Initialize the PrescribedFluidBoundaryAV and methods."""
+        self._bnd_grad_av_func = boundary_grad_av_func
+        self._av_num_flux_func = av_num_flux_func
+        AdiabaticNoslipWallBoundary.__init__(self, **kwargs)
+
+    def _boundary_quantity(self, dcoll, dd_bdry, quantity, local=False, **kwargs):
+        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
+        dd_allfaces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
+        return quantity if local else op.project(dcoll,
+            dd_bdry, dd_allfaces, quantity)
+
+    def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
+        """Get the diffusive fluxes for the AV operator API."""
+        dd_bdry = as_dofdesc(dd_bdry)
+        grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
+        actx = get_container_context_recursively(grad_av_minus)
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        grad_av_plus = grad_av_minus
+        bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
+                                  exterior=grad_av_plus)
+        num_flux = self._av_num_flux_func(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
+        return self._boundary_quantity(dcoll, dd_bdry, num_flux, **kwargs)
+
+
+# This class is a FluidBoundary that provides default implementations of
+# the abstract methods in FluidBoundary. This class will be eliminated
+# by resolution of https://github.com/illinois-ceesd/mirgecom/issues/576.
+# TODO: Don't do this. Make every boundary condition implement its own
+# version of the FluidBoundary methods.
+class PrescribedFluidBoundaryAV(PrescribedFluidBoundary):
+    r"""Interface to a prescribed fluid boundary treatment with AV.
+
+    .. automethod:: __init__
+    .. automethod:: av_flux
+    """
+
+    def __init__(self, boundary_grad_av_func=_identical_grad_av,
+                 av_num_flux_func=num_flux_central, **kwargs):
+        """Initialize the PrescribedFluidBoundaryAV and methods."""
+        self._bnd_grad_av_func = boundary_grad_av_func
+        self._av_num_flux_func = av_num_flux_func
+        PrescribedFluidBoundary.__init__(self, **kwargs)
+
+    def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
+        """Get the diffusive fluxes for the AV operator API."""
+        dd_bdry = as_dofdesc(dd_bdry)
+        grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
+        actx = get_container_context_recursively(grad_av_minus)
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        grad_av_plus = self._bnd_grad_av_func(
+            dcoll=dcoll, dd_bdry=dd_bdry, grad_av_minus=grad_av_minus, **kwargs)
+        bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
+                                  exterior=grad_av_plus)
+        num_flux = self._av_num_flux_func(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
+        return self._boundary_quantity(dcoll, dd_bdry, num_flux, **kwargs)
+
+    # }}}
 
 
 def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
