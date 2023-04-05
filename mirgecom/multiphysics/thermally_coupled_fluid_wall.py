@@ -64,7 +64,6 @@ from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
     ns_operator,
 )
-from mirgecom.artificial_viscosity import av_laplacian_operator
 from mirgecom.diffusion import (
     DiffusionBoundary,
     grad_operator as wall_grad_t_operator,
@@ -173,12 +172,11 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
     # FIXME: Incomplete docs
     def __init__(
             self, ext_kappa, ext_t, ext_grad_t=None, heat_flux_penalty_amount=None,
-            lengthscales=None):
+            lengthscales=None, use_kappa_weighted_grad_flux=False):
         """Initialize InterfaceFluidBoundary."""
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.get_external_state,
-            boundary_grad_av_func=self.get_external_grad_av,
             boundary_temperature_func=self.get_external_t,
             boundary_gradient_temperature_func=self.get_external_grad_t,
             inviscid_flux_func=self.inviscid_wall_flux,
@@ -190,6 +188,7 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
         self.ext_grad_t = ext_grad_t
         self.heat_flux_penalty_amount = heat_flux_penalty_amount
         self.lengthscales = lengthscales
+        self.use_kappa_weighted_grad_flux = use_kappa_weighted_grad_flux
 
     # NOTE: The BC for species mass is y_+ = y_-, I think that is OK here
     #       The BC for species mass fraction gradient is set down inside the
@@ -254,38 +253,6 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
         state_pair = TracePair(dd_bdry, interior=state_minus, exterior=wall_state)
 
         return numerical_flux_func(state_pair, gas_model, normal)
-
-    def get_external_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
-        # Grab some boundary-relevant data
-        actx = grad_av_minus.array_context
-
-        # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-
-        # Apply a Neumann condition on the energy gradient
-        # Should probably compute external energy gradient using external temperature
-        # gradient, but that is a can of worms
-        ext_grad_energy = \
-            grad_av_minus.energy - 2 * np.dot(grad_av_minus.energy, nhat) * nhat
-
-        # uh oh - we don't have the necessary data to compute grad_y from grad_av
-        # from mirgecom.fluid import species_mass_fraction_gradient
-        # grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-        #                                               grad_cv_minus)
-        # grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        # grad_species_mass_plus = 0.*grad_y_plus
-        # This re-stuffs grad_y+ back into grad_cv+, skipit; we did not split AVs
-        # for i in range(state_minus.nspecies):
-        #    grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
-        #        + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-        ext_grad_species_mass = (
-            grad_av_minus.species_mass
-            - np.outer(grad_av_minus.species_mass @ nhat, nhat))
-
-        return make_conserved(
-            grad_av_minus.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
-            momentum=grad_av_minus.momentum, species_mass=ext_grad_species_mass)
 
     def get_external_grad_cv(self, state_minus, state_plus, grad_cv_minus,
                              normal, **kwargs):
@@ -404,11 +371,28 @@ class InterfaceFluidSlipBoundary(PrescribedFluidBoundary):
 
     def get_external_t(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
+        int_kappa = state_minus.tv.thermal_conductivity
+        int_t = state_minus.dv.temperature
+
         if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
             dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
+            ext_kappa = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_kappa)
+            ext_t = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
         else:
-            return self.ext_t
+            ext_kappa = self.ext_kappa
+            ext_t = self.ext_t
+
+        if self.use_kappa_weighted_grad_flux:
+            actx = int_t.array_context
+            kappa_sum = actx.np.where(
+                actx.np.greater(int_kappa + ext_kappa, 0*int_kappa),
+                int_kappa + ext_kappa,
+                0*int_kappa + 1)
+
+            # Assumes numerical flux function is central
+            return 2*(int_t * int_kappa + ext_t * ext_kappa)/kappa_sum - int_t
+        else:
+            return ext_t
 
     def get_external_grad_t(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
@@ -430,12 +414,11 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
     # FIXME: Incomplete docs
     def __init__(
             self, ext_kappa, ext_t, ext_grad_t=None, heat_flux_penalty_amount=None,
-            lengthscales=None):
+            lengthscales=None, use_kappa_weighted_grad_flux=False):
         """Initialize InterfaceFluidBoundary."""
         PrescribedFluidBoundary.__init__(
             self,
             boundary_state_func=self.get_external_state,
-            boundary_grad_av_func=self.get_external_grad_av,
             boundary_temperature_func=self.get_external_t,
             boundary_gradient_temperature_func=self.get_external_grad_t,
             inviscid_flux_func=self.inviscid_wall_flux,
@@ -447,6 +430,7 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         self.ext_grad_t = ext_grad_t
         self.heat_flux_penalty_amount = heat_flux_penalty_amount
         self.lengthscales = lengthscales
+        self.use_kappa_weighted_grad_flux = use_kappa_weighted_grad_flux
 
     # NOTE: The BC for species mass is y_+ = y_-, I think that is OK here
     #       The BC for species mass fraction gradient is set down inside the
@@ -508,38 +492,6 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
         nhat = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
 
         return numerical_flux_func(state_pair, gas_model, nhat)
-
-    def get_external_grad_av(self, dcoll, dd_bdry, grad_av_minus, **kwargs):
-        """Get the exterior grad(Q) on the boundary."""
-        # Grab some boundary-relevant data
-        actx = grad_av_minus.array_context
-
-        # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
-
-        # Apply a Neumann condition on the energy gradient
-        # Should probably compute external energy gradient using external temperature
-        # gradient, but that is a can of worms
-        ext_grad_energy = \
-            grad_av_minus.energy - 2 * np.dot(grad_av_minus.energy, nhat) * nhat
-
-        # uh oh - we don't have the necessary data to compute grad_y from grad_av
-        # from mirgecom.fluid import species_mass_fraction_gradient
-        # grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-        #                                               grad_cv_minus)
-        # grad_y_plus = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        # grad_species_mass_plus = 0.*grad_y_plus
-        # This re-stuffs grad_y+ back into grad_cv+, skipit; we did not split AVs
-        # for i in range(state_minus.nspecies):
-        #    grad_species_mass_plus[i] = (state_minus.mass_density*grad_y_plus[i]
-        #        + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-        ext_grad_species_mass = (
-            grad_av_minus.species_mass
-            - np.outer(grad_av_minus.species_mass @ nhat, nhat))
-
-        return make_conserved(
-            grad_av_minus.dim, mass=grad_av_minus.mass, energy=ext_grad_energy,
-            momentum=grad_av_minus.momentum, species_mass=ext_grad_species_mass)
 
     def get_external_grad_cv(self, state_minus, grad_cv_minus, normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
@@ -624,11 +576,28 @@ class InterfaceFluidBoundary(PrescribedFluidBoundary):
 
     def get_external_t(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior T on the boundary."""
+        int_kappa = state_minus.tv.thermal_conductivity
+        int_t = state_minus.dv.temperature
+
         if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
             dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-            return op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
+            ext_kappa = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_kappa)
+            ext_t = op.project(dcoll, dd_bdry_base, dd_bdry, self.ext_t)
         else:
-            return self.ext_t
+            ext_kappa = self.ext_kappa
+            ext_t = self.ext_t
+
+        if self.use_kappa_weighted_grad_flux:
+            actx = int_t.array_context
+            kappa_sum = actx.np.where(
+                actx.np.greater(int_kappa + ext_kappa, 0*int_kappa),
+                int_kappa + ext_kappa,
+                0*int_kappa + 1)
+
+            # Assumes numerical flux function is central
+            return 2*(int_t * int_kappa + ext_t * ext_kappa)/kappa_sum - int_t
+        else:
+            return ext_t
 
     def get_external_grad_t(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
@@ -763,6 +732,7 @@ def get_interface_boundaries(
         fluid_dd, wall_dd,
         fluid_state, wall_kappa, wall_temperature,
         interface_noslip=True,
+        use_kappa_weighted_grad_flux_in_fluid=False,
         fluid_grad_temperature=None, wall_grad_temperature=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
@@ -827,7 +797,8 @@ def get_interface_boundaries(
                 grad_temperature_tpair.ext,
                 wall_penalty_amount,
                 lengthscales=op.project(dcoll,
-                    fluid_dd, temperature_tpair.dd, fluid_lengthscales))
+                    fluid_dd, temperature_tpair.dd, fluid_lengthscales),
+                use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
             for kappa_tpair, temperature_tpair, grad_temperature_tpair in zip(
                 kappa_inter_vol_tpairs[wall_dd, fluid_dd],
                 temperature_inter_vol_tpairs[wall_dd, fluid_dd],
@@ -846,7 +817,8 @@ def get_interface_boundaries(
         fluid_interface_boundaries = {
             kappa_tpair.dd.domain_tag: fluid_bc_class(
                 kappa_tpair.ext,
-                temperature_tpair.ext)
+                temperature_tpair.ext,
+                use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
             for kappa_tpair, temperature_tpair in zip(
                 kappa_inter_vol_tpairs[wall_dd, fluid_dd],
                 temperature_inter_vol_tpairs[wall_dd, fluid_dd])}
@@ -871,6 +843,8 @@ def coupled_grad_t_operator(
         *,
         time=0.,
         fluid_numerical_flux_func=num_flux_central,
+        interface_noslip=True,
+        use_kappa_weighted_grad_flux_in_fluid=False,
         quadrature_tag=DISCR_TAG_BASE,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
@@ -901,6 +875,9 @@ def coupled_grad_t_operator(
                 gas_model,
                 fluid_dd, wall_dd,
                 fluid_state, wall_kappa, wall_temperature,
+                interface_noslip=interface_noslip,
+                use_kappa_weighted_grad_flux_in_fluid=(
+                    use_kappa_weighted_grad_flux_in_fluid),
                 _kappa_inter_vol_tpairs=_kappa_inter_vol_tpairs,
                 _temperature_inter_vol_tpairs=_temperature_inter_vol_tpairs)
     else:
@@ -939,8 +916,7 @@ def coupled_ns_heat_operator(
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         interface_noslip=True,
-        use_av=False,
-        av_kwargs=None,
+        use_kappa_weighted_grad_flux_in_fluid=False,
         return_gradients=False,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE):
@@ -978,6 +954,8 @@ def coupled_ns_heat_operator(
             fluid_state=fluid_state, wall_kappa=wall_kappa,
             wall_temperature=wall_temperature,
             interface_noslip=interface_noslip,
+            use_kappa_weighted_grad_flux_in_fluid=(
+                use_kappa_weighted_grad_flux_in_fluid),
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs)
 
@@ -997,6 +975,9 @@ def coupled_ns_heat_operator(
         fluid_state, wall_kappa, wall_temperature,
         time=time,
         fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
+        interface_noslip=interface_noslip,
+        use_kappa_weighted_grad_flux_in_fluid=(
+            use_kappa_weighted_grad_flux_in_fluid),
         quadrature_tag=quadrature_tag,
         _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
         _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
@@ -1014,6 +995,8 @@ def coupled_ns_heat_operator(
             fluid_grad_temperature=fluid_grad_temperature,
             wall_grad_temperature=wall_grad_temperature,
             interface_noslip=interface_noslip,
+            use_kappa_weighted_grad_flux_in_fluid=(
+                use_kappa_weighted_grad_flux_in_fluid),
             wall_penalty_amount=wall_penalty_amount,
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs)
@@ -1038,13 +1021,6 @@ def coupled_ns_heat_operator(
         fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
     else:
         fluid_rhs = ns_result
-
-    if use_av:
-        if av_kwargs is None:
-            av_kwargs = {}
-        fluid_rhs = fluid_rhs + av_laplacian_operator(
-            dcoll, fluid_all_boundaries, fluid_state, quadrature_tag=quadrature_tag,
-            dd=fluid_dd, **av_kwargs)
 
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
