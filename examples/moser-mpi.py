@@ -37,6 +37,7 @@ from pytools.obj_array import (  # noqa
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
+from grudge.shortcuts import make_visualizer
 
 from mirgecom.boundary import (  # noqa
    IsothermalWallBoundary,  # noqa
@@ -109,7 +110,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     cl_ctx = ctx_factory()
 
     if casename is None:
-        casename = "mirgecom"
+        casename = "moser-mms"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -242,6 +243,18 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         char_len = actx.to_numpy(
             op.norm(dcoll, characteristic_lengthscales(actx, dcoll), np.inf)
         )
+        visualizer = make_visualizer(dcoll)
+
+        ncasename = f"{casename}_{n}"
+
+        def my_write_viz(step, t, state, dv=None):
+            if dv is None:
+                dv = eos.dependent_vars(state)
+            viz_fields = [("cv", state),
+                          ("dv", dv)]
+            from mirgecom.simutil import write_visfile
+            write_visfile(dcoll, viz_fields, visualizer, vizname=ncasename,  # noqa
+                          step=step, t=t, overwrite=True, comm=comm)
 
         source_eval = evaluate(sym_source, t=0, x=nodes)
         # source_eval = eval_source(0, nodes)
@@ -334,6 +347,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         for iloop in range(nsteps):
             print(f"{iloop=}")
+            my_write_viz(step=iloop, t=t, state=cv)
             cv = rk4_step(cv, t, dt, get_rhs)
             t += dt
 
@@ -369,7 +383,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 if __name__ == "__main__":
     import argparse
-    casename = "pulse"
+    casename = "moser-mms"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
