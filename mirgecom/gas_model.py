@@ -311,18 +311,19 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
     """
     temperature = gas_model.eos.temperature(cv, temperature_seed=temperature_seed)
     pressure = gas_model.eos.pressure(cv, temperature=temperature)
+    actx = cv.array_context
 
     if limiter_func:
         cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
                           dd=limiter_dd)
 
     # FIXME work-around for now
-    if smoothness_mu is None:
-        smoothness_mu = cv.mass*0.0
-    if smoothness_kappa is None:
-        smoothness_kappa = cv.mass*0.0
-    if smoothness_beta is None:
-        smoothness_beta = cv.mass*0.0
+    smoothness_mu = (actx.zeros_like(pressure) if smoothness_mu
+                     is None else smoothness_mu)
+    smoothness_kappa = (actx.zeros_like(pressure) if smoothness_kappa
+                        is None else smoothness_kappa)
+    smoothness_beta = (actx.zeros_like(pressure) if smoothness_beta
+                       is None else smoothness_beta)
 
     dv = GasDependentVars(
         temperature=temperature,
