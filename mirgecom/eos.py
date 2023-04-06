@@ -187,12 +187,13 @@ class GasEOS(metaclass=ABCMeta):
         temperature = self.temperature(cv, temperature_seed)
         # MJA, it doesn't appear that we can have a None field embedded inside DV,
         # make a dummy smoothness in this case
+        zeros = cv.array_context.zeros_like(cv.mass)
         if smoothness_mu is None:
-            smoothness_mu = 0. * cv.mass
+            smoothness_mu = zeros
         if smoothness_kappa is None:
-            smoothness_kappa = 0. * cv.mass
+            smoothness_kappa = zeros
         if smoothness_beta is None:
-            smoothness_beta = 0. * cv.mass
+            smoothness_beta = zeros
 
         return GasDependentVars(
             temperature=temperature,
@@ -264,12 +265,13 @@ class MixtureEOS(GasEOS):
         temperature = self.temperature(cv, temperature_seed)
         # MJA, it doesn't appear that we can have a None field embedded inside DV,
         # make a dummy smoothness in this case
+        zeros = cv.array_context.zeros_like(cv.mass)
         if smoothness_mu is None:
-            smoothness_mu = 0. * cv.mass
+            smoothness_mu = zeros
         if smoothness_kappa is None:
-            smoothness_kappa = 0. * cv.mass
+            smoothness_kappa = zeros
         if smoothness_beta is None:
-            smoothness_beta = 0. * cv.mass
+            smoothness_beta = zeros
 
         return MixtureDependentVars(
             temperature=temperature,
