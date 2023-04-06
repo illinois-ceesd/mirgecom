@@ -74,11 +74,18 @@ class GasDependentVars:
 
     .. attribute:: temperature
     .. attribute:: pressure
+    .. attribute:: speed_of_sound
+    .. attribute:: smoothness_mu
+    .. attribute:: smoothness_kappa
+    .. attribute:: smoothness_beta
     """
 
     temperature: DOFArray
     pressure: DOFArray
     speed_of_sound: DOFArray
+    smoothness_mu: DOFArray
+    smoothness_kappa: DOFArray
+    smoothness_beta: DOFArray
 
 
 @dataclass_array_container
@@ -154,7 +161,7 @@ class GasEOS(metaclass=ABCMeta):
         """Get the kinetic energy for the gas."""
 
     @abstractmethod
-    def gamma(self, cv: ConservedVars, temperature: DOFArray):
+    def gamma(self, cv: ConservedVars, temperature: DOFArray = None):
         """Get the ratio of gas specific heats Cp/Cv."""
 
     @abstractmethod
@@ -167,7 +174,10 @@ class GasEOS(metaclass=ABCMeta):
 
     def dependent_vars(
             self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> GasDependentVars:
+            temperature_seed: Optional[DOFArray] = None,
+            smoothness_mu: Optional[DOFArray] = None,
+            smoothness_kappa: Optional[DOFArray] = None,
+            smoothness_beta: Optional[DOFArray] = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -175,10 +185,23 @@ class GasEOS(metaclass=ABCMeta):
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
+        # MJA, it doesn't appear that we can have a None field embedded inside DV,
+        # make a dummy smoothness in this case
+        zeros = cv.array_context.zeros_like(cv.mass)
+        if smoothness_mu is None:
+            smoothness_mu = zeros
+        if smoothness_kappa is None:
+            smoothness_kappa = zeros
+        if smoothness_beta is None:
+            smoothness_beta = zeros
+
         return GasDependentVars(
             temperature=temperature,
             pressure=self.pressure(cv, temperature),
-            speed_of_sound=self.sound_speed(cv, temperature)
+            speed_of_sound=self.sound_speed(cv, temperature),
+            smoothness_mu=smoothness_mu,
+            smoothness_kappa=smoothness_kappa,
+            smoothness_beta=smoothness_beta
         )
 
 
@@ -229,7 +252,10 @@ class MixtureEOS(GasEOS):
 
     def dependent_vars(
             self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> MixtureDependentVars:
+            temperature_seed: Optional[DOFArray] = None,
+            smoothness_mu: Optional[DOFArray] = None,
+            smoothness_kappa: Optional[DOFArray] = None,
+            smoothness_beta: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -237,11 +263,24 @@ class MixtureEOS(GasEOS):
         given.
         """
         temperature = self.temperature(cv, temperature_seed)
+        # MJA, it doesn't appear that we can have a None field embedded inside DV,
+        # make a dummy smoothness in this case
+        zeros = cv.array_context.zeros_like(cv.mass)
+        if smoothness_mu is None:
+            smoothness_mu = zeros
+        if smoothness_kappa is None:
+            smoothness_kappa = zeros
+        if smoothness_beta is None:
+            smoothness_beta = zeros
+
         return MixtureDependentVars(
             temperature=temperature,
             pressure=self.pressure(cv, temperature),
             speed_of_sound=self.sound_speed(cv, temperature),
-            species_enthalpies=self.species_enthalpies(cv, temperature)
+            species_enthalpies=self.species_enthalpies(cv, temperature),
+            smoothness_mu=smoothness_mu,
+            smoothness_kappa=smoothness_kappa,
+            smoothness_beta=smoothness_beta
         )
 
 
@@ -606,7 +645,7 @@ class PyrometheusMixture(MixtureEOS):
             / self.gamma(cv, temperature)
         )
 
-    def gamma(self, cv: ConservedVars, temperature):
+    def gamma(self, cv: ConservedVars, temperature):  # type: ignore[override]
         r"""Get mixture-averaged heat capacity ratio, $\frac{C_p}{C_p - R_s}$.
 
         Parameters
@@ -726,7 +765,9 @@ class PyrometheusMixture(MixtureEOS):
 
     def species_enthalpies(self, cv: ConservedVars, temperature):
         """Get the species specific enthalpies."""
-        return self._pyrometheus_mech.get_species_enthalpies_rt(temperature)
+        spec_r = self._pyrometheus_mech.gas_constant/self._pyrometheus_mech.wts
+        return (spec_r * temperature
+                * self._pyrometheus_mech.get_species_enthalpies_rt(temperature))
 
     def get_production_rates(self, cv: ConservedVars, temperature):
         r"""Get the production rate for each species.
