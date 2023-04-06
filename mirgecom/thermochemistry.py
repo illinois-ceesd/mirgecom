@@ -133,8 +133,9 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
                 )
             return t_i
 
-        # Compute heat release due to chemistry. Only used for visualization.
-        def get_heat_release(self, state):
+        # Compute heat release rate due to chemistry.
+        # Only used for visualization/post-processing.
+        def get_heat_release_rate(self, state):
             w_dot = self.get_net_production_rates(state.cv.mass, state.temperature,
                                                   state.species_mass_fractions)
 
