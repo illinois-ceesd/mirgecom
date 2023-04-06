@@ -26,4 +26,3 @@ dependencies:
 - cantera
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
 - gmsh
-- occt=7.7.0
