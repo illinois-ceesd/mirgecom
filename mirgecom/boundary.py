@@ -832,8 +832,6 @@ class PrescribedFluidBoundary(FluidBoundary):
                  boundary_gradient_cv_func=None,
                  # Returns the boundary value for grad(temperature)
                  boundary_gradient_temperature_func=None,
-                 # For artificial viscosity - grad fluid soln on boundary
-                 boundary_grad_av_func=None,
                  ):
         """Initialize the PrescribedFluidBoundary and methods."""
         self._bnd_state_func = boundary_state_func
@@ -1191,7 +1189,10 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         )
 
         return make_fluid_state(cv=cv_infinity, gas_model=gas_model,
-                                temperature_seed=free_stream_temperature)
+                                temperature_seed=free_stream_temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
 
     def temperature_bc(self, state_minus, **kwargs):
         """Return farfield temperature for use in grad(temperature)."""
@@ -1312,7 +1313,10 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
                                     species_mass=state_minus.cv.species_mass)
 
         return make_fluid_state(cv=cv_outflow, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
 
     def outflow_state_for_diffusion(self, dcoll, dd_bdry, gas_model,
                                            state_minus, **kwargs):
@@ -1355,7 +1359,10 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
             species_mass=state_minus.species_mass_density
         )
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
 
     def inviscid_boundary_flux(self, dcoll, dd_bdry, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
@@ -1497,7 +1504,10 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
                                      species_mass=species_mass_boundary)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
 
 
 class RiemannOutflowBoundary(PrescribedFluidBoundary):
@@ -1599,7 +1609,10 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
                                      species_mass=species_mass_boundary)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
 
 
 class IsothermalWallBoundary(MengaldoBoundaryCondition):
@@ -1825,4 +1838,7 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
         )
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
