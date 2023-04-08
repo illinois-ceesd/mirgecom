@@ -344,8 +344,7 @@ class MixtureAveragedTransport(TransportModel):
     .. automethod:: thermal_conductivity
     """
 
-    def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0,
-                 prandtl=None, lewis=None):
+    def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None):
         r"""Initialize power law coefficients and parameters.
 
         Parameters
@@ -366,10 +365,6 @@ class MixtureAveragedTransport(TransportModel):
             Scaling factor to artifically increase or decrease the transport
             coefficients. The default is to keep the physical value, i.e., 1.0.
 
-        prandtl: float
-            If required, the Prandtl number specify the relation between the
-            fluid viscosity and the thermal conductivity.
-
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
             thermal conductivity and the species diffusivities.
@@ -377,7 +372,6 @@ class MixtureAveragedTransport(TransportModel):
         self._pyro_mech = pyrometheus_mech
         self._alpha = alpha
         self._factor = factor
-        self._prandtl = prandtl
         self._lewis = lewis
         if self._lewis is not None:
             if (len(self._lewis) != self._pyro_mech.num_species):
@@ -441,26 +435,15 @@ class MixtureAveragedTransport(TransportModel):
         r"""Get the gas thermal_conductivity, $\kappa$.
 
         The thermal conductivity can be obtained from Pyrometheus using a
-        mixture averaged rule considering the species individual heat
-        conductivity and mole fractions:
+        mixture averaged rule considering the species heat conductivities and
+        mole fractions:
 
         .. math::
 
             \kappa = \frac{1}{2} \left( \sum_{k=1}^{K} X_k \lambda_k +
                \frac{1}{\sum_{k=1}^{K} \frac{X_k}{\lambda_k} }\right)
 
-
-        or based on the user-imposed Prandtl number of
-        the mixture $Pr$ and the heat capacity at constant pressure $C_p$:
-
-        .. math::
-
-            \kappa = \frac{\mu C_p}{Pr}
-
         """
-        if self._prandtl is not None:
-            return 1.0/self._prandtl*(
-                eos.heat_capacity_cp(cv, dv.temperature)*self.viscosity(cv, dv))
         return self._factor*(self._pyro_mech.get_mixture_thermal_conductivity_mixavg(
             dv.temperature, cv.species_mass_fractions,))
 
@@ -489,10 +472,27 @@ class MixtureAveragedTransport(TransportModel):
             return (self.thermal_conductivity(cv, dv, eos)/(
                 cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
             )
-        return self._factor*(
-            self._pyro_mech.get_species_mass_diffusivities_mixavg(
+
+        diffusivity = self._pyro_mech.get_species_mass_diffusivities_mixavg(
                 dv.pressure, dv.temperature, cv.species_mass_fractions)
-        )
+
+        # floor to avoid single-species case breaking the mixture rule        
+        epsilon = 1e-4
+
+        # if one species dominate, uses a small diffusivity.
+        # The actual number should't matter since, in the single-species case,
+        # diffusion is proportional to a nearly zero-gradient.
+        dummy_diffusivity = 1e-6
+
+        for i in range(0, self._pyro_mech.num_species):
+            diffusivity[i] = \
+                # where "1-Yi < epsilon" means "Y_i -> 1.0"
+                actx.np.where(actx.np.less(1.0 - cv.species_mass_fractions[i], epsilon),
+                    dummy_diffusivity,
+                    diffusivity[i]
+                )
+
+        return self._factor*diffusivity
 
 
 class ArtificialViscosityTransportDiv(TransportModel):
