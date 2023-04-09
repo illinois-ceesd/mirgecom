@@ -473,6 +473,8 @@ class MixtureAveragedTransport(TransportModel):
                 cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
             )
 
+        actx = cv.mass.array_context
+
         diffusivity = self._pyro_mech.get_species_mass_diffusivities_mixavg(
                 dv.pressure, dv.temperature, cv.species_mass_fractions)
 
@@ -485,8 +487,8 @@ class MixtureAveragedTransport(TransportModel):
         dummy_diffusivity = 1e-6
 
         for i in range(0, self._pyro_mech.num_species):
+            # where "1-Yi < epsilon" means "Y_i -> 1.0"
             diffusivity[i] = \
-                # where "1-Yi < epsilon" means "Y_i -> 1.0"
                 actx.np.where(actx.np.less(1.0 - cv.species_mass_fractions[i], epsilon),
                     dummy_diffusivity,
                     diffusivity[i]
