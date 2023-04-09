@@ -476,9 +476,9 @@ class MixtureAveragedTransport(TransportModel):
         actx = cv.mass.array_context
 
         diffusivity = self._pyro_mech.get_species_mass_diffusivities_mixavg(
-                dv.pressure, dv.temperature, cv.species_mass_fractions)
+            dv.pressure, dv.temperature, cv.species_mass_fractions)
 
-        # floor to avoid single-species case breaking the mixture rule        
+        # floor to avoid single-species case breaking the mixture rule
         epsilon = 1e-4
 
         # if one species dominate, uses a small diffusivity.
@@ -489,7 +489,8 @@ class MixtureAveragedTransport(TransportModel):
         for i in range(0, self._pyro_mech.num_species):
             # where "1-Yi < epsilon" means "Y_i -> 1.0"
             diffusivity[i] = \
-                actx.np.where(actx.np.less(1.0 - cv.species_mass_fractions[i], epsilon),
+                actx.np.where(
+                    actx.np.less(1.0 - cv.species_mass_fractions[i], epsilon),
                     dummy_diffusivity,
                     diffusivity[i]
                 )
