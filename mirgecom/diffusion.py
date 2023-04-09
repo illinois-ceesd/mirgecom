@@ -51,6 +51,7 @@ from grudge.trace_pair import (
     tracepair_with_discr_tag,
 )
 import grudge.op as op
+from mirgecom.math import harmonic_mean
 from mirgecom.utils import normalize_boundaries
 
 
@@ -78,12 +79,6 @@ def diffusion_facial_flux(
     if penalty_amount is None:
         # *shrug*
         penalty_amount = 0.05
-
-    actx = u_tpair.int.array_context
-
-    def harmonic_mean(x, y):
-        x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
-        return 2*x*y/x_plus_y
 
     kappa_harmonic_mean = harmonic_mean(kappa_tpair.int, kappa_tpair.ext)
 
