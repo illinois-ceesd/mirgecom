@@ -219,8 +219,8 @@ class PowerLawTransport(TransportModel):
     """
 
     # air-like defaults here
-    def __init__(self, scaling_factor=1.0, alpha=0.6, beta=4.093e-7, sigma=2.5,
-                 n=.666, species_diffusivity=None, lewis=None):
+    def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
+                 species_diffusivity=None, lewis=None):
         """Initialize power law coefficients and parameters.
 
         Parameters
@@ -238,10 +238,6 @@ class PowerLawTransport(TransportModel):
         sigma: float
             The heat conductivity linear parameter. The default value is "air".
 
-        scaling_factor: float
-            Scaling factor to artifically increase or decrease the transport
-            coefficients. The default is to keep the physical value, i.e., 1.0.
-
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
             thermal conductivity and the species diffusivities. The input array
@@ -249,7 +245,6 @@ class PowerLawTransport(TransportModel):
         """
         if species_diffusivity is None and lewis is None:
             species_diffusivity = np.empty((0,), dtype=object)
-        self._scaling_factor = scaling_factor
         self._alpha = alpha
         self._beta = beta
         self._sigma = sigma
@@ -277,7 +272,7 @@ class PowerLawTransport(TransportModel):
 
         $\mu = \beta{T}^n$
         """
-        return self._scaling_factor * self._beta * dv.temperature**self._n
+        return self._beta * dv.temperature**self._n
 
     def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                          dv: GasDependentVars,
