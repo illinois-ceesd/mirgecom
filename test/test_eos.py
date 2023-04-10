@@ -30,6 +30,7 @@ import numpy.linalg as la  # noqa
 import pyopencl as cl
 import pyopencl.clrandom
 import pyopencl.clmath
+import pyopencl.tools as cl_tools
 import pytest
 from pytools.obj_array import make_obj_array
 
@@ -38,13 +39,15 @@ import grudge.op as op
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
 import cantera
+from mirgecom.transport import MixtureAveragedTransport
+from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.gas_model import (
     GasModel,
@@ -61,6 +64,317 @@ from pyopencl.tools import (  # noqa
 from mirgecom.mechanisms import get_mechanism_input
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.mark.parametrize(("mechname"),
+                         [("uiuc")])
+def test_pyrometheus_transport(ctx_factory, mechname):
+    """Test mixture-averaged transport properties. """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    dim = 1
+    nel_1d = 4
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 2
+
+    logger.info(f"Number of elements {mesh.nelements}")
+
+    discr = create_discretization_collection(actx, mesh, order=order)
+    ones = discr.zeros(actx) + 1.0
+    zeros = discr.zeros(actx)
+
+    # Pyrometheus initialization
+    from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+    mech_input = get_mechanism_input(mechname)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=3)(actx.np)
+
+    nspecies = pyro_obj.num_species
+    print(f"PrometheusMixture::NumSpecies = {nspecies}")
+
+    tempin = 1500.0
+    pressin = cantera.one_atm
+    print(f"Testing (t,P) = ({tempin}, {pressin})")
+
+    # Transport data initilization
+    transport_model = MixtureAveragedTransport(pyro_obj)
+    eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
+    gas_model = GasModel(eos=eos, transport=transport_model)
+
+    # Homogeneous reactor to get test data
+    equiv_ratio = 1.0
+    ox_di_ratio = 0.21
+    stoich_ratio = 0.5
+    i_fu = cantera_soln.species_index("H2")
+    i_ox = cantera_soln.species_index("O2")
+    i_di = cantera_soln.species_index("N2")
+    x = np.zeros(shape=(nspecies,))
+    x[i_fu] = (ox_di_ratio*equiv_ratio)/(stoich_ratio+ox_di_ratio*equiv_ratio)
+    x[i_ox] = stoich_ratio*x[i_fu]/equiv_ratio
+    x[i_di] = (1.0-ox_di_ratio)*x[i_ox]/ox_di_ratio
+
+    cantera_soln.TPX = tempin, pressin, x
+    #    cantera_soln.equilibrate("UV")
+    can_t, can_rho, can_y = cantera_soln.TDY
+    can_p = cantera_soln.P
+
+    reactor = cantera.IdealGasConstPressureReactor(cantera_soln)
+    sim = cantera.ReactorNet([reactor])
+    time = 0.0
+    for _ in range(50):
+        time += 1.0e-6
+        sim.advance(time)
+
+        # Get state from Cantera
+        can_rho = reactor.density
+        can_t = reactor.T
+        can_y = reactor.Y
+        print(f"can_p = {can_p}")
+        print(f"can_rho = {can_rho}")
+        print(f"can_t = {can_t}")
+        print(f"can_y = {can_y}")
+
+        tin = can_t * ones
+        rhoin = can_rho * ones
+        yin = can_rho * can_y * ones
+
+        # Cantera transport
+        mu_ct = cantera_soln.viscosity
+        kappa_ct = cantera_soln.thermal_conductivity
+        diff_ct = cantera_soln.mix_diff_coeffs
+
+        cv = make_conserved(dim=2, mass=rhoin,
+                            momentum=make_obj_array([zeros, zeros]),
+                            energy=gas_model.eos.get_internal_energy(tin, yin),
+                            species_mass=yin)
+
+        fluid_state = make_fluid_state(cv, gas_model, tin)
+
+        # Pyrometheus transport
+        mu = fluid_state.tv.viscosity
+        kappa = fluid_state.tv.thermal_conductivity
+        diff = fluid_state.tv.species_diffusivity
+
+        def inf_norm(x):
+            return actx.to_numpy(op.norm(discr, x, np.inf))
+
+        # Making sure both pressure and temperature are correct
+        err_p = np.abs(inf_norm(fluid_state.dv.pressure) - can_p)
+        assert err_p < 1.0e-10
+
+        err_t = np.abs(inf_norm(fluid_state.dv.temperature) - can_t)
+        assert err_t < 1.0e-12
+
+        # Viscosity
+        err_mu = np.abs(inf_norm(mu) - mu_ct)
+        assert err_mu < 1.0e-12
+
+        # Thermal conductivity
+        err_kappa = np.abs(inf_norm(kappa) - kappa_ct)
+        assert err_kappa < 1.0e-12
+
+        # Species diffusivities
+        for i in range(nspecies):
+            err_diff = np.abs(inf_norm(diff[i]) - diff_ct[i])
+            assert err_diff < 1.0e-12
+
+
+@pytest.mark.parametrize(("mechname", "rate_tol"),
+                         [("uiuc", 1e-12), ])
+@pytest.mark.parametrize("y0", [0, 1])
+def do_not_test_lazy_pyro(ctx_factory, mechname, rate_tol, y0):
+    """Test lazy pyrometheus mechanisms.
+
+    This test reproduces a pyrometheus-native test in the MIRGE context using both
+    eager and lazy evaluation protocols. The purpose of this test is making sure that
+    lazy evaluation mode is getting the same answers as eager (within a tolerance).
+
+    Some sanity checks to make sure eager is matching Cantera are also performed.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx_eager = PyOpenCLArrayContext(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    actx_lazy = PytatoPyOpenCLArrayContext(
+        queue,
+        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+
+    dim = 2
+    nel_1d = 2
+
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 2
+
+    logger.info(f"Number of elements {mesh.nelements}")
+
+    dcoll_eager = create_discretization_collection(actx_eager, mesh, order=order)
+    dcoll_lazy = create_discretization_collection(actx_lazy, mesh, order=order)
+
+    # Pyrometheus initialization
+    mech_input = get_mechanism_input(mechname)
+    sol = cantera.Solution(name="gas", yaml=mech_input)
+
+    from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    pyro_eager = make_pyrometheus_mechanism_class(sol)(actx_eager.np)
+    pyro_lazy = make_pyrometheus_mechanism_class(sol)(actx_lazy.np)
+
+    nspecies = pyro_eager.num_species
+    print(f"PyrometheusMixture::NumSpecies = {nspecies}")
+
+    press0 = 101500.0
+    temp0 = 300.0
+    y0s = np.zeros(shape=(nspecies,))
+    for i in range(nspecies-1):
+        y0s[i] = y0 / (10.0 ** (i + 1))
+    y0s[-1] = 1.0 - np.sum(y0s[:-1])
+
+    def get_temperature_lazy(energy, y, tguess):
+        return make_obj_array(
+            [pyro_lazy.get_temperature(energy, y, tguess)]
+        )
+
+    temp_lazy = actx_lazy.compile(get_temperature_lazy)
+
+    for fac in range(1, 11):
+        pressin = fac * press0
+        tempin = fac * temp0
+
+        print(f"Testing (t,P) = ({tempin}, {pressin})")
+        cantera_soln = cantera.Solution(phase_id="gas", source=mech_input)
+        cantera_soln.TPY = tempin, pressin, y0s
+        cantera_soln.equilibrate("UV")
+        can_t, can_rho, can_y = cantera_soln.TDY
+        can_p = cantera_soln.P
+        can_e = cantera_soln.int_energy_mass
+        can_k = cantera_soln.forward_rate_constants
+        can_c = cantera_soln.concentrations
+
+        # Chemistry functions for testing pyro chem
+        can_r = cantera_soln.net_rates_of_progress
+        can_omega = cantera_soln.net_production_rates
+
+        ones_lazy = dcoll_lazy.zeros(actx_lazy) + 1.0
+        tin_lazy = can_t * ones_lazy
+        pin_lazy = can_p * ones_lazy
+        yin_lazy = make_obj_array([can_y[i] * ones_lazy for i in range(nspecies)])
+
+        ones_eager = dcoll_eager.zeros(actx_eager) + 1.0
+        tin_eager = can_t * ones_eager
+        pin_eager = can_p * ones_eager
+        yin_eager = make_obj_array([can_y[i] * ones_eager for i in range(nspecies)])
+
+        pyro_rho_eager = pyro_eager.get_density(pin_eager, tin_eager, yin_eager)
+        pyro_rho_lazy = pyro_lazy.get_density(pin_lazy, tin_lazy, yin_lazy)
+
+        from arraycontext import to_numpy
+        rho_lazy = to_numpy(
+            actx_eager.thaw(actx_lazy.freeze(pyro_rho_lazy))
+        )
+
+        pyro_e_eager = pyro_eager.get_mixture_internal_energy_mass(tin_eager,
+                                                                   yin_eager)
+        pyro_e_lazy = pyro_lazy.get_mixture_internal_energy_mass(tin_lazy, yin_lazy)
+        e_lazy = to_numpy(
+            actx_eager.thaw(actx_lazy.freeze(pyro_e_lazy))
+        )
+
+        # These both take 5 Newton iterations
+        pyro_t_eager = pyro_eager.get_temperature(pyro_e_eager, tin_eager, yin_eager)
+        pyro_t_lazy = temp_lazy(pyro_e_lazy, tin_lazy, yin_lazy)
+
+        t_lazy = to_numpy(actx_eager.thaw(actx_lazy.freeze(pyro_t_lazy)))
+
+        pyro_p_eager = pyro_eager.get_pressure(pyro_rho_eager, tin_eager, yin_eager)
+        pyro_c_eager = pyro_eager.get_concentrations(pyro_rho_eager, yin_eager)
+        pyro_k_eager = pyro_eager.get_fwd_rate_coefficients(pyro_t_eager,
+                                                            pyro_c_eager)
+
+        pyro_p_lazy = pyro_lazy.get_pressure(pyro_rho_lazy, tin_lazy, yin_lazy)
+        pyro_c_lazy = pyro_lazy.get_concentrations(pyro_rho_lazy, yin_lazy)
+        pyro_k_lazy = pyro_lazy.get_fwd_rate_coefficients(pyro_t_lazy, pyro_c_lazy)
+
+        c_lazy = to_numpy(
+            actx_eager.thaw(actx_lazy.freeze(pyro_c_lazy))
+        )
+        p_lazy = to_numpy(
+            actx_eager.thaw(actx_lazy.freeze(pyro_p_lazy))
+        )
+        k_lazy = to_numpy(
+            actx_eager.thaw(actx_lazy.freeze(pyro_k_lazy))
+        )
+
+        # Pyro chemistry functions
+        pyro_r_eager = pyro_eager.get_net_rates_of_progress(pyro_t_eager,
+                                                            pyro_c_eager)
+        pyro_omega_eager = pyro_eager.get_net_production_rates(pyro_rho_eager,
+                                                               pyro_t_eager,
+                                                               yin_eager)
+
+        pyro_r_lazy = pyro_lazy.get_net_rates_of_progress(pyro_t_lazy,
+                                                          pyro_c_lazy)
+        pyro_omega_lazy = pyro_lazy.get_net_production_rates(pyro_rho_lazy,
+                                                             pyro_t_lazy,
+                                                             yin_lazy)
+        r_lazy = to_numpy(
+            actx_eager.thaw(actx_lazy.freeze(pyro_r_lazy))
+        )
+        omega_lazy = to_numpy(
+            actx_eager.thaw(actx_lazy.freeze(pyro_omega_lazy))
+        )
+
+        print(f"can(rho, y, p, t, e, k) = ({can_rho}, {can_y}, "
+              f"{can_p}, {can_t}, {can_e}, {can_k})")
+        print(f"pyro_eager(rho, y, p, t, e, k) = ({pyro_rho_eager}, {y0s}, "
+              f"{pyro_p_eager}, {pyro_t_eager}, {pyro_e_eager}, {pyro_k_eager})")
+        print(f"pyro_lazy(rho, y, p, t, e, k) = ({rho_lazy}, {y0s}, "
+              f"{p_lazy}, {t_lazy}, {e_lazy}, {k_lazy})")
+
+        # For pyro chem testing
+        print(f"{can_r=}")
+        print(f"{pyro_r_eager=}")
+        print(f"{r_lazy=}")
+        print(f"{can_omega=}")
+        print(f"{pyro_omega_eager=}")
+        print(f"{omega_lazy=}")
+
+        tol = 1e-10
+        assert dcoll_eager.norm((pyro_c_eager - c_lazy), np.inf) < tol
+        assert dcoll_eager.norm((pyro_t_eager - t_lazy), np.inf) < tol
+        assert dcoll_eager.norm((pyro_rho_eager - rho_lazy), np.inf) < tol
+        assert dcoll_eager.norm((pyro_p_eager - p_lazy), np.inf) < 1e-9
+        assert dcoll_eager.norm((pyro_e_eager - e_lazy), np.inf) < 1e-5
+        assert dcoll_eager.norm((pyro_k_eager - k_lazy), np.inf) < 1e-5
+
+        assert dcoll_eager.norm((pyro_c_eager - can_c) / can_c, np.inf) < 1e-14
+        assert dcoll_eager.norm((pyro_t_eager - can_t) / can_t, np.inf) < 1e-14
+        assert dcoll_eager.norm((pyro_rho_eager - can_rho) / can_rho, np.inf) < 1e-14
+        assert dcoll_eager.norm((pyro_p_eager - can_p) / can_p, np.inf) < 1e-14
+        assert dcoll_eager.norm((pyro_e_eager - can_e) / can_e, np.inf) < 1e-6
+        assert dcoll_eager.norm((pyro_k_eager - can_k) / can_k, np.inf) < 1e-10
+
+        # Pyro chem test comparisons
+        for i, rate in enumerate(can_r):
+            assert dcoll_eager.norm((pyro_r_eager[i] - r_lazy[i]), np.inf) < tol
+            assert dcoll_eager.norm((pyro_r_eager[i] - rate), np.inf) < rate_tol
+        for i, rate in enumerate(can_omega):
+            assert dcoll_eager.norm(
+                (pyro_omega_eager[i] - omega_lazy[i]), np.inf) < tol
+            assert dcoll_eager.norm((pyro_omega_eager[i] - rate), np.inf) < rate_tol
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
@@ -233,7 +547,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         tin = tempin * ones
         pin = pressin * ones
         yin = y0s * ones
-        tguess = 300.0
+        tguess = 0*ones + 300.0
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
         pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
@@ -330,7 +644,6 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     mech_input = get_mechanism_input(mechname)
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-    # pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
     pyro_obj = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
 
     nspecies = pyro_obj.num_species
