@@ -8,8 +8,10 @@
 
 MIRGE_HOME=${1:-"${MIRGE_HOME:-}"}
 if [[ -z "${MIRGE_HOME}" ]]; then
-    MIRGE_HOME="."
+    THIS_LOC=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+    MIRGE_HOME="${THIS_LOC}/../"
 fi
+
 cd ${MIRGE_HOME}
 MIRGE_HOME="$(pwd)"
 cd -
