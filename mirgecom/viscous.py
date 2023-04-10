@@ -122,8 +122,8 @@ def diffusive_flux(state, grad_cv):
     with gas density $\rho$, species diffusivities ${d}_{\alpha}$, and
     species mass fractions ${Y}_{\alpha}$.  The first term on the RHS is
     the usual diffusive flux, and the second term is a mass conservation
-    correction term to ensure $\Sigma{J_\alpha} = 0$. The parens $(\alpha)$
-    indicate no sum over repeated indices is to be performed.
+    correction term to ensure $\Sigma\mathbf{J}_\alpha = 0$. The parens
+    $(\alpha)$ indicate no sum over repeated indices is to be performed.
 
     Parameters
     ----------
