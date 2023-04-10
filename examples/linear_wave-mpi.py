@@ -52,7 +52,6 @@ def bump(actx, nodes):
     return actx.np.exp(-(nodes[0] - 0.0)**2/0.1**2)
 
 
-
 def _flux(dcoll, c, w_tpair):
     u = w_tpair
 
@@ -110,9 +109,6 @@ def linear_wave_operator(dcoll, c, w, *, comm_tag=None):
             )
         )
     )
-
-
-
 
 
 def main(actx_class, use_profiling=False, use_logmgr=False, lazy: bool = False):

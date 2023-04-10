@@ -24,18 +24,10 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-import numpy.linalg as la  # noqa
 import pyopencl as cl
 from grudge.trace_pair import TracePair, interior_trace_pairs
-from pytools.obj_array import flat_obj_array
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import (
-    DD_VOLUME_ALL,
-    VolumeDomainTag,
-    DISCR_TAG_BASE,
-)
+from meshmode.mesh import BTAG_ALL
 
 from grudge.shortcuts import make_visualizer
 import grudge.op as op
@@ -44,7 +36,6 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.utils import force_evaluation
-from mirgecom.operators import div_operator
 
 from logpyle import IntervalTimer, set_dt
 
@@ -53,15 +44,17 @@ from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_device_memory_usage,
                                          logmgr_add_mempool_usage,)
 
-import sys
 
 def utx(actx, nodes, t=0):
     """Initialize the field for Burgers Eqn."""
     x = nodes[0]
-    return actx.np.sin(2.0*np.pi*nodes[0]/2.0) 
+    return actx.np.sin(2.0*np.pi*nodes[0]/2.0)
 
-#    """Create a bump."""
-#    return actx.np.exp(-(nodes[0]-1.0)**2/0.1**2)
+#    x = nodes[0] - 1.0*t
+#    ones = 0*x + 1.0
+#    zeros = ones*0.0
+#    return actx.np.where(actx.np.less(x, 1.0+1e-7), ones, zeros)
+
 
 def _facial_flux(dcoll, u_tpair):
 
@@ -71,12 +64,7 @@ def _facial_flux(dcoll, u_tpair):
                         interior=0.5*u_tpair.int**2,
                         exterior=0.5*u_tpair.ext**2)
 
-    # average
-    flux_weak = 0.5*(u2_pair.ext + u2_pair.int)*normal[0]
-
-#    # dissipation term
-#    lamb = actx.np.abs( actx.np.maximum( u_tpair.int, u_tpair.ext ) )
-#    flux_weak = flux_weak + .5*lamb*u_tpair.diff*normal[0]
+    flux_weak = u2_pair.avg*normal[0]
 
     return op.project(dcoll, u_tpair.dd, "all_faces", flux_weak)
 
@@ -102,20 +90,15 @@ def burgers_operator(dcoll, u, u_bc, *, comm_tag=None):
     numpy.ndarray
         an object array of DOF arrays, representing the ODE RHS
     """
-    dd_vol = DD_VOLUME_ALL
-    dd_allfaces = dd_vol.trace(FACE_RESTR_ALL)
-
     u_bnd = op.project(dcoll, "vol", BTAG_ALL, u)
     itp = interior_trace_pairs(dcoll, u, comm_tag=(_BurgTag, comm_tag))
-    
-    #FIXME maybe flip the sign of u_bc to enforce 0 at the boundary
+
     el_bnd_flux = (
         _facial_flux(dcoll, u_tpair=TracePair(BTAG_ALL,
                                               interior=u_bnd, exterior=u_bc))
         + sum([_facial_flux(dcoll, u_tpair=tpair) for tpair in itp]))
     vol_flux = -op.weak_local_grad(dcoll, 0.5*u**2)[0]
-    return -op.inverse_mass(dcoll, vol_flux +
-                            op.face_mass(dcoll, el_bnd_flux))
+    return -op.inverse_mass(dcoll, vol_flux + op.face_mass(dcoll, el_bnd_flux))
 
 
 @mpi_entry_point
@@ -285,9 +268,7 @@ def main(actx_class, snapshot_pattern="burgers-mpi-{step:04d}-{rank:04d}.pkl",
             )
 
         d = rk4_step(u, t, dt, compiled_rhs)
-        u  = force_evaluation(actx, d)
-
-#        break
+        u = force_evaluation(actx, d)
 
         t += dt
         istep += 1
