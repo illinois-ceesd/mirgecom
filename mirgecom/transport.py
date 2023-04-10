@@ -151,8 +151,8 @@ class SimpleTransport(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     def __init__(self, bulk_viscosity=0, viscosity=0, thermal_conductivity=0,
@@ -214,13 +214,13 @@ class PowerLawTransport(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     # air-like defaults here
-    def __init__(self, scaling_factor=1.0, alpha=0.6, beta=4.093e-7, sigma=2.5,
-                 n=.666, species_diffusivity=None, lewis=None):
+    def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
+                 species_diffusivity=None, lewis=None):
         """Initialize power law coefficients and parameters.
 
         Parameters
@@ -238,10 +238,6 @@ class PowerLawTransport(TransportModel):
         sigma: float
             The heat conductivity linear parameter. The default value is "air".
 
-        scaling_factor: float
-            Scaling factor to artifically increase or decrease the transport
-            coefficients. The default is to keep the physical value, i.e., 1.0.
-
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
             thermal conductivity and the species diffusivities. The input array
@@ -249,7 +245,6 @@ class PowerLawTransport(TransportModel):
         """
         if species_diffusivity is None and lewis is None:
             species_diffusivity = np.empty((0,), dtype=object)
-        self._scaling_factor = scaling_factor
         self._alpha = alpha
         self._beta = beta
         self._sigma = sigma
@@ -277,7 +272,7 @@ class PowerLawTransport(TransportModel):
 
         $\mu = \beta{T}^n$
         """
-        return self._scaling_factor * self._beta * dv.temperature**self._n
+        return self._beta * dv.temperature**self._n
 
     def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                          dv: GasDependentVars,
@@ -340,12 +335,12 @@ class MixtureAveragedTransport(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
-    def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0,
-                 prandtl=None, lewis=None):
+    def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None,
+                 epsilon=1e-4, singular_diffusivity=1e-6):
         r"""Initialize power law coefficients and parameters.
 
         Parameters
@@ -363,22 +358,30 @@ class MixtureAveragedTransport(TransportModel):
             The bulk viscosity parameter. The default value is "air".
 
         factor: float
-            Scaling factor to artifically increase or decrease the transport
+            Scaling factor to artifically scale up or down the transport
             coefficients. The default is to keep the physical value, i.e., 1.0.
-
-        prandtl: float
-            If required, the Prandtl number specify the relation between the
-            fluid viscosity and the thermal conductivity.
 
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
-            thermal conductivity and the species diffusivities.
+            thermal conductivity and the species diffusivities. The input array
+            must have a shape of "nspecies".
+
+        epsilon: float
+            Parameter to avoid single-species case where $Y_i \to 1$ that may
+            lead to singular division in the mixture rule. If $1 - Y_i < \epsilon$,
+            a prescribed diffusivity is used instead. Default to 1e-4.
+
+        singular_diffusivity: float
+            Diffusivity for the singular case. The actual number should't matter
+            since, in the single-species case, diffusion is proportional to a
+            nearly zero-gradient. Default to 1e-6 for all species.
         """
         self._pyro_mech = pyrometheus_mech
         self._alpha = alpha
         self._factor = factor
-        self._prandtl = prandtl
         self._lewis = lewis
+        self._epsilon = epsilon
+        self._singular_diffusivity = singular_diffusivity
         if self._lewis is not None:
             if (len(self._lewis) != self._pyro_mech.num_species):
                 raise ValueError("Lewis number should match number of species")
@@ -441,26 +444,15 @@ class MixtureAveragedTransport(TransportModel):
         r"""Get the gas thermal_conductivity, $\kappa$.
 
         The thermal conductivity can be obtained from Pyrometheus using a
-        mixture averaged rule considering the species individual heat
-        conductivity and mole fractions:
+        mixture averaged rule considering the species heat conductivities and
+        mole fractions:
 
         .. math::
 
             \kappa = \frac{1}{2} \left( \sum_{k=1}^{K} X_k \lambda_k +
                \frac{1}{\sum_{k=1}^{K} \frac{X_k}{\lambda_k} }\right)
 
-
-        or based on the user-imposed Prandtl number of
-        the mixture $Pr$ and the heat capacity at constant pressure $C_p$:
-
-        .. math::
-
-            \kappa = \frac{\mu C_p}{Pr}
-
         """
-        if self._prandtl is not None:
-            return 1.0/self._prandtl*(
-                eos.heat_capacity_cp(cv, dv.temperature)*self.viscosity(cv, dv))
         return self._factor*(self._pyro_mech.get_mixture_thermal_conductivity_mixavg(
             dv.temperature, cv.species_mass_fractions,))
 
@@ -477,8 +469,12 @@ class MixtureAveragedTransport(TransportModel):
 
             d_{i}^{(m)} = \frac{1 - Y_i}{\sum_{j\ne i} \frac{X_j}{d_{ij}}}
 
-        or based on the user-imposed Lewis number $Le$ of the mixture and the
-        heat capacity at constant pressure $C_p$:
+        In regions with a single species, the above equation is ill-conditioned
+        and a constant diffusivity is used instead.
+
+        The user can prescribe an array with the Lewis number $Le$ for each species.
+        Then, it is used together with the mixture termal conductivity and the
+        heat capacity at constant pressure $C_p$ to yield the diffusivity.
 
         .. math::
 
@@ -489,10 +485,22 @@ class MixtureAveragedTransport(TransportModel):
             return (self.thermal_conductivity(cv, dv, eos)/(
                 cv.mass*self._lewis*eos.heat_capacity_cp(cv, dv.temperature))
             )
-        return self._factor*(
-            self._pyro_mech.get_species_mass_diffusivities_mixavg(
-                dv.pressure, dv.temperature, cv.species_mass_fractions)
-        )
+
+        actx = cv.mass.array_context
+
+        diffusivity = self._pyro_mech.get_species_mass_diffusivities_mixavg(
+            dv.pressure, dv.temperature, cv.species_mass_fractions)
+
+        for i in range(0, self._pyro_mech.num_species):
+            # where "1-Yi < epsilon" means "Y_i -> 1.0"
+            diffusivity[i] = \
+                actx.np.where(
+                    actx.np.less(1.0 - cv.species_mass_fractions[i], self._epsilon),
+                    self._singular_diffusivity,
+                    diffusivity[i]
+                )
+
+        return self._factor*diffusivity
 
 
 class ArtificialViscosityTransportDiv(TransportModel):
@@ -508,8 +516,8 @@ class ArtificialViscosityTransportDiv(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     def __init__(self,
@@ -588,8 +596,8 @@ class ArtificialViscosityTransportDiv2(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     def __init__(self,
