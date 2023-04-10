@@ -97,8 +97,11 @@ def burgers_operator(dcoll, u, u_bc, *, comm_tag=None):
         _facial_flux(dcoll, u_tpair=TracePair(BTAG_ALL,
                                               interior=u_bnd, exterior=u_bc))
         + sum([_facial_flux(dcoll, u_tpair=tpair) for tpair in itp]))
-    vol_flux = -op.weak_local_grad(dcoll, 0.5*u**2)[0]
-    return -op.inverse_mass(dcoll, vol_flux + op.face_mass(dcoll, el_bnd_flux))
+
+    # FIXME use weak_local_d_dx instead if 1D
+    # FIXME use weal_local_div instead if dim >= 2
+    vol_flux = op.weak_local_grad(dcoll, 0.5*u**2)[0]
+    return op.inverse_mass(dcoll, vol_flux - op.face_mass(dcoll, el_bnd_flux))
 
 
 @mpi_entry_point
