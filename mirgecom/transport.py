@@ -151,8 +151,8 @@ class SimpleTransport(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     def __init__(self, bulk_viscosity=0, viscosity=0, thermal_conductivity=0,
@@ -214,8 +214,8 @@ class PowerLawTransport(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     # air-like defaults here
@@ -335,8 +335,8 @@ class MixtureAveragedTransport(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None,
@@ -366,7 +366,7 @@ class MixtureAveragedTransport(TransportModel):
             thermal conductivity and the species diffusivities. The input array
             must have a shape of "nspecies".
 
-        epsilon: float        
+        epsilon: float
             Parameter to avoid single-species case where $Y_i \to 1$ that may
             lead to singular division in the mixture rule. If $1 - Y_i < \epsilon$,
             a prescribed diffusivity is used instead. Default to 1e-4.
@@ -469,8 +469,12 @@ class MixtureAveragedTransport(TransportModel):
 
             d_{i}^{(m)} = \frac{1 - Y_i}{\sum_{j\ne i} \frac{X_j}{d_{ij}}}
 
-        or based on the user-imposed Lewis number $Le$ of the mixture and the
-        heat capacity at constant pressure $C_p$:
+        In regions with a single species, the above equation is ill-conditioned
+        and a constant diffusivity is used instead.
+
+        The user can prescribe an array with the Lewis number $Le$ for each species.
+        Then, it is used together with the mixture termal conductivity and the
+        heat capacity at constant pressure $C_p$ to yield the diffusivity.
 
         .. math::
 
@@ -512,8 +516,8 @@ class ArtificialViscosityTransportDiv(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     def __init__(self,
@@ -592,8 +596,8 @@ class ArtificialViscosityTransportDiv2(TransportModel):
     .. automethod:: bulk_viscosity
     .. automethod:: viscosity
     .. automethod:: volume_viscosity
-    .. automethod:: species_diffusivity
     .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
     """
 
     def __init__(self,
