@@ -339,7 +339,8 @@ class MixtureAveragedTransport(TransportModel):
     .. automethod:: thermal_conductivity
     """
 
-    def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None):
+    def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None,
+                 epsilon=1e-4):
         r"""Initialize power law coefficients and parameters.
 
         Parameters
@@ -363,11 +364,23 @@ class MixtureAveragedTransport(TransportModel):
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
             thermal conductivity and the species diffusivities.
+
+        epsilon: float        
+            Parameter to avoid single-species case where $Y_i \to 1$ that may
+            lead to singular division in the mixture rule. If $1 - Y_i < \epsilon$,
+            a prescribed diffusivity is used instead. Default to 1e-4.
+
+        singular_diffusivity: float
+            Diffusivity for the singular case. The actual number should't matter
+            since, in the single-species case, diffusion is proportional to a
+            nearly zero-gradient.
         """
         self._pyro_mech = pyrometheus_mech
         self._alpha = alpha
         self._factor = factor
         self._lewis = lewis
+        self._epsilon = epsilon
+        self._singular_diffusivity = singular_diffusivity
         if self._lewis is not None:
             if (len(self._lewis) != self._pyro_mech.num_species):
                 raise ValueError("Lewis number should match number of species")
@@ -473,20 +486,12 @@ class MixtureAveragedTransport(TransportModel):
         diffusivity = self._pyro_mech.get_species_mass_diffusivities_mixavg(
             dv.pressure, dv.temperature, cv.species_mass_fractions)
 
-        # floor to avoid single-species case breaking the mixture rule
-        epsilon = 1e-4
-
-        # if one species dominate, uses a small diffusivity.
-        # The actual number should't matter since, in the single-species case,
-        # diffusion is proportional to a nearly zero-gradient.
-        dummy_diffusivity = 1e-6
-
         for i in range(0, self._pyro_mech.num_species):
             # where "1-Yi < epsilon" means "Y_i -> 1.0"
             diffusivity[i] = \
                 actx.np.where(
-                    actx.np.less(1.0 - cv.species_mass_fractions[i], epsilon),
-                    dummy_diffusivity,
+                    actx.np.less(1.0 - cv.species_mass_fractions[i], self._epsilon),
+                    self._singular_diffusivity,
                     diffusivity[i]
                 )
 
