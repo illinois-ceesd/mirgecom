@@ -18,10 +18,12 @@ Diagnostic utilities
 .. autofunction:: check_naninf_local
 .. autofunction:: check_range_local
 
-Mesh utilities
---------------
+Mesh and element utilities
+--------------------------
 
 .. autofunction:: distribute_mesh
+.. autofunction:: generate_and_distribute_mesh
+.. autofunction:: get_number_of_tetrahedron_nodes
 
 File comparison utilities
 -------------------------
@@ -72,6 +74,15 @@ from mirgecom.viscous import get_viscous_timestep
 import pyopencl as cl
 
 logger = logging.getLogger(__name__)
+
+
+def get_number_of_tetrahedron_nodes(dim, order):
+    """Get number of nodes (modes) in *dim* Tetrahedron of *order*."""
+    # number of {nodes, modes} see e.g.:
+    # JSH/TW Nodal DG Methods, Section 10.1
+    # DOI: 10.1007/978-0-387-72067-8
+    return int(np.math.factorial(dim+order)
+               / (np.math.factorial(dim) * np.math.factorial(order)))
 
 
 def check_step(step, interval):
