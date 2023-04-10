@@ -298,10 +298,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     compute_cfl = actx.compile(get_cfl)
 
+    # Evaluate species production rate
     def get_production_rates(cv, temperature):
         return eos.get_production_rates(cv, temperature)
 
     compute_production_rates = actx.compile(get_production_rates)
+
+    # Evaluate energy release rate due to chemistry
+    def get_heat_release_rate(state):
+        return pyro_mechanism.get_heat_release_rate(state)
+
+    compute_heat_release_rate = actx.compile(get_heat_release_rate)
 
     def my_get_timestep(t, dt, state):
         #  richer interface to calculate {dt,cfl} returns node-local estimates
@@ -452,9 +459,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if rank == 0:
             logger.info(status_msg)
 
-    def my_write_viz(step, t, dt, state, ts_field, dv, production_rates, cfl):
+    def my_write_viz(step, t, dt, state, ts_field, dv, production_rates,
+                     heat_release_rate, cfl):
         viz_fields = [("cv", state), ("dv", dv),
                       ("production_rates", production_rates),
+                      ("heat_release_rate", heat_release_rate),
                       ("dt" if constant_cfl else "cfl", ts_field)]
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -559,8 +568,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 production_rates = compute_production_rates(fluid_state.cv,
                                                             fluid_state.temperature)
+                heat_release_rate = compute_heat_release_rate(fluid_state)
                 my_write_viz(step=step, t=t, dt=dt, state=cv, dv=dv,
                              production_rates=production_rates,
+                             heat_release_rate=heat_release_rate,
                              ts_field=ts_field, cfl=cfl)
 
         except MyRuntimeError:
@@ -632,10 +643,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     final_fluid_state = construct_fluid_state(final_cv, tseed)
     final_dv = final_fluid_state.dv
     final_dm = compute_production_rates(final_cv, final_dv.temperature)
+    final_heat_rls = compute_heat_release_rate(final_fluid_state)
     ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=final_fluid_state)
     my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,
-                 dv=final_dv, production_rates=final_dm, ts_field=ts_field, cfl=cfl)
+                 dv=final_dv, production_rates=final_dm,
+                 heat_release_rate=final_heat_rls, ts_field=ts_field, cfl=cfl)
     my_write_status(dt=dt, cfl=cfl, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=final_fluid_state,
                      temperature_seed=tseed)
