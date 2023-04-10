@@ -340,7 +340,7 @@ class MixtureAveragedTransport(TransportModel):
     """
 
     def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None,
-                 epsilon=1e-4):
+                 epsilon=1e-4, singular_diffusivity=1e-6):
         r"""Initialize power law coefficients and parameters.
 
         Parameters
@@ -358,12 +358,13 @@ class MixtureAveragedTransport(TransportModel):
             The bulk viscosity parameter. The default value is "air".
 
         factor: float
-            Scaling factor to artifically increase or decrease the transport
+            Scaling factor to artifically scale up or down the transport
             coefficients. The default is to keep the physical value, i.e., 1.0.
 
         lewis: numpy.ndarray
             If required, the Lewis number specify the relation between the
-            thermal conductivity and the species diffusivities.
+            thermal conductivity and the species diffusivities. The input array
+            must have a shape of "nspecies".
 
         epsilon: float        
             Parameter to avoid single-species case where $Y_i \to 1$ that may
@@ -373,7 +374,7 @@ class MixtureAveragedTransport(TransportModel):
         singular_diffusivity: float
             Diffusivity for the singular case. The actual number should't matter
             since, in the single-species case, diffusion is proportional to a
-            nearly zero-gradient.
+            nearly zero-gradient. Default to 1e-6 for all species.
         """
         self._pyro_mech = pyrometheus_mech
         self._alpha = alpha
