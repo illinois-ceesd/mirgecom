@@ -248,7 +248,6 @@ class ViscousFluidState(FluidState):
         Viscous fluid state-dependent transport properties.
 
     .. autoattribute:: viscosity
-    .. autoattribute:: volume_viscosity
     .. autoattribute:: bulk_viscosity
     .. autoattribute:: species_diffusivity
     .. autoattribute:: thermal_conductivity
@@ -260,11 +259,6 @@ class ViscousFluidState(FluidState):
     def viscosity(self):
         """Return the fluid viscosity."""
         return self.tv.viscosity
-
-    @property
-    def volume_viscosity(self):
-        """Return the fluid second coefficient of viscosity."""
-        return self.tv.volume_viscosity
 
     @property
     def bulk_viscosity(self):
