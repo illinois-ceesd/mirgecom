@@ -47,7 +47,6 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 
 def utx(actx, nodes, t=0):
     """Initialize the field for Burgers Eqn."""
-    x = nodes[0]
     return actx.np.sin(2.0*np.pi*nodes[0]/2.0)
 
 #    x = nodes[0] - 1.0*t
