@@ -24,18 +24,10 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-import numpy.linalg as la  # noqa
 import pyopencl as cl
 from grudge.trace_pair import TracePair, interior_trace_pairs
-from pytools.obj_array import flat_obj_array
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import (
-    DD_VOLUME_ALL,
-    VolumeDomainTag,
-    DISCR_TAG_BASE,
-)
+from meshmode.mesh import BTAG_ALL
 
 from grudge.shortcuts import make_visualizer
 import grudge.op as op
@@ -44,7 +36,6 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.utils import force_evaluation
-from mirgecom.operators import div_operator
 
 from logpyle import IntervalTimer, set_dt
 
@@ -56,10 +47,12 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 
 def utx(actx, nodes, t=0):
     """Initialize the field for Burgers Eqn."""
+    return actx.np.sin(2.0*np.pi*nodes[0]/2.0)
 
-    x = nodes[0] - 3.0*t
-    ones = 0*x + 1.0
-    return actx.np.where(x < -0.5, ones, 2*ones) 
+#    x = nodes[0] - 1.0*t
+#    ones = 0*x + 1.0
+#    zeros = ones*0.0
+#    return actx.np.where(actx.np.less(x, 1.0+1e-7), ones, zeros)
 
 
 def _facial_flux(dcoll, u_tpair):
@@ -67,12 +60,10 @@ def _facial_flux(dcoll, u_tpair):
     actx = u_tpair.int.array_context
     normal = actx.thaw(dcoll.normal(u_tpair.dd))
     u2_pair = TracePair(dd=u_tpair.dd,
-                        interior=u_tpair.int**2,
-                        exterior=u_tpair.ext**2)
-    flux_weak = .5*u2_pair.avg*normal[0]
+                        interior=0.5*u_tpair.int**2,
+                        exterior=0.5*u_tpair.ext**2)
 
-    # dissipation term
-    flux_weak += .25*u_tpair.diff*normal[0]
+    flux_weak = u2_pair.avg*normal[0]
 
     return op.project(dcoll, u_tpair.dd, "all_faces", flux_weak)
 
@@ -98,20 +89,18 @@ def burgers_operator(dcoll, u, u_bc, *, comm_tag=None):
     numpy.ndarray
         an object array of DOF arrays, representing the ODE RHS
     """
-    dd_vol = DD_VOLUME_ALL
-    dd_allfaces = dd_vol.trace(FACE_RESTR_ALL)
-
     u_bnd = op.project(dcoll, "vol", BTAG_ALL, u)
     itp = interior_trace_pairs(dcoll, u, comm_tag=(_BurgTag, comm_tag))
-    
-    el_bnd_flux = (_facial_flux(dcoll,
-                                u_tpair=TracePair(BTAG_ALL, interior=u_bnd,
-                                                  exterior=u_bc))
-                   + sum([_facial_flux(dcoll, u_tpair=tpair)
-                          for tpair in itp]))
-    vol_flux = 0.5*u*u
-    return -op.inverse_mass(dcoll, vol_flux -
-                            op.face_mass(dcoll, el_bnd_flux))
+
+    el_bnd_flux = (
+        _facial_flux(dcoll, u_tpair=TracePair(BTAG_ALL,
+                                              interior=u_bnd, exterior=u_bc))
+        + sum([_facial_flux(dcoll, u_tpair=tpair) for tpair in itp]))
+
+    # FIXME use weak_local_d_dx instead if 1D
+    # FIXME use weal_local_div instead if dim >= 2
+    vol_flux = op.weak_local_grad(dcoll, 0.5*u**2)[0]
+    return op.inverse_mass(dcoll, vol_flux - op.face_mass(dcoll, el_bnd_flux))
 
 
 @mpi_entry_point
@@ -127,7 +116,7 @@ def main(actx_class, snapshot_pattern="burgers-mpi-{step:04d}-{rank:04d}.pkl",
     num_parts = comm.Get_size()
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="burgers-mpi.sqlite", mode="wu", mpi_comm=comm)
+        filename="burgers-mpi.sqlite", mode="wo", mpi_comm=comm)
     if use_profiling:
         queue = cl.CommandQueue(cl_ctx,
             properties=cl.command_queue_properties.PROFILING_ENABLE)
@@ -148,12 +137,12 @@ def main(actx_class, snapshot_pattern="burgers-mpi-{step:04d}-{rank:04d}.pkl",
         mesh_dist = MPIMeshDistributor(comm)
 
         dim = 1
-        nel_1d = 20
+        nel_1d = 200
 
         if mesh_dist.is_mananger_rank():
             from meshmode.mesh.generation import generate_regular_rect_mesh
             mesh = generate_regular_rect_mesh(
-                a=(-1.0,)*dim, b=(1.0,)*dim,
+                a=(0.0,)*dim, b=(2.0,)*dim,
                 nelements_per_axis=(nel_1d,)*dim)
 
             print("%d elements" % mesh.nelements)
@@ -175,18 +164,18 @@ def main(actx_class, snapshot_pattern="burgers-mpi-{step:04d}-{rank:04d}.pkl",
         nel_1d = restart_data["nel_1d"]
         assert comm.Get_size() == restart_data["num_parts"]
 
-    order = 8
+    order = 2
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     current_cfl = 0.485
-    wave_speed = 300.0
+    wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
 
     dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol", nodal_dt))[()]
 
-    t_final = 1
+    t_final = 1.0
 
     if restart_step is None:
         t = 0
@@ -244,8 +233,8 @@ def main(actx_class, snapshot_pattern="burgers-mpi-{step:04d}-{rank:04d}.pkl",
     u = force_evaluation(actx, u)
     compiled_rhs = actx.compile(rhs)
 
-    restart_n = 100
-    viz_n = 1
+    restart_n = 1000
+    viz_n = 10
 
     while t < t_final:
         if logmgr:
@@ -273,14 +262,15 @@ def main(actx_class, snapshot_pattern="burgers-mpi-{step:04d}-{rank:04d}.pkl",
             print(istep, t, actx.to_numpy(op.norm(dcoll, u, np.inf)))
             vis.write_parallel_vtk_file(
                 comm,
-                "burgers-mpi-%03d-%04d.vtu" % (rank, istep),
+                "burgers-mpi-%04d-%04d.vtu" % (rank, istep),
                 [
-                    ("u", u)
+                    ("u", u),
+                    ("x", nodes[0])
                 ], overwrite=True
             )
 
         d = rk4_step(u, t, dt, compiled_rhs)
-        u  = force_evaluation(actx, d)
+        u = force_evaluation(actx, d)
 
         t += dt
         istep += 1
