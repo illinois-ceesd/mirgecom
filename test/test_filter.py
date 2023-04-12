@@ -229,29 +229,25 @@ def test_spectral_filter(actx_factory, element_order, dim):
     unfiltered_fields = make_obj_array(fields)
     # unfiltered_iso_fields = make_obj_array(iso_fields)
     unfiltered_spectra = modal_map(unfiltered_fields)
-    spectra_numbers = actx.to_numpy(unfiltered_spectra)
+    spectra_numbers = np.stack(
+        actx.to_numpy(unfiltered_spectra)[0])  # (numfields, numelem, nummodes)
 
     # print(f"{unfiltered_spectra=}")
     # print(f"{spectra_numbers.shape=}")
     # print(f"{spectra_numbers=}")
 
-    element_spectra = make_obj_array([
-        [np.array([0. for i in range(element_order+1)])
-         for j in range(numfields)] for k in range(numelem)])
+    def accumulate_same_order_modes(modal_spectra):
+        accumulated_spectra = np.zeros(
+            (numfields, numelem, element_order+1), dtype=np.float64)
 
-    total_power = [np.array([0. for _ in range(element_order+1)])
-                   for e in range(numfields)]
+        for i in range(nummodes):
+            accumulated_spectra[:, :, emodes_to_pmodes[i]] += np.abs(
+                modal_spectra[:, :, i])
 
-    for fldi in range(numfields):
-        field_spectra = spectra_numbers[fldi][0]
-        for el in range(numelem):
-            spectral_storage = element_spectra[el][fldi]
-            el_spectrum = field_spectra[el]
-            for i in range(nummodes):
-                speci = emodes_to_pmodes[i]
-                spec_val = np.abs(float(el_spectrum[i]))
-                spectral_storage[speci] = spectral_storage[speci] + spec_val
-                total_power[fldi][speci] = total_power[fldi][speci] + spec_val
+        return accumulated_spectra
+
+    element_spectra = accumulate_same_order_modes(spectra_numbers)
+    total_power = np.sum(element_spectra, axis=1)
 
     print("Unfiltered expansions:")
     print(f"{element_spectra=}")
@@ -260,30 +256,15 @@ def test_spectral_filter(actx_factory, element_order, dim):
     # unfiltered_iso_spectra = modal_map(unfiltered_iso_fields)
     filtered_fields = filter_modally(dcoll, mid_cutoff, frfunc, unfiltered_fields)
     filtered_spectra = modal_map(filtered_fields)
-    spectra_numbers = actx.to_numpy(filtered_spectra)
+    spectra_numbers = np.stack(
+        actx.to_numpy(filtered_spectra)[0])  # (numfields, numelem, nummodes)
 
     # filtered_isofields = filter_modally(dcoll, iso_cutoff, frfunc,
     #                                    unfiltered_iso_fields)
     # filtered_isospectra = modal_map(filtered_isofields)
 
-    element_spectra = make_obj_array([
-        [np.array([0. for i in range(element_order+1)])
-         for j in range(numfields)] for k in range(numelem)])
-
-    tot_pow_filtered = [np.array([0. for _ in range(element_order+1)])
-                        for e in range(numfields)]
-
-    for fldi in range(numfields):
-        field_spectra = spectra_numbers[fldi][0]
-        for el in range(numelem):
-            spectral_storage = element_spectra[el][fldi]
-            el_spectrum = field_spectra[el]
-            for i in range(nummodes):
-                speci = emodes_to_pmodes[i]
-                spec_val = np.abs(float(el_spectrum[i]))
-                spectral_storage[speci] = spectral_storage[speci] + spec_val
-                tot_pow_filtered[fldi][speci] = \
-                    tot_pow_filtered[fldi][speci] + spec_val
+    element_spectra = accumulate_same_order_modes(spectra_numbers)
+    tot_pow_filtered = np.sum(element_spectra, axis=1)
 
     print("Filtered expansions:")
     print(f"{element_spectra=}")
