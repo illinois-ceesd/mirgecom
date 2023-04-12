@@ -428,6 +428,8 @@ class DeviceMemoryUsage(PostLogQuantity):
             warn(f"cudaMemGetInfo failed with error {ret}.")
             return None
         else:
+            if self.free.value / self.total.value < 0.1:
+                warn("The memory usage on the GPU is approaching the memory size.")
             return (self.total.value - self.free.value) / 1024 / 1024
 
 
