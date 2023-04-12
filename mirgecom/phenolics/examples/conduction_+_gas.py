@@ -108,11 +108,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     t_final = 60.0
 
     order = 2
-    dt = 1.0e-5
+    dt = 1.0e-7
 
     PressureScalingFactor = 0.01  # noqa N806
 
-    nviz = 100
+    nviz = 1
     ngarbage = 100
     nrestart = 1000
 
@@ -323,13 +323,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # I wonder if the issue is the BC or the centered flux (or both)
     # Have to pass a flux different than centered and the respective penalization
     # Implement an operator that could handle the BCs and different physical fluxes
-    def my_derivative_function(actx, dcoll, field, field_bounds, dd_vol):
+    def my_derivative_function(actx, dcoll, field, u, field_bounds, dd_vol):
 
         dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
         dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-        def flux(field):
-            return
+        itp = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
+                                         comm_tag=_MyGradTag)
+
+        itp_u = interior_trace_pairs(dcoll, u, volume_dd=dd_vol,
+                                         comm_tag=_MyGradTag)
 
         def interior_flux(field_tpair):
             dd_trace_quad = field_tpair.dd.with_discr_tag(quadrature_tag)
@@ -361,7 +364,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, field)
 
             # FIXME have to enforce the proper BCs
-            ext_soln_quad = 1.0*int_soln_quad
+            if (bdtag.tag == "prescribed"):
+                ext_soln_quad = +1.0*int_soln_quad
+            if (bdtag.tag == "neumann"):
+                ext_soln_quad = -1.0*int_soln_quad
 
             bnd_tpair = TracePair(dd_bdry_quad,
                 interior=int_soln_quad, exterior=ext_soln_quad)
@@ -374,9 +380,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             dcoll, dd_vol,
             op.weak_local_grad(dcoll, dd_vol, field)
             - op.face_mass(dcoll, dd_allfaces_quad,
-                (sum(interior_flux(u_tpair) for u_tpair in
-                    interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
-                                         comm_tag=_MyGradTag))
+                (sum(interior_flux(u_tpair) for u_tpair in itp)
                 + sum(boundary_flux(bdtag, bdry) for bdtag, bdry in
                                                     field_bounds.items()))
             )
@@ -415,15 +419,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         # ~~~~~
         # FIXME : add inviscid terms in the RHS
-#        velocity = -gas_pressure_diffusivity*grad_pressure
+        velocity = -gas_pressure_diffusivity*grad_pressure
 
-#        field = wv.gas_density*velocity*wdv.gas_enthalpy
-#        field_gradient = my_derivative_function(actx, dcoll, field,
-#                velocity_boundaries, dd_vol)
+        field = wv.gas_density*velocity*wdv.gas_enthalpy
+        field_gradient = my_derivative_function(actx, dcoll, velocity[1], field,
+                velocity_boundaries, dd_vol)
 
-#        energy_inviscid_rhs = -(field_gradient[0][0] + field_gradient[1][1])
+        energy_inviscid_rhs = -(field_gradient[0][0] + field_gradient[1][1])
 
-        energy_inviscid_rhs = zeros
+#        energy_inviscid_rhs = zeros
 
         inviscid_rhs = wall.make_conserved(
             solid_species_mass=wv.solid_species_mass*0.0,
