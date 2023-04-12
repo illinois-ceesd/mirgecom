@@ -211,7 +211,7 @@ def test_spectral_filter(actx_factory, element_order, dim):
         result = 0
         for n, a in enumerate(coeff):
             result = result + a * r ** n
-        return make_obj_array([result])
+        return result
 
     # ISO fields are for hand-testing, please don't remove
     # iso_fields = []  # f(x) = x**order
@@ -243,7 +243,7 @@ def test_spectral_filter(actx_factory, element_order, dim):
                    for e in range(numfields)]
 
     for fldi in range(numfields):
-        field_spectra = spectra_numbers[fldi][0][0]
+        field_spectra = spectra_numbers[fldi][0]
         for el in range(numelem):
             spectral_storage = element_spectra[el][fldi]
             el_spectrum = field_spectra[el]
@@ -274,7 +274,7 @@ def test_spectral_filter(actx_factory, element_order, dim):
                         for e in range(numfields)]
 
     for fldi in range(numfields):
-        field_spectra = spectra_numbers[fldi][0][0]
+        field_spectra = spectra_numbers[fldi][0]
         for el in range(numelem):
             spectral_storage = element_spectra[el][fldi]
             el_spectrum = field_spectra[el]
