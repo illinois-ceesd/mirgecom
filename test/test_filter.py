@@ -230,7 +230,9 @@ def test_spectral_filter(actx_factory, element_order, dim):
     # unfiltered_iso_fields = make_obj_array(iso_fields)
     unfiltered_spectra = modal_map(unfiltered_fields)
     spectra_numbers = np.stack(
-        actx.to_numpy(unfiltered_spectra)[0])  # (numfields, numelem, nummodes)
+        actx.to_numpy(ary)[0]
+        for ary in unfiltered_spectra)
+    assert spectra_numbers.shape == (numfields, numelem, nummodes)
 
     # print(f"{unfiltered_spectra=}")
     # print(f"{spectra_numbers.shape=}")
@@ -257,7 +259,9 @@ def test_spectral_filter(actx_factory, element_order, dim):
     filtered_fields = filter_modally(dcoll, mid_cutoff, frfunc, unfiltered_fields)
     filtered_spectra = modal_map(filtered_fields)
     spectra_numbers = np.stack(
-        actx.to_numpy(filtered_spectra)[0])  # (numfields, numelem, nummodes)
+        actx.to_numpy(ary)[0]
+        for ary in filtered_spectra)
+    assert spectra_numbers.shape == (numfields, numelem, nummodes)
 
     # filtered_isofields = filter_modally(dcoll, iso_cutoff, frfunc,
     #                                    unfiltered_iso_fields)
