@@ -113,7 +113,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     dt = dt/PressureScalingFactor
 
-    nviz = 100
+    nviz = 1000
     ngarbage = 100
     nrestart = 10000
 

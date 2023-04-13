@@ -1,13 +1,7 @@
-r""":mod:`mirgecom.diffusion` computes the diffusion operator.
+r""":mod:`mirgecom.phenolics.operator`
 
-.. autofunction:: grad_facial_flux
-.. autofunction:: diffusion_facial_flux
-.. autofunction:: grad_operator
-.. autofunction:: diffusion_operator
-.. autoclass:: DiffusionBoundary
-.. autoclass:: DirichletDiffusionBoundary
-.. autoclass:: NeumannDiffusionBoundary
-.. autoclass:: PrescribedFluxDiffusionBoundary
+.. autofunction:: 
+.. autoclass:: 
 """
 
 __copyright__ = """
