@@ -39,7 +39,9 @@ from meshmode.discretization.connection import FACE_RESTR_ALL
 import grudge.op as op
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
-    smoothness_indicator
+    smoothness_indicator,
+    AdiabaticNoSlipWallAV,
+    PrescribedFluidBoundaryAV
 )
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import (
@@ -421,15 +423,9 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
 
     boundary_nhat = actx.thaw(dcoll.normal(BTAG_ALL))
 
-    from mirgecom.boundary import (
-        PrescribedFluidBoundary,
-        AdiabaticNoslipMovingBoundary,
-        IsothermalNoSlipBoundary
-    )
     prescribed_boundary = \
-        PrescribedFluidBoundary(boundary_state_func=_boundary_state_func)
-    adiabatic_noslip = AdiabaticNoslipMovingBoundary()
-    isothermal_noslip = IsothermalNoSlipBoundary()
+        PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state_func)
+    adiabatic_noslip = AdiabaticNoSlipWallAV()
 
     fluid_boundaries = {BTAG_ALL: prescribed_boundary}
     from mirgecom.navierstokes import grad_cv_operator
@@ -464,9 +460,4 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     wall_bnd_flux = \
         adiabatic_noslip.av_flux(dcoll, BTAG_ALL, av_diffusion)
     print(f"adiabatic_noslip: {wall_bnd_flux=}")
-    assert wall_bnd_flux == 0
-
-    wall_bnd_flux = \
-        isothermal_noslip.av_flux(dcoll, BTAG_ALL, av_diffusion)
-    print(f"isothermal_noslip: {wall_bnd_flux=}")
     assert wall_bnd_flux == 0

@@ -10,11 +10,19 @@ Solution Initializers
 .. autoclass:: MulticomponentLump
 .. autoclass:: Uniform
 .. autoclass:: AcousticPulse
-.. automethod: make_pulse
 .. autoclass:: MixtureInitializer
-.. autoclass:: PlanarDiscontinuity
 .. autoclass:: PlanarPoiseuille
 .. autoclass:: ShearFlow
+.. autoclass:: PlanarDiscontinuity
+.. autoclass:: MulticomponentTrig
+
+State Initializers
+^^^^^^^^^^^^^^^^^^
+.. autofunction:: initialize_flow_solution
+
+Initialization Utilities
+^^^^^^^^^^^^^^^^^^^^^^^^
+.. autofunction:: make_pulse
 """
 
 __copyright__ = """
@@ -47,6 +55,60 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
+def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None,
+                             temperature=None, density=None, velocity=None,
+                             mass_fractions=None, make_fluid_state=False):
+    """Create a fluid CV/state from a set of minimal input data."""
+    if gas_model is None:
+        raise ValueError("Gas model is required to create a FluidState.")
+
+    state_spec = [pressure is None, temperature is None, density is None]
+    if sum(state_spec) != 1:
+        raise ValueError("Must provide 2 of (pressure, temperature, density).")
+
+    dim = dcoll.dim
+
+    if dd_bdry is None:
+        nodes = actx.thaw(dcoll.nodes())
+    else:
+        data_discr = dcoll.discr_from_dd(dd_bdry)
+        nodes = actx.thaw(data_discr.nodes())
+    zeros = nodes[0]*0.0
+
+    if velocity is None:
+        velocity = np.zeros(dim)
+
+    if pressure is None:
+        pressure = gas_model.eos.get_pressure(density, temperature, mass_fractions)
+
+    if temperature is None:
+        temperature = gas_model.eos.get_temperature(density, pressure,
+                                                    mass_fractions)
+
+    if density is None:
+        density = gas_model.eos.get_density(pressure, temperature, mass_fractions)
+
+    internal_energy = gas_model.eos.get_internal_energy(temperature, mass_fractions)
+
+    species_mass = None if mass_fractions is None \
+        else (density + zeros)*mass_fractions
+
+    total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
+    momentum = density*velocity
+
+    cv = make_conserved(dim=dim, mass=density + zeros,
+                        energy=total_energy + zeros,
+                        momentum=momentum + zeros,
+                        species_mass=species_mass)
+
+    if make_fluid_state:
+        from mirgecom.gas_model import make_fluid_state
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+            temperature_seed=temperature)
+    else:
+        return cv
+
+
 def make_pulse(amp, r0, w, r):
     r"""Create a Gaussian pulse.
 
@@ -64,16 +126,16 @@ def make_pulse(amp, r0, w, r):
     ----------
     amp: float
         specifies the value of $a_0$, the pulse amplitude
-    r0: float array
+    r0: numpy.ndarray
         specifies the value of $\mathbf{r}_0$, the pulse location
     w: float
         specifies the value of $w$, the rms pulse width
-    r: Object array of DOFArrays
+    r: numpy.ndarray
         specifies the nodal coordinates
 
     Returns
     -------
-    G: float array
+    G: numpy.ndarray
         The values of the exponential function
     """
     dim = len(r)
@@ -306,7 +368,7 @@ class DoubleMachReflection:
     """
 
     def __init__(
-            self, shock_location=1.0/6.0, shock_speed=4.0
+            self, shock_location=1.0/6.0, shock_speed=4.0, shock_sigma=0.05
     ):
         """Initialize double shock reflection parameters.
 
@@ -316,9 +378,12 @@ class DoubleMachReflection:
            initial location of shock
         shock_speed: float
            shock speed, Mach number
+        shock_sigma: float
+           initial condition sharpness
         """
         self._shock_location = shock_location
         self._shock_speed = shock_speed
+        self._shock_sigma = shock_sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         r"""
@@ -370,7 +435,7 @@ class DoubleMachReflection:
 
         xinter = (self._shock_location + y_rel/np.sqrt(3.0)
                   + 2.0*self._shock_speed*t/np.sqrt(3.0))
-        sigma = 0.05
+        sigma = self._shock_sigma
         xtanh = 1.0/sigma*(x_rel-xinter)
         mass = rhol/2.0*(actx.np.tanh(-xtanh)+1.0)+rhor/2.0*(actx.np.tanh(xtanh)+1.0)
         rhoe = (rhoel/2.0*(actx.np.tanh(-xtanh)+1.0)
@@ -574,7 +639,7 @@ class MulticomponentLump:
             rho0=1.0, p0=1.0,
             center=None, velocity=None,
             spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None
+            spec_centers=None, sigma=1.0
     ):
         r"""Initialize MulticomponentLump parameters.
 
@@ -591,6 +656,8 @@ class MulticomponentLump:
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(dim,)``
+        sigma: float
+            std deviation of the gaussian
         """
         if center is None:
             center = np.zeros(shape=(dim,))
@@ -625,6 +692,7 @@ class MulticomponentLump:
         self._spec_y0s = spec_y0s
         self._spec_centers = spec_centers
         self._spec_amplitudes = spec_amplitudes
+        self._sigma = sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
@@ -665,8 +733,8 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = x_vec - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
+            r2 = np.dot(rel_pos, rel_pos)/(self._sigma**2)
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
             species_mass[i] = self._rho0 * (self._spec_y0s[i] + expterm)
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
@@ -705,22 +773,167 @@ class MulticomponentLump:
         for i in range(self._nspecies):
             lump_loc = self._spec_centers[i] + loc_update
             rel_pos = nodes - lump_loc
-            r2 = np.dot(rel_pos, rel_pos)
-            expterm = self._spec_amplitudes[i] * actx.np.exp(-r2)
-            specrhs[i] = 2 * self._rho0 * expterm * np.dot(rel_pos, v)
+            r2 = np.dot(rel_pos, rel_pos)/self._sigma**2
+            expterm = self._spec_amplitudes[i] * actx.np.exp(-0.5*r2)
+            specrhs[i] = self._rho0 * expterm * np.dot(rel_pos, v) / self._sigma**2
 
         return make_conserved(dim=self._dim, mass=massrhs, energy=energyrhs,
                               momentum=momrhs, species_mass=specrhs)
 
 
+class MulticomponentTrig:
+    r"""Initializer for trig-distributed species fractions.
+
+    The trig lump is defined by:
+
+    .. math::
+
+         \rho &= 1.0\\
+         {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
+         {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
+         {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
+         + {a_\alpha}\sin{\omega(\mathbf{r} - \mathbf{v}t)},
+
+    where $\mathbf{V}_0$ is the fixed velocity specified by the user at init time,
+    and $\gamma$ is taken from the equation-of-state object (eos).
+
+    The user-specified vector of initial values (${{Y}_\alpha}_0$)
+    for the mass fraction of each species, *spec_y0s*, and $a_\alpha$ is the
+    user-specified vector of amplitudes for each species, *spec_amplitudes*, and
+    $c_\alpha$ is the user-specified origin for each species, *spec_centers*.
+
+    A call to this object after creation/init creates the trig solution at a given
+    time (*t*) relative to the configured origin (*center*), wave_vector k,  and
+    background flow velocity (*velocity*).
+
+    .. automethod:: __init__
+    .. automethod:: __call__
+    """
+
+    def __init__(
+            self, *, dim=1, nspecies=0,
+            rho0=1.0, p0=1.0, gamma=1.4,
+            center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None,
+            spec_centers=None,
+            spec_omegas=None,
+            spec_diffusivities=None,
+            wave_vector=None
+    ):
+        r"""Initialize MulticomponentLump parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specify the number of dimensions for the lump
+        rho0: float
+            specifies the value of $\rho_0$
+        p0: float
+            specifies the value of $p_0$
+        center: numpy.ndarray
+            center of lump, shape ``(dim,)``
+        velocity: numpy.ndarray
+            fixed flow velocity used for exact solution at t != 0,
+            shape ``(dim,)``
+        """
+        if center is None:
+            center = np.zeros(shape=(dim,))
+        if velocity is None:
+            velocity = np.zeros(shape=(dim,))
+        if center.shape != (dim,) or velocity.shape != (dim,):
+            raise ValueError(f"Expected {dim}-dimensional vector inputs.")
+        if spec_y0s is None:
+            spec_y0s = np.ones(shape=(nspecies,))
+        if spec_centers is None:
+            spec_centers = make_obj_array([np.zeros(shape=dim,)
+                                           for i in range(nspecies)])
+        if spec_omegas is None:
+            spec_omegas = 2.*np.pi*np.ones(shape=(nspecies,))
+
+        if spec_amplitudes is None:
+            spec_amplitudes = np.ones(shape=(nspecies,))
+        if spec_diffusivities is None:
+            spec_diffusivities = np.ones(shape=(nspecies,))
+
+        if wave_vector is None:
+            wave_vector = np.zeros(shape=(dim,))
+            wave_vector[0] = 1
+
+        if len(spec_y0s) != nspecies or\
+           len(spec_amplitudes) != nspecies or\
+               len(spec_centers) != nspecies:
+            raise ValueError(f"Expected nspecies={nspecies} inputs.")
+        for i in range(nspecies):
+            if len(spec_centers[i]) != dim:
+                raise ValueError(f"Expected {dim}-dimensional "
+                                 f"inputs for spec_centers.")
+
+        self._nspecies = nspecies
+        self._dim = dim
+        self._velocity = velocity
+        self._center = center
+        self._p0 = p0
+        self._rho0 = rho0
+        self._spec_y0s = spec_y0s
+        self._spec_centers = spec_centers
+        self._spec_amps = spec_amplitudes
+        self._gamma = gamma
+        self._spec_omegas = spec_omegas
+        self._d = spec_diffusivities
+        self._wave_vector = wave_vector
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        """
+        Create a multi-component lump solution at time *t* and locations *x_vec*.
+
+        The solution at time *t* is created by advecting the component mass lump
+        at the user-specified constant, uniform velocity
+        (``MulticomponentLump._velocity``).
+
+        Parameters
+        ----------
+        time: float
+            Current time at which the solution is desired
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+        """
+        t = time
+        if x_vec.shape != (self._dim,):
+            print(f"len(x_vec) = {len(x_vec)}")
+            print(f"self._dim = {self._dim}")
+            raise ValueError(f"Expected {self._dim}-dimensional inputs.")
+        # actx = x_vec[0].array_context
+        mass = 0 * x_vec[0] + self._rho0
+        mom = self._velocity * mass
+        energy = ((self._p0 / (self._gamma - 1.0))
+                  + 0.5*mass*np.dot(self._velocity, self._velocity))
+
+        import mirgecom.math as mm
+        vel_t = t * self._velocity
+        spec_mass = np.empty((self._nspecies,), dtype=object)
+        for i in range(self._nspecies):
+            spec_x = x_vec - self._spec_centers[i]
+            wave_r = spec_x - vel_t
+            wave_x = np.dot(wave_r, self._wave_vector)
+            expterm = mm.exp(-t*self._d[i]*self._spec_omegas[i]**2)
+            trigterm = mm.sin(self._spec_omegas[i]*wave_x)
+            spec_y = self._spec_y0s[i] + self._spec_amps[i]*expterm*trigterm
+            spec_mass[i] = mass * spec_y
+
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
+                              momentum=mom, species_mass=spec_mass)
+
+
 class AcousticPulse:
-    r"""Solution initializer for N-dimensional Gaussian acoustic pulse.
+    r"""Solution initializer for N-dimensional isentropic Gaussian acoustic pulse.
 
     The Gaussian pulse is defined by:
 
     .. math::
 
-        {\rho}E(\mathbf{r}) = {\rho}E + a_0 * G(\mathbf{r})\\
+        q(\mathbf{r}) = q_0 + a_0 * G(\mathbf{r})\\
         G(\mathbf{r}) = \exp^{-(\frac{(\mathbf{r}-\mathbf{r}_0)}{\sqrt{2}w})^{2}},
 
     where $\mathbf{r}$ are the nodal coordinates, and $\mathbf{r}_0$,
@@ -770,17 +983,26 @@ class AcousticPulse:
         x_vec: numpy.ndarray
             Nodal coordinates
         eos: :class:`mirgecom.eos.GasEOS`
-            Equation of state class to be used in construction of soln (unused)
+            Equation of state class to be used in construction of soln
         """
         if eos is None:
             eos = IdealSingleGas()
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        return cv.replace(
-            energy=cv.energy + make_pulse(
-                amp=self._amp, w=self._width, r0=self._center, r=x_vec)
-        )
+        gamma = eos.gamma()
+
+        int_energy = cv.energy - 0.5*cv.mass*np.dot(cv.velocity, cv.velocity)
+        ref_pressure = int_energy*(gamma-1.0)
+        pressure = ref_pressure + \
+            make_pulse(amp=self._amp, w=self._width, r0=self._center, r=x_vec)
+
+        # isentropic relations
+        mass = cv.mass*(pressure/ref_pressure)**(1.0/gamma)
+
+        energy = pressure/(gamma-1.0) + 0.5*mass*np.dot(cv.velocity, cv.velocity)
+
+        return cv.replace(mass=mass, energy=energy)
 
 
 class Uniform:
@@ -1213,6 +1435,7 @@ class PlanarPoiseuille:
         """Return the exact gradient of the Poiseuille state."""
         y = x_vec[1]
         x = x_vec[0]
+
         # FIXME: Symbolic infrastructure could perhaps do this better
         ones = x / x
         mass = cv_exact.mass

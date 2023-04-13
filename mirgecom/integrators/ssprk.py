@@ -1,4 +1,8 @@
 """Timestepping routines for strong-stability preserving Runge-Kutta methods.
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
 .. autofunction:: ssprk43_step
 """
 
@@ -23,8 +27,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
-from arraycontext import thaw, freeze
 
 
 def ssprk43_step(state, t, dt, rhs):
