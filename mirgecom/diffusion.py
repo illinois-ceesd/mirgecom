@@ -266,9 +266,8 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         # average between the prescribed value and the internal value
         # FIXME maybe the minus in the prescribed function is due to the normal?
-        return 0.5*(-kappa_tpair.int * np.dot(grad_u_tpair.int, normal) \
-            - self.function(u_tpair, kappa_tpair, grad_u_tpair, normal, **kwargs)
-        )
+        return 0.5*(-kappa_tpair.int * np.dot(grad_u_tpair.int, normal)
+            - self.function(u_tpair, kappa_tpair, grad_u_tpair, normal, **kwargs))
 
 
 class _DiffusionStateTag:
