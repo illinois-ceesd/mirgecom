@@ -429,7 +429,12 @@ class DeviceMemoryUsage(PostLogQuantity):
             return None
         else:
             if self.free.value / self.total.value < 0.1:
-                warn("The memory usage on the GPU is approaching the memory size.")
+                from warnings import warn
+                warn(
+                    "The memory usage on the GPU is approaching the memory "
+                    f"size, with less than 10% free of "
+                    f"{self.total.value // 1024 // 1024} MByte total. "
+                    "This may lead to slowdowns or crashes.")
             return (self.total.value - self.free.value) / 1024 / 1024
 
 
