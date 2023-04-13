@@ -204,7 +204,6 @@ class PhenolicsEOS():
         the internal energy/enthalpy and heat capacity for the bulk
         (solid+gas) material.
         """
-
         temp = tseed*1.0
 
         rho_gas = wv.gas_density
@@ -235,7 +234,8 @@ class PhenolicsEOS():
 
         The fractions of gas and solid phases must sum to one,
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
-        progress ratio $\tau$."""
+        progress ratio $\tau$.
+        """
         return 1.0 - self._composite_model.solid_volume_fraction(tau)
 
     def thermal_conductivity(self, temperature: DOFArray,
@@ -321,7 +321,6 @@ class PhenolicsEOS():
     def gas_heat_capacity(self, temperature: DOFArray) -> DOFArray:
         """Return the gas heat capacity."""
         return self._gas_data.gas_viscosity(temperature)
-
 
     def solid_heat_capacity_cp(self, temperature: DOFArray,
                                tau: DOFArray) -> DOFArray:

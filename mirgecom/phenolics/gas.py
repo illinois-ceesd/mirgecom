@@ -39,7 +39,6 @@ THE SOFTWARE.
 
 import numpy as np
 from scipy.interpolate import CubicSpline
-from meshmode.dof_array import DOFArray
 
 
 def eval_spline(x, x_bnds, coeffs):
@@ -86,7 +85,6 @@ class GasProperties():
 
     def __init__(self, prandtl=1.0, lewis=1.0):
         """Return gas tabulated data and interpolating functions."""
-
         self._prandtl = prandtl
         self._lewis = lewis
 

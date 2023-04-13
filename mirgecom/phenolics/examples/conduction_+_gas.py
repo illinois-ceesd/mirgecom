@@ -59,7 +59,7 @@ from pytools.obj_array import make_obj_array
 
 import sys  # noqa
 
-# $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -109,12 +109,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     order = 2
     dt = 1.0e-7
+    PressureScalingFactor = 0.1  # noqa N806
 
-    PressureScalingFactor = 0.01  # noqa N806
+    dt = dt/PressureScalingFactor
 
-    nviz = 1
+    nviz = 100
     ngarbage = 100
-    nrestart = 1000
+    nrestart = 10000
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -309,9 +310,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     from grudge.trace_pair import TracePair
-
-    from mirgecom.flux import num_flux_central
-    from arraycontext import outer
     from grudge.trace_pair import interior_trace_pairs, tracepair_with_discr_tag
     from grudge import op
     from meshmode.discretization.connection import FACE_RESTR_ALL
@@ -319,51 +317,47 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     class _MyGradTag:
         pass
 
-    # FIXME this is giving weird results...
-    # I wonder if the issue is the BC or the centered flux (or both)
-    # Have to pass a flux different than centered and the respective penalization
-    # Implement an operator that could handle the BCs and different physical fluxes
     def my_derivative_function(actx, dcoll, field, u, field_bounds, dd_vol):
 
         dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
         dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-        itp = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
+        itp_f = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
                                          comm_tag=_MyGradTag)
 
         itp_u = interior_trace_pairs(dcoll, u, volume_dd=dd_vol,
                                          comm_tag=_MyGradTag)
 
-        def interior_flux(field_tpair):
-            dd_trace_quad = field_tpair.dd.with_discr_tag(quadrature_tag)
+        flux = field*u
+
+        def interior_flux(f_tpair, u_tpair):
+            dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
             normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
-            bnd_tpair_quad = tracepair_with_discr_tag(dcoll,
-                                                      quadrature_tag, field_tpair)
+            bnd_u_tpair_quad = tracepair_with_discr_tag(dcoll,
+                quadrature_tag, u_tpair)
+            bnd_f_tpair_quad = tracepair_with_discr_tag(dcoll,
+                quadrature_tag, f_tpair)
 
-            # FIXME don't use central flux
-            numerical_flux = num_flux_central(bnd_tpair_quad.int, bnd_tpair_quad.ext)
+            numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg
 
-            # TODO use something like the LLF flux
-#            from mirgecom.flux import num_flux_lfr
-#            state_left = state_pair.int.wavespeed
-#            state_right = state_pair.ext.wavespeed
-#            lam = actx.np.maximum(state_left, state_right)
-#            return num_flux_lfr(
-#                f_minus_normal=flux(state_pair.int)@normal,
-#                f_plus_normal=flux(state_pair.ext)@normal,
-#                q_minus=state_pair.int.cv,
-#                q_plus=state_pair.ext.cv, lam=lam)
+            wavespeed_int = actx.np.sqrt(
+                bnd_u_tpair_quad.int[0]**2 + bnd_u_tpair_quad.int[1]**2)
+            wavespeed_ext = actx.np.sqrt(
+                bnd_u_tpair_quad.ext[0]**2 + bnd_u_tpair_quad.ext[1]**2)
+            lam = actx.np.maximum(wavespeed_int, wavespeed_ext)
+            jump = bnd_f_tpair_quad.int - bnd_f_tpair_quad.ext
+            numerical_flux = numerical_flux + 0.5*lam*(jump)
 
-            flux_int = outer(numerical_flux, normal_quad)
+            flux_int = numerical_flux@normal_quad
 
             return op.project(dcoll, dd_trace_quad, dd_allfaces_quad, flux_int)
 
         def boundary_flux(bdtag, bdry):
             dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
             normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
-            int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, field)
+            int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, flux)
 
-            # FIXME have to enforce the proper BCs
+            # FIXME make this more organized
             if (bdtag.tag == "prescribed"):
                 ext_soln_quad = +1.0*int_soln_quad
             if (bdtag.tag == "neumann"):
@@ -371,20 +365,23 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
             bnd_tpair = TracePair(dd_bdry_quad,
                 interior=int_soln_quad, exterior=ext_soln_quad)
-            flux_bnd = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext),
-                             normal_quad)
+
+            flux_bnd = bnd_tpair.avg@normal_quad
 
             return op.project(dcoll, dd_bdry_quad, dd_allfaces_quad, flux_bnd)
 
-        return -op.inverse_mass(
+        div = -op.inverse_mass(
             dcoll, dd_vol,
-            op.weak_local_grad(dcoll, dd_vol, field)
+            op.weak_local_div(dcoll, dd_vol, flux)
             - op.face_mass(dcoll, dd_allfaces_quad,
-                (sum(interior_flux(u_tpair) for u_tpair in itp)
+                (sum(interior_flux(f_tpair, u_tpair) for f_tpair, u_tpair in
+                    zip(itp_f, itp_u))
                 + sum(boundary_flux(bdtag, bdry) for bdtag, bdry in
-                                                    field_bounds.items()))
+                    field_bounds.items()))
             )
         )
+
+        return div
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -418,21 +415,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             energy=energy_viscous_rhs)
 
         # ~~~~~
-        # FIXME : add inviscid terms in the RHS
         velocity = -gas_pressure_diffusivity*grad_pressure
 
-        field = wv.gas_density*velocity*wdv.gas_enthalpy
-        field_gradient = my_derivative_function(actx, dcoll, velocity[1], field,
-                velocity_boundaries, dd_vol)
-
-        energy_inviscid_rhs = -(field_gradient[0][0] + field_gradient[1][1])
-
-#        energy_inviscid_rhs = zeros
+        field = wv.gas_density*wdv.gas_enthalpy
+        energy_inviscid_rhs = my_derivative_function(actx, dcoll, field,
+                velocity, velocity_boundaries, dd_vol)
 
         inviscid_rhs = wall.make_conserved(
             solid_species_mass=wv.solid_species_mass*0.0,
             gas_density=zeros,
-            energy=energy_inviscid_rhs
+            energy=-energy_inviscid_rhs
         )
 
         # ~~~~~
@@ -461,8 +453,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         wv = wall_vars
         wdv = dep_vars
-        gas_pressure_diffusivity = eos.gas_pressure_diffusivity(wdv.temperature,
-                                                                wdv.tau)
+        gas_pressure_diffusivity = \
+            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
         _, grad_pressure = diffusion_operator(dcoll,
             kappa=wv.gas_density*gas_pressure_diffusivity,
             boundaries=pressure_boundaries, u=wdv.gas_pressure, time=t,
@@ -470,16 +462,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         velocity = -gas_pressure_diffusivity*grad_pressure
 
-#        field = wv.gas_density*velocity*wdv.gas_enthalpy
-#        derivative = my_derivative_function(actx, dcoll, field,
-#                                            velocity_boundaries, dd_vol)
-#        energy_I_rhs = derivative[0][0] + derivative[1][1]
-
         viz_fields = [("gas_density", wall_vars.gas_density),
                       ("DV_velocity", velocity),
                       ("grad_p", grad_pressure),
-#                      ("field", field),
-#                      ("energy_I_rhs", energy_I_rhs),
                       ("DV", dep_vars)]
 
         viz_fields.extend((
@@ -549,7 +534,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 raise MyRuntimeError("Failed simulation health check.")
 
             if istep % nviz == 0:
-                my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
+                my_write_viz(step=istep, t=t, wall_vars=wall_vars,
+                             dep_vars=wdv)
 
             if istep % ngarbage == 0:
                 gc.collect()
@@ -571,7 +557,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     if logmgr:
         logmgr.close()
 
-# $$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 
 if __name__ == "__main__":
