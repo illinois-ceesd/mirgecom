@@ -79,7 +79,7 @@ def get_element_spectrum_from_modal_representation(actx, vol_discr, modal_fields
         Grudge discretization for volume elements only
     modal_fields: numpy.ndarray
         Array of DOFArrays with modal respresentations for each field
-    element_order: integer
+    element_order: int
         Polynomial order for the elements in the discretization
     Returns
     -------
