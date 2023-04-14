@@ -1,8 +1,5 @@
 """Timestepping routines for strong-stability preserving Runge-Kutta methods.
-<<<<<<< HEAD
-=======
 
->>>>>>> origin/main
 .. autofunction:: ssprk43_step
 """
 

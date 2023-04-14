@@ -253,21 +253,15 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
                            grad_u_minus, **kwargs):
         """Flux for Laplacian evaluation."""
         actx = grad_u_minus[0].array_context
-        u_tpair = TracePair(dd_bdry,
-            interior=u_minus,
-            exterior=u_minus)
-        kappa_tpair = TracePair(dd_bdry,
-            interior=kappa_minus,
-            exterior=kappa_minus)
-        grad_u_tpair = TracePair(dd_bdry,
-            interior=grad_u_minus,
-            exterior=grad_u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        # average between the prescribed value and the internal value
-        # FIXME maybe the minus in the prescribed function is due to the normal?
-        return 0.5*(-kappa_tpair.int * np.dot(grad_u_tpair.int, normal)
-            - self.function(u_tpair, kappa_tpair, grad_u_tpair, normal, **kwargs))
+        external_flux = self.function(u_minus, kappa_minus, grad_u_minus,
+                                      normal, **kwargs)
+
+        # flip the sign of the normal to indicate that positive values of
+        # flux are going in the cell
+        return 0.5*(-kappa_minus * np.dot(grad_u_minus, normal)
+                    + np.dot(external_flux, -normal))
 
 
 class _DiffusionStateTag:

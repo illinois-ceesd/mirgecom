@@ -136,7 +136,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         from functools import partial
         box_ll = (-.0025, 0.0)
         box_ur = (+.0025, .05)
-        num_elements = (6+1, 60+1)
+        num_elements = (5+1, 100+1)
 
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh,
@@ -189,18 +189,32 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#    # ablation workshop case #1.0
+#    def my_presc_func(**kwargs):
+#        time = kwargs['time']
+
+#        if time >= 0.0 and time < 0.1:
+#            surface_temperature = (1644-300)*(time/0.1) + 300.0
+
+#        if time >= 0.1 and time < 60.1:
+#            surface_temperature = 1644.0
+
+#        return surface_temperature
+
     # ablation workshop case #2.1
-    def my_presc_flux_func(u_tpair, kappa_tpair, grad_u_tpair, normal,
-                           **kwargs):
+    def my_presc_flux_func(u_minus, kappa_minus, grad_u_minus, normal, **kwargs):
         time = kwargs["time"]
 
         flux = actx.np.where(actx.np.less(time, 0.1),
-            0.3*(time/0.1)*1.5e6*(time/0.1),
+            0.3*1.5e6*(time/0.1),
             0.3*1.5e6
         )
 
-        # FIXME make emissivity a function of "tau"
-        return flux - 0.8*5.567e-8*(u_tpair.int**4 - 300**4)
+        # FIXME make emissivity function of tau
+        emissivity = 0.8
+        return make_obj_array([
+                flux - emissivity*5.67e-8*(u_minus**4 - 300**4),
+                u_minus*0.0])
 
     def my_presc_grad_func(u_minus, grad_u_minus, **kwargs):
         return 0.0
@@ -308,142 +322,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-#    from grudge.trace_pair import TracePair
-#    from grudge.trace_pair import interior_trace_pairs, tracepair_with_discr_tag
-#    from grudge import op
-#    from meshmode.discretization.connection import FACE_RESTR_ALL
-
-#    class _MyGradTag:
-#        pass
-
-#    def my_derivative_function(actx, dcoll, field, u, field_bounds, dd_vol):
-
-#        dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
-#        dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
-
-#        itp_f = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
-#                                         comm_tag=_MyGradTag)
-
-#        itp_u = interior_trace_pairs(dcoll, u, volume_dd=dd_vol,
-#                                         comm_tag=_MyGradTag)
-
-#        flux = field*u
-
-#        def interior_flux(f_tpair, u_tpair):
-#            dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
-#            normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
-#            bnd_u_tpair_quad = tracepair_with_discr_tag(dcoll,
-#                quadrature_tag, u_tpair)
-#            bnd_f_tpair_quad = tracepair_with_discr_tag(dcoll,
-#                quadrature_tag, f_tpair)
-
-#            numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg
-
-#            wavespeed_int = actx.np.sqrt(
-#                bnd_u_tpair_quad.int[0]**2 + bnd_u_tpair_quad.int[1]**2)
-#            wavespeed_ext = actx.np.sqrt(
-#                bnd_u_tpair_quad.ext[0]**2 + bnd_u_tpair_quad.ext[1]**2)
-#            lam = actx.np.maximum(wavespeed_int, wavespeed_ext)
-#            jump = bnd_f_tpair_quad.int - bnd_f_tpair_quad.ext
-#            numerical_flux = numerical_flux + 0.5*lam*(jump)
-
-#            flux_int = numerical_flux@normal_quad
-
-#            return op.project(dcoll, dd_trace_quad, dd_allfaces_quad, flux_int)
-
-#        def boundary_flux(bdtag, bdry):
-#            dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
-#            normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
-#            int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, flux)
-
-#            # FIXME make this more organized
-#            if (bdtag.tag == "prescribed"):
-#                ext_soln_quad = +1.0*int_soln_quad
-#            if (bdtag.tag == "neumann"):
-#                ext_soln_quad = -1.0*int_soln_quad
-
-#            bnd_tpair = TracePair(dd_bdry_quad,
-#                interior=int_soln_quad, exterior=ext_soln_quad)
-
-#            flux_bnd = bnd_tpair.avg@normal_quad
-
-#            return op.project(dcoll, dd_bdry_quad, dd_allfaces_quad, flux_bnd)
-
-#        div = -op.inverse_mass(
-#            dcoll, dd_vol,
-#            op.weak_local_div(dcoll, dd_vol, flux)
-#            - op.face_mass(dcoll, dd_allfaces_quad,
-#                (sum(interior_flux(f_tpair, u_tpair) for f_tpair, u_tpair in
-#                    zip(itp_f, itp_u))
-#                + sum(boundary_flux(bdtag, bdry) for bdtag, bdry in
-#                    field_bounds.items()))
-#            )
-#        )
-
-#        return div
-
-# # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-#    # FIXME create a new operator to put all this stuff
-#    def _rhs(t, state):
-
-#        wv, tseed = state
-#        wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed)
-
-#        tau = wdv.tau
-#        kappa = wdv.thermal_conductivity
-#        temperature = wdv.temperature
-#        pressure = wdv.gas_pressure
-
-#        # ~~~~~
-#        gas_pressure_diffusivity = eos.gas_pressure_diffusivity(temperature,
-#                                                                tau)
-#        pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
-#            kappa=wv.gas_density*gas_pressure_diffusivity,
-#            boundaries=pressure_boundaries, u=pressure, time=t,
-#            return_grad_u=True)
-
-#        energy_viscous_rhs = diffusion_operator(dcoll, kappa=kappa,
-#            boundaries=energy_boundaries, u=temperature, time=t)
-
-#        viscous_rhs = wall.make_conserved(
-#            solid_species_mass=wv.solid_species_mass*0.0,
-#            gas_density=PressureScalingFactor*pressure_viscous_rhs,
-#            energy=energy_viscous_rhs)
-
-#        # ~~~~~
-#        velocity = -gas_pressure_diffusivity*grad_pressure
-
-#        field = wv.gas_density*wdv.gas_enthalpy
-#        energy_inviscid_rhs = my_derivative_function(actx, dcoll, field,
-#                velocity, velocity_boundaries, dd_vol)
-
-#        inviscid_rhs = wall.make_conserved(
-#            solid_species_mass=wv.solid_species_mass*0.0,
-#            gas_density=zeros,
-#            energy=-energy_inviscid_rhs
-#        )
-
-#        # ~~~~~
-#        resin_pyrolysis = pyrolysis.get_sources(temperature,
-#                                                wv.solid_species_mass)
-
-#        # flip sign due to mass conservation
-#        gas_source_term = -PressureScalingFactor*sum(resin_pyrolysis)
-
-#        source_terms = wall.make_conserved(
-#            solid_species_mass=resin_pyrolysis,
-#            gas_density=gas_source_term,
-#            energy=zeros)
-
-#        # ~~~~~
-#        return make_obj_array([inviscid_rhs + viscous_rhs + source_terms,
-#                               tseed*0.0])
-
-#    compiled_rhs = actx.compile(_rhs)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
