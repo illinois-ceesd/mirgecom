@@ -404,8 +404,6 @@ class DeviceMemoryUsage(PostLogQuantity):
         super().__init__(name, "MByte", description="Memory usage (GPU)")
 
         import ctypes
-        self.free = ctypes.c_size_t()
-        self.total = ctypes.c_size_t()
 
         try:
             # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335  # noqa
@@ -421,21 +419,23 @@ class DeviceMemoryUsage(PostLogQuantity):
             return None
 
         import ctypes
-        ret = self.mem_func(ctypes.byref(self.free), ctypes.byref(self.total))
+        free = ctypes.c_size_t()
+        total = ctypes.c_size_t()
+        ret = self.mem_func(ctypes.byref(free), ctypes.byref(total))
 
         if ret != 0:
             from warnings import warn
             warn(f"cudaMemGetInfo failed with error {ret}.")
             return None
         else:
-            if self.free.value / self.total.value < 0.1:
+            if free.value / total.value < 0.1:
                 from warnings import warn
                 warn(
                     "The memory usage on the GPU is approaching the memory "
                     f"size, with less than 10% free of "
-                    f"{self.total.value // 1024 // 1024} MByte total. "
+                    f"{total.value // 1024 // 1024} MByte total. "
                     "This may lead to slowdowns or crashes.")
-            return (self.total.value - self.free.value) / 1024 / 1024
+            return (total.value - free.value) / 1024 / 1024
 
 
 class MempoolMemoryUsage(MultiPostLogQuantity):
