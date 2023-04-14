@@ -183,14 +183,6 @@ def test_spectral_filter(actx_factory, element_order, dim):
     nodes = actx.thaw(dcoll.nodes())
     vol_discr = dcoll.discr_from_dd("vol")
 
-    emodes_to_pmodes = np.array([0 for _ in range(nummodes)], dtype=np.uint32)
-    for group in vol_discr.groups:
-        mode_ids = group.mode_ids()
-        print(f"{mode_ids=}")
-        for modi, mode in enumerate(mode_ids):
-            emodes_to_pmodes[modi] = sum(mode)
-    print(f"{emodes_to_pmodes=}")
-
     from mirgecom.filter import exponential_mode_response_function as xmrfunc
     from mirgecom.filter import filter_modally
     from grudge.dof_desc import DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL
@@ -229,49 +221,30 @@ def test_spectral_filter(actx_factory, element_order, dim):
     unfiltered_fields = make_obj_array(fields)
     # unfiltered_iso_fields = make_obj_array(iso_fields)
     unfiltered_spectra = modal_map(unfiltered_fields)
-    spectra_numbers = np.stack(
-        actx.to_numpy(ary)[0]
-        for ary in unfiltered_spectra)
-    assert spectra_numbers.shape == (numfields, numelem, nummodes)
 
-    # print(f"{unfiltered_spectra=}")
-    # print(f"{spectra_numbers.shape=}")
-    # print(f"{spectra_numbers=}")
+    from mirgecom.filter import get_element_spectrum_from_modal_representation
 
-    def accumulate_same_order_modes(modal_spectra):
-        accumulated_spectra = np.zeros(
-            (numfields, numelem, element_order+1), dtype=np.float64)
+    unfiltered_element_spectrum = \
+        get_element_spectrum_from_modal_representation(
+            actx, vol_discr, unfiltered_spectra, element_order)
 
-        for i in range(nummodes):
-            accumulated_spectra[:, :, emodes_to_pmodes[i]] += np.abs(
-                modal_spectra[:, :, i])
-
-        return accumulated_spectra
-
-    element_spectra = accumulate_same_order_modes(spectra_numbers)
-    total_power = np.sum(element_spectra, axis=1)
+    total_power_unfilt = np.sum(unfiltered_element_spectrum, axis=1)
 
     print("Unfiltered expansions:")
-    print(f"{element_spectra=}")
-    print(f"{total_power=}")
+    print(f"{unfiltered_element_spectrum=}")
+    print(f"{total_power_unfilt=}")
 
     # unfiltered_iso_spectra = modal_map(unfiltered_iso_fields)
     filtered_fields = filter_modally(dcoll, mid_cutoff, frfunc, unfiltered_fields)
     filtered_spectra = modal_map(filtered_fields)
-    spectra_numbers = np.stack(
-        actx.to_numpy(ary)[0]
-        for ary in filtered_spectra)
-    assert spectra_numbers.shape == (numfields, numelem, nummodes)
+    filtered_element_spectrum = \
+        get_element_spectrum_from_modal_representation(
+            actx, vol_discr, filtered_spectra, element_order)
 
-    # filtered_isofields = filter_modally(dcoll, iso_cutoff, frfunc,
-    #                                    unfiltered_iso_fields)
-    # filtered_isospectra = modal_map(filtered_isofields)
-
-    element_spectra = accumulate_same_order_modes(spectra_numbers)
-    tot_pow_filtered = np.sum(element_spectra, axis=1)
+    tot_pow_filtered = np.sum(filtered_element_spectrum, axis=1)
 
     print("Filtered expansions:")
-    print(f"{element_spectra=}")
+    print(f"{filtered_element_spectrum=}")
     print(f"{tot_pow_filtered=}")
     nfilt = element_order - mid_cutoff
     ckfn = partial(xmrfunc, alpha=alpha, cutoff=mid_cutoff,
@@ -282,7 +255,7 @@ def test_spectral_filter(actx_factory, element_order, dim):
     # correct amount.
     for i in range(numfields):
         for n in range(element_order+1):
-            tp = total_power[i][n]
+            tp = total_power_unfilt[i][n]
             tpf = tot_pow_filtered[i][n]
             tpdiff = np.abs(tp - tpf)
             err = tpdiff

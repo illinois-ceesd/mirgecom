@@ -19,6 +19,10 @@ Applying Filters
 
 .. autofunction:: filter_modally
 
+Spectral Analysis Helpers
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: get_element_spectrum_from_modal_representation
 """
 
 __copyright__ = """
@@ -59,6 +63,52 @@ from arraycontext import map_array_container
 from meshmode.dof_array import DOFArray
 
 from pytools import keyed_memoize_in
+
+
+# TODO: Revisit for multi-group meshes
+def get_element_spectrum_from_modal_representation(actx, vol_discr, modal_fields,
+                                                   element_order):
+    """Get the Legendre Polynomial expansion for specified fields on elements.
+
+    Parameters
+    ----------
+    actx: :class:`arraycontext.ArrayContext`
+        A :class:`arraycontext.ArrayContext` associated with
+        an array of degrees of freedom
+    vol_discr: :class:`grudge.discretization.DiscretizationCollection`
+        Grudge discretization for volume elements only
+    modal_fields: numpy.ndarray
+        Array of DOFArrays with modal respresentations for each field
+    element_order: integer
+        Polynomial order for the elements in the discretization
+    Returns
+    -------
+    numpy.ndarray
+        Array with the element modes accumulated into the corresponding
+        "modes" for the polynomial basis functions for each field.
+    """
+
+    modal_spectra = np.stack(
+        actx.to_numpy(ary)[0]
+        for ary in modal_fields)
+
+    numfields, numelem, nummodes = modal_spectra.shape
+
+    emodes_to_pmodes = np.array([0 for _ in range(nummodes)], dtype=np.uint32)
+
+    for group in vol_discr.groups:
+        mode_ids = group.mode_ids()
+        for modi, mode in enumerate(mode_ids):
+            emodes_to_pmodes[modi] = sum(mode)
+
+    accumulated_spectra = np.zeros(
+        (numfields, numelem, element_order+1), dtype=np.float64)
+
+    for i in range(nummodes):
+        accumulated_spectra[:, :, emodes_to_pmodes[i]] += np.abs(
+            modal_spectra[:, :, i])
+
+    return accumulated_spectra
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
