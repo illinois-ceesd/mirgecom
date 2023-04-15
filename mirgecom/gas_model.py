@@ -743,3 +743,276 @@ def replace_fluid_state(
         smoothness_beta=state.smoothness_beta,
         limiter_func=limiter_func,
         limiter_dd=limiter_dd)
+
+
+def make_entropy_projected_fluid_state(
+        discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model):
+
+    from grudge.interpolation import volume_and_surface_quadrature_interpolation
+
+    # Interpolate to the volume and surface (concatenated) quadrature
+    # discretizations: v = [v_vol, v_surf]
+    ev_quad = volume_and_surface_quadrature_interpolation(
+        discr, dd_vol, dd_faces, entropy_vars)
+
+    temperature_seed = None
+    if state.is_mixture:
+        temperature_seed = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, state.temperature)
+        gamma = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, gamma)
+
+    # Convert back to conserved varaibles and use to make the new fluid state
+    cv_modified = entropy_to_conservative_vars(gamma, ev_quad)
+
+    return make_fluid_state(cv=cv_modified,
+                            gas_model=gas_model,
+                            temperature_seed=temperature_seed)
+
+
+def conservative_to_entropy_vars(gamma, state):
+    """Compute the entropy variables from conserved variables.
+    Converts from conserved variables (density, momentum, total energy)
+    into entropy variables.
+    Parameters
+    ----------
+    state: :class:`~mirgecom.gas_model.FluidState`
+        The full fluid conserved and thermal state
+    Returns
+    -------
+    ConservedVars
+        The entropy variables
+    """
+    from mirgecom.fluid import make_conserved
+
+    dim = state.dim
+    actx = state.array_context
+
+    rho = state.mass_density
+    u = state.velocity
+    p = state.pressure
+    rho_species = state.species_mass_density
+
+    u_square = sum(v ** 2 for v in u)
+    s = actx.np.log(p) - gamma*actx.np.log(rho)
+    rho_p = rho / p
+    rho_species_p = rho_species / p
+
+    return make_conserved(
+        dim,
+        mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_p * u_square,
+        energy=-rho_p,
+        momentum=rho_p * u,
+        species_mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_species_p * u_square
+    )
+
+
+def entropy_to_conservative_vars(gamma, ev: ConservedVars):
+    """Compute the conserved variables from entropy variables *ev*.
+    Converts from entropy variables into conserved variables
+    (density, momentum, total energy).
+    Parameters
+    ----------
+    ev: ConservedVars
+        The entropy variables
+    Returns
+    -------
+    ConservedVars
+        The fluid conserved variables
+    """
+    from mirgecom.fluid import make_conserved
+
+    dim = ev.dim
+    actx = ev.array_context
+    # See Hughes, Franca, Mallet (1986) A new finite element
+    # formulation for CFD: (DOI: 10.1016/0045-7825(86)90127-1)
+    inv_gamma_minus_one = 1/(gamma - 1)
+
+    # Convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
+    ev_state = ev * (gamma - 1)
+    v1 = ev_state.mass
+    v234 = ev_state.momentum
+    v5 = ev_state.energy
+    v6ns = ev_state.species_mass
+
+    v_square = sum(v**2 for v in v234)
+    s = gamma - v1 + v_square/(2*v5)
+    s_species = gamma - v6ns + v_square/(2*v5)
+    iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+    rho_iota = iota * actx.np.exp(-s * inv_gamma_minus_one)
+    rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
+
+    return make_conserved(
+        dim,
+        mass=-rho_iota * v5,
+        energy=rho_iota * (1 - v_square/(2*v5)),
+        momentum=rho_iota * v234,
+        species_mass=-rho_iota_species * v5
+    )
+
+
+def make_entropy_stable_operator_fluid_states(
+        dcoll, volume_state, entropy_vars, dd_vol, dd_faces, gas_model,
+        boundaries, quadrature_tag=DISCR_TAG_BASE, comm_tag=None, limiter_func=None):
+    """Prepare gas model-consistent fluid states for use in fluid operators.
+
+    This routine prepares a model-consistent fluid state for each of the volume and
+    all interior and domain boundaries, using the quadrature representation if
+    one is given. The input *volume_state* is projected to the quadrature domain
+    (if any), along with the model-consistent dependent quantities.
+
+    .. note::
+
+        When running MPI-distributed, volume state conserved quantities
+        (ConservedVars), and for mixtures, temperatures will be communicated over
+        partition boundaries inside this routine.
+
+    Parameters
+    ----------
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
+
+        A discretization collection encapsulating the DG elements
+
+    volume_state: :class:`~mirgecom.gas_model.FluidState`
+
+        The full fluid conserved and thermal state
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        The physical model constructs for the gas_model
+
+    boundaries
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`.
+
+    quadrature_tag
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *volume_state* lives. Must
+        be a volume on the base discretization.
+
+    comm_tag: Hashable
+        Tag for distributed communication
+
+    limiter_func:
+
+        Callable function to limit the fluid conserved quantities to physically
+        valid and realizable values.
+
+    Returns
+    -------
+    (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
+     dict)
+
+        Thermally consistent fluid state for the volume, fluid state trace pairs
+        for the internal boundaries, and a dictionary of fluid states keyed by
+        boundary domain tags in *boundaries*, all on the quadrature grid (if
+        specified).
+    """
+    boundaries = normalize_boundaries(boundaries)
+
+    # ================
+    from grudge.interpolation import volume_and_surface_quadrature_interpolation
+
+    # Interpolate to the volume and surface (concatenated) quadrature
+    # discretizations: v = [v_vol, v_surf]
+    ev_quad = volume_and_surface_quadrature_interpolation(
+        discr, dd_vol, dd_faces, entropy_vars)
+
+    temperature_seed = None
+    if state.is_mixture:
+        temperature_seed = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, state.temperature)
+        gamma = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, gamma)
+
+    # Convert back to conserved varaibles and use to make the new fluid state
+    cv_modified = entropy_to_conservative_vars(gamma, ev_quad)
+
+    # return make_fluid_state(cv=cv_modified,
+    #                        gas_model=gas_model,
+    #                        temperature_seed=temperature_seed)
+
+    # ==== 0000
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+
+    # project pair to the quadrature discretization and update dd to quad
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
+
+    domain_boundary_states_quad = {
+        bdtag: project_fluid_state(dcoll, dd_vol,
+                                  dd_vol_quad.with_domain_tag(bdtag),
+                                  volume_state, gas_model, limiter_func=limiter_func)
+        for bdtag in boundaries
+    }
+
+    # performs MPI communication of CV if needed
+    cv_interior_pairs = [
+        # Get the interior trace pairs onto the surface quadrature
+        # discretization (if any)
+        interp_to_surf_quad(tpair=tpair)
+        for tpair in interior_trace_pairs(
+            dcoll, volume_state.cv, volume_dd=dd_vol,
+            comm_tag=(_FluidCVTag, comm_tag))
+    ]
+
+    tseed_interior_pairs = None
+    if volume_state.is_mixture:
+        # If this is a mixture, we need to exchange the temperature field because
+        # mixture pressure (used in the inviscid flux calculations) depends on
+        # temperature and we need to seed the temperature calculation for the
+        # (+) part of the partition boundary with the remote temperature data.
+        tseed_interior_pairs = [
+            # Get the interior trace pairs onto the surface quadrature
+            # discretization (if any)
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.temperature, volume_dd=dd_vol,
+                comm_tag=(_FluidTemperatureTag, comm_tag))]
+
+    smoothness_mu_interior_pairs = None
+    if volume_state.smoothness_mu is not None:
+        smoothness_mu_interior_pairs = [
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.smoothness_mu, volume_dd=dd_vol,
+                tag=(_FluidSmoothnessMuTag, comm_tag))]
+    smoothness_kappa_interior_pairs = None
+    if volume_state.smoothness_kappa is not None:
+        smoothness_kappa_interior_pairs = [
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.smoothness_kappa, volume_dd=dd_vol,
+                tag=(_FluidSmoothnessKappaTag, comm_tag))]
+    smoothness_beta_interior_pairs = None
+    if volume_state.smoothness_beta is not None:
+        smoothness_beta_interior_pairs = [
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.smoothness_beta, volume_dd=dd_vol,
+                tag=(_FluidSmoothnessBetaTag, comm_tag))]
+
+    interior_boundary_states_quad = \
+        make_fluid_state_trace_pairs(cv_interior_pairs, gas_model,
+                                     tseed_interior_pairs,
+                                     smoothness_mu_interior_pairs,
+                                     smoothness_kappa_interior_pairs,
+                                     smoothness_beta_interior_pairs,
+                                     limiter_func=limiter_func)
+
+    # Interpolate the fluid state to the volume quadrature grid
+    # (this includes the conserved and dependent quantities)
+    volume_state_quad = project_fluid_state(dcoll, dd_vol, dd_vol_quad,
+                                            volume_state, gas_model,
+                                            limiter_func=limiter_func)
+
+    return \
+        volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad
