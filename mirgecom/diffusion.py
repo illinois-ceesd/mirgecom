@@ -124,7 +124,6 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
             exterior=2*ext_value-u_minus
-#            exterior=ext_value
         )
         normal = actx.thaw(dcoll.normal(dd_bdry))
         return grad_facial_flux(u_tpair, normal)

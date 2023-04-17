@@ -109,7 +109,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     order = 2
     dt = 2.5e-8
-    pressure_scaling_factor = 1.0  # noqa N806
+    pressure_scaling_factor = 0.1  # noqa N806
 
     dt = dt/pressure_scaling_factor
 
@@ -189,18 +189,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    # ablation workshop case #1.0
-    def my_presc_energy_func(u_minus, **kwargs):
-        time = kwargs['time']
+#    # ablation workshop case #1.0
+#    def my_presc_energy_func(u_minus, **kwargs):
+#        time = kwargs['time']
 
 #        surface_temperature = actx.np.where(actx.np.less(time, 0.1),
 #            (1644-300)*(time/0.1) + 300,
 #            1644
 #        )
+#        surface_temperature = u_minus*0.0 + 1200
 
-        surface_temperature = u_minus*0.0 + 1200
-
-        return surface_temperature
+#        return surface_temperature
 
     # ablation workshop case #2.1
     def my_presc_flux_func(u_minus, kappa_minus, grad_u_minus, normal, **kwargs):
@@ -213,17 +212,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         # FIXME make emissivity function of tau
         emissivity = 0.8
-        return make_obj_array([                
+        return make_obj_array([
             u_minus*0.0, flux - emissivity*5.67e-8*(u_minus**4 - 300**4)])
 
     def my_presc_grad_func(u_minus, grad_u_minus, **kwargs):
         return 0.0
 
     energy_boundaries = {
-#        BoundaryDomainTag("prescribed"):
-#            PrescribedFluxDiffusionBoundary(my_presc_flux_func),
         BoundaryDomainTag("prescribed"):
-            DirichletDiffusionBoundary(my_presc_energy_func),
+            PrescribedFluxDiffusionBoundary(my_presc_flux_func),
+#        BoundaryDomainTag("prescribed"):
+#            DirichletDiffusionBoundary(my_presc_energy_func),
         BoundaryDomainTag("neumann"):
             NeumannDiffusionBoundary(my_presc_grad_func)
     }
@@ -269,19 +268,18 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     solid_species_mass = np.empty((3,), dtype=object)
 
-#    solid_species_mass[0] = 30.0 + nodes[0]*0.0
-#    solid_species_mass[1] = 90.0 + nodes[0]*0.0
-#    solid_species_mass[2] = 160. + nodes[0]*0.0
-#    temperature = 300.0 + 0.0*nodes[1]
+    solid_species_mass[0] = 30.0 + nodes[0]*0.0
+    solid_species_mass[1] = 90.0 + nodes[0]*0.0
+    solid_species_mass[2] = 160. + nodes[0]*0.0
+    temperature = 300.0 + 0.0*nodes[1]
+    pressure = 101325.0 + nodes[0]*0.0
 
-    solid_species_mass[0] = 30.0 - (nodes[1]/0.05)**2*0.5*30.0
-    solid_species_mass[1] = 90.0 - (nodes[1]/0.05)**2*0.5*30.0
-    solid_species_mass[2] = 160. + (nodes[1]/0.05)*0.0
-    temperature = 300.0 + 900*(nodes[1]/0.05)**2
-
-    #pressure = 101325.0 + nodes[0]*0.0
-    pressure = actx.np.where(actx.np.greater(nodes[1], 0.04),
-        101326.0-((nodes[1]-0.04)/0.01)**2, 101326.0)
+#    solid_species_mass[0] = 30.0 - (nodes[1]/0.05)**2*0.5*30.0
+#    solid_species_mass[1] = 90.0 - (nodes[1]/0.05)**2*0.5*30.0
+#    solid_species_mass[2] = 160. + (nodes[1]/0.05)*0.0
+#    temperature = 300.0 + 900*(nodes[1]/0.05)**2
+#    pressure = actx.np.where(actx.np.greater(nodes[1], 0.04),
+#        101326.0-((nodes[1]-0.04)/0.01)**2, 101326.0)
 
     pressure = force_evaluation(actx, pressure)
     temperature = force_evaluation(actx, temperature)
@@ -352,14 +350,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     compiled_rhs = actx.compile(_rhs)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    visualizer = make_visualizer(dcoll)
-
-    def my_write_viz(step, t, wall_vars, dep_vars):
-
-        wv = wall_vars
-        wdv = dep_vars
+    def _get_gradients(wv, wdv):
         gas_pressure_diffusivity = \
             eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
         _, grad_pressure = diffusion_operator(dcoll,
@@ -372,8 +363,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             boundaries=energy_boundaries, u=wdv.temperature, time=t,
             return_grad_u=True)
 
+        return make_obj_array([grad_pressure, grad_temperature])
+
+    get_gradients = actx.compile(_get_gradients)
+
+    def _get_rhs_terms(t, wv, wdv):
+
         boundaries = make_obj_array([pressure_boundaries, energy_boundaries,
                                      velocity_boundaries])
+ 
         rhs_I, rhs_V, rhs_S = phenolics_operator(
             dcoll=dcoll, state=make_obj_array([wv, wdv.temperature]),
             boundaries=boundaries, time=t,
@@ -381,19 +379,46 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             pressure_scaling_factor=pressure_scaling_factor,
             quadrature_tag=quadrature_tag, dd_wall=dd_vol, split=True)
 
-        velocity = -gas_pressure_diffusivity*grad_pressure
+        return make_obj_array([rhs_I, rhs_V, rhs_S])
 
-        mass_flux = wv.gas_density*velocity
+    get_rhs_terms = actx.compile(_get_rhs_terms)
 
-        viz_fields = [("DV_velocity", velocity),
-                      ("mass_flux", mass_flux),
-                      ("grad_P", grad_pressure),
-                      ("grad_T", grad_temperature),
-                      ("RHS_I", rhs_I),
-                      ("RHS_V", rhs_V),
-                      ("RHS_S", rhs_S),
-                      ("WV", wall_vars),
-                      ("DV", dep_vars)]
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    visualizer = make_visualizer(dcoll)
+
+    def my_write_temperature(step, t, wall_vars, dep_vars):
+        viz_fields = [("DV", wdv.temperature)]
+
+        write_visfile(dcoll, viz_fields, visualizer, vizname='viz_data/temp',
+            step=step, t=t, overwrite=True, vis_timer=vis_timer, comm=comm)
+
+    def my_write_viz(step, t, wall_vars, dep_vars):
+
+        wv = force_evaluation(actx, wall_vars)
+        wdv = force_evaluation(actx, dep_vars)
+
+#        gas_pressure_diffusivity = \
+#            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
+
+#        gradients = get_gradients(wv, wdv)
+#        grad_P, grad_T = gradients
+#        velocity = -gas_pressure_diffusivity*grad_P
+#        mass_flux = wv.gas_density*velocity
+
+#        rhs = get_rhs_terms(t, wv, wdv)
+#        rhs_I, rhs_V, rhs_S = rhs
+
+        viz_fields = [("WV", wall_vars),
+                      ("DV", dep_vars),
+#                      ("DV_velocity", velocity),
+#                      ("DV_mass_flux", mass_flux),
+#                      ("grad_P", grad_P),
+#                      ("grad_T", grad_T),
+#                      ("RHS_I", rhs_I),
+#                      ("RHS_V", rhs_V),
+#                      ("RHS_S", rhs_S),
+        ]
 
         viz_fields.extend((
             ("phase_1", wall_vars.solid_species_mass[0]),
@@ -422,6 +447,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    def _eval_temperature(wall_vars, tseed):
+        tau = eos.eval_tau(wall_vars)
+        return eos.eval_temperature(wall_vars, tseed, tau)
+
+    eval_temperature = actx.compile(_eval_temperature)
+
     def _eval_dep_vars(wall_vars, tseed):
         return eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
 
@@ -435,8 +466,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     gc.collect()
 
     my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
+    my_write_temperature(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
 
-    sys.exit()
+    tseed = wdv.temperature
 
     while t < t_final:
 
@@ -445,15 +477,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         try:
 
-            tseed = wdv.temperature
+            tseed = eval_temperature(wall_vars, tseed)
             state = make_obj_array([wall_vars, tseed])
 
             state = ssprk43_step(state, t, dt, compiled_rhs)
             state = force_evaluation(actx, state)
 
             wall_vars, tseed = state
-
-            wdv = eval_dep_vars(wall_vars, tseed)
 
             t += dt
             istep += 1
@@ -464,6 +494,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 raise MyRuntimeError("Failed simulation health check.")
 
             if istep % nviz == 0:
+                wdv = eval_dep_vars(wall_vars, tseed)
+                my_write_temperature(step=istep, t=t, wall_vars=wall_vars,
+                             dep_vars=wdv)
                 my_write_viz(step=istep, t=t, wall_vars=wall_vars,
                              dep_vars=wdv)
 

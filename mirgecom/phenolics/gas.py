@@ -47,14 +47,14 @@ def eval_spline(x, x_bnds, coeffs):
 
     val = x*0.0
     for i in range(0, len(x_bnds)-1):
-        val = actx.np.where(actx.np.less(x, x_bnds[i+1]+1e-7),
-                    actx.np.where(actx.np.greater(x, x_bnds[i]-1e-7),
-                        coeffs[0, i]*(x-x_bnds[i])**3
-                            + coeffs[1, i]*(x-x_bnds[i])**2
-                            + coeffs[2, i]*(x-x_bnds[i])
-                            + coeffs[3, i],
-                        val),
-                    val)
+        val = actx.np.where(actx.np.less(x, x_bnds[i+1]+1e-12),
+                actx.np.where(actx.np.greater(x, x_bnds[i]),
+                    coeffs[0, i]*(x-x_bnds[i])**3
+                    + coeffs[1, i]*(x-x_bnds[i])**2
+                    + coeffs[2, i]*(x-x_bnds[i])
+                    + coeffs[3, i],
+                    0.0),
+                0.0) + val
 
     return val
 
@@ -65,13 +65,13 @@ def eval_spline_derivative(x, x_bnds, coeffs):
 
     val = x*0.0
     for i in range(0, len(x_bnds)-1):
-        val = actx.np.where(actx.np.less(x, x_bnds[i+1]+1e-7),
-                    actx.np.where(actx.np.greater(x, x_bnds[i]-1e-7),
-                        3.0*coeffs[0, i]*(x-x_bnds[i])**2
-                            + 2.0*coeffs[1, i]*(x-x_bnds[i])
-                            + coeffs[2, i],
-                        val),
-                    val)
+        val = actx.np.where(actx.np.less(x, x_bnds[i+1]+1e-12),
+                actx.np.where(actx.np.greater(x, x_bnds[i]),
+                    3.0*coeffs[0, i]*(x-x_bnds[i])**2
+                    + 2.0*coeffs[1, i]*(x-x_bnds[i])
+                    + coeffs[2, i],
+                    0.0),
+                0.0) + val
 
     return val
 
