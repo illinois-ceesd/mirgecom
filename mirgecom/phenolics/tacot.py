@@ -79,14 +79,17 @@ class Pyrolysis():
 
         rhs = np.empty((3,), dtype=object)
 
-        rhs[0] = actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
-            0.0,
-            -(30.*((xi[0] - 0.00)/30.)**3)*12000.*actx.np.exp(-8556.000/temperature)
-        )
-        rhs[1] = actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
-            0.0,
-            -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
-        )
+#        rhs[0] = actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
+#            0.0,
+#            -(30.*((xi[0] - 0.00)/30.)**3)*12000.*actx.np.exp(-8556.000/temperature)
+#        )
+#        rhs[1] = actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
+#            0.0,
+#            -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
+#        )
+
+        rhs[0] = -(30.*((xi[0] - 0.00)/30.)**3)*12000.*actx.np.exp(-8556.000/temperature)
+        rhs[1] = -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
 
         # include the fiber in the RHS but dont do anything more for now.
         # ignore oxidation, for now...

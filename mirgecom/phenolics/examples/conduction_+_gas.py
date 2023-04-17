@@ -105,16 +105,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     viz_path = "viz_data/"
     vizname = viz_path+casename
 
-    t_final = 60.0
+    t_final = 0.11
 
     order = 2
-    dt = 1.0e-7
-    pressure_scaling_factor = 0.1  # noqa N806
+    dt = 2.5e-8
+    pressure_scaling_factor = 1.0  # noqa N806
 
     dt = dt/pressure_scaling_factor
 
-    nviz = 1000
-    ngarbage = 100
+    nviz = 4000
+    ngarbage = 250
     nrestart = 10000
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -136,7 +136,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         from functools import partial
         box_ll = (-.0025, 0.0)
         box_ur = (+.0025, .05)
-        num_elements = (5+1, 100+1)
+        num_elements = (5+1, 200+1)
 
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh,
@@ -189,39 +189,41 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#    # ablation workshop case #1.0
-#    def my_presc_func(**kwargs):
-#        time = kwargs['time']
+    # ablation workshop case #1.0
+    def my_presc_energy_func(u_minus, **kwargs):
+        time = kwargs['time']
 
-#        if time >= 0.0 and time < 0.1:
-#            surface_temperature = (1644-300)*(time/0.1) + 300.0
+#        surface_temperature = actx.np.where(actx.np.less(time, 0.1),
+#            (1644-300)*(time/0.1) + 300,
+#            1644
+#        )
 
-#        if time >= 0.1 and time < 60.1:
-#            surface_temperature = 1644.0
+        surface_temperature = u_minus*0.0 + 1200
 
-#        return surface_temperature
+        return surface_temperature
 
     # ablation workshop case #2.1
     def my_presc_flux_func(u_minus, kappa_minus, grad_u_minus, normal, **kwargs):
         time = kwargs["time"]
 
         flux = actx.np.where(actx.np.less(time, 0.1),
-            0.3*1.5e6*(time/0.1),
+            0.3*(time/0.1)*1.5e6*(time/0.1),
             0.3*1.5e6
         )
 
         # FIXME make emissivity function of tau
         emissivity = 0.8
-        return make_obj_array([
-                flux - emissivity*5.67e-8*(u_minus**4 - 300**4),
-                u_minus*0.0])
+        return make_obj_array([                
+            u_minus*0.0, flux - emissivity*5.67e-8*(u_minus**4 - 300**4)])
 
     def my_presc_grad_func(u_minus, grad_u_minus, **kwargs):
         return 0.0
 
     energy_boundaries = {
+#        BoundaryDomainTag("prescribed"):
+#            PrescribedFluxDiffusionBoundary(my_presc_flux_func),
         BoundaryDomainTag("prescribed"):
-            PrescribedFluxDiffusionBoundary(my_presc_flux_func),
+            DirichletDiffusionBoundary(my_presc_energy_func),
         BoundaryDomainTag("neumann"):
             NeumannDiffusionBoundary(my_presc_grad_func)
     }
@@ -266,13 +268,20 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     import mirgecom.phenolics.phenolics as wall
 
     solid_species_mass = np.empty((3,), dtype=object)
-    solid_species_mass[0] = 30.0 + nodes[0]*0.0
-    solid_species_mass[1] = 90.0 + nodes[0]*0.0
-    solid_species_mass[2] = 160. + nodes[0]*0.0
 
-    pressure = 101325.0 + nodes[0]*0.0
+#    solid_species_mass[0] = 30.0 + nodes[0]*0.0
+#    solid_species_mass[1] = 90.0 + nodes[0]*0.0
+#    solid_species_mass[2] = 160. + nodes[0]*0.0
+#    temperature = 300.0 + 0.0*nodes[1]
 
-    temperature = 300.0 + nodes[0]*0.0
+    solid_species_mass[0] = 30.0 - (nodes[1]/0.05)**2*0.5*30.0
+    solid_species_mass[1] = 90.0 - (nodes[1]/0.05)**2*0.5*30.0
+    solid_species_mass[2] = 160. + (nodes[1]/0.05)*0.0
+    temperature = 300.0 + 900*(nodes[1]/0.05)**2
+
+    #pressure = 101325.0 + nodes[0]*0.0
+    pressure = actx.np.where(actx.np.greater(nodes[1], 0.04),
+        101326.0-((nodes[1]-0.04)/0.01)**2, 101326.0)
 
     pressure = force_evaluation(actx, pressure)
     temperature = force_evaluation(actx, temperature)
@@ -289,7 +298,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         istep = 0
         wall_vars = wall.initializer(eos=eos,
             solid_species_mass=solid_species_mass,
-            pressure=pressure, temperature=temperature, progress=0.0)
+            pressure=pressure, temperature=temperature)
 
     wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature)
 
@@ -358,11 +367,32 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             boundaries=pressure_boundaries, u=wdv.gas_pressure, time=t,
             return_grad_u=True)
 
+        _, grad_temperature = diffusion_operator(dcoll,
+            kappa=wdv.thermal_conductivity,
+            boundaries=energy_boundaries, u=wdv.temperature, time=t,
+            return_grad_u=True)
+
+        boundaries = make_obj_array([pressure_boundaries, energy_boundaries,
+                                     velocity_boundaries])
+        rhs_I, rhs_V, rhs_S = phenolics_operator(
+            dcoll=dcoll, state=make_obj_array([wv, wdv.temperature]),
+            boundaries=boundaries, time=t,
+            wall=wall, eos=eos, pyrolysis=pyrolysis,
+            pressure_scaling_factor=pressure_scaling_factor,
+            quadrature_tag=quadrature_tag, dd_wall=dd_vol, split=True)
+
         velocity = -gas_pressure_diffusivity*grad_pressure
 
-        viz_fields = [("gas_density", wall_vars.gas_density),
-                      ("DV_velocity", velocity),
-                      ("grad_p", grad_pressure),
+        mass_flux = wv.gas_density*velocity
+
+        viz_fields = [("DV_velocity", velocity),
+                      ("mass_flux", mass_flux),
+                      ("grad_P", grad_pressure),
+                      ("grad_T", grad_temperature),
+                      ("RHS_I", rhs_I),
+                      ("RHS_V", rhs_V),
+                      ("RHS_S", rhs_S),
+                      ("WV", wall_vars),
                       ("DV", dep_vars)]
 
         viz_fields.extend((
@@ -405,6 +435,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     gc.collect()
 
     my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
+
+    sys.exit()
 
     while t < t_final:
 

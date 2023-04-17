@@ -62,7 +62,18 @@ import sys  # noqa
 @dataclass_array_container
 @dataclass(frozen=True)
 class PhenolicsConservedVars:
-    r"""."""
+    r"""Class of conserved variables.
+
+    The conserved variables are
+
+    .. math::
+
+        \epsilon_i \rho_i, \mbox{for i = 1:N constituents}
+
+        \epsilon_g \rho_g, \mbox{assuming single gas in equilibrium}
+
+        \rho e, \mbox{the energy of solid+gas}
+    """
 
     # the "epsilon_density" of each phase in the solid
     solid_species_mass: np.ndarray
@@ -93,13 +104,7 @@ def initializer(eos, solid_species_mass, temperature, gas_density=None,
     if isinstance(temperature, DOFArray) is False:
         raise ValueError("Temperature does not have the proper shape")
 
-    zeros = temperature*0.0
-
-    # progress ratio
-    if isinstance(progress, DOFArray) is False:
-        tau = zeros + 1.0 - progress
-    else:
-        tau = 1.0 - progress
+    tau = 280.0/(280.0 - 220.0)*(1.0 - 220.0/sum(solid_species_mass))
 
     # gas constant
     Rg = 8314.46261815324/eos.gas_molar_mass(temperature)  # noqa N806
@@ -152,6 +157,7 @@ class PhenolicsDependentVars:
     gas_molar_mass: DOFArray
     gas_viscosity: DOFArray
 
+    solid_enthalpy: DOFArray
     solid_emissivity: DOFArray
     solid_permeability: DOFArray
     solid_density: DOFArray
@@ -169,7 +175,8 @@ class PhenolicsEOS():
     .. automethod:: gas_enthalpy
     .. automethod:: gas_molar_mass
     .. automethod:: gas_viscosity
-    .. automethod:: gas_heat_capacity
+    .. automethod:: gas_thermal_conductivity
+    .. automethod:: gas_heat_capacity_cp
     .. automethod:: gas_pressure_diffusivity
     .. automethod:: gas_pressure
     .. automethod:: solid_density
@@ -199,10 +206,9 @@ class PhenolicsEOS():
                          tau: DOFArray, niter=3) -> DOFArray:
         """Evaluate the temperature.
 
-        It uses the approximation of thermal equilibrium between solid and
-        fluid. Newton iteration are used to evaluate the temperature based on
-        the internal energy/enthalpy and heat capacity for the bulk
-        (solid+gas) material.
+        It uses the assumption of thermal equilibrium between solid and fluid.
+        Newton iteration are used to get the temperature based on the internal
+        energy/enthalpy and heat capacity for the bulk (solid+gas) material.
         """
         temp = tseed*1.0
 
@@ -220,7 +226,7 @@ class PhenolicsEOS():
                 + rho_solid*self.solid_enthalpy(temp, tau))
 
             bulk_cp = (
-                rho_gas*(self.gas_heat_capacity(temp)
+                rho_gas*(self.gas_heat_capacity_cp(temp)
                          - Rg*(1.0 - temp/molar_mass*self._gas_data.gas_dMdT(temp)))
                 + rho_solid*self.solid_heat_capacity_cp(temp, tau))
 
@@ -238,12 +244,21 @@ class PhenolicsEOS():
         """
         return 1.0 - self._composite_model.solid_volume_fraction(tau)
 
-    def thermal_conductivity(self, temperature: DOFArray,
-                             tau: DOFArray) -> DOFArray:
-        r"""Return the bulk thermal conductivity, $f(\tau, T)$."""
+    def thermal_conductivity(self, wv: PhenolicsConservedVars,
+                             temperature: DOFArray, tau: DOFArray) -> DOFArray:
+        r"""Return the bulk thermal conductivity, $f(\rho, \tau, T)$.
+
+        It is evaluated using a mass-weighted average given by
+
+        .. math::
+
+            \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
+        """
+        y_g = wv.gas_density/(wv.gas_density + self.solid_density(wv))
+        y_s = 1.0 - y_g
         return (
-            self._composite_model.solid_thermal_conductivity(temperature, tau)
-            # + gas
+            y_s*self._composite_model.solid_thermal_conductivity(temperature, tau)
+            + y_g*self.gas_thermal_conductivity(temperature)
         )
 
     # ~~~~~~~~~~~~ gas
@@ -259,18 +274,31 @@ class PhenolicsEOS():
         """Return the gas viscosity."""
         return self._gas_data.gas_viscosity(temperature)
 
+    def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
+        r"""Return the gas thermal conductivity.
+
+        .. math::
+
+            \kappa = \frac{\mu C_p}{Pr}
+
+        where $\mu$ is the gas viscosity and $C_p$ is the heat capacity at
+        constant pressure. The Prandtl number $Pr$ is assumed to be 1.
+        """
+        cp = self.gas_heat_capacity_cp(temperature)
+        mu = self._gas_data.gas_viscosity(temperature)
+        prandtl = 1.0
+        return mu*cp/prandtl
+
     def gas_pressure_diffusivity(self, temperature: DOFArray,
                                  tau: DOFArray) -> DOFArray:
         r"""Return the normalized pressure diffusivity.
 
-        It is evaluated as
-
         .. math::
 
-            \frac{1}{P} d_{P} = \frac{\mathbf{K}}{\mu \epsilon}
+            \frac{1}{\epsilon_g \rho_g} d_{P} = \frac{\mathbf{K}}{\mu \epsilon_g}
 
-        where $\mu$ is the gas viscosity, $\epsilon$ is the void fraction and
-        $\mathbf{K}$ is the permeability matrix.
+        where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
+        and $\mathbf{K}$ is the permeability matrix.
         """
         mu = self.gas_viscosity(temperature)
         epsilon = self.void_fraction(tau)
@@ -279,7 +307,12 @@ class PhenolicsEOS():
 
     def gas_pressure(self, wv: PhenolicsConservedVars,
                      temperature: DOFArray, tau: DOFArray) -> DOFArray:
-        """Return the gas pressure."""
+        r"""Return the gas pressure.
+
+        .. math::
+
+            P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
+        """
         Rg = 8314.46261815324/self.gas_molar_mass(temperature)  # noqa N806
         eps_gas = self.void_fraction(tau)
         return (1.0/eps_gas)*wv.gas_density*Rg*temperature
@@ -296,8 +329,8 @@ class PhenolicsEOS():
     def solid_density(self, wv: PhenolicsConservedVars) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
 
-        The density is relative to the entire control volume and it is
-        computed with the sum of all N solid phases:
+        The material density is relative to the entire control volume and it
+        is computed as the sum of all N solid phases:
 
         .. math::
 
@@ -318,7 +351,7 @@ class PhenolicsEOS():
         return self._composite_model.solid_emissivity(tau)
 
     # ~~~~~~~~~~~~ auxiliary functions
-    def gas_heat_capacity(self, temperature: DOFArray) -> DOFArray:
+    def gas_heat_capacity_cp(self, temperature: DOFArray) -> DOFArray:
         """Return the gas heat capacity."""
         return self._gas_data.gas_viscosity(temperature)
 
@@ -337,7 +370,7 @@ class PhenolicsEOS():
             tau=tau,
             progress=1.0-tau,
             temperature=temperature,
-            thermal_conductivity=self.thermal_conductivity(temperature, tau),
+            thermal_conductivity=self.thermal_conductivity(wv, temperature, tau),
             void_fraction=self.void_fraction(tau),
             gas_pressure=self.gas_pressure(wv, temperature, tau),
             # velocity
@@ -345,6 +378,7 @@ class PhenolicsEOS():
             gas_molar_mass=self.gas_molar_mass(temperature),
             # species_diffusivity
             gas_enthalpy=self.gas_enthalpy(temperature),
+            solid_enthalpy=self.solid_enthalpy(temperature, tau),
             # heat_capacity
             solid_density=self.solid_density(wv),
             solid_emissivity=self.solid_emissivity(tau),

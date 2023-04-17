@@ -123,7 +123,9 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         ext_value = self.function(u_minus, **kwargs)
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
-            exterior=2*ext_value-u_minus)
+            exterior=2*ext_value-u_minus
+#            exterior=ext_value
+        )
         normal = actx.thaw(dcoll.normal(dd_bdry))
         return grad_facial_flux(u_tpair, normal)
 
@@ -260,9 +262,9 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         # flip the sign of the normal to indicate that positive values of
         # flux are going in the cell
-        return 0.5*(-kappa_minus * np.dot(grad_u_minus, normal)
-                    + np.dot(external_flux, -normal))
-
+#        return 0.5*(-kappa_minus * np.dot(grad_u_minus, normal)
+#                    + np.dot(external_flux, -normal))
+        return np.dot(external_flux, -normal)
 
 class _DiffusionStateTag:
     pass

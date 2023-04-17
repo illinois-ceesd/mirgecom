@@ -107,7 +107,8 @@ def my_derivative_function(actx, dcoll, quadrature_tag, field, u,
 
 
 def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
-                       pressure_scaling_factor, quadrature_tag, dd_wall):
+                       pressure_scaling_factor, quadrature_tag, dd_wall,
+                       split=False):
     """."""
     wv, tseed = state
     wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed)
@@ -162,4 +163,6 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
         gas_density=gas_source_term,
         energy=zeros)
 
+    if split:
+        return inviscid_rhs, viscous_rhs, source_terms
     return inviscid_rhs + viscous_rhs + source_terms

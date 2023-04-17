@@ -53,8 +53,8 @@ def eval_spline(x, x_bnds, coeffs):
                             + coeffs[1, i]*(x-x_bnds[i])**2
                             + coeffs[2, i]*(x-x_bnds[i])
                             + coeffs[3, i],
-                        0.0),
-                    0.0) + val
+                        val),
+                    val)
 
     return val
 
@@ -70,8 +70,8 @@ def eval_spline_derivative(x, x_bnds, coeffs):
                         3.0*coeffs[0, i]*(x-x_bnds[i])**2
                             + 2.0*coeffs[1, i]*(x-x_bnds[i])
                             + coeffs[2, i],
-                        0.0),
-                    0.0) + val
+                        val),
+                    val)
 
     return val
 
