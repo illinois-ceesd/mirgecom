@@ -30,6 +30,7 @@ from grudge.dof_desc import BoundaryDomainTag
 from mirgecom.discretization import create_discretization_collection
 
 from mirgecom.integrators.ssprk import ssprk43_step
+from mirgecom.integrators import lsrk54_step
 
 from mirgecom.diffusion import (
     diffusion_operator,
