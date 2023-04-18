@@ -657,10 +657,9 @@ def entropy_stable_ns_operator(
             for tpair in interior_trace_pairs(discr, state.temperature)
         ]
 
-    def interp_to_surf_modified_conservedvars(gamma, utpair):
-        """Takes a trace pair containing the projected entropy variables
-        and converts them into conserved variables on the quadrature grid.
-        """
+    def _interp_to_surf_modified_conservedvars(gamma, utpair):
+        # Takes a trace pair containing the projected entropy variables
+        # and converts them into conserved variables on the quadrature grid.
         local_dd = utpair.dd
         local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
         # Interpolate entropy variables to the surface quadrature grid
@@ -678,7 +677,7 @@ def entropy_stable_ns_operator(
         # Compute interior trace pairs using modified conservative
         # variables on the quadrature grid
         # (obtaining state from projected entropy variables)
-        interp_to_surf_modified_conservedvars(gamma, tpair)
+        _interp_to_surf_modified_conservedvars(gamma, tpair)
         for tpair in interior_trace_pairs(discr, entropy_vars)
     ]
 
