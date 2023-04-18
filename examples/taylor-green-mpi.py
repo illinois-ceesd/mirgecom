@@ -27,17 +27,11 @@ THE SOFTWARE.
 import numpy as np
 import logging
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 
 from mirgecom.mpi import mpi_entry_point
 
 from functools import partial
 
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
-)
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
 from arraycontext import thaw
 from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
@@ -77,12 +71,12 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context,
+def main(actx_class, ctx_factory=cl.create_some_context,
          order=1, t_final=1, resolution=8,
-         use_logmgr=True,
+         use_logmgr=True, lazy=False,
          use_overintegration=False, use_esdg=False,
          use_profiling=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext):
+         rst_filename=None):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -106,9 +100,13 @@ def main(ctx_factory=cl.create_some_context,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    actx = actx_class(
-        queue,
-        allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
+    from mirgecom.simutil import get_reasonable_memory_pool
+    alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
+    if lazy:
+        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
+    else:
+        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
     if use_esdg and not actx.supports_nonscalar_broadcasting:
         raise RuntimeError(
@@ -374,13 +372,13 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    lazy = args.lazy
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
-        actx_class = PyOpenCLProfilingArrayContext
-    else:
-        actx_class = PytatoPyOpenCLArrayContext if args.lazy \
-            else PyOpenCLArrayContext
+
+    from grudge.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -389,9 +387,10 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(order=args.order, t_final=args.tfinal, resolution=args.resolution,
+    main(actx_class, order=args.order, t_final=args.tfinal,
+         resolution=args.resolution, lazy=args.lazy,
          use_logmgr=args.log, use_overintegration=args.overintegration,
          use_esdg=args.esdg, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

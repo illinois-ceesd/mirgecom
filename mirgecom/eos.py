@@ -540,12 +540,12 @@ class IdealSingleGas(GasEOS):
         Parameters
         ----------
         state: :class:`~mirgecom.gas_model.FluidState`
-        The full fluid conserved and thermal state
+            The full fluid conserved and thermal state
 
         Returns
         -------
         ConservedVars
-        The entropy variables
+            The entropy variables
         """
         dim = cv.dim
         actx = cv.array_context
@@ -1037,12 +1037,12 @@ class PyrometheusMixture(MixtureEOS):
         Parameters
         ----------
         state: :class:`~mirgecom.gas_model.FluidState`
-        The full fluid conserved and thermal state
+            The full fluid conserved and thermal state
 
         Returns
         -------
         ConservedVars
-        The entropy variables
+            The entropy variables
         """
         dim = cv.dim
         actx = cv.array_context
@@ -1070,16 +1070,19 @@ class PyrometheusMixture(MixtureEOS):
     def entropy_to_conservative_vars(self, cv: ConservedVars, ev: ConservedVars,
                                      temperature):
         """Compute the conserved variables from entropy variables *ev*.
+
         Converts from entropy variables into conserved variables
         (density, momentum, total energy).
+
         Parameters
         ----------
         ev: ConservedVars
-        The entropy variables
+            The entropy variables
+
         Returns
         -------
         ConservedVars
-        The fluid conserved variables
+            The fluid conserved variables
         """
         from mirgecom.fluid import make_conserved
 

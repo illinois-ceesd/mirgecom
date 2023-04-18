@@ -191,12 +191,10 @@ def entropy_stable_euler_operator(
     Parameters
     ----------
     state: :class:`~mirgecom.gas_model.FluidState`
-
         Fluid state object with the conserved state, and dependent
         quantities.
 
     boundaries
-
         Dictionary of boundary functions, one for each valid btag
 
     time
@@ -204,7 +202,6 @@ def entropy_stable_euler_operator(
         Time
 
     gas_model: :class:`~mirgecom.gas_model.GasModel`
-
         Physical gas model including equation of state, transport,
         and kinetic properties as required by fluid state
 
@@ -216,7 +213,6 @@ def entropy_stable_euler_operator(
     Returns
     -------
     :class:`mirgecom.fluid.ConservedVars`
-
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
@@ -285,10 +281,9 @@ def entropy_stable_euler_operator(
             for tpair in interior_trace_pairs(discr, state.temperature)
         ]
 
-    def interp_to_surf_modified_conservedvars(gamma, utpair):
-        """Takes a trace pair containing the projected entropy variables
-        and converts them into conserved variables on the quadrature grid.
-        """
+    def _interp_to_surf_modified_conservedvars(gamma, utpair):
+        # Takes a trace pair containing the projected entropy variables
+        # and converts them into conserved variables on the quadrature grid.
         local_dd = utpair.dd
         local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
         # Interpolate entropy variables to the surface quadrature grid
@@ -306,7 +301,7 @@ def entropy_stable_euler_operator(
         # Compute interior trace pairs using modified conservative
         # variables on the quadrature grid
         # (obtaining state from projected entropy variables)
-        interp_to_surf_modified_conservedvars(gamma, tpair)
+        _interp_to_surf_modified_conservedvars(gamma, tpair)
         for tpair in interior_trace_pairs(discr, entropy_vars)
     ]
 

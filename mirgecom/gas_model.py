@@ -747,7 +747,7 @@ def replace_fluid_state(
 
 def make_entropy_projected_fluid_state(
         discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model):
-
+    """Projects the entropy vars to target manifold, computes the CV from that."""
     from grudge.interpolation import volume_and_surface_quadrature_interpolation
 
     # Interpolate to the volume and surface (concatenated) quadrature
@@ -772,12 +772,15 @@ def make_entropy_projected_fluid_state(
 
 def conservative_to_entropy_vars(gamma, state):
     """Compute the entropy variables from conserved variables.
+
     Converts from conserved variables (density, momentum, total energy)
     into entropy variables.
+
     Parameters
     ----------
     state: :class:`~mirgecom.gas_model.FluidState`
         The full fluid conserved and thermal state
+
     Returns
     -------
     ConservedVars
@@ -809,12 +812,15 @@ def conservative_to_entropy_vars(gamma, state):
 
 def entropy_to_conservative_vars(gamma, ev: ConservedVars):
     """Compute the conserved variables from entropy variables *ev*.
+
     Converts from entropy variables into conserved variables
     (density, momentum, total energy).
+
     Parameters
     ----------
     ev: ConservedVars
         The entropy variables
+
     Returns
     -------
     ConservedVars

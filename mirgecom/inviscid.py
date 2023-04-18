@@ -401,11 +401,13 @@ def get_inviscid_cfl(dcoll, state, dt):
 
 def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     """Compute the entropy conservative fluxes from states *cv_ll* and *cv_rr*.
+
     This routine implements the two-point volume flux based on the entropy
     conserving and kinetic energy preserving two-point flux in:
     - Chandrashekar (2013) Kinetic Energy Preserving and Entropy Stable Finite
     Volume Schemes for Compressible Euler and Navier-Stokes Equations
     [DOI](https://doi.org/10.4208/cicp.170712.010313a)
+
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
@@ -472,17 +474,20 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
 
 def entropy_stable_inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
     r"""Return the entropy stable inviscid numerical flux.
+
     This facial flux routine is "entropy stable" in the sense that
     it computes the flux average component of the interface fluxes
     using an entropy conservative two-point flux
     (e.g. :func:`entropy_conserving_flux_chandrashekar`). Additional
     dissipation is imposed by penalizing the "jump" of the state across
     interfaces.
+
     Parameters
     ----------
     state_pair: :class:`~grudge.trace_pair.TracePair`
         Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
         which the flux calculation is to be performed
+
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
