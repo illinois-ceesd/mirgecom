@@ -8,7 +8,7 @@ Inviscid Flux Calculation
 .. autofunction:: inviscid_facial_flux_hll
 .. autofunction:: inviscid_flux_on_element_boundary
 .. autofunction:: entropy_conserving_flux_chandrashekar
-.. autofunciton:: entropy_stable_facial_flux
+.. autofunction:: entropy_stable_facial_flux
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
