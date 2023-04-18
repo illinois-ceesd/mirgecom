@@ -220,6 +220,8 @@ def entropy_stable_euler_operator(
         Agglomerated object array of DOF arrays representing the RHS of the Euler
         flow equations.
     """
+    boundaries = normalize_boundaries(boundaries)
+
     dd_base = as_dofdesc("vol")
     dd_vol = DOFDesc("vol", quadrature_tag)
     dd_faces = DOFDesc("all_faces", quadrature_tag)
@@ -331,7 +333,7 @@ def entropy_stable_euler_operator(
         discr, gas_model, boundaries, interior_states,
         boundary_states, quadrature_tag=quadrature_tag,
         numerical_flux_func=inviscid_numerical_flux_func, time=time,
-        dd=dd_vol)
+        dd=dd_base)
 
     return op.inverse_mass(
         discr,
