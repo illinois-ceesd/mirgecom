@@ -15,6 +15,7 @@ Solution Initializers
 .. autoclass:: ShearFlow
 .. autoclass:: PlanarDiscontinuity
 .. autoclass:: MulticomponentTrig
+.. autoclass:: InviscidTaylorGreenVortex
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
@@ -1555,8 +1556,7 @@ class ShearFlow:
 
 
 class InviscidTaylorGreenVortex:
-    """todo.
-    """
+    """Initialize Taylor-Green Vortex."""
 
     def __init__(
             self, *, dim=3, mach_number=0.05, domain_lengthscale=1, v0=1, p0=1
