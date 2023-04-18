@@ -77,7 +77,9 @@ import grudge.op as op
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux_rusanov,
-    inviscid_flux_on_element_boundary
+    inviscid_flux_on_element_boundary,
+    entropy_conserving_flux_chandrashekar,
+    entropy_stable_inviscid_flux_rusanov
 )
 from mirgecom.viscous import (
     viscous_flux,
@@ -91,6 +93,21 @@ from mirgecom.operators import (
 )
 from mirgecom.gas_model import make_operator_fluid_states
 from mirgecom.utils import normalize_boundaries
+
+from arraycontext import map_array_container
+from mirgecom.gas_model import (
+    project_fluid_state,
+    make_fluid_state_trace_pairs,
+    make_entropy_projected_fluid_state,
+    conservative_to_entropy_vars,
+    entropy_to_conservative_vars
+)
+
+from meshmode.dof_array import DOFArray
+
+from grudge.dof_desc import DOFDesc, as_dofdesc
+from grudge.projection import volume_quadrature_project
+from grudge.flux_differencing import volume_flux_differencing
 
 
 class _NSGradCVTag:
@@ -525,8 +542,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 def entropy_stable_ns_operator(
         discr, state, gas_model, boundaries, time=0.0,
         inviscid_numerical_flux_func=entropy_stable_inviscid_flux_rusanov,
-        gradient_numerical_flux_func=gradient_flux_central,
-        viscous_numerical_flux_func=viscous_flux_central,
+        gradient_numerical_flux_func=num_flux_central,
+        viscous_numerical_flux_func=viscous_facial_flux_central,
         quadrature_tag=None):
     r"""Compute RHS of the Navier-Stokes equations using flux-differencing.
 
@@ -697,7 +714,7 @@ def entropy_stable_ns_operator(
 
     def gradient_flux_interior(tpair):
         dd = tpair.dd
-        normal = thaw(discr.normal(dd), actx)
+        normal = actx.thaw(discr.normal(dd))
         flux = gradient_numerical_flux_func(tpair, normal)
         return op.project(discr, dd, dd.with_dtag("all_faces"), flux)
 
@@ -767,29 +784,6 @@ def entropy_stable_ns_operator(
         for tpair in interior_trace_pairs(discr, grad_t)
     ]
 
-    # viscous fluxes across interior faces (including partition and periodic bnd)
-    def fvisc_divergence_flux_interior(state_pair, grad_cv_pair, grad_t_pair):
-        return viscous_facial_flux(discr=discr, gas_model=gas_model,
-                                   state_pair=state_pair, grad_cv_pair=grad_cv_pair,
-                                   grad_t_pair=grad_t_pair,
-                                   numerical_flux_func=viscous_numerical_flux_func)
-
-    # viscous part of bcs applied here
-    def fvisc_divergence_flux_boundary(btag, boundary_state):
-        # Make sure we fields on the quadrature grid
-        # restricted to the tag *btag*
-        dd_btag = as_dofdesc(btag).with_discr_tag(quadrature_tag)
-        return boundaries[btag].viscous_divergence_flux(
-            discr=discr,
-            btag=dd_btag,
-            gas_model=gas_model,
-            state_minus=boundary_state,
-            grad_cv_minus=op.project(discr, dd_base, dd_btag, grad_cv),
-            grad_t_minus=op.project(discr, dd_base, dd_btag, grad_t),
-            time=time,
-            numerical_flux_func=viscous_numerical_flux_func
-        )
-
     visc_vol_term = viscous_flux(
         state=quadrature_state,
         # Interpolate gradients to the quadrature grid
@@ -798,7 +792,7 @@ def entropy_stable_ns_operator(
 
     # Physical viscous flux (f .dot. n) is the boundary term for the div op
     visc_bnd_term = viscous_flux_on_element_boundary(
-        dcoll, gas_model, boundaries, interior_states,
+        discr, gas_model, boundaries, interior_states,
         boundary_states, grad_cv, grad_cv_interior_pairs,
         grad_t, grad_t_interior_pairs, quadrature_tag=quadrature_tag,
         numerical_flux_func=viscous_numerical_flux_func, time=time,
