@@ -528,7 +528,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
     # map partition id to list of elements in that partition
-    part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
+    part_to_elements = {r: set(np.where(elem_to_rank == r)[0].flat)
                         for r in range(num_ranks)}
     # make an array of the geometrically even partition sizes
     # avoids calling "len" over and over on the element sets
