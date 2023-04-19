@@ -928,6 +928,61 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     return local_mesh_data, global_nelements
 
 
+def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
+                    mesh=None):
+    """Generate a report of the grid boundaries."""
+    boundaries = normalize_boundaries(boundaries)
+
+    comm = dcoll.mpi_communicator
+    nproc = 1
+    rank = 0
+    if comm is not None:
+        nproc = comm.Get_size()
+        rank = comm.Get_rank()
+
+    if mesh is not None:
+        nelem = 0
+        for grp in mesh.groups:
+            nelem = nelem + grp.nelements
+        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}\n"
+    else:
+        local_header = f"nproc: {nproc}\nrank: {rank}\n"
+
+    from io import StringIO
+    local_report = StringIO(local_header)
+    local_report.seek(0, 2)
+
+    for bdtag in boundaries:
+        boundary_discr = dcoll.discr_from_dd(bdtag)
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        local_report.write(f"{bdtag}: {nnodes}\n")
+
+    from meshmode.mesh import BTAG_PARTITION
+    from meshmode.distributed import get_connected_parts
+    connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
+    local_report.write(f"num_nbr_parts: {len(connected_part_ids)}\n")
+    local_report.write(f"connected_part_ids: {connected_part_ids}\n")
+    part_nodes = []
+    for connected_part_id in connected_part_ids:
+        boundary_discr = dcoll.discr_from_dd(
+            dd.trace(BTAG_PARTITION(connected_part_id)))
+        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        part_nodes.append(nnodes)
+    if part_nodes:
+        local_report.write(f"nnodes_pb: {part_nodes}\n")
+
+    local_report.write("-----\n")
+    local_report.seek(0)
+
+    for irank in range(nproc):
+        if irank == rank:
+            f = open(outfile_name, "a+")
+            f.write(local_report.read())
+            f.close()
+        if comm is not None:
+            comm.barrier()
+
+
 def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
     r"""
     Create a mesh containing a subset of another mesh's volumes.
@@ -1000,61 +1055,6 @@ def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
 def force_evaluation(actx, expn):
     """Wrap freeze/thaw forcing evaluation of expressions."""
     return actx.thaw(actx.freeze(expn))
-
-
-def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
-                    mesh=None):
-    """Generate a report of the grid boundaries."""
-    boundaries = normalize_boundaries(boundaries)
-
-    comm = dcoll.mpi_communicator
-    nproc = 1
-    rank = 0
-    if comm is not None:
-        nproc = comm.Get_size()
-        rank = comm.Get_rank()
-
-    if mesh is not None:
-        nelem = 0
-        for grp in mesh.groups:
-            nelem = nelem + grp.nelements
-        local_header = f"nproc: {nproc}\nrank: {rank}\nnelem: {nelem}\n"
-    else:
-        local_header = f"nproc: {nproc}\nrank: {rank}\n"
-
-    from io import StringIO
-    local_report = StringIO(local_header)
-    local_report.seek(0, 2)
-
-    for bdtag in boundaries:
-        boundary_discr = dcoll.discr_from_dd(bdtag)
-        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
-        local_report.write(f"{bdtag}: {nnodes}\n")
-
-    from meshmode.mesh import BTAG_PARTITION
-    from meshmode.distributed import get_connected_parts
-    connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
-    local_report.write(f"num_nbr_parts: {len(connected_part_ids)}\n")
-    local_report.write(f"connected_part_ids: {connected_part_ids}\n")
-    part_nodes = []
-    for connected_part_id in connected_part_ids:
-        boundary_discr = dcoll.discr_from_dd(
-            dd.trace(BTAG_PARTITION(connected_part_id)))
-        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
-        part_nodes.append(nnodes)
-    if part_nodes:
-        local_report.write(f"nnodes_pb: {part_nodes}\n")
-
-    local_report.write("-----\n")
-    local_report.seek(0)
-
-    for irank in range(nproc):
-        if irank == rank:
-            f = open(outfile_name, "a+")
-            f.write(local_report.read())
-            f.close()
-        if comm is not None:
-            comm.barrier()
 
 
 def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
