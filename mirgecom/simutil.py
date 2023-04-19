@@ -447,6 +447,7 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
 
 class PartitioningError(Exception):
     """Error tossed to indicate an error with domain decomposition."""
+
     pass
 
 
