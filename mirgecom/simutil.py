@@ -515,7 +515,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         elem_group_x = mesh_verts[0, group.vertex_indices]
         elem_group_centroids = np.sum(elem_group_x, axis=1)/elem_group_x.shape[1]
         global_nelements = global_nelements + len(elem_group_centroids)
-        np.concatenate((elem_centroids, elem_group_centroids))
+        elem_centroids = np.concatenate((elem_centroids, elem_group_centroids))
 
     aver_part_nelem = global_nelements / num_ranks
 
