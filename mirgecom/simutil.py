@@ -488,7 +488,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         from warnings import warn
         warn("num_ranks is deprecated, use nranks_per_axis instead.")
         num_ranks = num_ranks or 1
-        nranks_per_axis = np.ones(mesh_dimension)
+        nranks_per_axis = np.ones(mesh_dimension, dtype=np.int8)
         nranks_per_axis[0] = num_ranks
     if len(nranks_per_axis) != mesh_dimension:
         raise PartitioningError("nranks_per_axis must match mesh dimension.")
