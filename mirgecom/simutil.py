@@ -22,6 +22,7 @@ Diagnostic utilities
 Mesh and element utilities
 --------------------------
 
+.. autofunction:: distribute_mesh
 .. autofunction:: geometric_mesh_partitioner
 .. autofunction:: generate_and_distribute_mesh
 .. autofunction:: get_number_of_tetrahedron_nodes
