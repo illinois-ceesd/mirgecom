@@ -73,4 +73,6 @@ for details.
 
 .. warning::
 
-   The CUDA JIT cache is disabled by default on Lassen.
+   The CUDA JIT cache is disabled by default on Lassen, i.e.,
+   ``CUDA_CACHE_DISABLE=1`` is set by default. Source: email by
+   J. Gyllenhaal on 03/12/2020.
