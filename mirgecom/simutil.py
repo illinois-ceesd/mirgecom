@@ -484,6 +484,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     elem_to_rank: numpy.ndarray
         Array indicating the MPI rank for each element
     """
+    debug = True
     mesh_dimension = mesh.dim
     if nranks_per_axis is None or num_ranks is not None:
         from warnings import warn
@@ -528,7 +529,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
     # map partition id to list of elements in that partition
-    part_to_elements = {r: set(np.where(elem_to_rank == r)[0].flat)
+    part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
                         for r in range(num_ranks)}
     # make an array of the geometrically even partition sizes
     # avoids calling "len" over and over on the element sets
