@@ -446,10 +446,11 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
 
 
 class PartitioningError(Exception):
+    """Error tossed to indicate an error with domain decomposition."""
     pass
 
 
-def geometric_mesh_partitioner(mesh, *, num_ranks=None, nranks_per_axis=None,
+def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                auto_balance=False, imbalance_tolerance=.01,
                                debug=False):
     """Partition a mesh uniformly along the X coordinate axis.
@@ -463,9 +464,9 @@ def geometric_mesh_partitioner(mesh, *, num_ranks=None, nranks_per_axis=None,
     mesh: :class:`meshmode.mesh.Mesh`
         The serial mesh to partition
     num_ranks: int
-        The number of partitions to make
+        The number of partitions to make (deprecated)
     nranks_per_axis: numpy.ndarray
-        How many partitions per specified axis.  Currently unused.
+        How many partitions per specified axis.
     auto_balance: bool
         Indicates whether to perform automatic balancing.  If true, the
         partitioner will try to balance the number of elements over
