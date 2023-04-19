@@ -322,7 +322,7 @@ class SodShock1D:
         energy = actx.np.where(yesno, energyr, energyl)
         mom = make_obj_array(
             [
-                0*x_rel
+                1.*zeros
                 for i in range(self._dim)
             ]
         )

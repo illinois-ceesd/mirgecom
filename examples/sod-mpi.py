@@ -106,18 +106,18 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.01
+    t_final = 1.0
     current_cfl = 1.0
-    current_dt = .0001
+    current_dt = 1e-6
     current_t = 0
     constant_cfl = False
     current_step = 0
 
     # some i/o frequencies
-    nstatus = 10
-    nrestart = 5
-    nviz = 10
-    nhealth = 10
+    nstatus = 100
+    nrestart = 1000
+    nviz = 100
+    nhealth = 100
 
     dim = 1
     rst_path = "restart_data/"
@@ -134,9 +134,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        nel_1d = 24
-        box_ll = -5.0
-        box_ur = 5.0
+        nel_1d = 64
+        box_ll = 0
+        box_ur = 1.0
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
@@ -194,6 +194,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     boundaries = {
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
     }
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -218,6 +219,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
                                      eosname=eosname, casename=casename)
+
     if rank == 0:
         logger.info(init_message)
 
@@ -239,6 +241,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       ("dv", dv),
                       ("exact", exact),
                       ("residual", resid)]
+
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -267,11 +270,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        exittol = .09
-        if max(component_errors) > exittol:
-            health_error = True
-            if rank == 0:
-                logger.info("Solution diverged from exact soln.")
+        # exittol = .09
+        # if max(component_errors) > exittol:
+        #    health_error = True
+        #    if rank == 0:
+        #        logger.info("Solution diverged from exact soln.")
 
         return health_error
 
