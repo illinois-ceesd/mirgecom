@@ -47,6 +47,14 @@ for details.
    :class:`loopy.LoopKernel` already holds handles to compiled
    :class:`pyopencl.Kernel` objects.
 
+.. note::
+
+   PyOpenCL uses ``clCreateProgramWithSource`` on the first compilation and
+   caches the OpenCL binary it retrieves. The second time the same source
+   is compiled, it uses ``clCreateProgramWithBinary`` to hand the binary
+   to the CL runtime (such as PoCL). This can lead to different caching behaviors on the first three compilations depending on how the CL runtime
+   itself performs caching.
+
 
 PoCL
 ++++
