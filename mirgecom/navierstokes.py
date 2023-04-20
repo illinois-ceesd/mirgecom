@@ -424,6 +424,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     dd_vol = dd
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
+    actx = state.array_context
 
     # Make model-consistent fluid state data (i.e. CV *and* DV) for:
     # - Volume: vol_state_quad
@@ -449,12 +450,16 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
     # {{{ === Compute grad(CV) ===
 
-    if grad_cv is None:
-        grad_cv = grad_cv_operator(
+    @actx.outline
+    def get_grad_cv(state):
+        return grad_cv_operator(
             dcoll, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
             operator_states_quad=operator_states_quad, comm_tag=comm_tag)
+
+    if grad_cv is None:
+        grad_cv = get_grad_cv(state)
 
     # Communicate grad(CV) and put it on the quadrature domain
     grad_cv_interior_pairs = [
@@ -468,6 +473,13 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     # }}} Compute grad(CV)
 
     # {{{ === Compute grad(temperature) ===
+    @actx.outline
+    def get_grad_t(state):
+        return grad_t_operator(
+            dcoll, gas_model, boundaries, state, time=time,
+            numerical_flux_func=gradient_numerical_flux_func,
+            quadrature_tag=quadrature_tag, dd=dd_vol,
+            operator_states_quad=operator_states_quad, comm_tag=comm_tag)
 
     if grad_t is None:
         grad_t = grad_t_operator(
