@@ -495,8 +495,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         raise ValueError("nranks_per_axis must match mesh dimension.")
     num_ranks = np.prod(nranks_per_axis)
     if np.prod(nranks_per_axis[1:]) != 1:
-        raise NotImplementedError("geometric_mesh_partitioner currently only supports"
-                                " partitioning in the X-dimension."
+        raise NotImplementedError("geometric_mesh_partitioner currently only "
+                                "supports partitioning in the X-dimension."
                                 "(only nranks_per_axis[0] should be > 1).")
     mesh_verts = mesh.vertices
     mesh_x = mesh_verts[0]
@@ -530,7 +530,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     print(f"{elem_to_rank=}")
 
     # map partition id to list of elements in that partition
-    part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
+    part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
                         for r in range(num_ranks)}
     # make an array of the geometrically even partition sizes
     # avoids calling "len" over and over on the element sets
