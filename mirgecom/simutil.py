@@ -447,7 +447,13 @@ def max_component_norm(dcoll, fields, order=np.inf, *, dd=DD_VOLUME_ALL):
         componentwise_norms(dcoll, fields, order, dd=dd), actx)))
 
 
-def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
+class PartitioningError(Exception):
+    """Error tossed to indicate an error with domain decomposition."""
+
+    pass
+
+
+def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                auto_balance=False, imbalance_tolerance=.01,
                                debug=False):
     """Partition a mesh uniformly along the X coordinate axis.
@@ -461,9 +467,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
     mesh: :class:`meshmode.mesh.Mesh`
         The serial mesh to partition
     num_ranks: int
-        The number of partitions to make
+        The number of partitions to make (deprecated)
     nranks_per_axis: numpy.ndarray
-        How many partitions per specified axis.  Currently unused.
+        How many partitions per specified axis.
     auto_balance: bool
         Indicates whether to perform automatic balancing.  If true, the
         partitioner will try to balance the number of elements over
@@ -481,18 +487,19 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
         Array indicating the MPI rank for each element
     """
     mesh_dimension = mesh.dim
-    if nranks_per_axis is None:
-        nranks_per_axis = np.ones(mesh_dimension)
+    if nranks_per_axis is None or num_ranks is not None:
+        from warnings import warn
+        warn("num_ranks is deprecated, use nranks_per_axis instead.")
+        num_ranks = num_ranks or 1
+        nranks_per_axis = np.ones(mesh_dimension, dtype=np.int32)
         nranks_per_axis[0] = num_ranks
     if len(nranks_per_axis) != mesh_dimension:
         raise ValueError("nranks_per_axis must match mesh dimension.")
-    nranks_test = 1
-    for i in range(mesh_dimension):
-        nranks_test = nranks_test * nranks_per_axis[i]
-    if nranks_test != num_ranks:
-        raise ValueError("nranks_per_axis must match num_ranks.")
-
-    mesh_groups, = mesh.groups
+    num_ranks = np.prod(nranks_per_axis)
+    if np.prod(nranks_per_axis[1:]) != 1:
+        raise NotImplementedError("geometric_mesh_partitioner currently only "
+                                "supports partitioning in the X-dimension."
+                                "(only nranks_per_axis[0] should be > 1).")
     mesh_verts = mesh.vertices
     mesh_x = mesh_verts[0]
 
@@ -502,9 +509,15 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
     part_loc = np.linspace(x_min, x_max, num_ranks+1)
 
     part_interval = x_interval / nranks_per_axis[0]
-    elem_x = mesh_verts[0, mesh_groups.vertex_indices]
-    elem_centroids = np.sum(elem_x, axis=1)/elem_x.shape[1]
+
+    all_elem_group_centroids = []
+    for group in mesh.groups:
+        elem_group_x = mesh_verts[0, group.vertex_indices]
+        elem_group_centroids = np.sum(elem_group_x, axis=1)/elem_group_x.shape[1]
+        all_elem_group_centroids.append(elem_group_centroids)
+    elem_centroids = np.concatenate(all_elem_group_centroids)
     global_nelements = len(elem_centroids)
+
     aver_part_nelem = global_nelements / num_ranks
 
     if debug:
@@ -517,7 +530,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
     # map partition id to list of elements in that partition
-    part_to_elements = {r: set((np.where(elem_to_rank == r))[0].flat)
+    part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
                         for r in range(num_ranks)}
     # make an array of the geometrically even partition sizes
     # avoids calling "len" over and over on the element sets
@@ -531,17 +544,12 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
 
         for r in range(num_ranks-1):
 
-            # find the element reservoir (next part with elements in it)
-            adv_part = r + 1
-            while nelem_part[adv_part] == 0:
-                adv_part = adv_part + 1
-
             num_elem_needed = aver_part_nelem - nelem_part[r]
             part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
             if debug:
                 print(f"Processing part({r=})")
-                print(f"{part_loc[r]=}, {adv_part=}")
+                print(f"{part_loc[r]=}")
                 print(f"{num_elem_needed=}, {part_imbalance=}")
                 print(f"{nelem_part=}")
 
@@ -549,8 +557,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
             total_change = 0
             moved_elements = set()
 
-            while ((part_imbalance > imbalance_tolerance)
-                   and (adv_part < num_ranks)):
+            adv_part = r + 1
+            while part_imbalance > imbalance_tolerance:
                 # This partition needs to keep changing in size until it meets the
                 # specified imbalance tolerance, or gives up trying
 
@@ -558,7 +566,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
                 while nelem_part[adv_part] == 0:
                     adv_part = adv_part + 1
                     if adv_part >= num_ranks:
-                        raise ValueError("Ran out of elements to partition.")
+                        raise PartitioningError("Ran out of elements to partition.")
 
                 if debug:
                     print(f"-{nelem_part[r]=}, adv_part({adv_part}),"
@@ -567,7 +575,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
                     print(f"-{num_elem_needed=},{part_imbalance=}")
 
                 if niter > 100:
-                    raise ValueError("Detected too many iterations in partitioning.")
+                    raise PartitioningError("Detected too many iterations in"
+                                            " partitioning.")
 
                 # The purpose of the next block is to populate the "moved_elements"
                 # data structure. Then those elements will be moved between the
@@ -731,18 +740,18 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
         print("Validating mesh parts.")
 
     if total_partitioned_elements != total_nelem_part:
-        raise ValueError("Validator: parted element counts dont match")
+        raise PartitioningError("Validator: parted element counts dont match")
     if total_partitioned_elements != global_nelements:
-        raise ValueError("Validator: global element counts dont match.")
+        raise PartitioningError("Validator: global element counts dont match.")
     if len(elem_to_rank) != global_nelements:
-        raise ValueError("Validator: elem-to-rank wrong size.")
+        raise PartitioningError("Validator: elem-to-rank wrong size.")
     if np.any(nelem_part) <= 0:
-        raise ValueError("Validator: empty partitions.")
+        raise PartitioningError("Validator: empty partitions.")
 
     for e in range(global_nelements):
         part = elem_to_rank[e]
         if e not in part_to_elements[part]:
-            raise ValueError("Validator: part/element/part map mismatch.")
+            raise PartitioningError("Validator: part/element/part map mismatch.")
 
     part_counts = np.zeros(global_nelements)
     for part_elements in part_to_elements.values():
@@ -750,9 +759,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=1, *, nranks_per_axis=None,
             part_counts[element] = part_counts[element] + 1
 
     if np.any(part_counts > 1):
-        raise ValueError("Validator: degenerate elements")
+        raise PartitioningError("Validator: degenerate elements")
     if np.any(part_counts < 1):
-        raise ValueError("Validator: orphaned elements")
+        raise PartitioningError("Validator: orphaned elements")
 
     return elem_to_rank
 
