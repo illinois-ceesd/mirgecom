@@ -3,7 +3,6 @@ mpi4py
 numpy
 pytest
 pytest-cov
-pyvisfile
 pymetis
 importlib-resources
 psutil
@@ -24,3 +23,4 @@ git+https://github.com/pythological/kanren.git#egg=miniKanren
 --editable git+https://github.com/pyrometheus/pyrometheus.git@tulio-transport#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 --editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
+--editable git+https://github.com/inducer/pyvisfile.git#egg=pyvisfile
