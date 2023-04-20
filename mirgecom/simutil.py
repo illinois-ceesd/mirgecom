@@ -484,19 +484,18 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     elem_to_rank: numpy.ndarray
         Array indicating the MPI rank for each element
     """
-    debug = True
     mesh_dimension = mesh.dim
     if nranks_per_axis is None or num_ranks is not None:
         from warnings import warn
         warn("num_ranks is deprecated, use nranks_per_axis instead.")
         num_ranks = num_ranks or 1
-        nranks_per_axis = np.ones(mesh_dimension, dtype=np.int8)
+        nranks_per_axis = np.ones(mesh_dimension, dtype=np.int32)
         nranks_per_axis[0] = num_ranks
     if len(nranks_per_axis) != mesh_dimension:
-        raise PartitioningError("nranks_per_axis must match mesh dimension.")
+        raise ValueError("nranks_per_axis must match mesh dimension.")
     num_ranks = np.prod(nranks_per_axis)
     if np.prod(nranks_per_axis[1:]) != 1:
-        raise PartitioningError("geometric_mesh_partitioner currently only supports"
+        raise NotImplementedError("geometric_mesh_partitioner currently only supports"
                                 " partitioning in the X-dimension."
                                 "(only nranks_per_axis[0] should be > 1).")
     mesh_verts = mesh.vertices
@@ -509,13 +508,13 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
 
     part_interval = x_interval / nranks_per_axis[0]
 
-    global_nelements = 0
-    elem_centroids = np.array([])
+    all_elem_group_centroids = []
     for group in mesh.groups:
         elem_group_x = mesh_verts[0, group.vertex_indices]
         elem_group_centroids = np.sum(elem_group_x, axis=1)/elem_group_x.shape[1]
-        global_nelements = global_nelements + len(elem_group_centroids)
-        elem_centroids = np.concatenate((elem_centroids, elem_group_centroids))
+        all_elem_group_centroids.append(elem_group_centroids)
+    elem_centroids = np.concatenate(all_elem_group_centroids)
+    global_nelements = len(elem_centroids)
 
     aver_part_nelem = global_nelements / num_ranks
 
