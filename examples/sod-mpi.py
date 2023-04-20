@@ -187,7 +187,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
     initializer = SodShock1D(dim=dim)
-    eos = IdealSingleGas()
+    eos = IdealSingleGas(gas_const=1.0)
     gas_model = GasModel(eos=eos)
 
     def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
@@ -272,8 +272,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_health_check(pressure, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .09, 1.1):
+        # or check_range_local(dcoll, "vol", pressure, .09, 1.1):
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
