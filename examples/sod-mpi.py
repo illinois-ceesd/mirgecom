@@ -107,17 +107,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         timestepper = rk4_step
     t_final = 0.2
-    current_cfl = 1.0
+    current_cfl = 0.01
     current_dt = 1e-6
     current_t = 0
     constant_cfl = False
     current_step = 0
 
     # some i/o frequencies
-    nstatus = 100
+    nstatus = 1
     nrestart = 1000
-    nviz = 100
-    nhealth = 100
+    nviz = 1
+    nhealth = 1
 
     dim = 1
     rst_path = "restart_data/"
@@ -144,8 +144,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     order = 4
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=order+2)
     nodes = actx.thaw(dcoll.nodes())
+
+    # TODO: Fix this wonky dt estimate
+    from grudge.dt_utils import h_min_from_volume
+    cn = 0.5*(order + 1)**2
+    current_dt = current_cfl * actx.to_numpy(h_min_from_volume(dcoll)) / cn
 
     if use_esdg:
         print("Using ESDG, enabling overintegration.")
