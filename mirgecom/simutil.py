@@ -545,16 +545,16 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         for r in range(num_ranks-1):
 
             # find the element reservoir (next part with elements in it)
-            adv_part = r + 1
-            while nelem_part[adv_part] == 0:
-                adv_part = adv_part + 1
+            # adv_part = r + 1
+            # while nelem_part[adv_part] == 0:
+            #    adv_part = adv_part + 1
 
             num_elem_needed = aver_part_nelem - nelem_part[r]
             part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
             if debug:
                 print(f"Processing part({r=})")
-                print(f"{part_loc[r]=}, {adv_part=}")
+                print(f"{part_loc[r]=}")
                 print(f"{num_elem_needed=}, {part_imbalance=}")
                 print(f"{nelem_part=}")
 
@@ -562,8 +562,10 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
             total_change = 0
             moved_elements = set()
 
-            while ((part_imbalance > imbalance_tolerance)
-                   and (adv_part < num_ranks)):
+            adv_part = r + 1
+            # while ((part_imbalance > imbalance_tolerance)
+            #       and (adv_part < num_ranks)):
+            while part_imbalance > imbalance_tolerance:
                 # This partition needs to keep changing in size until it meets the
                 # specified imbalance tolerance, or gives up trying
 
