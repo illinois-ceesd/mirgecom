@@ -262,7 +262,7 @@ class SodShock1D:
     """
 
     def __init__(
-            self, *, dim=2, xdir=0, x0=0.5, rhol=1.0,
+            self, *, dim=1, xdir=0, x0=0.5, rhol=1.0,
             rhor=0.125, pleft=1.0, pright=0.1,
     ):
         """Initialize shock parameters.
@@ -285,8 +285,8 @@ class SodShock1D:
         self._x0 = x0
         self._rhol = rhol
         self._rhor = rhor
-        self._energyl = pleft
-        self._energyr = pright
+        self._pl = pleft
+        self._pr = pright
         self._dim = dim
         self._xdir = xdir
         if self._xdir >= self._dim:
@@ -305,30 +305,39 @@ class SodShock1D:
         """
         if eos is None:
             eos = IdealSingleGas()
+
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
-        x_rel = x_vec[self._xdir]
-        actx = x_rel.array_context
+        x = x_vec[self._xdir]
+        actx = x.array_context
 
-        zeros = 0*x_rel
+        zeros = 0*x
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
         x0 = zeros + self._x0
-        energyl = zeros + gmn1 * self._energyl
-        energyr = zeros + gmn1 * self._energyr
-        yesno = actx.np.greater(x_rel, x0)
-        mass = actx.np.where(yesno, rhor, rhol)
-        energy = actx.np.where(yesno, energyr, energyl)
-        mom = make_obj_array(
-            [
-                1.*zeros
-                for i in range(self._dim)
-            ]
-        )
+        energyl = zeros + gmn1 * self._pl
+        energyr = zeros + gmn1 * self._pr
+
+        sigma = 1e-13
+        weight = 0.5 * (1.0 - actx.np.tanh(1.0/sigma * (x - x0)))
+
+        mass = rhor + (rhol - rhor)*weight
+        energy = energyr + (energyl - energyr)*weight
+        momentum = make_obj_array([1.*zeros for _ in range(self._dim)])
+
+        # yesno = actx.np.greater(x_rel, x0)
+        # mass = actx.np.where(yesno, rhor, rhol)
+        # energy = actx.np.where(yesno, energyr, energyl)
+        # mom = make_obj_array(
+        #     [
+        #         0*x_rel
+        #         for i in range(self._dim)
+        #     ]
+        # )
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+                              momentum=momentum)
 
 
 class DoubleMachReflection:

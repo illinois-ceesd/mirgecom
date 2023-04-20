@@ -106,7 +106,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1.0
+    t_final = 0.2
     current_cfl = 1.0
     current_dt = 1e-6
     current_t = 0
@@ -134,8 +134,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        nel_1d = 64
-        box_ll = 0
+        nel_1d = 32
+        box_ll = 0.0
         box_ur = 1.0
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
@@ -143,7 +143,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
+    order = 4
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
@@ -238,6 +238,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if resid is None:
             resid = state - exact
         viz_fields = [("cv", state),
+                      ("vel", state.velocity),
                       ("dv", dv),
                       ("exact", exact),
                       ("residual", resid)]
