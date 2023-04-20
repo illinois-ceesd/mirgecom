@@ -261,8 +261,6 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         # flip the sign of the normal to indicate that positive values of
         # flux are going in the cell
-#        return 0.5*(-kappa_minus * np.dot(grad_u_minus, normal)
-#                    + np.dot(external_flux, -normal))
         return np.dot(external_flux, -normal)
 
 class _DiffusionStateTag:

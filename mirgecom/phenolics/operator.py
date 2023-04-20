@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 from grudge.trace_pair import TracePair
 from grudge.trace_pair import interior_trace_pairs, tracepair_with_discr_tag
 from grudge import op
@@ -64,10 +65,14 @@ def my_derivative_function(actx, dcoll, quadrature_tag, field, u,
 
         numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg
 
-        wavespeed_int = actx.np.sqrt(
-            bnd_u_tpair_quad.int[0]**2 + bnd_u_tpair_quad.int[1]**2)
-        wavespeed_ext = actx.np.sqrt(
-            bnd_u_tpair_quad.ext[0]**2 + bnd_u_tpair_quad.ext[1]**2)
+        if dcoll.dim == 1:
+            wavespeed_int = bnd_u_tpair_quad.int[0]
+            wavespeed_ext = bnd_u_tpair_quad.ext[0]
+        if dcoll.dim == 2:
+            wavespeed_int = actx.np.sqrt(
+                bnd_u_tpair_quad.int[0]**2 + bnd_u_tpair_quad.int[1]**2)
+            wavespeed_ext = actx.np.sqrt(
+                bnd_u_tpair_quad.ext[0]**2 + bnd_u_tpair_quad.ext[1]**2)
         lam = actx.np.maximum(wavespeed_int, wavespeed_ext)
         jump = bnd_f_tpair_quad.int - bnd_f_tpair_quad.ext
         numerical_flux = numerical_flux + 0.5*lam*(jump)
@@ -107,7 +112,7 @@ def my_derivative_function(actx, dcoll, quadrature_tag, field, u,
 
 
 def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
-                       pressure_scaling_factor, quadrature_tag, dd_wall,
+                       quadrature_tag, dd_wall, pressure_scaling_factor=1.0,
                        split=False):
     """."""
     wv, tseed = state
@@ -122,8 +127,9 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
 
     pressure_boundaries, energy_boundaries, velocity_boundaries = boundaries
 
-    # ~~~~~
     gas_pressure_diffusivity = eos.gas_pressure_diffusivity(temperature, tau)
+
+    # ~~~~~
     pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
         kappa=wv.gas_density*gas_pressure_diffusivity,
         boundaries=pressure_boundaries, u=pressure, time=time,
@@ -158,11 +164,18 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
     # flip sign due to mass conservation
     gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
 
+    actx = zeros.array_context
+    visc_diss_energy = (
+        wdv.gas_viscosity*wdv.void_fraction**2*(1.0/wdv.solid_permeability)*
+        np.dot(velocity, velocity)
+    )
+
     source_terms = wall.make_conserved(
         solid_species_mass=resin_pyrolysis,
         gas_density=gas_source_term,
-        energy=zeros)
+        energy=visc_diss_energy)
 
+    # ~~~~~
     if split:
         return inviscid_rhs, viscous_rhs, source_terms
     return inviscid_rhs + viscous_rhs + source_terms

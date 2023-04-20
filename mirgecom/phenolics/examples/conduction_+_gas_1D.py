@@ -111,14 +111,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     t_final = 1.0
 
+    dim = 1
+
     order = 2
-    dt = 1.0e-8
+    dt = 2.0e-8*5.0
     pressure_scaling_factor = 1.0  # noqa N806
 
     dt = dt/pressure_scaling_factor
 
-    nviz = 100000
-    ngarbage = 250
+    nviz = 1000
+    ngarbage = 50
     nrestart = 10000
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -136,15 +138,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     else:  # generate the grid from scratch
         from functools import partial
-        box_ll = (-.0025, 0.0)
-        box_ur = (+.0025, .05)
-        num_elements = (5+1, 200+1)
+        nel_1d = 201
 
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh,
-            a=box_ll, b=box_ur, n=num_elements,
-            periodic=(True, False),
-            boundary_tag_to_face={"prescribed": ["+y"], "neumann": ["-y"]})
+            a=(0.0,)*dim, b=(0.05,)*dim,
+            nelements_per_axis=(nel_1d,)*dim,
+            boundary_tag_to_face={"prescribed": ["+x"], "neumann": ["-x"]})
 
         local_mesh, global_nelements = (
             generate_and_distribute_mesh(comm, generate_mesh))
@@ -208,8 +208,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         # FIXME make emissivity function of tau
         emissivity = 0.8
-        return make_obj_array([
-            u_minus*0.0, flux - emissivity*5.67e-8*(u_minus**4 - 300**4)])
+        return make_obj_array([flux - emissivity*5.67e-8*(u_minus**4 - 300**4)])
 
     def my_presc_grad_func(u_minus, grad_u_minus, **kwargs):
         return 0.0
@@ -224,7 +223,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     }
 
     def my_presc_pres_func(u_minus, **kwargs):
-        return 101325.0
+        return 101325.0/5.0
 
     pressure_boundaries = {
         BoundaryDomainTag("prescribed"):
@@ -234,7 +233,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     }
 
     def my_presc_velocity_func(u_minus, **kwargs):
-        return np.zeros((2,))
+        return 0.0
 
     def my_dummy_velocity_func(u_minus, **kwargs):
         return u_minus
@@ -267,8 +266,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     solid_species_mass[0] = 30.0 + nodes[0]*0.0
     solid_species_mass[1] = 90.0 + nodes[0]*0.0
     solid_species_mass[2] = 160. + nodes[0]*0.0
-    temperature = 300.0 + 0.0*nodes[1]
-    pressure = 101325.0 + nodes[0]*0.0
+    temperature = 300.0 + 0.0*nodes[0]
+    pressure = 101325.0/5.0 + nodes[0]*0.0
 
 #    solid_species_mass[0] = 30.0 - (nodes[1]/0.05)**2*0.5*30.0
 #    solid_species_mass[1] = 90.0 - (nodes[1]/0.05)**2*0.5*30.0
@@ -406,7 +405,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 #        rhs = get_rhs_terms(t, wv, wdv)
 #        rhs_I, rhs_V, rhs_S = rhs
 
-        viz_fields = [("WV", wall_vars),
+        viz_fields = [("x", nodes[0]),
+                      ("WV", wall_vars),
                       ("DV", dep_vars),
                       ("DV_velocity", velocity),
                       ("DV_mass_flux", mass_flux),
@@ -465,6 +465,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
     my_write_temperature(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
 
+#    rhs = get_rhs_terms(t, wall_vars, wdv)
+#    rhs_I, rhs_V, rhs_S = rhs
+
+    freeze_gc_flag = True
     while t < t_final:
 
         if logmgr:
@@ -502,6 +506,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             if istep % nrestart == 0:
                 my_write_restart(step=istep, t=t, wall_vars=wall_vars,
                              tseed=wdv.temperature)
+
+            if freeze_gc_flag == True:
+                print('Freeze gc')
+                freeze_gc_flag = False
+
+                import gc
+                gc.collect()
+                # Freeze the objects that are still alive so they will not
+                # be considered in future gc collections.
+                gc.freeze()
 
         except MyRuntimeError:
             if rank == 0:
