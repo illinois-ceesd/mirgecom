@@ -640,14 +640,20 @@ class ArtificialViscosityTransportDiv2(TransportModel):
                        dv: GasDependentVars,
                        eos: GasEOS) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
-        return (dv.smoothness_beta*self.av_beta(cv, dv, eos)
+        actx = cv.array_context
+        smoothness_beta = actx.np.where(
+            actx.np.greater(dv.smoothness_beta, 0.), dv.smoothness_beta, 0.)
+        return (smoothness_beta*self.av_beta(cv, dv, eos)
                 + self._physical_transport.bulk_viscosity(cv, dv))
 
     def viscosity(self, cv: ConservedVars,  # type: ignore[override]
                   dv: GasDependentVars,
                   eos: GasEOS) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return (dv.smoothness_mu*self.av_mu(cv, dv, eos)
+        actx = cv.array_context
+        smoothness_mu = actx.np.where(
+            actx.np.greater(dv.smoothness_mu, 0.), dv.smoothness_mu, 0.)
+        return (smoothness_mu*self.av_mu(cv, dv, eos)
                 + self._physical_transport.viscosity(cv, dv))
 
     def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
@@ -659,7 +665,14 @@ class ArtificialViscosityTransportDiv2(TransportModel):
 
         $\lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)$
         """
-        return (dv.smoothness_mu*self.av_mu(cv, dv, eos)
+        actx = cv.array_context
+        smoothness_mu = actx.np.where(
+            actx.np.greater(dv.smoothness_mu, 0.), dv.smoothness_mu, 0.)
+        smoothness_beta = actx.np.where(
+            actx.np.greater(dv.smoothness_beta, 0.), dv.smoothness_beta, 0.)
+
+        return (smoothness_beta*self.av_beta(cv, dv, eos)
+                - 2*smoothness_mu*self.av_mu(cv, dv, eos)/3
                 + self._physical_transport.volume_viscosity(cv, dv))
 
     def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
@@ -667,9 +680,14 @@ class ArtificialViscosityTransportDiv2(TransportModel):
                              eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
         cp = eos.heat_capacity_cp(cv, dv.temperature)
+        actx = cv.array_context
+        smoothness_beta = actx.np.where(
+            actx.np.greater(dv.smoothness_beta, 0.), dv.smoothness_beta, 0.)
+        smoothness_kappa = actx.np.where(
+            actx.np.greater(dv.smoothness_kappa, 0.), dv.smoothness_kappa, 0.)
         av_kappa = (
-            cp*(dv.smoothness_beta*self.av_beta(cv, dv, eos)/self._av_prandtl
-                + dv.smoothness_kappa*self.av_kappa(cv, dv, eos))
+            cp*(smoothness_beta*self.av_beta(cv, dv, eos)/self._av_prandtl
+                + smoothness_kappa*self.av_kappa(cv, dv, eos))
         )
 
         return (av_kappa
