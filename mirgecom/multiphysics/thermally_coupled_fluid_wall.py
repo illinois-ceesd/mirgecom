@@ -1,16 +1,25 @@
-r"""Operator for thermally-coupled fluid and wall.
+r""":mod:`mirgecom.multiphysics.thermally_coupled_fluid_wall` for thermally-coupled
+fluid and wall.
 
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
-(:module:`mirgecom.navierstokes) with a wall subdomain governed by the heat
-equation (:module:`mirgecom.diffusion`) by enforcing continuity of temperature
-and heat flux across their interface.
+(:mod:`mirgecom.navierstokes`) with a wall subdomain governed by the heat
+equation (:mod:`mirgecom.diffusion`) by enforcing continuity of temperature
+and heat flux
+
+.. math::
+    T_\text{fluid} &= T_\text{wall} \\
+    -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n} &=
+        -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n}.
+
+at the interface.
 
 .. autofunction:: get_interface_boundaries
 .. autofunction:: coupled_grad_t_operator
 .. autofunction:: coupled_ns_heat_operator
 
-.. autoclass:: InterfaceFluidSlipBoundary
 .. autoclass:: InterfaceFluidBoundary
+.. autoclass:: InterfaceFluidSlipBoundary
+.. autoclass:: InterfaceFluidNoslipBoundary
 .. autoclass:: InterfaceWallBoundary
 """
 
@@ -109,6 +118,7 @@ class _WallOperatorTag:
 
 
 def _project_from_base(dcoll, dd_bdry, field):
+    """Project *field* from *DISCR_TAG_BASE* to the same discr. as *dd_bdry*."""
     if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
         dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
         return op.project(dcoll, dd_bdry_base, dd_bdry, field)
@@ -120,7 +130,7 @@ def _project_from_base(dcoll, dd_bdry, field):
 # both sides of the interface
 class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     r"""
-    Abstract interface for fluid side of fluid-wall interface boundary.
+    Abstract interface for the fluid side of the fluid-wall interface boundary.
 
     Extends :class:`~mirgecom.boundary.MengaldoBoundaryCondition` to include
     an interior penalty on the heat flux:
@@ -131,6 +141,15 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     where $\tau = c \frac{\kappa_\text{bc}}{h^-}$. Here $c$ is a
     user-defined constant and $h^-$ is the characteristic mesh spacing
     on the fluid side of the interface.
+
+    Base class implementations
+    --------------------------
+    .. automethod:: __init__
+    .. automethod:: viscous_divergence_flux
+
+    Abstract interface
+    ------------------
+    .. automethod:: temperature_plus
     """
     def __init__(self, heat_flux_penalty_amount, lengthscales_minus):
         r"""
@@ -177,7 +196,12 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     def viscous_divergence_flux(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
             grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
-            **kwargs):  # noqa: D102
+            **kwargs):
+        """
+        Return the viscous flux as defined by
+        :meth:`mirgecom.boundary.MengaldoBoundaryCondition.viscous_divergence_flux`
+        with the additional heat flux interior penalty term.
+        """
         dd_bdry = as_dofdesc(dd_bdry)
 
         state_bc = self.state_bc(
@@ -249,12 +273,23 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
 
 
 def _replace_kappa(state, kappa):
+    """Replace the thermal conductivity in fluid state *state* with *kappa*."""
     new_tv = replace(state.tv, thermal_conductivity=kappa)
     return replace(state, tv=new_tv)
 
 
 class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
-    """Boundary for the fluid side of the fluid-wall interface, with slip."""
+    """
+    Boundary for the fluid side of the fluid-wall interface, with slip.
+
+    .. automethod:: __init__
+    .. automethod:: state_plus
+    .. automethod:: state_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: temperature_plus
+    .. automethod:: temperature_bc
+    .. automethod:: grad_temperature_bc
+    """
 
     def __init__(
             self, kappa_plus, t_plus, grad_t_plus=None,
@@ -269,15 +304,15 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
 
         Parameters
         ----------
-        kappa_plus: float or :class:meshmode.dof_array.DOFArray`
+        kappa_plus: float or :class:`meshmode.dof_array.DOFArray`
 
             Thermal conductivity from the wall side.
 
-        t_plus: :class:meshmode.dof_array.DOFArray`
+        t_plus: :class:`meshmode.dof_array.DOFArray`
 
             Temperature from the wall side.
 
-        grad_t_plus: :class:meshmode.dof_array.DOFArray` or None
+        grad_t_plus: :class:`meshmode.dof_array.DOFArray` or None
 
             Temperature gradient from the wall side.
 
@@ -291,9 +326,9 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
 
         use_kappa_weighted_grad_t_flux: bool
 
-            Indicates whether the temperature gradient at the interface should be
-            computed using a simple average or by weighting each side by its
-            respective thermal conductivity.
+            Indicates whether the temperature gradient flux at the interface should
+            be computed using a simple average of temperatures or by weighting the
+            temperature from each side by its respective thermal conductivity.
         """
         InterfaceFluidBoundary.__init__(
             self,
@@ -399,7 +434,17 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
 
 
 class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
-    """Boundary for the fluid side of the fluid-wall interface, without slip."""
+    """
+    Boundary for the fluid side of the fluid-wall interface, without slip.
+
+    .. automethod:: __init__
+    .. automethod:: state_plus
+    .. automethod:: state_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: temperature_plus
+    .. automethod:: temperature_bc
+    .. automethod:: grad_temperature_bc
+    """
 
     def __init__(
             self, kappa_plus, t_plus, grad_t_plus=None,
@@ -414,15 +459,15 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 
         Parameters
         ----------
-        kappa_plus: float or :class:meshmode.dof_array.DOFArray`
+        kappa_plus: float or :class:`meshmode.dof_array.DOFArray`
 
             Thermal conductivity from the wall side.
 
-        t_plus: :class:meshmode.dof_array.DOFArray`
+        t_plus: :class:`meshmode.dof_array.DOFArray`
 
             Temperature from the wall side.
 
-        grad_t_plus: :class:meshmode.dof_array.DOFArray` or None
+        grad_t_plus: :class:`meshmode.dof_array.DOFArray` or None
 
             Temperature gradient from the wall side.
 
@@ -436,9 +481,9 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 
         use_kappa_weighted_grad_t_flux: bool
 
-            Indicates whether the temperature gradient at the interface should be
-            computed using a simple average or by weighting each side by its
-            respective thermal conductivity.
+            Indicates whether the temperature gradient flux at the interface should
+            be computed using a simple average of temperatures or by weighting the
+            temperature from each side by its respective thermal conductivity.
         """
         InterfaceFluidBoundary.__init__(
             self,
@@ -518,7 +563,13 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 # FIXME: Interior penalty should probably use an average of the lengthscales on
 # both sides of the interface
 class InterfaceWallBoundary(DiffusionBoundary):
-    """Boundary for the wall side of the fluid-wall interface."""
+    """
+    Boundary for the wall side of the fluid-wall interface.
+
+    .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
+    """
 
     def __init__(self, kappa_plus, u_plus, grad_u_plus=None):
         r"""
@@ -529,15 +580,15 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
         Parameters
         ----------
-        kappa_plus: float or :class:meshmode.dof_array.DOFArray`
+        kappa_plus: float or :class:`meshmode.dof_array.DOFArray`
 
             Thermal conductivity from the fluid side.
 
-        t_plus: :class:meshmode.dof_array.DOFArray`
+        t_plus: :class:`meshmode.dof_array.DOFArray`
 
             Temperature from the fluid side.
 
-        grad_t_plus: :class:meshmode.dof_array.DOFArray` or None
+        grad_t_plus: :class:`meshmode.dof_array.DOFArray` or None
 
             Temperature gradient from the fluid side.
         """
@@ -594,14 +645,17 @@ def _kappa_inter_volume_trace_pairs(
         gas_model,
         fluid_dd, wall_dd,
         fluid_state, wall_kappa):
+    """Exchange thermal conductivity across the fluid-wall interface."""
     actx = fluid_state.array_context
     fluid_kappa = fluid_state.thermal_conductivity
 
+    # Promote constant-valued kappas to DOFArrays
     from meshmode.dof_array import DOFArray
     if not isinstance(fluid_kappa, DOFArray):
         fluid_kappa = fluid_kappa * (dcoll.zeros(actx, dd=fluid_dd) + 1)
     if not isinstance(wall_kappa, DOFArray):
         wall_kappa = wall_kappa * (dcoll.zeros(actx, dd=wall_dd) + 1)
+
     pairwise_kappa = {
         (fluid_dd, wall_dd): (fluid_kappa, wall_kappa)}
     return inter_volume_trace_pairs(
@@ -613,6 +667,7 @@ def _temperature_inter_volume_trace_pairs(
         gas_model,
         fluid_dd, wall_dd,
         fluid_state, wall_temperature):
+    """Exchange temperature across the fluid-wall interface."""
     pairwise_temperature = {
         (fluid_dd, wall_dd):
             (fluid_state.temperature, wall_temperature)}
@@ -625,6 +680,7 @@ def _grad_temperature_inter_volume_trace_pairs(
         gas_model,
         fluid_dd, wall_dd,
         fluid_grad_temperature, wall_grad_temperature):
+    """Exchange temperature gradient across the fluid-wall interface."""
     pairwise_grad_temperature = {
         (fluid_dd, wall_dd):
             (fluid_grad_temperature, wall_grad_temperature)}
@@ -648,8 +704,83 @@ def get_interface_boundaries(
         _kappa_inter_vol_tpairs=None,
         _temperature_inter_vol_tpairs=None,
         _grad_temperature_inter_vol_tpairs=None):
-    # FIXME: Incomplete docs
-    """Get the fluid-wall interface boundaries."""
+    """
+    Get the fluid-wall interface boundaries.
+
+    Return a tuple `(fluid_interface_boundaries, wall_interface_boundaries)` in
+    which each of the two entries is a mapping from each interface boundary's
+    :class:`grudge.dof_desc.BoundaryDomainTag` to a boundary condition object
+    compatible with that subdomain's operators. The map contains one entry for
+    the collection of faces whose opposite face reside on the current MPI rank
+    and one-per-rank for each collection of faces whose opposite face resides on
+    a different rank.
+
+    Parameters
+    ----------
+
+    dcoll: class:`~grudge.discretization.DiscretizationCollection`
+
+        A discretization collection encapsulating the DG elements
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    fluid_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the fluid volume.
+
+    wall_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the wall volume.
+
+    fluid_state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state and dependent
+        quantities for the fluid volume.
+
+    wall_kappa: float or :class:`meshmode.dof_array.DOFArray`
+
+        Thermal conductivity for the wall volume.
+
+    wall_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Temperature for the wall volume.
+
+    fluid_grad_temperature: numpy.ndarray or None
+
+        Temperature gradient for the fluid volume. Only needed if boundaries will
+        be used to compute viscous fluxes.
+
+    wall_grad_temperature: numpy.ndarray or None
+
+        Temperature gradient for the wall volume. Only needed if boundaries will
+        be used to compute diffusion fluxes.
+
+    interface_noslip: bool
+
+        If `True`, interface boundaries on the fluid side will be treated as
+        no-slip walls. If `False` they will be treated as slip walls.
+
+    use_kappa_weighted_grad_flux_in_fluid: bool
+
+        Indicates whether the temperature gradient flux on the fluid side of the
+        interface should be computed using a simple average of temperatures or by
+        weighting the temperature from each side by its respective thermal
+        conductivity.
+
+    wall_penalty_amount: float
+
+        Coefficient $c$ for the interior penalty on the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
+        for details.
+
+    quadrature_tag
+
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+    """
     if interface_noslip:
         fluid_bc_class = InterfaceFluidNoslipBoundary
     else:
@@ -660,6 +791,9 @@ def get_interface_boundaries(
         "Expected both fluid_grad_temperature and wall_grad_temperature or neither")
 
     include_gradient = fluid_grad_temperature is not None
+
+    # Exchange thermal conductivity, temperature, and (optionally) temperature
+    # gradient
 
     if _kappa_inter_vol_tpairs is None:
         kappa_inter_vol_tpairs = _kappa_inter_volume_trace_pairs(
@@ -692,12 +826,20 @@ def get_interface_boundaries(
     else:
         grad_temperature_inter_vol_tpairs = None
 
+    # Set up the interface boundaries
+
     if include_gradient:
+
+        # Diffusion operator passes lengthscales_minus into the boundary flux
+        # functions, but NS doesn't; thus we need to pass lengthscales into
+        # the fluid boundary condition constructor
         from grudge.dt_utils import characteristic_lengthscales
         fluid_lengthscales = (
             characteristic_lengthscales(
                 fluid_state.array_context, dcoll, fluid_dd)
             * (0*fluid_state.temperature+1))
+
+        # Construct interface boundaries with temperature gradient
 
         fluid_interface_boundaries = {
             kappa_tpair.dd.domain_tag: fluid_bc_class(
@@ -723,6 +865,9 @@ def get_interface_boundaries(
                 temperature_inter_vol_tpairs[fluid_dd, wall_dd],
                 grad_temperature_inter_vol_tpairs[fluid_dd, wall_dd])}
     else:
+
+        # Construct interface boundaries without temperature gradient
+
         fluid_interface_boundaries = {
             kappa_tpair.dd.domain_tag: fluid_bc_class(
                 kappa_tpair.ext,
@@ -762,14 +907,95 @@ def coupled_grad_t_operator(
         _fluid_operator_states_quad=None,
         _fluid_interface_boundaries_no_grad=None,
         _wall_interface_boundaries_no_grad=None):
-    # FIXME: Incomplete docs
-    """Compute grad(T) of the coupled fluid-wall system."""
+    r"""
+    Compute $\nabla T$ on the fluid and wall subdomains.
+
+    Parameters
+    ----------
+
+    dcoll: class:`~grudge.discretization.DiscretizationCollection`
+
+        A discretization collection encapsulating the DG elements
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    fluid_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the fluid volume.
+
+    wall_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the wall volume.
+
+    fluid_boundaries:
+
+        Dictionary of boundary objects for the fluid subdomain, one for each
+        :class:`~grudge.dof_desc.BoundaryDomainTag` that represents a domain
+        boundary.
+
+    wall_boundaries:
+
+        Dictionary of boundary objects for the wall subdomain, one for each
+        :class:`~grudge.dof_desc.BoundaryDomainTag` that represents a domain
+        boundary.
+
+    fluid_state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state and dependent
+        quantities for the fluid volume.
+
+    wall_kappa: float or :class:`meshmode.dof_array.DOFArray`
+
+        Thermal conductivity for the wall volume.
+
+    wall_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Temperature for the wall volume.
+
+    time:
+
+        Time
+
+    interface_noslip: bool
+
+        If `True`, interface boundaries on the fluid side will be treated as
+        no-slip walls. If `False` they will be treated as slip walls.
+
+    use_kappa_weighted_grad_flux_in_fluid: bool
+
+        Indicates whether the temperature gradient flux on the fluid side of the
+        interface should be computed using a simple average of temperatures or by
+        weighting the temperature from each side by its respective thermal
+        conductivity.
+
+    quadrature_tag:
+
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    fluid_numerical_flux_func:
+
+        Callable function to return the numerical flux to be used when computing
+        the temperature gradient in the fluid subdomain. Defaults to
+        :class:`~mirgecom.flux.num_flux_central`.
+
+    Returns
+    -------
+
+        The tuple `(fluid_grad_temperature, wall_grad_temperature)`.
+    """
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in fluid_boundaries.items()}
     wall_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
+
+    # Construct boundaries for the fluid-wall interface; no temperature gradient
+    # yet because that's what we're trying to compute
 
     assert (
         (_fluid_interface_boundaries_no_grad is None)
@@ -778,6 +1004,8 @@ def coupled_grad_t_operator(
         "_wall_interface_boundaries_no_grad or neither")
 
     if _fluid_interface_boundaries_no_grad is None:
+        # Note: We don't need to supply wall_penalty_amount here since we're only
+        # using these to compute the temperature gradient
         fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
             get_interface_boundaries(
                 dcoll,
@@ -793,6 +1021,8 @@ def coupled_grad_t_operator(
         fluid_interface_boundaries_no_grad = _fluid_interface_boundaries_no_grad
         wall_interface_boundaries_no_grad = _wall_interface_boundaries_no_grad
 
+    # Augment the domain boundaries with the interface boundaries
+
     fluid_all_boundaries_no_grad = {}
     fluid_all_boundaries_no_grad.update(fluid_boundaries)
     fluid_all_boundaries_no_grad.update(fluid_interface_boundaries_no_grad)
@@ -800,6 +1030,8 @@ def coupled_grad_t_operator(
     wall_all_boundaries_no_grad = {}
     wall_all_boundaries_no_grad.update(wall_boundaries)
     wall_all_boundaries_no_grad.update(wall_interface_boundaries_no_grad)
+
+    # Compute the subdomain gradient operators using the augmented boundaries
 
     return (
         fluid_grad_t_operator(
@@ -829,8 +1061,108 @@ def coupled_ns_heat_operator(
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         return_gradients=False):
-    # FIXME: Incomplete docs
-    """Compute RHS of the coupled fluid-wall system."""
+    r"""
+    Compute the RHS of the fluid and wall subdomains.
+
+    Augments *fluid_boundaries* and *wall_boundaries* with the boundaries for the
+    fluid-wall interface that are needed to enforce continuity of temperature and
+    heat flux.
+
+    Parameters
+    ----------
+
+    dcoll: class:`~grudge.discretization.DiscretizationCollection`
+
+        A discretization collection encapsulating the DG elements
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    fluid_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the fluid volume.
+
+    wall_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the wall volume.
+
+    fluid_boundaries:
+
+        Dictionary of boundary objects for the fluid subdomain, one for each
+        :class:`~grudge.dof_desc.BoundaryDomainTag` that represents a domain
+        boundary.
+
+    wall_boundaries:
+
+        Dictionary of boundary objects for the wall subdomain, one for each
+        :class:`~grudge.dof_desc.BoundaryDomainTag` that represents a domain
+        boundary.
+
+    fluid_state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state and dependent
+        quantities for the fluid volume.
+
+    wall_kappa: float or :class:`meshmode.dof_array.DOFArray`
+
+        Thermal conductivity for the wall volume.
+
+    wall_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Temperature for the wall volume.
+
+    time:
+
+        Time
+
+    interface_noslip: bool
+
+        If `True`, interface boundaries on the fluid side will be treated as
+        no-slip walls. If `False` they will be treated as slip walls.
+
+    use_kappa_weighted_grad_flux_in_fluid: bool
+
+        Indicates whether the temperature gradient flux on the fluid side of the
+        interface should be computed using a simple average of temperatures or by
+        weighting the temperature from each side by its respective thermal
+        conductivity.
+
+    wall_penalty_amount: float
+
+        Coefficient $c$ for the interior penalty on the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
+        for details.
+
+    quadrature_tag:
+
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    fluid_gradient_numerical_flux_func:
+
+        Callable function to return the numerical flux to be used when computing
+        the temperature gradient in the fluid subdomain. Defaults to
+        :class:`~mirgecom.flux.num_flux_central`.
+
+    inviscid_numerical_flux_func:
+
+        Callable function providing the face-normal flux to be used
+        for the divergence of the inviscid transport flux.  This defaults to
+        :func:`~mirgecom.inviscid.inviscid_facial_flux_rusanov`.
+
+    viscous_numerical_flux_func:
+
+        Callable function providing the face-normal flux to be used
+        for the divergence of the viscous transport flux.  This defaults to
+        :func:`~mirgecom.viscous.viscous_facial_flux_harmonic`.
+
+    Returns
+    -------
+
+        The tuple `(fluid_rhs, wall_rhs)`.
+    """
     if wall_penalty_amount is None:
         # *shrug*
         wall_penalty_amount = 0.05
@@ -841,6 +1173,8 @@ def coupled_ns_heat_operator(
     wall_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
+
+    # Pre-exchange kappa and temperature since we will need them in multiple steps
 
     kappa_inter_vol_tpairs = _kappa_inter_volume_trace_pairs(
         dcoll,
@@ -855,6 +1189,9 @@ def coupled_ns_heat_operator(
         fluid_dd, wall_dd,
         fluid_state, wall_temperature)
 
+    # Construct boundaries for the fluid-wall interface; no temperature gradient
+    # yet because we need to compute it
+
     fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
         get_interface_boundaries(
             dcoll=dcoll,
@@ -868,13 +1205,20 @@ def coupled_ns_heat_operator(
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs)
 
+    # Augment the domain boundaries with the interface boundaries (fluid only;
+    # needed for make_operator_fluid_states)
+
     fluid_all_boundaries_no_grad = {}
     fluid_all_boundaries_no_grad.update(fluid_boundaries)
     fluid_all_boundaries_no_grad.update(fluid_interface_boundaries_no_grad)
 
+    # Get the operator fluid states
+
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
         quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag)
+
+    # Compute the temperature gradient for both subdomains
 
     fluid_grad_temperature, wall_grad_temperature = coupled_grad_t_operator(
         dcoll,
@@ -894,6 +1238,9 @@ def coupled_ns_heat_operator(
         _fluid_interface_boundaries_no_grad=fluid_interface_boundaries_no_grad,
         _wall_interface_boundaries_no_grad=wall_interface_boundaries_no_grad)
 
+    # Construct boundaries for the fluid-wall interface, now with the temperature
+    # gradient
+
     fluid_interface_boundaries, wall_interface_boundaries = \
         get_interface_boundaries(
             dcoll=dcoll,
@@ -910,6 +1257,8 @@ def coupled_ns_heat_operator(
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs)
 
+    # Augment the domain boundaries with the interface boundaries
+
     fluid_all_boundaries = {}
     fluid_all_boundaries.update(fluid_boundaries)
     fluid_all_boundaries.update(fluid_interface_boundaries)
@@ -917,6 +1266,8 @@ def coupled_ns_heat_operator(
     wall_all_boundaries = {}
     wall_all_boundaries.update(wall_boundaries)
     wall_all_boundaries.update(wall_interface_boundaries)
+
+    # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
     ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
