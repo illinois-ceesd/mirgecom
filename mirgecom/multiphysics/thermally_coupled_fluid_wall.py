@@ -655,8 +655,11 @@ def get_interface_boundaries(
     else:
         fluid_bc_class = InterfaceFluidSlipBoundary
 
-    include_gradient = (
-        fluid_grad_temperature is not None and wall_grad_temperature is not None)
+    assert (
+        (fluid_grad_temperature is None) == (wall_grad_temperature is None)), (
+        "Expected both fluid_grad_temperature and wall_grad_temperature or neither")
+
+    include_gradient = fluid_grad_temperature is not None
 
     if _kappa_inter_vol_tpairs is None:
         kappa_inter_vol_tpairs = _kappa_inter_volume_trace_pairs(
