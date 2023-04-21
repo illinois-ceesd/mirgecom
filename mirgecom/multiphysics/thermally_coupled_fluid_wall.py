@@ -632,7 +632,6 @@ def _grad_temperature_inter_volume_trace_pairs(
         dcoll, pairwise_grad_temperature, comm_tag=_GradTemperatureInterVolTag)
 
 
-# FIXME: Make kappa optional like the gradient?
 def get_interface_boundaries(
         dcoll,
         gas_model,
