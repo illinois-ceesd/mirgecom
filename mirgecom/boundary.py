@@ -9,6 +9,7 @@ Boundary Conditions Base Classes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: PrescribedFluidBoundary
+.. autoclass:: MengaldoBoundaryCondition
 
 Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^
@@ -579,8 +580,8 @@ class MengaldoBoundaryCondition(FluidBoundary):
         of the inviscid fluid transport flux. Mengaldo BCs use the
         approximate Riemann solver specified by the *numerical_flux_func*
         to calculate the flux.  The boundary implementation must provide
-        the :meth:`inviscid_state_plus` to set the exterior state used
-        in the Riemann solver.
+        the :meth:`state_plus` to set the exterior state used in the
+        Riemann solver.
 
         Parameters
         ----------
@@ -638,7 +639,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
         .. math::
             f_v = F_v\left(\text{CV}_\text{bc}, (\nabla{\text{CV}})_\text{bc},
-            (\nabla{T})_\text{bc}\right) \cdot \nhat
+            (\nabla{T})_\text{bc}\right) \cdot \hat{n}
 
         where $F_v(.,.,.)$ is the viscous flux function and it is called with
         the boundary conditions of $\text{CV}$, $\nabla\text{CV}$, and
@@ -717,7 +718,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
         This routine returns the facial flux used by the gradient operator to
         compute the gradient of the fluid solution on a domain boundary. The
-        Mengaldo boundary treatment sends back $\text{CV}_bc~\mathbf{\nhat}$.
+        Mengaldo boundary treatment sends back $\text{CV}_bc~\mathbf{\hat{n}}$.
 
         Parameters
         ----------
@@ -759,7 +760,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         This method returns the boundary flux to be used by the gradient
         operator when computing the gradient of the fluid temperature at a
         domain boundary.  The Mengaldo boundary treatment sends back
-        $T_bc~\mathbf{\nhat}$.
+        $T_bc~\mathbf{\hat{n}}$.
 
         Parameters
         ----------
