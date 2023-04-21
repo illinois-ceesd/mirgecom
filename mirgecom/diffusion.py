@@ -249,19 +249,11 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
             penalty_amount=penalty_amount)
 
 
-class _DiffusionKappa1Tag:
+class _DiffusionKappaTag:
     pass
 
 
-class _DiffusionKappa2Tag:
-    pass
-
-
-class _DiffusionState1Tag:
-    pass
-
-
-class _DiffusionState2Tag:
+class _DiffusionStateTag:
     pass
 
 
@@ -275,7 +267,11 @@ class _DiffusionLengthscalesTag:
 
 def grad_operator(
         dcoll, kappa, boundaries, u, *, quadrature_tag=DISCR_TAG_BASE,
-        dd=DD_VOLUME_ALL, comm_tag=None):
+        dd=DD_VOLUME_ALL, comm_tag=None,
+        # Added to avoid repeated computation
+        # FIXME: See if there's a better way to do this
+        kappa_tpairs=None,
+        u_tpairs=None):
     r"""
     Compute the gradient of *u*.
 
@@ -336,6 +332,14 @@ def grad_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
+    if kappa_tpairs is None:
+        kappa_tpairs = interior_trace_pairs(
+            dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag, comm_tag))
+
+    if u_tpairs is None:
+        u_tpairs = interior_trace_pairs(
+            dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag, comm_tag))
+
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
     def interior_flux(kappa_tpair, u_tpair):
@@ -363,13 +367,7 @@ def grad_operator(
             dcoll, dd_allfaces_quad,
             sum(
                 interior_flux(kappa_tpair, u_tpair)
-                for kappa_tpair, u_tpair in zip(
-                    interior_trace_pairs(
-                        dcoll, kappa, volume_dd=dd_vol,
-                        comm_tag=(_DiffusionKappa1Tag, comm_tag)),
-                    interior_trace_pairs(
-                        dcoll, u, volume_dd=dd_vol,
-                        comm_tag=(_DiffusionState1Tag, comm_tag))))
+                for kappa_tpair, u_tpair in zip(kappa_tpairs, u_tpairs))
             + sum(
                 boundary_flux(bdtag, bdry)
                 for bdtag, bdry in boundaries.items())
@@ -455,18 +453,30 @@ def diffusion_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
+    kappa_tpairs = interior_trace_pairs(
+        dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag, comm_tag))
+
+    u_tpairs = interior_trace_pairs(
+        dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag, comm_tag))
+
     if grad_u is None:
-        # FIXME: Do something similar to make_operator_fluid_states to avoid
-        # communicating kappa and u multiple times
         grad_u = grad_operator(
             dcoll, kappa, boundaries, u, quadrature_tag=quadrature_tag, dd=dd_vol,
-            comm_tag=comm_tag)
+            comm_tag=comm_tag, kappa_tpairs=kappa_tpairs, u_tpairs=u_tpairs)
+
+    grad_u_tpairs = interior_trace_pairs(
+        dcoll, grad_u, volume_dd=dd_vol,
+        comm_tag=(_DiffusionGradTag, comm_tag))
 
     kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
     grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
 
     from grudge.dt_utils import characteristic_lengthscales
     lengthscales = characteristic_lengthscales(actx, dcoll, dd=dd_vol)*(0*u+1)
+
+    lengthscales_tpairs = interior_trace_pairs(
+        dcoll, lengthscales, volume_dd=dd_vol,
+        comm_tag=(_DiffusionLengthscalesTag, comm_tag))
 
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
@@ -507,18 +517,7 @@ def diffusion_operator(
             sum(
                 interior_flux(kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair)
                 for kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair in zip(
-                    interior_trace_pairs(
-                        dcoll, kappa, volume_dd=dd_vol,
-                        comm_tag=(_DiffusionKappa2Tag, comm_tag)),
-                    interior_trace_pairs(
-                        dcoll, u, volume_dd=dd_vol,
-                        comm_tag=(_DiffusionState2Tag, comm_tag)),
-                    interior_trace_pairs(
-                        dcoll, grad_u, volume_dd=dd_vol,
-                        comm_tag=(_DiffusionGradTag, comm_tag)),
-                    interior_trace_pairs(
-                        dcoll, lengthscales, volume_dd=dd_vol,
-                        comm_tag=(_DiffusionLengthscalesTag, comm_tag))))
+                    kappa_tpairs, u_tpairs, grad_u_tpairs, lengthscales_tpairs))
             + sum(
                 boundary_flux(bdtag, bdry)
                 for bdtag, bdry in boundaries.items())
