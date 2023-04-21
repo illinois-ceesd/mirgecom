@@ -1,6 +1,7 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
 .. autofunction:: grad_facial_flux
+.. autofunction:: diffusion_flux
 .. autofunction:: diffusion_facial_flux
 .. autofunction:: grad_operator
 .. autofunction:: diffusion_operator
@@ -69,6 +70,25 @@ def grad_facial_flux(kappa_tpair, u_tpair, normal):
 
 
 def diffusion_flux(kappa, grad_u):
+    r"""
+    Compute the diffusive flux $-\kappa \nabla u$.
+
+    Parameters
+    ----------
+    kappa: float or :class:`meshmode.dof_array.DOFArray`
+
+        The thermal conductivity.
+
+    grad_u: numpy.ndarray
+
+        Gradient of the state variable *u*.
+
+    Returns
+    -------
+    meshmode.dof_array.DOFArray
+
+        The diffusive flux.
+    """
     return -kappa * grad_u
 
 
