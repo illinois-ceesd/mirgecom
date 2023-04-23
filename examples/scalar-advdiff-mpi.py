@@ -30,7 +30,7 @@ from functools import partial
 from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
 from grudge.shortcuts import make_visualizer
 
 
@@ -151,9 +151,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    dcoll = EagerDGDiscretization(
-        actx, local_mesh, order=order, mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     def vol_min(x):

@@ -328,9 +328,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
-    def dummy_pre_step(step, t, dt, state):
-        return state, dt
-
     def my_pre_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = construct_fluid_state(cv, tseed)
@@ -389,9 +386,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                               constant_cfl)
         return state, dt
 
-    def dummy_post_step(step, t, dt, state):
-        return state, dt
-
     def my_post_step(step, t, dt, state):
         cv, tseed = state
         fluid_state = construct_fluid_state(cv, tseed)
@@ -403,9 +397,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             set_sim_state(logmgr, dim, cv, eos)
             logmgr.tick_after()
         return make_obj_array([fluid_state.cv, tseed]), dt
-
-    def dummy_rhs(t, state):
-        return make_obj_array([0*state[0], 0*state[1]])
 
     def my_rhs(t, state):
         cv, tseed = state
