@@ -261,7 +261,6 @@ class StateConsumer:
 
 # }}}
 
-
 # {{{ Discretization-based quantities
 
 
