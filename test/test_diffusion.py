@@ -377,7 +377,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=True):
+def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     """
     Checks the accuracy of the diffusion operator for an kappa field that has a
     jump across an element face.

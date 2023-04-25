@@ -23,7 +23,7 @@ Mesh and element utilities
 --------------------------
 
 .. autofunction:: geometric_mesh_partitioner
-.. autofunction:: generate_and_distribute_mesh
+.. autofunction:: distribute_mesh
 .. autofunction:: get_number_of_tetrahedron_nodes
 
 Simulation support utilities
@@ -825,12 +825,11 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
 
     Returns
     -------
-    # FIXME: dict entries are not just the mesh, but the tag mapping too
     local_mesh_data: :class:`meshmode.mesh.Mesh` or :class:`dict`
         If the result of calling *get_mesh_data* specifies a single volume,
         *local_mesh_data* is the local mesh.  If it specifies multiple volumes,
         *local_mesh_data* will be a :class:`dict` mapping volume tags to
-        corresponding local meshes.
+        tuples of the form *(local_mesh, local_tag_to_elements)*.
     global_nelements: :class:`int`
         The number of elements in the global mesh
     """
@@ -891,7 +890,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                 for vol_idx in range(len(volumes))
                 for rank in range(num_ranks)}
 
-            # FIXME: Find a better way to do this
+            # TODO: Add a public function to meshmode to accomplish this? So we're
+            # not depending on meshmode internals
             part_id_to_part_index = {
                 part_id: part_index
                 for part_index, part_id in enumerate(part_id_to_elements.keys())}
