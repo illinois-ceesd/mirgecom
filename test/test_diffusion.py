@@ -421,11 +421,14 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
               -flux/kappa_lower * (nodes[0] + 1)  * lower_mask  # noqa: E126, E221
         + (1 - flux/kappa_upper * (nodes[0] - 1)) * upper_mask)  # noqa: E131
 
-    def get_rhs(t, u):
+    def get_rhs(t, u, return_grad_u=False):
         return diffusion_operator(
-            dcoll, kappa=kappa, boundaries=boundaries, u=u)
+            dcoll, kappa=kappa, boundaries=boundaries, u=u,
+            return_grad_u=return_grad_u)
 
-    rhs = get_rhs(0, u_steady)
+    rhs, grad_u_steady = get_rhs(0, u_steady, return_grad_u=True)
+
+    grad_u_steady_exact = -flux/kappa
 
     if visualize:
         from grudge.shortcuts import make_visualizer
@@ -434,8 +437,14 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
             .format(order=order), [
                 ("kappa", kappa),
                 ("u_steady", u_steady),
+                ("grad_u_steady", grad_u_steady),
+                ("grad_u_steady_exact", grad_u_steady_exact),
                 ("rhs", rhs),
                 ])
+
+    linf_err = actx.to_numpy(
+        op.norm(dcoll, grad_u_steady - grad_u_steady_exact, np.inf))
+    assert linf_err < 1e-11
 
     linf_err = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
     assert linf_err < 1e-11
