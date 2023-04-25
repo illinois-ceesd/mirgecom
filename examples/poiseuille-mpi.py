@@ -87,6 +87,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=None):
     """Drive the example."""
+    if actx_class is None:
+        raise RuntimeError("Array context class missing.")
+
     cl_ctx = ctx_factory()
 
     if casename is None:
