@@ -79,6 +79,8 @@ from mirgecom.navierstokes import (
     ns_operator,
 )
 from mirgecom.diffusion import (
+    grad_facial_flux_weighted,
+    diffusion_facial_flux_harmonic,
     DiffusionBoundary,
     grad_operator as wall_grad_t_operator,
     diffusion_operator,
@@ -596,7 +598,9 @@ class InterfaceWallBoundary(DiffusionBoundary):
         self.u_plus = u_plus
         self.grad_u_plus = grad_u_plus
 
-    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus):  # noqa: D102
+    def get_grad_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, *,
+            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
@@ -607,12 +611,12 @@ class InterfaceWallBoundary(DiffusionBoundary):
         u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
-        from mirgecom.diffusion import grad_facial_flux
-        return grad_facial_flux(kappa_tpair, u_tpair, normal)
+        return numerical_flux_func(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
-            lengthscales_minus, penalty_amount=None):  # noqa: D102
+            lengthscales_minus, *, penalty_amount=None,
+            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
         if self.grad_u_plus is None:
             raise ValueError(
                 "Boundary does not have external gradient data.")
@@ -634,8 +638,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
 
-        from mirgecom.diffusion import diffusion_facial_flux
-        return diffusion_facial_flux(
+        return numerical_flux_func(
             kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
             penalty_amount=penalty_amount)
 
@@ -1164,7 +1167,8 @@ def coupled_ns_heat_operator(
         The tuple `(fluid_rhs, wall_rhs)`.
     """
     if wall_penalty_amount is None:
-        # *shrug*
+        # FIXME: After verifying the form of the penalty term, figure out what value
+        # makes sense to use as a default here
         wall_penalty_amount = 0.05
 
     fluid_boundaries = {
