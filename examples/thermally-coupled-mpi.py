@@ -54,7 +54,7 @@ from mirgecom.io import make_init_message
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    IsothermalWallBoundary
+    IsothermalWallBoundary,
 )
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
