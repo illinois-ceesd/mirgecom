@@ -271,7 +271,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(pressure, component_errors):
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
+        # from mirgecom.simutil import check_naninf_local, check_range_local
+        from mirgecom.simutil import check_naninf_local
         # or check_range_local(dcoll, "vol", pressure, .09, 1.1):
         if check_naninf_local(dcoll, "vol", pressure):
             health_error = True

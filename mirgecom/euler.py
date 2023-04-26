@@ -89,7 +89,7 @@ from grudge.trace_pair import (
     TracePair,
     interior_trace_pairs
 )
-from grudge.dof_desc import DOFDesc, as_dofdesc
+from grudge.dof_desc import as_dofdesc
 from grudge.projection import volume_quadrature_project
 from grudge.flux_differencing import volume_flux_differencing
 

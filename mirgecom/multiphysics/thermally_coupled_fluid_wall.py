@@ -1279,7 +1279,7 @@ def coupled_ns_heat_operator(
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
-    
+
     if return_gradients:
         fluid_rhs, fluid_grad_cv, fluid_grad_temperature = fluid_op_result
     else:

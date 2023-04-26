@@ -329,7 +329,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(state, dv, component_errors):
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
+        # from mirgecom.simutil import check_naninf_local, check_range_local
+        from mirgecom.simutil import check_naninf_local
         if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
