@@ -52,9 +52,7 @@ def eval_spline(x, x_bnds, coeffs):
                     coeffs[0, i]*(x-x_bnds[i])**3
                     + coeffs[1, i]*(x-x_bnds[i])**2
                     + coeffs[2, i]*(x-x_bnds[i])
-                    + coeffs[3, i],
-                    0.0),
-                0.0) + val
+                    + coeffs[3, i], 0.0), 0.0) + val
 
     return val
 
@@ -69,9 +67,7 @@ def eval_spline_derivative(x, x_bnds, coeffs):
                 actx.np.where(actx.np.greater_equal(x, x_bnds[i]),
                     3.0*coeffs[0, i]*(x-x_bnds[i])**2
                     + 2.0*coeffs[1, i]*(x-x_bnds[i])
-                    + coeffs[2, i],
-                    0.0),
-                0.0) + val
+                    + coeffs[2, i], 0.0), 0.0) + val
 
     return val
 

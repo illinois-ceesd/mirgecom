@@ -35,37 +35,27 @@ import numpy as np
 from meshmode.dof_array import DOFArray
 import scipy
 
-class Bprime_table():
+
+class BprimeTable():
+    """Class containing the table for wall properties."""
 
     def __init__(self):
 
-        #bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
-        bprime_table = (np.genfromtxt('../Bprime_table/B_prime.dat',
-                                      skip_header=1)[:,2:6]).reshape((25,151,4))  # noqa E501
+        # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
+        bprime_table = (np.genfromtxt("../Bprime_table/B_prime.dat",
+                                      skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
 
-        self._bounds_T = bprime_table[   0,:,2]
-        self._bounds_B = bprime_table[::-1,0,0]
-        self._Bc = bprime_table[::-1,:,1]
-        self._H  = bprime_table[::-1,:,3]
+        self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
+        self._bounds_B = bprime_table[::-1, 0, 0]
+        self._Bc = bprime_table[::-1, :, 1]
+        self._Hw = bprime_table[::-1, :-1:6, 3]
 
-        self._cs_H = np.zeros((25,4,24))
-        for i in range(0,25):
-            self._cs_H[i,:,:] = scipy.interpolate.CubicSpline(self._bounds_T[:-1:6],
-                                                              self._H[i,:-1:6]).c
+        # create spline to interpolate the wall enthalpy
+        self._cs_Hw = np.zeros((25, 4, 24))
+        for i in range(0, 25):
+            self._cs_Hw[i, :, :] = scipy.interpolate.CubicSpline(
+                self._bounds_T, self._Hw[i, :]).c
 
-#        x = bprime_table[   0,:,2]
-#        y = bprime_table[::-1,0,0]
-#        z = bprime_table[::-1,:,3].T
-#        self._cs_Hw = scipy.interpolate.RectBivariateSpline(x,y,z)
-
-#        self._interp_Bc = scipy.interpolate.RegularGridInterpolator(
-#            (bprime_table[::-1,0,0], bprime_table[0,:,2]),
-#            bprime_table[::-1,:,1])
-#        self._interp_Hw = scipy.interpolate.RegularGridInterpolator(
-#            (bprime_table[::-1,0,0], bprime_table[0,:,2]),
-#            bprime_table[::-1,:,3])
-
-#        self._RGI_Hw = scipy.interpolate.RegularGridInterpolator((x, y), z)
 
 class Pyrolysis():
     """Pyrolysis class.
@@ -95,17 +85,14 @@ class Pyrolysis():
 
         rhs = np.empty((3,), dtype=object)
 
-#        rhs[0] = actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
-#            0.0,
-#            -(30.*((xi[0] - 0.00)/30.)**3)*12000.*actx.np.exp(-8556.000/temperature)
-#        )
-#        rhs[1] = actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
-#            0.0,
-#            -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
-#        )
-
-        rhs[0] = -(30.*((xi[0] - 0.00)/30.)**3)*12000.*actx.np.exp(-8556.000/temperature)
-        rhs[1] = -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
+        rhs[0] = actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
+            0.0,
+            -(30.*((xi[0] - 0.00)/30.)**3)*12000.*actx.np.exp(-8556.000/temperature)
+        )
+        rhs[1] = actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
+            0.0,
+            -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
+        )
 
         # include the fiber in the RHS but dont do anything more for now.
         # ignore oxidation, for now...

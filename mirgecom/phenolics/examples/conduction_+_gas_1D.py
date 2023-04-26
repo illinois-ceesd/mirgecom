@@ -33,13 +33,10 @@ from grudge.dof_desc import (
 from mirgecom.discretization import create_discretization_collection
 
 from mirgecom.integrators.ssprk import ssprk43_step
-from mirgecom.integrators import lsrk54_step
 
 from mirgecom.diffusion import (
-    diffusion_operator,
     DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary,
-    PrescribedFluxDiffusionBoundary
+    NeumannDiffusionBoundary
 )
 
 from mirgecom.simutil import (
@@ -205,12 +202,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 #            0.3*(time/0.1)*1.5e6*(time/0.1),
 #            0.3*1.5e6
 #        )
-#    
+#
 #        # FIXME add blowing correction
 #        Bsurf = m_dot_g/conv_coeff
-#    
+#
 #        temperature = u_tpair.int
-#        
+#
 
 #        H11 = bprime_class._H[ idx_B ,  idx_T ]
 #        H21 = bprime_class._H[ idx_B , idx_T+1]
@@ -245,7 +242,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     import mirgecom.phenolics.tacot as my_composite
 
     pyrolysis = my_composite.Pyrolysis()
-    bprime_class = my_composite.Bprime_table()
+    bprime_class = my_composite.BprimeTable()
 
     from mirgecom.phenolics.gas import GasProperties
     my_gas = GasProperties()
@@ -358,7 +355,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 #        boundaries = make_obj_array([pressure_boundaries, energy_boundaries,
 #                                     velocity_boundaries])
-# 
+#
 #        rhs_I, rhs_V, rhs_S = phenolics_operator(
 #            dcoll=dcoll, state=make_obj_array([wv, wdv.temperature]),
 #            boundaries=boundaries, time=t,
@@ -378,12 +375,18 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_viz(step, t, wall_vars, dep_vars):
 
-        wv = force_evaluation(actx, wall_vars)
         wdv = force_evaluation(actx, dep_vars)
+        wv = force_evaluation(actx, wall_vars)
 
-        gas_pressure_diffusivity = \
-            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
+        viz_fields = [("x", nodes[0]),
+                      ("WV", wv),
+                      ("DV", wdv),
+                      ("phase_1", wall_vars.solid_species_mass[0]),
+                      ("phase_2", wall_vars.solid_species_mass[1]),
+                      ("phase_3", wall_vars.solid_species_mass[2])]
 
+#        gas_pressure_diffusivity = \
+#            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
 #        gradients = get_gradients(wv, wdv)
 #        grad_P, grad_T = gradients
 #        velocity = -gas_pressure_diffusivity*grad_P
@@ -392,23 +395,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 #        rhs = get_rhs_terms(t, wv, wdv)
 #        rhs_I, rhs_V, rhs_S = rhs
 
-        viz_fields = [("x", nodes[0]),
-                      ("WV", wall_vars),
-                      ("DV", dep_vars),
-#                      ("DV_velocity", velocity),
-#                      ("DV_mass_flux", mass_flux),
-#                      ("grad_P", grad_P),
-#                      ("grad_T", grad_T),
-#                      ("RHS_I", rhs_I),
-#                      ("RHS_V", rhs_V),
-#                      ("RHS_S", rhs_S),
-        ]
-
-        viz_fields.extend((
-            ("phase_1", wall_vars.solid_species_mass[0]),
-            ("phase_2", wall_vars.solid_species_mass[1]),
-            ("phase_3", wall_vars.solid_species_mass[2]),
-        ))
+#        viz_fields.extend((
+#            ("DV_velocity", velocity),
+#            ("DV_mass_flux", mass_flux),
+#            ("grad_P", grad_P),
+#            ("grad_T", grad_T),
+#            ("RHS_I", rhs_I),
+#            ("RHS_V", rhs_V),
+#            ("RHS_S", rhs_S)))
 
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
             step=step, t=t, overwrite=True, vis_timer=vis_timer, comm=comm)
@@ -431,11 +425,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def _eval_temperature(wall_vars, tseed):
-        tau = eos.eval_tau(wall_vars)
-        return eos.eval_temperature(wall_vars, tseed, tau)
+#    def _eval_temperature(wall_vars, tseed):
+#        tau = eos.eval_tau(wall_vars)
+#        return eos.eval_temperature(wall_vars, tseed, tau)
 
-    eval_temperature = actx.compile(_eval_temperature)
+#    eval_temperature = actx.compile(_eval_temperature)
 
     def _eval_dep_vars(wall_vars, tseed):
         return eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
@@ -491,8 +485,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 my_write_restart(step=istep, t=t, wall_vars=wall_vars,
                              tseed=wdv.temperature)
 
-            if freeze_gc_flag == True:
-                print('Freeze gc')
+            if freeze_gc_flag is True:
+                print("Freeze gc")
                 freeze_gc_flag = False
 
                 import gc

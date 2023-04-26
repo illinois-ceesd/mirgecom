@@ -42,16 +42,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
 import numpy as np
 from meshmode.dof_array import DOFArray
-from dataclasses import dataclass
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
     get_container_context_recursively
 )
-
-import sys  # noqa
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -96,7 +94,7 @@ class PhenolicsConservedVars:
 
 
 def initializer(eos, solid_species_mass, temperature, gas_density=None,
-                pressure=None, progress=0.0):
+                pressure=None):
     """Initialize state of composite material."""
     if gas_density is None and pressure is None:
         raise ValueError("Must specify one of 'gas_density' or 'pressure'")

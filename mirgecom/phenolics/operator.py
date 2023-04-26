@@ -1,4 +1,4 @@
-r""":mod:`mirgecom.phenolics.operator`
+r""":mod:`mirgecom.phenolics.operator` for the RHS of phenolics model.
 
 .. autofunction:: my_derivative_function
 .. autofunction:: phenolics_operator
@@ -28,12 +28,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import sys  # noqa F401
 import numpy as np
 from grudge.trace_pair import (
     TracePair, interior_trace_pairs, tracepair_with_discr_tag
 )
 from grudge import op
+from grudge.dof_desc import BoundaryDomainTag
 from meshmode.discretization.connection import FACE_RESTR_ALL
+
+from pytools.obj_array import make_obj_array
 
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -41,18 +45,13 @@ from mirgecom.diffusion import (
     NeumannDiffusionBoundary
 )
 
-from pytools.obj_array import make_obj_array
-
-from grudge.dof_desc import BoundaryDomainTag
-
-import sys
 
 class _MyGradTag:
     pass
 
 
-def my_derivative_function(actx, dcoll, quadrature_tag, field, u,
-                           boundaries, dd_vol):
+def my_derivative_function(actx, dcoll, quadrature_tag, field, velocity,
+                           boundaries, dd_vol):  # noqa
     """."""
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
@@ -60,10 +59,10 @@ def my_derivative_function(actx, dcoll, quadrature_tag, field, u,
     itp_f = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
                                      comm_tag=_MyGradTag)
 
-    itp_u = interior_trace_pairs(dcoll, u, volume_dd=dd_vol,
+    itp_u = interior_trace_pairs(dcoll, velocity, volume_dd=dd_vol,
                                      comm_tag=_MyGradTag)
 
-    flux = field*u
+    flux = field*velocity
 
     def interior_flux(f_tpair, u_tpair):
         dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
@@ -97,9 +96,9 @@ def my_derivative_function(actx, dcoll, quadrature_tag, field, u,
         int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, flux)
 
         # FIXME make this more organized
-        if (bdtag.tag == "prescribed"):
+        if bdtag.tag == "prescribed":
             ext_soln_quad = +1.0*int_soln_quad
-        if (bdtag.tag == "neumann"):
+        if bdtag.tag == "neumann":
             ext_soln_quad = -1.0*int_soln_quad
 
         bnd_tpair = TracePair(dd_bdry_quad,
@@ -123,29 +122,22 @@ def my_derivative_function(actx, dcoll, quadrature_tag, field, u,
 
 def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
                        quadrature_tag, dd_wall, bprime_class,
-                       pressure_scaling_factor=1.0, penalty_amount=1.0,
-                       split=False):
+                       pressure_scaling_factor=1.0, penalty_amount=1.0):
     """."""
     wv, tseed = state
     wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed)
 
-    tau = wdv.tau
-    kappa = wdv.thermal_conductivity
-    temperature = wdv.temperature
-    pressure = wdv.gas_pressure
-
-    zeros = tau*0.0
-
+    zeros = wdv.tau*0.0
     actx = zeros.array_context
 
     pressure_boundaries, velocity_boundaries = boundaries
 
-    gas_pressure_diffusivity = eos.gas_pressure_diffusivity(temperature, tau)
+    gas_pressure_diffusivity = eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
 
     # ~~~~~
     pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
         kappa=wv.gas_density*gas_pressure_diffusivity,
-        boundaries=pressure_boundaries, u=pressure, time=time,
+        boundaries=pressure_boundaries, u=wdv.gas_pressure,
         penalty_amount=penalty_amount, return_grad_u=True)
 
     velocity = -gas_pressure_diffusivity*grad_pressure
@@ -153,11 +145,11 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     # restrict temperature and momentum to the domain boundary
     dd_vol_quad = dd_wall.with_discr_tag(quadrature_tag)
-    bdtag = dd_wall.trace('neumann').domain_tag
+    bdtag = dd_wall.trace("neumann").domain_tag
     normal_vec = actx.thaw(dcoll.normal(bdtag))
     dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
 
-    temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, temperature)
+    temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.temperature)
     m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad,
                          wv.gas_density*velocity)
 
@@ -166,7 +158,7 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
 
     # ~~~~
     # time-dependent function
-    weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-13, 1.0 )
+    weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-13, 1.0)
 
     h_e = 1.5e6*weight
     conv_coeff_0 = 0.3*weight
@@ -174,7 +166,9 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
     # ~~~~
     m_dot_c = 0.0
     m_dot = m_dot_g + m_dot_c + 1e-13
-    mass_flux = [m_dot_c, m_dot_g]
+
+    # TODO return this for plotting purposes
+#    mass_flux = [m_dot_c, m_dot_g]
 
     # ~~~~
     # FIXME add blowing correction
@@ -185,28 +179,28 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
 
 #    conv_coeff = conv_coeff_0*blowing_correction
 
-    Bsurf = m_dot_g/conv_coeff
+    Bsurf = m_dot_g/conv_coeff  # noqa N806
 
     # ~~~~
     # get the wall enthalpy
-    bnds_T = bprime_class._bounds_T[:-1:6]
-    bnds_B = bprime_class._bounds_B
+    bnds_T = bprime_class._bounds_T  # noqa N806
+    bnds_B = bprime_class._bounds_B  # noqa N806
 
     # couldn't make lazy work without this
-    import sys
-    sys.setrecursionlimit(4000)
+    sys.setrecursionlimit(10000)
 
     h_w = 0.0
-    for j in range(0,24):
-        for k in range(0,15):
-            h_w = actx.np.where(actx.np.greater_equal(temperature_bc, bnds_T[j]),
+    for j in range(0, 24):
+        for k in range(0, 15):
+            h_w = \
+                actx.np.where(actx.np.greater_equal(temperature_bc, bnds_T[j]),
                 actx.np.where(actx.np.less(temperature_bc, bnds_T[j+1]),
-                    actx.np.where(actx.np.greater_equal(Bsurf, bnds_B[k]),
-                        actx.np.where(actx.np.less(Bsurf, bnds_B[k+1]),
-                              bprime_class._cs_H[k, 0, j]*(temperature_bc-bnds_T[j])**3
-                            + bprime_class._cs_H[k, 1, j]*(temperature_bc-bnds_T[j])**2
-                            + bprime_class._cs_H[k, 2, j]*(temperature_bc-bnds_T[j])
-                            + bprime_class._cs_H[k, 3, j], 0.0), 0.0), 0.0), 0.0) + h_w
+                actx.np.where(actx.np.greater_equal(Bsurf, bnds_B[k]),
+                actx.np.where(actx.np.less(Bsurf, bnds_B[k+1]),
+                      bprime_class._cs_Hw[k, 0, j]*(temperature_bc-bnds_T[j])**3
+                    + bprime_class._cs_Hw[k, 1, j]*(temperature_bc-bnds_T[j])**2
+                    + bprime_class._cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
+                    + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0) + h_w
 
     # ~~~~
     h_g = eos.gas_enthalpy(temperature_bc)
@@ -224,11 +218,10 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
         BoundaryDomainTag("neumann"):
             NeumannDiffusionBoundary(0.0)
     }
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    energy_viscous_rhs = diffusion_operator(dcoll, kappa=kappa,
-        boundaries=energy_boundaries, u=temperature, time=time,
-        penalty_amount=penalty_amount)
+    energy_viscous_rhs = diffusion_operator(dcoll,
+        kappa=wdv.thermal_conductivity, boundaries=energy_boundaries,
+        u=wdv.temperature, penalty_amount=penalty_amount)
 
     viscous_rhs = wall.make_conserved(
         solid_species_mass=wv.solid_species_mass*0.0,
@@ -247,24 +240,19 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
     )
 
     # ~~~~~
-    resin_pyrolysis = pyrolysis.get_sources(temperature,
+    resin_pyrolysis = pyrolysis.get_sources(wdv.temperature,
                                             wv.solid_species_mass)
 
     # flip sign due to mass conservation
     gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
 
     actx = zeros.array_context
-    visc_diss_energy = (
-        wdv.gas_viscosity*wdv.void_fraction**2*(1.0/wdv.solid_permeability)*
-        np.dot(velocity, velocity)
-    )
+    visc_diss_energy = wdv.gas_viscosity*wdv.void_fraction**2*(
+        (1.0/wdv.solid_permeability)*np.dot(velocity, velocity))
 
     source_terms = wall.make_conserved(
         solid_species_mass=resin_pyrolysis,
         gas_density=gas_source_term,
         energy=visc_diss_energy)
 
-    # ~~~~~
-    if split:
-        return inviscid_rhs, viscous_rhs, source_terms
     return inviscid_rhs + viscous_rhs + source_terms
