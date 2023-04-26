@@ -114,12 +114,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     dim = 1
 
     order = 2
-    dt = 2.0e-8*5.0
+    dt = 1.0e-8
     pressure_scaling_factor = 1.0  # noqa N806
 
     dt = dt/pressure_scaling_factor
 
-    nviz = 1000
+    nviz = 200
     ngarbage = 50
     nrestart = 10000
 
@@ -197,59 +197,55 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 #        return surface_temperature
 
-    # ablation workshop case #2.1
-    def my_presc_flux_func(u_minus, kappa_minus, grad_u_minus, normal, **kwargs):
-        time = kwargs["time"]
+#    # ablation workshop case #2.1
+#    def my_presc_flux_func(kappa_tpair, u_tpair, grad_u_tpair,
+#                           lengthscales_tpair, normal, penalty_amount):
 
-        flux = actx.np.where(actx.np.less(time, 0.1),
-            0.3*(time/0.1)*1.5e6*(time/0.1),
-            0.3*1.5e6
-        )
+#        flux = actx.np.where(actx.np.less(time, 0.1),
+#            0.3*(time/0.1)*1.5e6*(time/0.1),
+#            0.3*1.5e6
+#        )
+#    
+#        # FIXME add blowing correction
+#        Bsurf = m_dot_g/conv_coeff
+#    
+#        temperature = u_tpair.int
+#        
 
-        # FIXME make emissivity function of tau
-        emissivity = 0.8
-        return make_obj_array([flux - emissivity*5.67e-8*(u_minus**4 - 300**4)])
+#        H11 = bprime_class._H[ idx_B ,  idx_T ]
+#        H21 = bprime_class._H[ idx_B , idx_T+1]
+#        H12 = bprime_class._H[idx_B+1,  idx_T ]
+#        H22 = bprime_class._H[idx_B+1, idx_T+1]
 
-    def my_presc_grad_func(u_minus, grad_u_minus, **kwargs):
-        return 0.0
+#        print(H11, H21, H12, H22)
 
-    energy_boundaries = {
-        BoundaryDomainTag("prescribed"):
-            PrescribedFluxDiffusionBoundary(my_presc_flux_func),
-#        BoundaryDomainTag("prescribed"):
-#            DirichletDiffusionBoundary(my_presc_energy_func),
-        BoundaryDomainTag("neumann"):
-            NeumannDiffusionBoundary(my_presc_grad_func)
-    }
-
-    def my_presc_pres_func(u_minus, **kwargs):
-        return 101325.0/5.0
+#        # FIXME make emissivity function of tau
+#        emissivity = 0.8
+#        radiation = emissivity*5.67e-8*(temperature**4 - 300**4)
+#        return make_obj_array([flux - radiation])
 
     pressure_boundaries = {
         BoundaryDomainTag("prescribed"):
-            DirichletDiffusionBoundary(my_presc_pres_func),
+            DirichletDiffusionBoundary(101325),
         BoundaryDomainTag("neumann"):
-            NeumannDiffusionBoundary(my_presc_grad_func)
+            NeumannDiffusionBoundary(0.0)
     }
 
-    def my_presc_velocity_func(u_minus, **kwargs):
-        return 0.0
-
-    def my_dummy_velocity_func(u_minus, **kwargs):
-        return u_minus
-
+    # FIXME this is just a dummy work around. Make this the right way...
     velocity_boundaries = {
         BoundaryDomainTag("prescribed"):
-            DirichletDiffusionBoundary(my_dummy_velocity_func),
+            DirichletDiffusionBoundary(-1234567.0),
         BoundaryDomainTag("neumann"):
-            DirichletDiffusionBoundary(my_presc_velocity_func)
+            DirichletDiffusionBoundary(-1234567.0)
     }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     import mirgecom.phenolics.phenolics as wall
     import mirgecom.phenolics.tacot as my_composite
+
     pyrolysis = my_composite.Pyrolysis()
+    bprime_class = my_composite.Bprime_table()
 
     from mirgecom.phenolics.gas import GasProperties
     my_gas = GasProperties()
@@ -267,14 +263,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     solid_species_mass[1] = 90.0 + nodes[0]*0.0
     solid_species_mass[2] = 160. + nodes[0]*0.0
     temperature = 300.0 + 0.0*nodes[0]
-    pressure = 101325.0/5.0 + nodes[0]*0.0
-
-#    solid_species_mass[0] = 30.0 - (nodes[1]/0.05)**2*0.5*30.0
-#    solid_species_mass[1] = 90.0 - (nodes[1]/0.05)**2*0.5*30.0
-#    solid_species_mass[2] = 160. + (nodes[1]/0.05)*0.0
-#    temperature = 300.0 + 900*(nodes[1]/0.05)**2
-#    pressure = actx.np.where(actx.np.greater(nodes[1], 0.04),
-#        101326.0-((nodes[1]-0.04)/0.01)**2, 101326.0)
+    pressure = 101325.0 + nodes[0]*0.0
 
     pressure = force_evaluation(actx, pressure)
     temperature = force_evaluation(actx, temperature)
@@ -331,63 +320,61 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def _rhs(t, state):
 
-        boundaries = make_obj_array([pressure_boundaries, energy_boundaries,
-                                     velocity_boundaries])
+        boundaries = make_obj_array([pressure_boundaries, velocity_boundaries])
 
         rhs = phenolics_operator(
             dcoll=dcoll, state=state, boundaries=boundaries, time=t,
             wall=wall, eos=eos, pyrolysis=pyrolysis,
+            quadrature_tag=quadrature_tag, dd_wall=dd_vol,
             pressure_scaling_factor=pressure_scaling_factor,
-            quadrature_tag=quadrature_tag, dd_wall=dd_vol)
+            bprime_class=bprime_class,
+            penalty_amount=1.0)
 
         # ~~~~~
         return make_obj_array([rhs, tseed*0.0])
 
     compiled_rhs = actx.compile(_rhs)
 
-    def _get_gradients(wv, wdv):
-        gas_pressure_diffusivity = \
-            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
-        _, grad_pressure = diffusion_operator(dcoll,
-            kappa=wv.gas_density*gas_pressure_diffusivity,
-            boundaries=pressure_boundaries, u=wdv.gas_pressure, time=t,
-            return_grad_u=True)
+#    def _get_gradients(wv, wdv):
+#        gas_pressure_diffusivity = \
+#            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
+#        _, grad_pressure = diffusion_operator(dcoll,
+#            kappa=wv.gas_density*gas_pressure_diffusivity,
+#            boundaries=pressure_boundaries, u=wdv.gas_pressure, time=t,
+#            penalty_amount=1.0,
+#            return_grad_u=True)
 
-        _, grad_temperature = diffusion_operator(dcoll,
-            kappa=wdv.thermal_conductivity,
-            boundaries=energy_boundaries, u=wdv.temperature, time=t,
-            return_grad_u=True)
+#        _, grad_temperature = diffusion_operator(dcoll,
+#            kappa=wdv.thermal_conductivity,
+#            boundaries=energy_boundaries, u=wdv.temperature, time=t,
+#            penalty_amount=1.0,
+#            return_grad_u=True)
 
-        return make_obj_array([grad_pressure, grad_temperature])
+#        return make_obj_array([grad_pressure, grad_temperature])
 
-    get_gradients = actx.compile(_get_gradients)
+#    get_gradients = actx.compile(_get_gradients)
 
-    def _get_rhs_terms(t, wv, wdv):
+#    def _get_rhs_terms(t, wv, wdv):
 
-        boundaries = make_obj_array([pressure_boundaries, energy_boundaries,
-                                     velocity_boundaries])
- 
-        rhs_I, rhs_V, rhs_S = phenolics_operator(
-            dcoll=dcoll, state=make_obj_array([wv, wdv.temperature]),
-            boundaries=boundaries, time=t,
-            wall=wall, eos=eos, pyrolysis=pyrolysis,
-            quadrature_tag=quadrature_tag, dd_wall=dd_vol,
-            pressure_scaling_factor=pressure_scaling_factor,
-            split=True)
+#        boundaries = make_obj_array([pressure_boundaries, energy_boundaries,
+#                                     velocity_boundaries])
+# 
+#        rhs_I, rhs_V, rhs_S = phenolics_operator(
+#            dcoll=dcoll, state=make_obj_array([wv, wdv.temperature]),
+#            boundaries=boundaries, time=t,
+#            wall=wall, eos=eos, pyrolysis=pyrolysis,
+#            quadrature_tag=quadrature_tag, dd_wall=dd_vol,
+#            pressure_scaling_factor=pressure_scaling_factor,
+#            penalty_amount=1.0,
+#            split=True)
 
-        return make_obj_array([rhs_I, rhs_V, rhs_S])
+#        return make_obj_array([rhs_I, rhs_V, rhs_S])
 
-    get_rhs_terms = actx.compile(_get_rhs_terms)
+#    get_rhs_terms = actx.compile(_get_rhs_terms)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     visualizer = make_visualizer(dcoll)
-
-    def my_write_temperature(step, t, wall_vars, dep_vars):
-        viz_fields = [("DV", wdv.temperature)]
-
-        write_visfile(dcoll, viz_fields, visualizer, vizname='viz_data/temp',
-            step=step, t=t, overwrite=True, vis_timer=vis_timer, comm=comm)
 
     def my_write_viz(step, t, wall_vars, dep_vars):
 
@@ -397,10 +384,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         gas_pressure_diffusivity = \
             eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
 
-        gradients = get_gradients(wv, wdv)
-        grad_P, grad_T = gradients
-        velocity = -gas_pressure_diffusivity*grad_P
-        mass_flux = wv.gas_density*velocity
+#        gradients = get_gradients(wv, wdv)
+#        grad_P, grad_T = gradients
+#        velocity = -gas_pressure_diffusivity*grad_P
+#        mass_flux = wv.gas_density*velocity
 
 #        rhs = get_rhs_terms(t, wv, wdv)
 #        rhs_I, rhs_V, rhs_S = rhs
@@ -408,10 +395,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         viz_fields = [("x", nodes[0]),
                       ("WV", wall_vars),
                       ("DV", dep_vars),
-                      ("DV_velocity", velocity),
-                      ("DV_mass_flux", mass_flux),
-                      ("grad_P", grad_P),
-                      ("grad_T", grad_T),
+#                      ("DV_velocity", velocity),
+#                      ("DV_mass_flux", mass_flux),
+#                      ("grad_P", grad_P),
+#                      ("grad_T", grad_T),
 #                      ("RHS_I", rhs_I),
 #                      ("RHS_V", rhs_V),
 #                      ("RHS_S", rhs_S),
@@ -463,7 +450,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     gc.collect()
 
     my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
-    my_write_temperature(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
 
 #    rhs = get_rhs_terms(t, wall_vars, wdv)
 #    rhs_I, rhs_V, rhs_S = rhs
@@ -495,8 +481,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 raise MyRuntimeError("Failed simulation health check.")
 
             if istep % nviz == 0:
-                my_write_temperature(step=istep, t=t, wall_vars=wall_vars,
-                             dep_vars=wdv)
                 my_write_viz(step=istep, t=t, wall_vars=wall_vars,
                              dep_vars=wdv)
 

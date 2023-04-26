@@ -535,7 +535,7 @@ def diffusion_operator(
         quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        grad_u=None, **kwargs):
+        grad_u=None):
     r"""
     Compute the diffusion operator.
 

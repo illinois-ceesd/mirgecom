@@ -33,23 +33,39 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
+import scipy
 
+class Bprime_table():
 
-#    # FIXME
-#    class Bprime_table():
+    def __init__(self):
 
-#        def __init__(self):
+        #bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
+        bprime_table = (np.genfromtxt('../Bprime_table/B_prime.dat',
+                                      skip_header=1)[:,2:6]).reshape((25,151,4))  # noqa E501
 
-#            #bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
-#            bprime_table = (np.genfromtxt('Bprime_table/B_prime.dat', skip_header=1)[:,2:6]).reshape((25,151,4))  # noqa E501
+        self._bounds_T = bprime_table[   0,:,2]
+        self._bounds_B = bprime_table[::-1,0,0]
+        self._Bc = bprime_table[::-1,:,1]
+        self._H  = bprime_table[::-1,:,3]
 
-#            self._bounds_T = bprime_table[   0,:,2]
-#            self._bounds_B = bprime_table[::-1,0,0]
-#            self._Bc = bprime_table[::-1,:,1]
-#            self._H  = bprime_table[::-1,:,3]
-#            self._interp_Bc = scipy.interpolate.RegularGridInterpolator((bprime_table[::-1,0,0], bprime_table[0,:,2]), bprime_table[::-1,:,1])  # noqa E501
-#            self._interp_Hw = scipy.interpolate.RegularGridInterpolator((bprime_table[::-1,0,0], bprime_table[0,:,2]), bprime_table[::-1,:,3])  # noqa E501
+        self._cs_H = np.zeros((25,4,24))
+        for i in range(0,25):
+            self._cs_H[i,:,:] = scipy.interpolate.CubicSpline(self._bounds_T[:-1:6],
+                                                              self._H[i,:-1:6]).c
 
+#        x = bprime_table[   0,:,2]
+#        y = bprime_table[::-1,0,0]
+#        z = bprime_table[::-1,:,3].T
+#        self._cs_Hw = scipy.interpolate.RectBivariateSpline(x,y,z)
+
+#        self._interp_Bc = scipy.interpolate.RegularGridInterpolator(
+#            (bprime_table[::-1,0,0], bprime_table[0,:,2]),
+#            bprime_table[::-1,:,1])
+#        self._interp_Hw = scipy.interpolate.RegularGridInterpolator(
+#            (bprime_table[::-1,0,0], bprime_table[0,:,2]),
+#            bprime_table[::-1,:,3])
+
+#        self._RGI_Hw = scipy.interpolate.RegularGridInterpolator((x, y), z)
 
 class Pyrolysis():
     """Pyrolysis class.
