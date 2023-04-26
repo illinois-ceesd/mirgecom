@@ -540,11 +540,11 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
 
 def entropy_stable_ns_operator(
-        dcoll, state, gas_model, boundaries, time=0.0,
+        dcoll, gas_model, state, boundaries, *, time=0.0,
         inviscid_numerical_flux_func=entropy_stable_inviscid_flux_rusanov,
         gradient_numerical_flux_func=num_flux_central,
         viscous_numerical_flux_func=viscous_facial_flux_central,
-        dd=DD_VOLUME_ALL, quadrature_tag=None,
+        dd=DD_VOLUME_ALL, quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None, grad_cv=None, grad_t=None,
         operator_states_quad=None, return_gradients=False):
     r"""Compute RHS of the Navier-Stokes equations using flux-differencing.
@@ -591,6 +591,8 @@ def entropy_stable_ns_operator(
     """
     if not state.is_viscous:
         raise ValueError("Navier-Stokes operator expects viscous gas model.")
+    if not state.is_viscous:
+        raise ValueError("Navier-Stokes operator expects viscous gas model.")
 
     boundaries = normalize_boundaries(boundaries)
 
@@ -598,9 +600,8 @@ def entropy_stable_ns_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-    # dd_base = as_dofdesc("vol")
-    # dd_vol = DOFDesc("vol", quadrature_tag)
-    # dd_faces = DOFDesc("all_faces", quadrature_tag)
+    from grudge.dof_desc import DISCR_TAG_BASE
+    dd_vol_base = dd_vol.with_discr_tag(DISCR_TAG_BASE)
 
     # NOTE: For single-gas this is just a fixed scalar.
     # However, for mixtures, gamma is a DOFArray. For now,
@@ -619,7 +620,7 @@ def entropy_stable_ns_operator(
         conservative_to_entropy_vars(gamma, state_quad))
 
     modified_conserved_fluid_state = \
-        make_entropy_projected_fluid_state(dcoll, dd_vol_quad, dd_allfaces_quad,
+        make_entropy_projected_fluid_state(dcoll, dd_vol_quad, dd_allfaces_quad, 
                                            state, entropy_vars, gamma, gas_model)
 
     def _reshape(shape, ary):
@@ -629,7 +630,7 @@ def entropy_stable_ns_operator(
         return DOFArray(ary.array_context, data=tuple(
             subary.reshape(grp.nelements, *shape)
             # Just need group for determining the number of elements
-            for grp, subary in zip(dcoll.discr_from_dd("vol").groups, ary)))
+            for grp, subary in zip(dcoll.discr_from_dd(dd_vol_base).groups, ary)))
 
     flux_matrices = entropy_conserving_flux_chandrashekar(
         gas_model,

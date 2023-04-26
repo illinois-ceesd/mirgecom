@@ -62,7 +62,7 @@ from mirgecom.gas_model import (
 )
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
-    ns_operator,
+    ns_operator
 )
 from mirgecom.diffusion import (
     DiffusionBoundary,
@@ -919,6 +919,7 @@ def coupled_ns_heat_operator(
         use_kappa_weighted_grad_flux_in_fluid=False,
         return_gradients=False,
         wall_penalty_amount=None,
+        fluid_operator=ns_operator,
         quadrature_tag=DISCR_TAG_BASE):
     # FIXME: Incomplete docs
     """Compute RHS of the coupled fluid-wall system."""
@@ -1009,18 +1010,18 @@ def coupled_ns_heat_operator(
     wall_all_boundaries.update(wall_boundaries)
     wall_all_boundaries.update(wall_interface_boundaries)
 
-    ns_result = ns_operator(
+    fluid_op_result = fluid_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         viscous_numerical_flux_func=viscous_numerical_flux_func,
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
-
+    
     if return_gradients:
-        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
+        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = fluid_op_result
     else:
-        fluid_rhs = ns_result
+        fluid_rhs = fluid_op_result
 
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
