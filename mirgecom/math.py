@@ -24,6 +24,7 @@ expressions.
         x_sym = pmbl.var("x")
         s_sym = mm.sin(x_sym)  # Creates an expression pmbl.var("sin")(x_sym)
 
+.. autofunction:: harmonic_mean
 .. autofunction:: __getattr__
 """
 
@@ -54,7 +55,41 @@ import numpy.linalg as la # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 from pymbolic.primitives import Expression
-from arraycontext import get_container_context_recursively
+from arraycontext import (
+    get_container_context_recursively,
+    get_container_context_recursively_opt,
+)
+
+
+def harmonic_mean(x, y):
+    r"""
+    Return the harmonic mean of *x* and *y*.
+
+    The harmonic mean is defined as
+
+    .. math::
+        \frac{2 x y}{x + y}.
+
+    Parameters
+    ----------
+    x:
+        A number, array type, or symbolic expression.
+
+    y:
+        A number, array type, or symbolic expression.
+    """
+    if any(isinstance(arg, Expression) for arg in (x, y)):
+        return 2*x*y/(x + y)
+    else:
+        for arg in (x, y):
+            actx = get_container_context_recursively_opt(arg)
+            if actx is not None:
+                break
+        if actx is not None:
+            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+        else:
+            x_plus_y = x + y if x + y > 0 else 1
+        return 2*x*y/x_plus_y
 
 
 def __getattr__(name):

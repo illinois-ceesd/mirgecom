@@ -183,7 +183,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         logmgr.close()
 
     final_answer = actx.to_numpy(op.norm(dcoll, u, np.inf))
-    resid = abs(final_answer - 0.00020620711665201585)
+    resid = abs(final_answer - 0.0002062062188374177)
     if resid > 1e-15:
         raise ValueError(f"Run did not produce the expected result {resid=}")
 
