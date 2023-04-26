@@ -236,7 +236,8 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
 
-            temperature_bc = bndry.temperature_bc(state_minus)
+            temperature_bc = bndry.temperature_bc(
+                dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
             print(f"{temperature_bc=}")
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
@@ -529,7 +530,8 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
 
-            temperature_bc = wall.temperature_bc(state_minus=state_minus)
+            temperature_bc = wall.temperature_bc(
+                dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
             print(f"{temperature_bc=}")
 
             t_int_tpair = interior_trace_pair(dcoll, temper)
@@ -703,7 +705,8 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
             print(f"{cv_grad_flux_wall=}")
 
-            temperature_bc = wall.temperature_bc(state_minus)
+            temperature_bc = wall.temperature_bc(
+                dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
             print(f"{temperature_bc=}")
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
@@ -950,7 +953,8 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
                                                      grad_cv_minus=grad_cv_minus,
                                                      grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
-            temperature_bc = wall.temperature_bc(state_minus)
+            temperature_bc = wall.temperature_bc(
+                dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
 
             assert adv_wall_state.cv == expected_adv_wall_cv
             assert diff_wall_state.cv == expected_diff_wall_cv

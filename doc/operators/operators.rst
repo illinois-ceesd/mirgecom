@@ -8,4 +8,5 @@ Operators
    diffusion
    artificial_viscosity
    gas-dynamics
+   thermally_coupled
    phenolics
