@@ -153,12 +153,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     cn = 0.5*(order + 1)**2
     current_dt = current_cfl * actx.to_numpy(h_min_from_volume(dcoll)) / cn
 
-    if use_esdg:
-        print("Using ESDG, enabling overintegration.")
-        use_overintegration = True
-        operator_rhs = entropy_stable_euler_operator
-    else:
-        operator_rhs = euler_operator
+    operator_rhs = entropy_stable_euler_operator if use_esdg else euler_operator
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -408,7 +403,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -425,6 +420,6 @@ if __name__ == "__main__":
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
          use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
-         use_overintegration=args.overintegration, use_esdg=args.esdg)
+         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

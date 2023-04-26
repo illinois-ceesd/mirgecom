@@ -486,7 +486,7 @@ if __name__ == "__main__":
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
-    lazy = args.lazy
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -502,7 +502,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration, lazy=lazy,
+         use_overintegration=args.overintegration or args.esdg, lazy=lazy,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
          use_esdg=args.esdg)
 

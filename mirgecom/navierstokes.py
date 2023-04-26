@@ -665,7 +665,8 @@ def entropy_stable_ns_operator(
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(dcoll, state.temperature)
+            for tpair in interior_trace_pairs(dcoll, state.temperature,
+                                              volume_dd=dd_vol)
         ]
 
     def _interp_to_surf_modified_conservedvars(gamma, utpair):
@@ -689,7 +690,8 @@ def entropy_stable_ns_operator(
         # variables on the quadrature grid
         # (obtaining state from projected entropy variables)
         _interp_to_surf_modified_conservedvars(gamma, tpair)
-        for tpair in interior_trace_pairs(dcoll, entropy_vars)
+        for tpair in interior_trace_pairs(dcoll, entropy_vars,
+                                          volume_dd=dd_vol)
     ]
 
     boundary_states = {
@@ -725,6 +727,7 @@ def entropy_stable_ns_operator(
 
     inviscid_term = op.inverse_mass(
         dcoll,
+        dd_vol,
         inviscid_vol_term - op.face_mass(dcoll, dd_allfaces_quad, inviscid_flux_bnd)
     )
 

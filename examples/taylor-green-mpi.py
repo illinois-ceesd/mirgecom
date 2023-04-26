@@ -372,7 +372,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -389,7 +389,8 @@ if __name__ == "__main__":
 
     main(actx_class, order=args.order, t_final=args.tfinal,
          resolution=args.resolution, lazy=args.lazy,
-         use_logmgr=args.log, use_overintegration=args.overintegration,
+         use_logmgr=args.log,
+         use_overintegration=args.overintegration or args.esdg,
          use_esdg=args.esdg, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename)
 

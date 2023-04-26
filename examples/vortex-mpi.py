@@ -426,7 +426,7 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -443,6 +443,6 @@ if __name__ == "__main__":
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
          use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
-         use_overintegration=args.overintegration, use_esdg=args.esdg)
+         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg)
 
 # vim: foldmethod=marker
