@@ -72,7 +72,9 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-
+from mirgecom.navierstokes import (
+    ns_operator, entropy_stable_ns_operator
+)
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     coupled_ns_heat_operator,
 )
@@ -90,7 +92,8 @@ class MyRuntimeError(RuntimeError):
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_overintegration=False,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None, lazy=False):
+         rst_filename=None, actx_class=None, lazy=False,
+         use_esdg=False):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -113,6 +116,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
     else:
         queue = cl.CommandQueue(cl_ctx)
+
+    fluid_operator = entropy_stable_ns_operator if use_esdg else ns_operator
 
     from mirgecom.simutil import get_reasonable_memory_pool
     alloc = get_reasonable_memory_pool(cl_ctx, queue)
@@ -190,7 +195,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     order = 3
     dcoll = create_discretization_collection(
-        actx, volume_to_local_mesh, order=order)
+        actx, volume_to_local_mesh, order=order,
+        quadrature_order=order+2)
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -520,7 +526,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             wall_kappa, wall_temperature,
             time=t,
             return_gradients=return_gradients,
-            quadrature_tag=quadrature_tag)
+            quadrature_tag=quadrature_tag,
+            fluid_operator=fluid_operator)
 
         if return_gradients:
             (
@@ -589,6 +596,8 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
+    parser.add_argument("--esdg", action="store_true", default=True,
+        help="use entropy-stable operator")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -599,8 +608,9 @@ if __name__ == "__main__":
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
+    lazy = args.lazy or args.esdg
     from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=args.lazy, distributed=True)
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -609,9 +619,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_overintegration=args.overintegration,
+    main(use_logmgr=args.log, use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         lazy=args.lazy)
+         lazy=lazy, use_esdg=args.esdg)
 
 # vim: foldmethod=marker
