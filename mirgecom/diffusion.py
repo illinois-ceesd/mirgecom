@@ -217,16 +217,16 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     .. automethod:: get_diffusion_flux
     """
 
-    def __init__(self, function):
+    def __init__(self, value):
         """
         Initialize the boundary condition.
 
         Parameters
         ----------
-        function
-            user-defined function prescribing the flux along the boundary
+        value: float or meshmode.dof_array.DOFArray
+            the value(s) of $f$ along the boundary
         """
-        self.function = function
+        self.value = value
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
@@ -237,8 +237,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
             exterior=kappa_minus)
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
-            exterior=2*ext_value-u_minus
-        )
+            exterior=2*self.value-u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
         return numerical_flux_func(kappa_tpair, u_tpair, normal)
 
@@ -291,16 +290,16 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     .. automethod:: get_diffusion_flux
     """
 
-    def __init__(self, function):
+    def __init__(self, value):
         """
         Initialize the boundary condition.
 
         Parameters
         ----------
-        function
-            user-defined function to prescribe the gradient along the boundary
+        value: float or meshmode.dof_array.DOFArray
+            the value(s) of $g$ along the boundary
         """
-        self.function = function
+        self.value = value
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
@@ -337,6 +336,67 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         return numerical_flux_func(
             kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
             penalty_amount=penalty_amount)
+
+
+class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
+    r"""Prescribed flux boundary condition for the diffusion operator.
+
+    For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
+    external data
+
+    .. math::
+
+        u^+ = u^-
+
+    when computing the boundary fluxes for $\nabla u$, and applies directly
+    the prescribed flux when computing $\nabla \cdot (\kappa \nabla u)$.
+
+    .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
+    """
+
+    def __init__(self, value):
+        """
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        bnd_func:
+            function to prescribe $g$ along the boundary
+        """
+        self.value = value
+
+    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
+            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(
+            dd_bdry, interior=kappa_minus, exterior=kappa_minus)
+        u_tpair = TracePair(
+            dd_bdry, interior=u_minus, exterior=u_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(kappa_tpair, u_tpair, normal)
+
+    def get_diffusion_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
+            lengthscales_minus, *, penalty_amount=None,
+            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+        actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        kappa_tpair = TracePair(
+            dd_bdry, interior=kappa_minus, exterior=kappa_minus)
+        u_tpair = TracePair(
+            dd_bdry, interior=u_minus, exterior=u_minus)
+        grad_u_tpair = TracePair(
+            dd_bdry, interior=grad_u_minus, exterior=grad_u_minus)
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
+
+        external_flux = u_minus*0.0 + self.value
+
+        # flip the sign of the normal to indicate that positive values of
+        # flux are going in the cell
+        return np.dot(external_flux, -normal)
 
 
 class _DiffusionKappaTag:
