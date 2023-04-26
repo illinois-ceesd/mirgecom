@@ -620,7 +620,7 @@ def entropy_stable_ns_operator(
         conservative_to_entropy_vars(gamma, state_quad))
 
     modified_conserved_fluid_state = \
-        make_entropy_projected_fluid_state(dcoll, dd_vol_quad, dd_allfaces_quad, 
+        make_entropy_projected_fluid_state(dcoll, dd_vol_quad, dd_allfaces_quad,
                                            state, entropy_vars, gamma, gas_model)
 
     def _reshape(shape, ary):
