@@ -76,7 +76,7 @@ from mirgecom.gas_model import (
 )
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
-    ns_operator,
+    ns_operator
 )
 from mirgecom.diffusion import (
     grad_facial_flux_weighted,
@@ -1063,6 +1063,7 @@ def coupled_ns_heat_operator(
         fluid_gradient_numerical_flux_func=num_flux_central,
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
+        fluid_operator=ns_operator,
         return_gradients=False):
     r"""
     Compute the RHS of the fluid and wall subdomains.
@@ -1273,7 +1274,7 @@ def coupled_ns_heat_operator(
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
-    ns_result = ns_operator(
+    ns_result = fluid_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         viscous_numerical_flux_func=viscous_numerical_flux_func,

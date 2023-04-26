@@ -72,7 +72,10 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-
+from mirgecom.navierstokes import (
+    ns_operator,
+    # entropy_stable_operator
+)
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     coupled_ns_heat_operator,
 )
@@ -88,7 +91,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_overintegration=False,
+         use_overintegration=False, use_esdg=False,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=None, lazy=False):
     """Drive the example."""
@@ -121,6 +124,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+
+    # fluid_operator = entropy_stable_ns_operator if use_esdg else ns_operator
+    fluid_operator = ns_operator
 
     # timestepping control
     current_step = 0
@@ -189,8 +195,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     local_nelements = local_fluid_mesh.nelements + local_wall_mesh.nelements
 
     order = 3
+    quadrature_order = order + 2
     dcoll = create_discretization_collection(
-        actx, volume_to_local_mesh, order=order)
+        actx, volume_to_local_mesh, order=order,
+        quadrature_order=quadrature_order)
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -520,7 +528,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             wall_kappa, wall_temperature,
             time=t,
             return_gradients=return_gradients,
-            quadrature_tag=quadrature_tag)
+            quadrature_tag=quadrature_tag,
+            fluid_operator=fluid_operator)
 
         if return_gradients:
             (
@@ -587,6 +596,8 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
+    parser.add_argument("--esdg", action="store_true",
+        help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
@@ -609,9 +620,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_overintegration=args.overintegration,
+    main(use_logmgr=args.log, use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         lazy=args.lazy)
+         lazy=args.lazy, use_esdg=args.esdg)
 
 # vim: foldmethod=marker
