@@ -13,9 +13,19 @@ and heat flux
 
 at the interface.
 
+Helper Functions
+^^^^^^^^^^^^^^^^
+
 .. autofunction:: get_interface_boundaries
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
 .. autofunction:: coupled_grad_t_operator
 .. autofunction:: coupled_ns_heat_operator
+
+Boundary Conditions
+^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: InterfaceFluidBoundary
 .. autoclass:: InterfaceFluidSlipBoundary
@@ -132,7 +142,7 @@ def _project_from_base(dcoll, dd_bdry, field):
 # both sides of the interface
 class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     r"""
-    Abstract interface for the fluid side of the fluid-wall interface boundary.
+    Abstract interface for the fluid side of the fluid-wall interface.
 
     Extends :class:`~mirgecom.boundary.MengaldoBoundaryCondition` to include
     an interior penalty on the heat flux:
@@ -577,7 +587,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
         r"""
         Initialize InterfaceWallBoundary.
 
-        Argument *grad_u_plus*, is only required if the boundary will be used to
+        Argument *grad_u_plus* is only required if the boundary will be used to
         compute the heat flux.
 
         Parameters
@@ -586,11 +596,11 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
             Thermal conductivity from the fluid side.
 
-        t_plus: :class:`meshmode.dof_array.DOFArray`
+        u_plus: :class:`meshmode.dof_array.DOFArray`
 
             Temperature from the fluid side.
 
-        grad_t_plus: :class:`meshmode.dof_array.DOFArray` or None
+        grad_u_plus: :class:`meshmode.dof_array.DOFArray` or None
 
             Temperature gradient from the fluid side.
         """
