@@ -2,6 +2,7 @@
 
 Pyrolysis-Handling Functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: BprimeTable
 .. autoclass:: Pyrolysis
 
 """

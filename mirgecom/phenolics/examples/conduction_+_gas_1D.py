@@ -321,11 +321,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         rhs = phenolics_operator(
             dcoll=dcoll, state=state, boundaries=boundaries, time=t,
-            wall=wall, eos=eos, pyrolysis=pyrolysis,
-            quadrature_tag=quadrature_tag, dd_wall=dd_vol,
-            pressure_scaling_factor=pressure_scaling_factor,
-            bprime_class=bprime_class,
-            penalty_amount=1.0)
+            eos=eos, pyrolysis=pyrolysis, quadrature_tag=quadrature_tag,
+            dd_wall=dd_vol, pressure_scaling_factor=pressure_scaling_factor,
+            bprime_class=bprime_class, penalty_amount=1.0)
 
         # ~~~~~
         return make_obj_array([rhs, tseed*0.0])

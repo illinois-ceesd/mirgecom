@@ -1,7 +1,12 @@
 r""":mod:`mirgecom.phenolics.operator` for the RHS of phenolics model.
 
-.. autofunction:: my_derivative_function
+Composite RHS
+^^^^^^^^^^^^^
 .. autofunction:: phenolics_operator
+
+Helper Function
+===============
+.. autofunction:: compute_div
 """
 
 __copyright__ = """
@@ -44,13 +49,14 @@ from mirgecom.diffusion import (
     PrescribedFluxDiffusionBoundary,
     NeumannDiffusionBoundary
 )
+from mirgecom.phenolics.phenolics import make_conserved
 
 
 class _MyGradTag:
     pass
 
 
-def my_derivative_function(actx, dcoll, quadrature_tag, field, velocity,
+def compute_div(actx, dcoll, quadrature_tag, field, velocity,
                            boundaries, dd_vol):
     """Return flux for inviscid term."""
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
@@ -74,15 +80,10 @@ def my_derivative_function(actx, dcoll, quadrature_tag, field, velocity,
 
         numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg
 
-        # FIXME make this more organized
-        if dcoll.dim == 1:
-            wavespeed_int = bnd_u_tpair_quad.int[0]
-            wavespeed_ext = bnd_u_tpair_quad.ext[0]
-        if dcoll.dim == 2:
-            wavespeed_int = actx.np.sqrt(
-                bnd_u_tpair_quad.int[0]**2 + bnd_u_tpair_quad.int[1]**2)
-            wavespeed_ext = actx.np.sqrt(
-                bnd_u_tpair_quad.ext[0]**2 + bnd_u_tpair_quad.ext[1]**2)
+        wavespeed_int = actx.np.sqrt(np.dot(bnd_u_tpair_quad.int,
+                                            bnd_u_tpair_quad.int))
+        wavespeed_ext = actx.np.sqrt(np.dot(bnd_u_tpair_quad.ext,
+                                            bnd_u_tpair_quad.ext))
         lam = actx.np.maximum(wavespeed_int, wavespeed_ext)
         jump = bnd_f_tpair_quad.int - bnd_f_tpair_quad.ext
         numerical_flux = numerical_flux + 0.5*lam*(jump)
@@ -130,7 +131,7 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
     """
     actx = wv.gas_density.array_context
 
-    # restrict temperature and momentum to the domain boundary
+    # restrict variables to the domain boundary
     dd_vol_quad = dd_wall.with_discr_tag(quadrature_tag)
     bdtag = dd_wall.trace("prescribed").domain_tag
     normal_vec = actx.thaw(dcoll.normal(bdtag))
@@ -138,6 +139,7 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
 
     temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.temperature)
     m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad, wv.gas_density*velocity)
+    emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.solid_emissivity)
 
     # TODO double-check this
     m_dot_g = np.dot(m_dot_g, normal_vec)
@@ -156,12 +158,13 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
 #    mass_flux = [m_dot_c, m_dot_g]
 
     # ~~~~
-    # FIXME add blowing correction
+    # blowing correction
     conv_coeff = conv_coeff_0*1.0
-#    lambda_corr = 0.5
-#    phi = 2*lambda_corr*m_dot/conv_coeff
-#    blowing_correction = phi/(np.exp(phi) - 1)
-#    conv_coeff = conv_coeff_0*blowing_correction
+    lambda_corr = 0.5
+    for _ in range(0, 3):
+        phi = 2.0*lambda_corr*m_dot/conv_coeff
+        blowing_correction = phi/(actx.np.exp(phi) - 1.0)
+        conv_coeff = conv_coeff_0*blowing_correction
 
     Bsurf = m_dot_g/conv_coeff  # noqa N806
 
@@ -188,8 +191,6 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
 
     h_g = eos.gas_enthalpy(temperature_bc)
 
-    # FIXME make emissivity function of tau
-    emissivity = 0.8
     radiation = emissivity*5.67e-8*(temperature_bc**4 - 300**4)
 
     flux = conv_coeff*(h_e - h_w) - m_dot*h_w + m_dot_g*h_g
@@ -198,10 +199,52 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
     return make_obj_array([flux - radiation])
 
 
-def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
+def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
                        quadrature_tag, dd_wall, bprime_class,
                        pressure_scaling_factor=1.0, penalty_amount=1.0):
-    """Return the RHS of the composite wall."""
+    """Return the RHS of the composite wall.
+
+    Parameters
+    ----------
+    state: :class:`~mirgecom.phenolics.phenolics.PhenolicsConservedVars`
+
+        Object with the conserved state and tseed.
+
+    boundaries
+        Dictionary of boundary functions keyed by btags
+
+    time
+        Time
+
+    eos
+        :class:`~mirgecom.phenolics.phenolics.PhenolicsEOS`
+
+    pyrolysis
+        :class:`~mirgecom.phenolics.tacot.Pyrolysis`
+
+    quadrature_tag
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    dd_wall: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *state* lives. Must be a
+        volume on the base discretization.
+
+    bprime_class
+        :class:`~mirgecom.phenolics.tacot.BprimeTable`
+
+    pressure_scaling_factor
+        Optional float with a scaling of the pressure diffusivity. May be useful
+        to increase the simulation time step.
+
+    penalty_amount: float
+        strength parameter for the diffusion flux interior penalty.
+        The default value is 1.0.
+
+    Returns
+    -------
+    :class:`mirgecom.phenolics.phenolics.PhenolicsConservedVars`
+    """
     wv, tseed = state
     wdv = eos.dependent_vars(wv=wv, temperature_seed=tseed)
 
@@ -237,17 +280,17 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
         kappa=wdv.thermal_conductivity, boundaries=energy_boundaries,
         u=wdv.temperature, penalty_amount=penalty_amount)
 
-    viscous_rhs = wall.make_conserved(
+    viscous_rhs = make_conserved(
         solid_species_mass=wv.solid_species_mass*0.0,
         gas_density=pressure_scaling_factor*pressure_viscous_rhs,
         energy=energy_viscous_rhs)
 
     # ~~~~~
     field = wv.gas_density*wdv.gas_enthalpy
-    energy_inviscid_rhs = my_derivative_function(actx, dcoll, quadrature_tag,
-            field, velocity, velocity_boundaries, dd_wall)
+    energy_inviscid_rhs = compute_div(actx, dcoll, quadrature_tag, field,
+                                      velocity, velocity_boundaries, dd_wall)
 
-    inviscid_rhs = wall.make_conserved(
+    inviscid_rhs = make_conserved(
         solid_species_mass=wv.solid_species_mass*0.0,
         gas_density=zeros,
         energy=-energy_inviscid_rhs
@@ -265,7 +308,7 @@ def phenolics_operator(dcoll, state, boundaries, time, wall, eos, pyrolysis,
     visc_diss_energy = wdv.gas_viscosity*wdv.void_fraction**2*(
         (1.0/wdv.solid_permeability)*np.dot(velocity, velocity))
 
-    source_terms = wall.make_conserved(
+    source_terms = make_conserved(
         solid_species_mass=resin_pyrolysis,
         gas_density=gas_source_term,
         energy=visc_diss_energy)
