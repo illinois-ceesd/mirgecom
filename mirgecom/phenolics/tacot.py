@@ -2,7 +2,6 @@
 
 Pyrolysis-Handling Functions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 .. autoclass:: Pyrolysis
 
 """
@@ -58,29 +57,28 @@ class BprimeTable():
 
 
 class Pyrolysis():
-    """Pyrolysis class.
+    r"""Evaluate the source terms for the pyrolysis decomposition.
+
+    The source terms follow as Arrhenius-like equation given by
+
+    .. math::
+
+        \dot{\omega}_i^p = \mathcal{A}_{i} T^{n_{i}}
+        \exp\left(- \frac{E_{i}}{RT} \right)
+        \left( \frac{\epsilon_i \rho_i -
+            \epsilon^c_i \rho^c_i}{\epsilon^0_i \rho^0_i} \right)^{m_i}
+
+    The reactions are assumed to happen only after a minimum temperature.
+    Different reactions are considered based on the resin constituents.
 
     .. automethod:: get_sources
     """
 
     def __init__(self):
         self._Tcrit = np.array([333.3, 555.6])
-        # self._Fij = np.array([0.025, 0.075])
-        # self._n_phases = 2
 
     def get_sources(self, temperature: DOFArray, xi):
-        r"""Return the source terms of pyrolysis decomposition.
-
-        The source terms follow as Arrhenius-like equation given by
-
-        .. math::
-
-            \dot{\omega}_i^p = \mathcal{A}_{i} T^{n_{i}}
-            \exp\left(- \frac{E_{i}}{RT} \right)
-            \left( \frac{\epsilon_i \rho_i -
-                \epsilon^c_i \rho^c_i}{\epsilon^0_i \rho^0_i} \right)^{m_i}
-
-        """
+        """Return the source terms of pyrolysis decomposition."""
         actx = temperature.array_context
 
         rhs = np.empty((3,), dtype=object)
@@ -95,15 +93,14 @@ class Pyrolysis():
         )
 
         # include the fiber in the RHS but dont do anything more for now.
-        # ignore oxidation, for now...
-        # at some point, Y2 model can be included here...
+        # TODO at some point, Y2 model can be included here...
         rhs[2] = temperature*0.0
 
         return rhs
 
 
 def solid_enthalpy(temperature, tau):
-    """."""
+    """Solid enthalpy as a function of pyrolysis progress."""
     virgin = (
         - 1.36068885310508e-11*temperature**5 + 1.52102962615076e-07*temperature**4
         - 6.73376995865907e-04*temperature**3 + 1.49708228272951e+00*temperature**2
@@ -118,7 +115,7 @@ def solid_enthalpy(temperature, tau):
 
 
 def solid_heat_capacity(temperature, tau):
-    """."""
+    """Solid heat capacity as a function of pyrolysis progress."""
     actx = temperature.array_context
 
     virgin = actx.np.where(actx.np.less(temperature, 2222.0),
@@ -136,7 +133,7 @@ def solid_heat_capacity(temperature, tau):
 
 
 def solid_thermal_conductivity(temperature, tau):
-    """."""
+    """Solid thermal conductivity as a function of pyrolysis progress."""
     virgin = (
         + 2.31290019732353e-17*temperature**5 - 2.16778503256247e-13*temperature**4
         + 8.24498395180905e-10*temperature**3 - 1.22161245622351e-06*temperature**2
@@ -151,21 +148,22 @@ def solid_thermal_conductivity(temperature, tau):
 
 
 def solid_permeability(tau):
-    """."""
+    """Permeability of the composite material."""
     virgin = 1.6e-11
     charr = 2.0e-11
     return virgin*tau + charr*(1.0 - tau)
 
 
 def solid_tortuosity(temperature, tau):
-    """."""
-    virgin = 1.2e-11
-    charr = 1.1e-11
+    """Tortuosity affects the species diffusivity."""
+    virgin = 1.2
+    charr = 1.1
     return virgin*tau + charr*(1.0 - tau)
 
 
+# TODO when we start considering fiber oxidation, update this function too
 def solid_volume_fraction(tau):
-    """."""
+    """Void fraction filled by gas around the fibers."""
     fiber = 0.10
     virgin = 0.10
     charr = 0.05
@@ -173,7 +171,7 @@ def solid_volume_fraction(tau):
 
 
 def solid_emissivity(tau):
-    """."""
+    """Emissivity for energy radiation."""
     virgin = 0.8
     charr = 0.9
     return virgin*tau + charr*(1.0 - tau)

@@ -304,10 +304,6 @@ class PhenolicsEOS():
         return (1.0/eps_gas)*wv.gas_density*Rg*temperature
 
 #    # FIXME
-#    def velocity(self, wv, temperature, tau):
-#        return temperature*0.0
-
-#    # FIXME
 #    def species_diffusivity(self, wv, temperature, tau):
 #        return temperature*0.0
 
@@ -359,13 +355,11 @@ class PhenolicsEOS():
             thermal_conductivity=self.thermal_conductivity(wv, temperature, tau),
             void_fraction=self.void_fraction(tau),
             gas_pressure=self.gas_pressure(wv, temperature, tau),
-            # velocity
             gas_viscosity=self.gas_viscosity(temperature),
             gas_molar_mass=self.gas_molar_mass(temperature),
             # species_diffusivity
             gas_enthalpy=self.gas_enthalpy(temperature),
             solid_enthalpy=self.solid_enthalpy(temperature, tau),
-            # heat_capacity
             solid_density=self.solid_density(wv),
             solid_emissivity=self.solid_emissivity(tau),
             solid_permeability=self.solid_permeability(tau)

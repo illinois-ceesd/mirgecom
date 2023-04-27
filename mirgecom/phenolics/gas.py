@@ -2,17 +2,14 @@
 
 Gas-Handling Functions
 ^^^^^^^^^^^^^^^^^^^^^^
-
 .. autoclass:: GasProperties
 
 Helper Functions
 ================
-
 .. autofunction:: eval_spline
 .. autofunction:: eval_spline_derivative
 
 """
-
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -133,7 +130,7 @@ class GasProperties():
         return eval_spline(temperature, bnds, coeffs)
 
     def gas_heat_capacity(self, temperature):
-        """Return the gas heat capacity."""
+        r"""Return the gas heat capacity at constant pressure $(C_p)$."""
         coeffs = self._cs_enthalpy.c
         bnds = self._cs_enthalpy.x
         return eval_spline_derivative(temperature, bnds, coeffs)
@@ -145,7 +142,10 @@ class GasProperties():
         return eval_spline(temperature, bnds, coeffs)
 
     def gas_dMdT(self, temperature):  # noqa N802
-        """Return the partial derivative of molar mass wrt temperature."""
+        """Return the partial derivative of molar mass wrt temperature.
+
+        This is necessary to evaluate the temperature using Newton iteration.
+        """
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         return eval_spline_derivative(temperature, bnds, coeffs)

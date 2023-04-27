@@ -14,7 +14,7 @@ r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
