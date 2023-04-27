@@ -57,7 +57,7 @@ class _MyGradTag:
 
 
 def compute_div(actx, dcoll, quadrature_tag, field, velocity,
-                           boundaries, dd_vol):
+                boundaries, dd_vol):
     """Return flux for inviscid term."""
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
@@ -68,17 +68,11 @@ def compute_div(actx, dcoll, quadrature_tag, field, velocity,
     itp_u = interior_trace_pairs(dcoll, velocity, volume_dd=dd_vol,
                                      comm_tag=_MyGradTag)
 
-    flux = field*velocity
-
     def interior_flux(f_tpair, u_tpair):
         dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
         normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
-        bnd_u_tpair_quad = tracepair_with_discr_tag(dcoll,
-            quadrature_tag, u_tpair)
-        bnd_f_tpair_quad = tracepair_with_discr_tag(dcoll,
-            quadrature_tag, f_tpair)
-
-        numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg
+        bnd_u_tpair_quad = tracepair_with_discr_tag(dcoll, quadrature_tag, u_tpair)
+        bnd_f_tpair_quad = tracepair_with_discr_tag(dcoll, quadrature_tag, f_tpair)
 
         wavespeed_int = actx.np.sqrt(np.dot(bnd_u_tpair_quad.int,
                                             bnd_u_tpair_quad.int))
@@ -86,16 +80,15 @@ def compute_div(actx, dcoll, quadrature_tag, field, velocity,
                                             bnd_u_tpair_quad.ext))
         lam = actx.np.maximum(wavespeed_int, wavespeed_ext)
         jump = bnd_f_tpair_quad.int - bnd_f_tpair_quad.ext
-        numerical_flux = numerical_flux + 0.5*lam*(jump)
+        numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg + 0.5*lam*jump
 
-        flux_int = numerical_flux@normal_quad
-
-        return op.project(dcoll, dd_trace_quad, dd_allfaces_quad, flux_int)
+        return op.project(dcoll, dd_trace_quad, dd_allfaces_quad,
+                          numerical_flux@normal_quad)
 
     def boundary_flux(bdtag, bdry):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
         normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
-        int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, flux)
+        int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, field*velocity)
 
         # FIXME make this more organized
         if bdtag.tag == "prescribed":
@@ -106,13 +99,13 @@ def compute_div(actx, dcoll, quadrature_tag, field, velocity,
         bnd_tpair = TracePair(dd_bdry_quad,
             interior=int_soln_quad, exterior=ext_soln_quad)
 
-        flux_bnd = bnd_tpair.avg@normal_quad
+        return op.project(dcoll, dd_bdry_quad, dd_allfaces_quad,
+                          bnd_tpair.avg@normal_quad)
 
-        return op.project(dcoll, dd_bdry_quad, dd_allfaces_quad, flux_bnd)
-
+    # pylint: disable=invalid-unary-operand-type
     return -op.inverse_mass(
         dcoll, dd_vol,
-        op.weak_local_div(dcoll, dd_vol, flux)
+        op.weak_local_div(dcoll, dd_vol, field*velocity)
         - op.face_mass(dcoll, dd_allfaces_quad,
             (sum(interior_flux(f_tpair, u_tpair) for f_tpair, u_tpair in
                 zip(itp_f, itp_u))
@@ -126,14 +119,13 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
                            quadrature_tag, dd_wall, time):
     """Evaluate the prescribed heat flux to be applied at the boundary.
 
-    Function specific for verification of the code against the ablation
-    workshop test case 2.1.
+    Function specific for verification against the ablation workshop test case 2.1.
     """
     actx = wv.gas_density.array_context
 
     # restrict variables to the domain boundary
     dd_vol_quad = dd_wall.with_discr_tag(quadrature_tag)
-    bdtag = dd_wall.trace("prescribed").domain_tag
+    bdtag = dd_wall.trace("prescribed").domain_tag  # FIXME make this more organized
     normal_vec = actx.thaw(dcoll.normal(bdtag))
     dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
 
@@ -256,6 +248,7 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
     gas_pressure_diffusivity = eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
 
     # ~~~~~
+    # viscous RHS
     pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
         kappa=wv.gas_density*gas_pressure_diffusivity,
         boundaries=pressure_boundaries, u=wdv.gas_pressure,
@@ -269,6 +262,7 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
                                            bprime_class, quadrature_tag,
                                            dd_wall, time)
 
+    # FIXME make this more general
     energy_boundaries = {
         BoundaryDomainTag("prescribed"):
             PrescribedFluxDiffusionBoundary(boundary_flux),
@@ -286,6 +280,7 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
         energy=energy_viscous_rhs)
 
     # ~~~~~
+    # inviscid RHS, energy equation only
     field = wv.gas_density*wdv.gas_enthalpy
     energy_inviscid_rhs = compute_div(actx, dcoll, quadrature_tag, field,
                                       velocity, velocity_boundaries, dd_wall)
