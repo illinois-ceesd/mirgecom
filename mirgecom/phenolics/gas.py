@@ -38,7 +38,7 @@ THE SOFTWARE.
 
 
 import numpy as np
-from scipy.interpolate import CubicSpline
+from scipy.interpolate import CubicSpline  # type: ignore[import]
 
 
 def eval_spline(x, x_bnds, coeffs):
@@ -58,7 +58,7 @@ def eval_spline(x, x_bnds, coeffs):
 
 
 def eval_spline_derivative(x, x_bnds, coeffs):
-    """Evaluate derivative of a spline."""
+    """Evaluate analytical derivative of a spline."""
     actx = x.array_context
 
     val = x*0.0
@@ -156,7 +156,17 @@ class GasProperties():
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
-    # TODO
     def gas_thermal_conductivity(self, temperature):
-        """Return gas thermal conductivity."""
-        return temperature*0.0
+        r"""Return gas thermal conductivity.
+
+        .. math::
+
+            \kappa = \frac{\mu C_p}{Pr}
+
+        where $\mu$ is the gas viscosity and $C_p$ is the heat capacity at
+        constant pressure. The Prandtl number $Pr$ is assumed to be 1.
+        """
+        cp = self.gas_heat_capacity(temperature)
+        mu = self.gas_viscosity(temperature)
+        prandtl = 1.0
+        return mu*cp/prandtl

@@ -33,7 +33,7 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
-import scipy
+import scipy  # type: ignore[import]
 
 
 class BprimeTable():

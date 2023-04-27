@@ -1,11 +1,7 @@
 """:mod:`mirgecom.phenolics.phenolics` handles phenolics modeling.
 
-    Additional details are provided in
-    https://github.com/illinois-ceesd/phenolics-notes
-
 Conserved Quantities
 ^^^^^^^^^^^^^^^^^^^^
-
 .. autoclass:: PhenolicsConservedVars
 
 Helper Functions
@@ -62,15 +58,16 @@ from arraycontext import (
 class PhenolicsConservedVars:
     r"""Class of conserved variables.
 
-    The conserved variables are
+    The conserved variables are the solid phases densities (for $i = 1:N$),
+    gas density and the bulk energy. These are, respectively, given by
 
     .. math::
 
-        \epsilon_i \rho_i, \mbox{for i = 1:N constituents}
+        \epsilon_i \rho_i,
 
-        \epsilon_g \rho_g, \mbox{assuming single gas in equilibrium}
+        \epsilon_g \rho_g,
 
-        \rho e, \mbox{the energy of solid+gas}
+        \rho e
     """
 
     # the "epsilon_density" of each phase in the solid
@@ -121,7 +118,8 @@ def initializer(eos, solid_species_mass, temperature, gas_density=None,
         energy=bulk_energy, gas_density=eps_rho_gas)
 
 
-def make_conserved(solid_species_mass, gas_density, energy):  # noqa D103
+def make_conserved(solid_species_mass, gas_density, energy):
+    """Create :class:`PhenolicsConservedVars` from separated conserved variables."""
     return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
         energy=energy, gas_density=gas_density)
 
@@ -131,6 +129,7 @@ def make_conserved(solid_species_mass, gas_density, energy):  # noqa D103
 class PhenolicsDependentVars:
     """State-dependent quantities.
 
+    .. attribute:: tau
     .. attribute:: progress
     .. attribute:: temperature
     .. attribute:: void_fraction
@@ -163,7 +162,7 @@ class PhenolicsDependentVars:
 
 # TODO maybe split this in two, one for "gas" and another for "solid"??
 class PhenolicsEOS():
-    """.
+    """Variables dependent on the wall state.
 
     .. automethod:: __init__
     .. automethod:: eval_tau
@@ -273,19 +272,8 @@ class PhenolicsEOS():
         return self._gas_data.gas_viscosity(temperature)
 
     def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas thermal conductivity.
-
-        .. math::
-
-            \kappa = \frac{\mu C_p}{Pr}
-
-        where $\mu$ is the gas viscosity and $C_p$ is the heat capacity at
-        constant pressure. The Prandtl number $Pr$ is assumed to be 1.
-        """
-        cp = self.gas_heat_capacity_cp(temperature)
-        mu = self._gas_data.gas_viscosity(temperature)
-        prandtl = 1.0
-        return mu*cp/prandtl
+        r"""Return the gas thermal conductivity."""
+        return self._gas_data.gas_thermal_conductivity(temperature)
 
     def gas_pressure_diffusivity(self, temperature: DOFArray,
                                  tau: DOFArray) -> DOFArray:
