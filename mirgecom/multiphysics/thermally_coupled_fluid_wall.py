@@ -1165,7 +1165,7 @@ def coupled_ns_heat_operator(
     limiter_func:
 
         Callable function to be passed to
-        :func:`~mirgecom.gas_model.make_fluid_operator_states`
+        :func:`~mirgecom.gas_model.make_operator_fluid_states`
         that filters or limits the produced fluid states.  This is used to keep
         species mass fractions in physical and realizable states, for example.
 
