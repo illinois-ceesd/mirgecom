@@ -35,7 +35,10 @@ from grudge.shortcuts import make_visualizer
 
 
 from mirgecom.transport import SimpleTransport
-from mirgecom.navierstokes import ns_operator
+from mirgecom.navierstokes import (
+    ns_operator,
+    entropy_stable_ns_operator
+)
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
@@ -72,7 +75,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, lazy=False):
+         rst_filename=None, lazy=False, use_esdg=False,
+         use_overintegration=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -104,6 +108,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
+    rhs_operator = entropy_stable_ns_operator if use_esdg else ns_operator
+
     # timestepping control
     current_step = 0
     if use_leap:
@@ -125,7 +131,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     dim = 2
     nel_1d = 4
-    order = 1
+    order = 3
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -153,6 +159,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     def vol_min(x):
         from grudge.op import nodal_min
@@ -369,8 +381,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return ns_operator(dcoll, state=fluid_state, time=t,
-                           boundaries=boundaries, gas_model=gas_model)
+        return rhs_operator(dcoll, state=fluid_state, time=t,
+                            boundaries=boundaries, gas_model=gas_model,
+                            quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -415,10 +428,14 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable rhs operator")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -434,6 +451,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
+         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg,
          use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

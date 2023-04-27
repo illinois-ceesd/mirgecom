@@ -352,7 +352,8 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
     return FluidState(cv=cv, dv=dv)
 
 
-def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
+def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
+                        entropy_stable=False):
     """Project a fluid state onto a boundary consistent with the gas model.
 
     If required by the gas model, (e.g. gas is a mixture), this routine will
@@ -396,9 +397,17 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
         Thermally consistent fluid state
     """
     cv_sd = op.project(dcoll, src, tgt, state.cv)
+
     temperature_seed = None
     if state.is_mixture:
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
+
+    if entropy_stable:
+        gamma = gas_model.eos.gamma(state.cv, state.temperature)
+        if isinstance(gamma, DOFArray):
+            gamma = op.project(dcoll, src, tgt, gamma)
+            ev_sd = conservative_to_entropy_vars(gamma, cv_sd)
+            cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
 
     smoothness_mu = None
     if state.dv.smoothness_mu is not None:

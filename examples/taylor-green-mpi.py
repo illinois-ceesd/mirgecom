@@ -1,4 +1,4 @@
-"""Demonstrate the inviscid Taylor-Green vortex problem."""
+"""Demonstratefl the inviscid Taylor-Green vortex problem."""
 
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees
@@ -32,17 +32,14 @@ from mirgecom.mpi import mpi_entry_point
 
 from functools import partial
 
-from arraycontext import thaw
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.euler import euler_operator, entropy_stable_euler_operator
 from mirgecom.simutil import (
-    get_sim_timestep,
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
-
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import lsrk54_step
 from mirgecom.steppers import advance_state
 from mirgecom.initializers import InviscidTaylorGreenVortex
@@ -130,7 +127,7 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     nviz = 100
     nhealth = 100
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -156,20 +153,10 @@ def main(actx_class, ctx_factory=cl.create_some_context,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
+    from grudge.dof_desc import DISCR_TAG_QUAD
 
-    discr = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
-    )
-    nodes = thaw(discr.nodes(), actx)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -181,7 +168,7 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     if logmgr:
         logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, discr, dim,
+        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
@@ -202,7 +189,7 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     # Periodic domain, no boundary conditions (yay!)
     boundaries = {}
 
-    initial_condition = InviscidTaylorGreenVortex(dim=dim)
+    initial_condition = InviscidTaylorGreenVortex()
 
     if use_esdg:
         operator_rhs = entropy_stable_euler_operator
@@ -218,11 +205,11 @@ def main(actx_class, ctx_factory=cl.create_some_context,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_cv = initial_condition(x_vec=nodes, eos=eos)
+        from mirgecom.simutil import force_evaluation
+        current_cv = force_evaluation(actx,
+                                      initial_condition(x_vec=nodes, eos=eos))
 
-    current_state = make_fluid_state(current_cv, gas_model)
-
-    visualizer = make_visualizer(discr)
+    visualizer = make_visualizer(dcoll)
 
     initname = "taylorgreen"
     eosname = eos.__class__.__name__
@@ -236,13 +223,19 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     if rank == 0:
         logger.info(init_message)
 
+    def _make_fluid_state(cv, tseed):
+        return make_fluid_state(cv=cv, gas_model=gas_model)
+
+    make_fluid_state_compiled = actx.compile(_make_fluid_state)
+    # current_state = make_fluid_state_compiled(current_cv, gas_model)
+
     def my_write_viz(step, t, state, dv=None):
         if dv is None:
             dv = eos.dependent_vars(state)
         viz_fields = [("cv", state),
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
-        write_visfile(discr, viz_fields, visualizer, vizname=casename,
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state):
@@ -263,13 +256,13 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     def my_health_check(pressure):
         health_error = False
         from mirgecom.simutil import check_naninf_local
-        if check_naninf_local(discr, "vol", pressure):
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        fluid_state = make_fluid_state(state, gas_model)
+        fluid_state = make_fluid_state_compiled(state, gas_model)
         dv = fluid_state.dv
 
         try:
@@ -302,13 +295,11 @@ def main(actx_class, ctx_factory=cl.create_some_context,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(discr, fluid_state, t, dt, current_cfl, t_final,
-                              constant_cfl)
+        # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
+        #                      constant_cfl)
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
@@ -317,13 +308,10 @@ def main(actx_class, ctx_factory=cl.create_some_context,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return operator_rhs(discr, state=fluid_state, time=t,
+        return operator_rhs(dcoll, state=fluid_state, time=t,
                             boundaries=boundaries,
                             gas_model=gas_model,
                             quadrature_tag=quadrature_tag)
-
-    current_dt = get_sim_timestep(discr, current_state, current_t, current_dt,
-                                  current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,

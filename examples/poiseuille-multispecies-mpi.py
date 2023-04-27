@@ -85,7 +85,7 @@ def _get_box_mesh(dim, a, b, n, t=None):
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_overintegration=False, lazy=False,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None):
+         rst_filename=None, actx_class=None, use_esdg=False):
     """Drive the example."""
     if actx_class is None:
         raise RuntimeError("Array context class missing.")

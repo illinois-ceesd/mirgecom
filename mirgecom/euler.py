@@ -319,7 +319,7 @@ def entropy_stable_euler_operator(
             # Make sure we get the state on the quadrature grid
             # restricted to the tag *btag*
             as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            state, gas_model) for btag in boundaries
+            state, gas_model, entropy_stable=True) for btag in boundaries
     }
 
     # Interior interface state pairs consisting of modified conservative

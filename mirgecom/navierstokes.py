@@ -591,8 +591,6 @@ def entropy_stable_ns_operator(
     """
     if not state.is_viscous:
         raise ValueError("Navier-Stokes operator expects viscous gas model.")
-    if not state.is_viscous:
-        raise ValueError("Navier-Stokes operator expects viscous gas model.")
 
     boundaries = normalize_boundaries(boundaries)
 
@@ -703,7 +701,7 @@ def entropy_stable_ns_operator(
             # Make sure we get the state on the quadrature grid
             # restricted to the tag *btag*
             as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            state, gas_model) for btag in boundaries
+            state, gas_model, entropy_stable=True) for btag in boundaries
     }
 
     # Interior interface state pairs consisting of modified conservative

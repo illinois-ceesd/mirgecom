@@ -40,8 +40,14 @@ from mirgecom.discretization import create_discretization_collection
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.euler import euler_operator
-from mirgecom.navierstokes import ns_operator
+from mirgecom.euler import (
+    euler_operator,
+    entropy_stable_euler_operator
+)
+from mirgecom.navierstokes import (
+    ns_operator,
+    entropy_stable_ns_operator
+)
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
@@ -165,7 +171,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_profiling=False, casename=None, lazy=False,
          rst_filename=None, actx_class=PyOpenCLArrayContext,
          log_dependent=False, input_file=None,
-         force_eval=True):
+         force_eval=True, use_esdg=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -188,7 +194,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # {{{ Some discretization parameters
 
-    dim = 3
+    dim = 2
     order = 3
 
     # - scales the size of the domain
@@ -257,10 +263,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     grid_only = 0
     discr_only = 0
     inviscid_only = 0
-    inert_only = 0
+    inert_only = 1
     init_only = 0
-    single_gas_only = 0
-    nspecies = 7
+    single_gas_only = 1
+    nspecies = 0
     use_cantera = 0
 
     # }}}
@@ -1123,6 +1129,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         pre_step_func = my_pre_step
         post_step_func = my_post_step
 
+    inviscid_operator = \
+        entropy_stable_euler_operator if use_esdg else euler_operator
+    viscous_operator = \
+        entropy_stable_ns_operator if use_esdg else ns_operator
+
     from mirgecom.flux import num_flux_central
     from mirgecom.gas_model import make_operator_fluid_states
     from mirgecom.navierstokes import grad_cv_operator
@@ -1132,13 +1143,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         from mirgecom.gas_model import make_fluid_state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        fluid_operator_states = make_operator_fluid_states(dcoll, fluid_state,
-                                                           gas_model, boundaries,
-                                                           quadrature_tag)
+        fluid_operator_states = make_operator_fluid_states(
+            dcoll, fluid_state, gas_model, boundaries, quadrature_tag=quadrature_tag)
 
         if inviscid_only:
             fluid_rhs = \
-                euler_operator(
+                inviscid_operator(
                     dcoll, state=fluid_state, time=t,
                     boundaries=boundaries, gas_model=gas_model,
                     inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
@@ -1151,36 +1161,30 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                        quadrature_tag=quadrature_tag,
                                        operator_states_quad=fluid_operator_states)
             fluid_rhs = \
-                ns_operator(
+                viscous_operator(
                     dcoll, state=fluid_state, time=t, boundaries=boundaries,
                     gas_model=gas_model, quadrature_tag=quadrature_tag,
                     inviscid_numerical_flux_func=inviscid_facial_flux_rusanov)
 
-        if inert_only:
-            chem_rhs = 0*fluid_rhs
-        else:
-            chem_rhs = eos.get_species_source_terms(cv, fluid_state.temperature)
+        if not inert_only:
+            fluid_rhs = fluid_rhs + eos.get_species_source_terms(
+                cv, fluid_state.temperature)
 
         if av_on:
             alpha_f = compute_av_alpha_field(fluid_state)
             indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
                                              kappa=kappa_sc, s0=s0_sc)
-            av_rhs = av_laplacian_operator(
+            fluid_rhs = fluid_rhs + av_laplacian_operator(
                 dcoll, fluid_state=fluid_state, boundaries=boundaries, time=t,
                 gas_model=gas_model, grad_cv=grad_cv,
                 operator_states_quad=fluid_operator_states,
                 alpha=alpha_f, s0=s0_sc, kappa=kappa_sc,
                 indicator=indicator)
-        else:
-            av_rhs = 0*fluid_rhs
 
         if sponge_on:
-            sponge_rhs = _sponge(fluid_state.cv)
-        else:
-            sponge_rhs = 0*fluid_rhs
+            fluid_rhs = fluid_rhs + _sponge(fluid_state.cv)
 
-        fluid_rhs = fluid_rhs + chem_rhs + av_rhs + sponge_rhs
-        tseed_rhs = fluid_state.temperature - tseed
+        tseed_rhs = actx.zeros_like(fluid_state.temperature)
 
         return make_obj_array([fluid_rhs, tseed_rhs])
 

@@ -45,7 +45,8 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    AdiabaticNoslipWallBoundary
+    AdiabaticNoslipWallBoundary,
+    IsothermalWallBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -130,10 +131,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
 
     # some i/o frequencies
-    nstatus = 1
-    nviz = 1
+    nstatus = 10000
+    nviz = 100
     nrestart = 100
-    nhealth = 1
+    nhealth = 100
 
     # some geometry setup
     dim = 2
@@ -222,10 +223,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         velocity = make_obj_array([u_x, u_y])
         ke = .5*np.dot(velocity, velocity)*mass
         gamma = eos.gamma()
-        if cv is not None:
-            mass = cv.mass
-            vel = cv.velocity
-            ke = .5*np.dot(vel, vel)*mass
+        # if cv is not None:
+        #    mass = cv.mass
+        #    vel = cv.velocity
+        #    ke = .5*np.dot(vel, vel)*mass
 
         rho_e = p_x/(gamma-1) + ke
         return make_conserved(2, mass=mass, energy=rho_e,
@@ -234,7 +235,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     initializer = poiseuille_2d
     gas_model = GasModel(eos=IdealSingleGas(),
                          transport=SimpleTransport(viscosity=mu))
-    exact = initializer(x_vec=nodes, eos=gas_model.eos)
+
+    from mirgecom.simutil import force_evaluation
+    exact = force_evaluation(actx, initializer(x_vec=nodes, eos=gas_model.eos))
 
     def _boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
@@ -243,6 +246,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             cv=state_minus.cv, **kwargs), gas_model)
 
+    use_adiabatic = False
+    if use_adiabatic:
+        wall_boundary = AdiabaticNoslipWallBoundary()
+    else:
+        wall_boundary = IsothermalWallBoundary(wall_temperature=300)
+
     boundaries = {
         BoundaryDomainTag("-1"):
             PrescribedFluidBoundary(
@@ -250,8 +259,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         BoundaryDomainTag("+1"):
             PrescribedFluidBoundary(
                 boundary_state_func=_boundary_solution),
-        BoundaryDomainTag("-2"): AdiabaticNoslipWallBoundary(),
-        BoundaryDomainTag("+2"): AdiabaticNoslipWallBoundary()}
+        BoundaryDomainTag("-2"): wall_boundary,
+        BoundaryDomainTag("+2"): wall_boundary}
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -264,7 +273,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # Set the current state from time 0
         current_cv = exact
 
-    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
+    def _make_fluid_state(cv):
+        return make_fluid_state(cv=cv, gas_model=gas_model)
+
+    make_fluid_state_compiled = actx.compile(_make_fluid_state)
+
+    current_state = make_fluid_state_compiled(current_cv)
 
     vis_timer = None
 
@@ -364,8 +378,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+
+        fluid_state = make_fluid_state_compiled(cv=state)
         dv = fluid_state.dv
+
         try:
             component_errors = None
 
@@ -394,8 +410,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 my_write_viz(step=step, t=t, state=state, dv=dv)
 
-            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                                  t_final, constant_cfl)
+            # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
+            #                      t_final, constant_cfl)
 
             if do_status:  # needed because logging fails to make output
                 if component_errors is None:
