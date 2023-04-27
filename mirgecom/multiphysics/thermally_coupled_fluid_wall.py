@@ -275,8 +275,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         else:
             return (t_minus + t_plus)/2
 
-    def grad_temperature_bc(
-            self, dcoll, dd_bdry, grad_t_minus):
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
         if self._grad_t_plus is None:
             raise ValueError(
                 "Boundary does not have external temperature gradient data.")
