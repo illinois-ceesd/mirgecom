@@ -243,11 +243,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     pyrolysis = my_composite.Pyrolysis()
     bprime_class = my_composite.BprimeTable()
+    my_solid = my_composite.SolidProperties()
+    my_gas = my_composite.GasProperties()
 
-    from mirgecom.phenolics.gas import GasProperties
-    my_gas = GasProperties()
-
-    eos = wall.PhenolicsEOS(composite=my_composite, gas=my_gas)
+    eos = wall.PhenolicsEOS(solid_data=my_solid, gas_data=my_gas)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

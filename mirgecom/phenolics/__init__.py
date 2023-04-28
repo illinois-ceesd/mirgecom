@@ -27,6 +27,5 @@ THE SOFTWARE.
 __doc__ = """
 .. automodule:: mirgecom.phenolics.operator
 .. automodule:: mirgecom.phenolics.tacot
-.. automodule:: mirgecom.phenolics.gas
 .. automodule:: mirgecom.phenolics.operator
 """

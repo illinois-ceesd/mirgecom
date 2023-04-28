@@ -1,7 +1,5 @@
 r""":mod:`mirgecom.phenolics.operator` for the RHS of phenolics model.
 
-Composite RHS
-^^^^^^^^^^^^^
 .. autofunction:: phenolics_operator
 
 Helper Function
@@ -33,7 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sys  # noqa F401
+import sys
 import numpy as np
 from grudge.trace_pair import (
     TracePair, interior_trace_pairs, tracepair_with_discr_tag
@@ -58,7 +56,7 @@ class _MyGradTag:
 
 def compute_div(actx, dcoll, quadrature_tag, field, velocity,
                 boundaries, dd_vol):
-    """Return flux for inviscid term."""
+    """Return divergence for inviscid term."""
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
@@ -168,6 +166,8 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
     # couldn't make lazy work without this
     sys.setrecursionlimit(10000)
 
+    # using spline for temperature interpolation
+    # while using "nearest neighbor" for the "B" parameter
     h_w = 0.0
     for j in range(0, 24):
         for k in range(0, 15):
@@ -183,9 +183,9 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
 
     h_g = eos.gas_enthalpy(temperature_bc)
 
-    radiation = emissivity*5.67e-8*(temperature_bc**4 - 300**4)
-
     flux = conv_coeff*(h_e - h_w) - m_dot*h_w + m_dot_g*h_g
+
+    radiation = emissivity*5.67e-8*(temperature_bc**4 - 300**4)
 
     # FIXME this depends on "dim"
     return make_obj_array([flux - radiation])
@@ -199,14 +199,13 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
     Parameters
     ----------
     state: :class:`~mirgecom.phenolics.phenolics.PhenolicsConservedVars`
-
         Object with the conserved state and tseed.
 
     boundaries
         Dictionary of boundary functions keyed by btags
 
     time
-        Time
+        Simulation time
 
     eos
         :class:`~mirgecom.phenolics.phenolics.PhenolicsEOS`

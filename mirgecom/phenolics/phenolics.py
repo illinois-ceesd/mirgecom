@@ -4,15 +4,15 @@ Conserved Quantities
 ^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: PhenolicsConservedVars
 
-Helper Functions
-================
-.. autofunction:: initializer
-.. autofunction:: make_conserved
-
 Equations of State
 ^^^^^^^^^^^^^^^^^^
 .. autoclass:: PhenolicsDependentVars
 .. autoclass:: PhenolicsEOS
+
+Helper Functions
+^^^^^^^^^^^^^^^^
+.. autofunction:: initializer
+.. autofunction:: make_conserved
 
 """
 
@@ -58,16 +58,9 @@ from arraycontext import (
 class PhenolicsConservedVars:
     r"""Class of conserved variables.
 
-    The conserved variables are the solid phases densities (for $i = 1:N$),
-    gas density and the bulk energy. These are, respectively, given by
-
-    .. math::
-
-        \epsilon_i \rho_i,
-
-        \epsilon_g \rho_g,
-
-        \rho e
+    .. attribute:: solid_species_mass
+    .. attribute:: gas_density
+    .. attribute:: energy
     """
 
     # the "epsilon_density" of each phase in the solid
@@ -92,13 +85,35 @@ class PhenolicsConservedVars:
 
 def initializer(eos, solid_species_mass, temperature, gas_density=None,
                 pressure=None):
-    """Initialize state of composite material."""
+    """Initialize state of composite material.
+
+    Parameters
+    ----------
+    eos
+        :class:`~mirgecom.phenolics.phenolics.PhenolicsEOS`
+
+    solid_species_mass: numpy.ndarray
+        The initial bulk density of each one of the resin constituents.
+        It has shape ``(nphase,)``
+
+    temperature: :class:`~meshmode.dof_array.DOFArray`
+        The initial temperature of the gas+solid
+
+    gas_density: :class:`~meshmode.dof_array.DOFArray`
+        Optional argument with the gas density. If not provided, the pressure
+        will be used to evaluate the density.
+
+    pressure: :class:`~meshmode.dof_array.DOFArray`
+        Optional argument with the gas pressure. It will be used to evaluate
+        the gas density.
+    """
     if gas_density is None and pressure is None:
         raise ValueError("Must specify one of 'gas_density' or 'pressure'")
 
     if isinstance(temperature, DOFArray) is False:
         raise ValueError("Temperature does not have the proper shape")
 
+    # FIXME this is hard-coded for TACOT!
     tau = 280.0/(280.0 - 220.0)*(1.0 - 220.0/sum(solid_species_mass))
 
     # gas constant
@@ -160,7 +175,6 @@ class PhenolicsDependentVars:
     solid_density: DOFArray
 
 
-# TODO maybe split this in two, one for "gas" and another for "solid"??
 class PhenolicsEOS():
     """Variables dependent on the wall state.
 
@@ -172,7 +186,6 @@ class PhenolicsEOS():
     .. automethod:: gas_enthalpy
     .. automethod:: gas_molar_mass
     .. automethod:: gas_viscosity
-    .. automethod:: gas_thermal_conductivity
     .. automethod:: gas_heat_capacity_cp
     .. automethod:: gas_pressure_diffusivity
     .. automethod:: gas_pressure
@@ -184,10 +197,10 @@ class PhenolicsEOS():
     """
 
     # FIXME Ideally, we wanna do something similar to the pyrometheus interface
-    def __init__(self, composite, gas):
+    def __init__(self, solid_data, gas_data):
         """Initialize EOS for composite."""
-        self._composite_model = composite
-        self._gas_data = gas
+        self._solid_data = solid_data
+        self._gas_data = gas_data
 
     # ~~~~~~~~~~~~
     def eval_tau(self, wv: PhenolicsConservedVars) -> DOFArray:
@@ -239,7 +252,7 @@ class PhenolicsEOS():
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
         progress ratio $\tau$.
         """
-        return 1.0 - self._composite_model.solid_volume_fraction(tau)
+        return 1.0 - self._solid_data.solid_volume_fraction(tau)
 
     def thermal_conductivity(self, wv: PhenolicsConservedVars,
                              temperature: DOFArray, tau: DOFArray) -> DOFArray:
@@ -254,8 +267,8 @@ class PhenolicsEOS():
         y_g = wv.gas_density/(wv.gas_density + self.solid_density(wv))
         y_s = 1.0 - y_g
         return (
-            y_s*self._composite_model.solid_thermal_conductivity(temperature, tau)
-            + y_g*self.gas_thermal_conductivity(temperature)
+            y_s*self._solid_data.solid_thermal_conductivity(temperature, tau)
+            + y_g*self._gas_data.gas_thermal_conductivity(temperature)
         )
 
     # ~~~~~~~~~~~~ gas
@@ -270,10 +283,6 @@ class PhenolicsEOS():
     def gas_viscosity(self, temperature: DOFArray) -> DOFArray:
         """Return the gas viscosity."""
         return self._gas_data.gas_viscosity(temperature)
-
-    def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas thermal conductivity."""
-        return self._gas_data.gas_thermal_conductivity(temperature)
 
     def gas_pressure_diffusivity(self, temperature: DOFArray,
                                  tau: DOFArray) -> DOFArray:
@@ -303,7 +312,7 @@ class PhenolicsEOS():
         eps_gas = self.void_fraction(tau)
         return (1.0/eps_gas)*wv.gas_density*Rg*temperature
 
-#    # FIXME
+#    # TODO future task
 #    def species_diffusivity(self, wv, temperature, tau):
 #        return temperature*0.0
 
@@ -322,15 +331,15 @@ class PhenolicsEOS():
 
     def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Return the solid enthalpy."""
-        return self._composite_model.solid_enthalpy(temperature, tau)
+        return self._solid_data.solid_enthalpy(temperature, tau)
 
     def solid_permeability(self, tau: DOFArray) -> DOFArray:
         r"""Return the wall permeability based on the progress ratio $\tau$."""
-        return self._composite_model.solid_permeability(tau)
+        return self._solid_data.solid_permeability(tau)
 
     def solid_emissivity(self, tau: DOFArray) -> DOFArray:
         r"""Return the wall emissivity based on the progress ratio $\tau$."""
-        return self._composite_model.solid_emissivity(tau)
+        return self._solid_data.solid_emissivity(tau)
 
     # ~~~~~~~~~~~~ auxiliary functions
     def gas_heat_capacity_cp(self, temperature: DOFArray) -> DOFArray:
@@ -340,7 +349,7 @@ class PhenolicsEOS():
     def solid_heat_capacity_cp(self, temperature: DOFArray,
                                tau: DOFArray) -> DOFArray:
         """Return the solid heat capacity."""
-        return self._composite_model.solid_heat_capacity(temperature, tau)
+        return self._solid_data.solid_heat_capacity(temperature, tau)
 
     # ~~~~~~~~~~~~
     def dependent_vars(self, wv: PhenolicsConservedVars,
