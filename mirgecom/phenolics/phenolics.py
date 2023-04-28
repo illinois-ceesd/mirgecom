@@ -113,8 +113,10 @@ def initializer(eos, solid_species_mass, temperature, gas_density=None,
     if isinstance(temperature, DOFArray) is False:
         raise ValueError("Temperature does not have the proper shape")
 
-    # FIXME this is hard-coded for TACOT!
-    tau = 280.0/(280.0 - 220.0)*(1.0 - 220.0/sum(solid_species_mass))
+    char_mass = eos._solid_data._char_mass
+    virgin_mass = eos._solid_data._virgin_mass
+    current_mass = sum(solid_species_mass)
+    tau = virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/current_mass)
 
     # gas constant
     Rg = 8314.46261815324/eos.gas_molar_mass(temperature)  # noqa N806
@@ -210,7 +212,10 @@ class PhenolicsEOS():
         $\tau=0$, then the pyrolysis is locally complete and only charred
         material exists.
         """
-        return 280.0/(280.0 - 220.0)*(1.0 - 220.0/self.solid_density(wv))
+        char_mass = self._solid_data._char_mass
+        virgin_mass = self._solid_data._virgin_mass
+        current_mass = self.solid_density(wv)
+        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/current_mass)
 
     def eval_temperature(self, wv: PhenolicsConservedVars, tseed: DOFArray,
                          tau: DOFArray, niter=3) -> DOFArray:

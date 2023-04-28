@@ -265,7 +265,7 @@ class GasProperties():
 class SolidProperties():
     """Evaluate the properties of the solid state.
 
-    Linear weighting between the virgin and charred states.
+    Linear weighting between the virgin and chared states.
 
     .. automethod:: solid_enthalpy
     .. automethod:: solid_heat_capacity
@@ -276,6 +276,11 @@ class SolidProperties():
     .. automethod:: solid_emissivity
     """
 
+    # TODO not considering any fiber degration for now
+    def __init__(self):
+        self._char_mass = 220.0
+        self._virgin_mass = 280.0
+
     def solid_enthalpy(self, temperature, tau):
         """Solid enthalpy as a function of pyrolysis progress."""
         virgin = (
@@ -283,12 +288,12 @@ class SolidProperties():
             - 6.733769958659e-04*temperature**3 + 1.497082282729e+00*temperature**2
             + 3.009865156984e+02*temperature - 1.062767983774e+06)
 
-        charr = (
+        char = (
             - 1.279887694729e-11*temperature**5 + 1.491175465285e-07*temperature**4
             - 6.994595296860e-04*temperature**3 + 1.691564018109e+00*temperature**2
             - 3.441837408320e+01*temperature - 1.235438104496e+05)
 
-        return virgin*tau + charr*(1.0 - tau)
+        return virgin*tau + char*(1.0 - tau)
 
     def solid_heat_capacity(self, temperature, tau):
         """Solid heat capacity as a function of pyrolysis progress."""
@@ -300,12 +305,12 @@ class SolidProperties():
             + 4.291080938736e+00*temperature + 1.397594340362e+01,
             2008.8139143251735)
 
-        charr = (
+        char = (
             + 1.461303669323e-14*temperature**5 - 1.862489701581e-10*temperature**4
             + 9.685398830530e-07*temperature**3 - 2.599755262540e-03*temperature**2
             + 3.667295510844e+00*temperature - 7.816218435655e+01)
 
-        return virgin*tau + charr*(1.0 - tau)
+        return virgin*tau + char*(1.0 - tau)
 
     def solid_thermal_conductivity(self, temperature, tau):
         """Solid thermal conductivity as a function of pyrolysis progress."""
@@ -314,35 +319,35 @@ class SolidProperties():
             + 8.24498395180905e-10*temperature**3 - 1.221612456223e-06*temperature**2
             + 8.46459266618945e-04*temperature + 2.387112689755e-01)
 
-        charr = (
+        char = (
             - 7.378279908877e-18*temperature**5 + 4.709353498411e-14*temperature**4
             + 1.530236899258e-11*temperature**3 - 2.305611352452e-07*temperature**2
             + 3.668624886569e-04*temperature + 3.120898814888e-01)
 
-        return virgin*tau + charr*(1.0 - tau)
+        return virgin*tau + char*(1.0 - tau)
 
     def solid_permeability(self, tau):
         """Permeability of the composite material."""
         virgin = 1.6e-11
-        charr = 2.0e-11
-        return virgin*tau + charr*(1.0 - tau)
+        char = 2.0e-11
+        return virgin*tau + char*(1.0 - tau)
 
     def solid_tortuosity(self, tau):
         """Tortuosity affects the species diffusivity."""
         virgin = 1.2
-        charr = 1.1
-        return virgin*tau + charr*(1.0 - tau)
+        char = 1.1
+        return virgin*tau + char*(1.0 - tau)
 
     # TODO when we start considering fiber oxidation, update this function too
     def solid_volume_fraction(self, tau):
         """Void fraction filled by gas around the fibers."""
         fiber = 0.10
         virgin = 0.10
-        charr = 0.05
-        return virgin*tau + charr*(1.0 - tau) + fiber
+        char = 0.05
+        return virgin*tau + char*(1.0 - tau) + fiber
 
     def solid_emissivity(self, tau):
         """Emissivity for energy radiation."""
         virgin = 0.8
-        charr = 0.9
-        return virgin*tau + charr*(1.0 - tau)
+        char = 0.9
+        return virgin*tau + char*(1.0 - tau)

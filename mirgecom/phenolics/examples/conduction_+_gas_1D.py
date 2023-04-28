@@ -376,11 +376,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         wv = force_evaluation(actx, wall_vars)
 
         viz_fields = [("x", nodes[0]),
-                      ("WV", wv),
-                      ("DV", wdv),
-                      ("phase_1", wall_vars.solid_species_mass[0]),
-                      ("phase_2", wall_vars.solid_species_mass[1]),
-                      ("phase_3", wall_vars.solid_species_mass[2])]
+                      ("WV_gas_density", wv.gas_density),
+                      ("WV_energy", wv.energy),
+                      ("WV_phase_1", wall_vars.solid_species_mass[0]),
+                      ("WV_phase_2", wall_vars.solid_species_mass[1]),
+                      ("WV_phase_3", wall_vars.solid_species_mass[2]),
+                      ("DV", wdv)]
 
 #        gas_pressure_diffusivity = \
 #            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
