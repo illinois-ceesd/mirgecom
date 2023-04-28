@@ -31,11 +31,6 @@ Simulation support utilities
 
 .. autofunction:: configurate
 
-Lazy eval utilities
--------------------
-
-.. autofunction:: force_evaluation
-
 File comparison utilities
 -------------------------
 
@@ -1070,7 +1065,13 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
 
 
 def force_evaluation(actx, expn):
-    """Wrap freeze/thaw forcing evaluation of expressions."""
+    """Wrap freeze/thaw forcing evaluation of expressions.
+
+    Deprecated; use :func:`mirgecom.utils.force_evaluation` instead.
+    """
+    from warnings import warn
+    warn("simutil.force_evaluation is deprecated and will disappear in Q3 2023. "
+         "Use utils.force_evaluation instead.", DeprecationWarning, stacklevel=2)
     return actx.thaw(actx.freeze(expn))
 
 
