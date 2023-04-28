@@ -38,7 +38,7 @@ THE SOFTWARE.
 
 import numpy as np
 import scipy  # type: ignore[import]
-from scipy.interpolate import CubicSpline  # type: ignore[import]v
+from scipy.interpolate import CubicSpline  # type: ignore[import]
 
 
 class BprimeTable():
@@ -263,7 +263,9 @@ class GasProperties():
 
 
 class SolidProperties():
-    """XXX.
+    """Evaluate the properties of the solid state.
+
+    Linear weighting between the virgin and charred states.
 
     .. automethod:: solid_enthalpy
     .. automethod:: solid_heat_capacity
@@ -277,14 +279,14 @@ class SolidProperties():
     def solid_enthalpy(self, temperature, tau):
         """Solid enthalpy as a function of pyrolysis progress."""
         virgin = (
-            - 1.36068885310508e-11*temperature**5 + 1.52102962615076e-07*temperature**4
-            - 6.73376995865907e-04*temperature**3 + 1.49708228272951e+00*temperature**2
-            + 3.00986515698487e+02*temperature - 1.06276798377448e+06)
+            - 1.360688853105e-11*temperature**5 + 1.521029626150e-07*temperature**4
+            - 6.733769958659e-04*temperature**3 + 1.497082282729e+00*temperature**2
+            + 3.009865156984e+02*temperature - 1.062767983774e+06)
 
         charr = (
-            - 1.27988769472902e-11*temperature**5 + 1.49117546528569e-07*temperature**4
-            - 6.99459529686087e-04*temperature**3 + 1.69156401810899e+00*temperature**2
-            - 3.44183740832012e+01*temperature - 1.23543810449620e+05)
+            - 1.279887694729e-11*temperature**5 + 1.491175465285e-07*temperature**4
+            - 6.994595296860e-04*temperature**3 + 1.691564018109e+00*temperature**2
+            - 3.441837408320e+01*temperature - 1.235438104496e+05)
 
         return virgin*tau + charr*(1.0 - tau)
 
@@ -293,29 +295,29 @@ class SolidProperties():
         actx = temperature.array_context
 
         virgin = actx.np.where(actx.np.less(temperature, 2222.0),
-            + 4.12265891689180e-14*temperature**5 - 4.43093718060442e-10*temperature**4
-            + 1.87206033562391e-06*temperature**3 - 3.95146486560366e-03*temperature**2
-            + 4.29108093873644e+00*temperature + 1.39759434036202e+01,
+            + 4.122658916891e-14*temperature**5 - 4.430937180604e-10*temperature**4
+            + 1.872060335623e-06*temperature**3 - 3.951464865603e-03*temperature**2
+            + 4.291080938736e+00*temperature + 1.397594340362e+01,
             2008.8139143251735)
 
         charr = (
-            + 1.46130366932393e-14*temperature**5 - 1.86248970158190e-10*temperature**4
-            + 9.68539883053023e-07*temperature**3 - 2.59975526254095e-03*temperature**2
-            + 3.66729551084460e+00*temperature - 7.81621843565539e+01)
+            + 1.461303669323e-14*temperature**5 - 1.862489701581e-10*temperature**4
+            + 9.685398830530e-07*temperature**3 - 2.599755262540e-03*temperature**2
+            + 3.667295510844e+00*temperature - 7.816218435655e+01)
 
         return virgin*tau + charr*(1.0 - tau)
 
     def solid_thermal_conductivity(self, temperature, tau):
         """Solid thermal conductivity as a function of pyrolysis progress."""
         virgin = (
-            + 2.31290019732353e-17*temperature**5 - 2.16778503256247e-13*temperature**4
-            + 8.24498395180905e-10*temperature**3 - 1.22161245622351e-06*temperature**2
-            + 8.46459266618945e-04*temperature + 2.38711268975591e-01)
+            + 2.31290019732353e-17*temperature**5 - 2.167785032562e-13*temperature**4
+            + 8.24498395180905e-10*temperature**3 - 1.221612456223e-06*temperature**2
+            + 8.46459266618945e-04*temperature + 2.387112689755e-01)
 
         charr = (
-            - 7.37827990887776e-18*temperature**5 + 4.70935349841195e-14*temperature**4
-            + 1.53023689925812e-11*temperature**3 - 2.30561135245248e-07*temperature**2
-            + 3.66862488656913e-04*temperature + 3.12089881488869e-01)
+            - 7.378279908877e-18*temperature**5 + 4.709353498411e-14*temperature**4
+            + 1.530236899258e-11*temperature**3 - 2.305611352452e-07*temperature**2
+            + 3.668624886569e-04*temperature + 3.120898814888e-01)
 
         return virgin*tau + charr*(1.0 - tau)
 
