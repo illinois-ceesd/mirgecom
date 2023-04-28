@@ -7,6 +7,18 @@ when running the same driver multiple times.
 
 The following sections discuss |mirgecom|-related packages that use caching.
 
+.. note::
+
+   The following bash code can be used to remove all disk caches used by |mirgecom| on Linux and MacOS:
+
+   .. Note that the following code is not in a code block so that it
+      renders with line breaks.
+
+   ``$ rm -rf $XDG_CACHE_HOME/pytools/pdict* ~/.cache/pytools/pdict*
+   ~/Library/Caches/pytools/pdict*  $XDG_CACHE_HOME/pyopencl
+   ~/.cache/pyopencl  ~/Library/Caches/pyopencl $POCL_CACHE_DIR
+   $XDG_CACHE_HOME/pocl ~/.cache/pocl ~/.nv/ComputeCache $CUDA_CACHE_PATH``
+
 
 Loopy
 -----
