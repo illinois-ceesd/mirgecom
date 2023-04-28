@@ -95,6 +95,7 @@ from mirgecom.diffusion import (
     grad_operator as wall_grad_t_operator,
     diffusion_operator,
 )
+from mirgecom.utils import project_from_base
 
 
 class _TemperatureInterVolTag:
@@ -127,15 +128,6 @@ class _WallGradTag:
 
 class _WallOperatorTag:
     pass
-
-
-def _project_from_base(dcoll, dd_bdry, field):
-    """Project *field* from *DISCR_TAG_BASE* to the same discr. as *dd_bdry*."""
-    if dd_bdry.discretization_tag is not DISCR_TAG_BASE:
-        dd_bdry_base = dd_bdry.with_discr_tag(DISCR_TAG_BASE)
-        return op.project(dcoll, dd_bdry_base, dd_bdry, field)
-    else:
-        return field
 
 
 # FIXME: Interior penalty should probably use an average of the lengthscales on
@@ -225,7 +217,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
             state_minus=state_minus, numerical_flux_func=numerical_flux_func,
             grad_cv_minus=grad_cv_minus, grad_t_minus=grad_t_minus, **kwargs)
 
-        lengthscales_minus = _project_from_base(
+        lengthscales_minus = project_from_base(
             dcoll, dd_bdry, self._lengthscales_minus)
 
         tau = (
@@ -253,20 +245,20 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._use_kappa_weighted_t_bc = use_kappa_weighted_t_bc
 
     def kappa_plus(self, dcoll, dd_bdry):
-        return _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+        return project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
-        kappa_plus = _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+        kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
         return harmonic_mean(kappa_minus, kappa_plus)
 
     def temperature_plus(self, dcoll, dd_bdry):
-        return _project_from_base(dcoll, dd_bdry, self._t_plus)
+        return project_from_base(dcoll, dd_bdry, self._t_plus)
 
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
-        t_plus = _project_from_base(dcoll, dd_bdry, self._t_plus)
+        t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
         if self._use_kappa_weighted_t_bc:
             actx = t_minus.array_context
-            kappa_plus = _project_from_base(dcoll, dd_bdry, self._kappa_plus)
+            kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
             kappa_sum = actx.np.where(
                 actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
                 kappa_minus + kappa_plus,
@@ -279,7 +271,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         if self._grad_t_plus is None:
             raise ValueError(
                 "Boundary does not have external temperature gradient data.")
-        grad_t_plus = _project_from_base(dcoll, dd_bdry, self._grad_t_plus)
+        grad_t_plus = project_from_base(dcoll, dd_bdry, self._grad_t_plus)
         return (grad_t_plus + grad_t_minus)/2
 
 
@@ -613,11 +605,11 @@ class InterfaceWallBoundary(DiffusionBoundary):
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
+        kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
 
-        u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
+        u_plus = project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
         return numerical_flux_func(kappa_tpair, u_tpair, normal)
@@ -633,14 +625,14 @@ class InterfaceWallBoundary(DiffusionBoundary):
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        kappa_plus = _project_from_base(dcoll, dd_bdry, self.kappa_plus)
+        kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
 
-        u_plus = _project_from_base(dcoll, dd_bdry, self.u_plus)
+        u_plus = project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
-        grad_u_plus = _project_from_base(dcoll, dd_bdry, self.grad_u_plus)
+        grad_u_plus = project_from_base(dcoll, dd_bdry, self.grad_u_plus)
         grad_u_tpair = TracePair(
             dd_bdry, interior=grad_u_minus, exterior=grad_u_plus)
 
