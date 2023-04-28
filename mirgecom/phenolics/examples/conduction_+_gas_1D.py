@@ -319,10 +319,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         boundaries = make_obj_array([pressure_boundaries, velocity_boundaries])
 
         rhs = phenolics_operator(
-            dcoll=dcoll, state=state, boundaries=boundaries, time=t,
+            dcoll=dcoll, state=state, boundaries=boundaries,
             eos=eos, pyrolysis=pyrolysis, quadrature_tag=quadrature_tag,
-            dd_wall=dd_vol, pressure_scaling_factor=pressure_scaling_factor,
-            bprime_class=bprime_class, penalty_amount=1.0)
+            dd_wall=dd_vol, time=t, bprime_class=bprime_class,
+            pressure_scaling_factor=pressure_scaling_factor, penalty_amount=1.0)
 
         # ~~~~~
         return make_obj_array([rhs, tseed*0.0])
@@ -375,13 +375,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         wdv = force_evaluation(actx, dep_vars)
         wv = force_evaluation(actx, wall_vars)
 
-        viz_fields = [("x", nodes[0]),
-                      ("WV_gas_density", wv.gas_density),
+        viz_fields = [("WV_gas_density", wv.gas_density),
                       ("WV_energy", wv.energy),
                       ("WV_phase_1", wall_vars.solid_species_mass[0]),
                       ("WV_phase_2", wall_vars.solid_species_mass[1]),
                       ("WV_phase_3", wall_vars.solid_species_mass[2]),
                       ("DV", wdv)]
+
+        # depending on the version, paraview may complain without this
+        viz_fields.append(("x", nodes[0]))
 
 #        gas_pressure_diffusivity = \
 #            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)

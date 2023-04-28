@@ -221,7 +221,12 @@ class GasProperties():
         return eval_spline(temperature, bnds, coeffs)
 
     def gas_heat_capacity(self, temperature):
-        r"""Return the gas heat capacity at constant pressure $(C_p)$."""
+        r"""Return the gas heat capacity at constant pressure $(C_p)$.
+
+        The heat capacity is the derivative of the enthalpy. Thus, to improve
+        accuracy and avoid issues with Newton iteration, this is computed
+        exactly as the analytical derivative of the spline for the enthalpy.
+        """
         coeffs = self._cs_enthalpy.c
         bnds = self._cs_enthalpy.x
         return eval_spline_derivative(temperature, bnds, coeffs)
@@ -265,7 +270,9 @@ class GasProperties():
 class SolidProperties():
     """Evaluate the properties of the solid state.
 
-    Linear weighting between the virgin and chared states.
+    Linear weighting between the virgin and chared states. The polynomials
+    were generated offline to avoid interpolation and they are not valid for
+    temperatures above 3200K.
 
     .. automethod:: solid_enthalpy
     .. automethod:: solid_heat_capacity

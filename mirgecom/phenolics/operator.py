@@ -1,4 +1,4 @@
-r""":mod:`mirgecom.phenolics.operator` for the RHS of phenolics model.
+r""":mod:`mirgecom.phenolics.operator` computes the RHS of phenolics model.
 
 .. autofunction:: phenolics_operator
 
@@ -8,7 +8,7 @@ Helper Function
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -88,7 +88,8 @@ def compute_div(actx, dcoll, quadrature_tag, field, velocity,
         normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
         int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, field*velocity)
 
-        # FIXME make this more organized
+        # FIXME make this more organized.
+        # This is necessary for the coupled case.
         if bdtag.tag == "prescribed":
             ext_soln_quad = +1.0*int_soln_quad
         if bdtag.tag == "neumann":
@@ -118,6 +119,7 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
     """Evaluate the prescribed heat flux to be applied at the boundary.
 
     Function specific for verification against the ablation workshop test case 2.1.
+    This function will not be used in the fully coupled fluid-wall.
     """
     actx = wv.gas_density.array_context
 
@@ -148,7 +150,7 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
 #    mass_flux = [m_dot_c, m_dot_g]
 
     # ~~~~
-    # blowing correction
+    # blowing correction: few iterations to converge the coefficient
     conv_coeff = conv_coeff_0*1.0
     lambda_corr = 0.5
     for _ in range(0, 3):
@@ -191,8 +193,8 @@ def ablation_workshop_flux(dcoll, wv, wdv, eos, velocity, bprime_class,
     return make_obj_array([flux - radiation])
 
 
-def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
-                       quadrature_tag, dd_wall, bprime_class,
+def phenolics_operator(dcoll, state, boundaries, eos, pyrolysis,
+                       quadrature_tag, dd_wall, time=0.0, bprime_class=None,
                        pressure_scaling_factor=1.0, penalty_amount=1.0):
     """Return the RHS of the composite wall.
 
@@ -202,16 +204,15 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
         Object with the conserved state and tseed.
 
     boundaries
-        Dictionary of boundary functions keyed by btags
-
-    time
-        Simulation time
+        Dictionary of boundary functions keyed by btags.
 
     eos
-        :class:`~mirgecom.phenolics.phenolics.PhenolicsEOS`
+        Class with the :class:`~mirgecom.phenolics.phenolics.PhenolicsEOS`
+        to compute the dependent variables.
 
     pyrolysis
-        :class:`~mirgecom.phenolics.tacot.Pyrolysis`
+        Class containing the :class:`~mirgecom.phenolics.tacot.Pyrolysis`
+        source terms.
 
     quadrature_tag
         An identifier denoting a particular quadrature discretization to use during
@@ -221,8 +222,12 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
         the DOF descriptor of the discretization on which *state* lives. Must be a
         volume on the base discretization.
 
+    time: float
+        Optional argument with the simulation time.
+
     bprime_class
-        :class:`~mirgecom.phenolics.tacot.BprimeTable`
+        Option class with the :class:`~mirgecom.phenolics.tacot.BprimeTable`.
+        This is only required when the wall by itself, with no coupling.
 
     pressure_scaling_factor
         Optional float with a scaling of the pressure diffusivity. May be useful
@@ -262,6 +267,7 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
                                            dd_wall, time)
 
     # FIXME make this more general
+    # or worry about it when coupling with the fluid
     energy_boundaries = {
         BoundaryDomainTag("prescribed"):
             PrescribedFluxDiffusionBoundary(boundary_flux),
@@ -287,8 +293,7 @@ def phenolics_operator(dcoll, state, boundaries, time, eos, pyrolysis,
     inviscid_rhs = make_conserved(
         solid_species_mass=wv.solid_species_mass*0.0,
         gas_density=zeros,
-        energy=-energy_inviscid_rhs
-    )
+        energy=-energy_inviscid_rhs)
 
     # ~~~~~
     # decomposition for each component of the resin

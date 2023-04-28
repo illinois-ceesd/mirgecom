@@ -198,7 +198,6 @@ class PhenolicsEOS():
     .. automethod:: solid_heat_capacity_cp
     """
 
-    # FIXME Ideally, we wanna do something similar to the pyrometheus interface
     def __init__(self, solid_data, gas_data):
         """Initialize EOS for composite."""
         self._solid_data = solid_data
@@ -318,6 +317,7 @@ class PhenolicsEOS():
         return (1.0/eps_gas)*wv.gas_density*Rg*temperature
 
 #    # TODO future task
+#    # need the pyrometheus mechanism to account for this
 #    def species_diffusivity(self, wv, temperature, tau):
 #        return temperature*0.0
 
@@ -349,7 +349,7 @@ class PhenolicsEOS():
     # ~~~~~~~~~~~~ auxiliary functions
     def gas_heat_capacity_cp(self, temperature: DOFArray) -> DOFArray:
         """Return the gas heat capacity."""
-        return self._gas_data.gas_viscosity(temperature)
+        return self._gas_data.gas_heat_capacity(temperature)
 
     def solid_heat_capacity_cp(self, temperature: DOFArray,
                                tau: DOFArray) -> DOFArray:
