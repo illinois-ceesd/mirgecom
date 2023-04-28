@@ -62,6 +62,7 @@ from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import make_fluid_state, replace_fluid_state
 from pytools.obj_array import make_obj_array
+from mirgecom.utils import project_from_base
 
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
 
@@ -1637,7 +1638,8 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
-        return 0*state_minus.temperature + self._wall_temp
+        wall_temp = project_from_base(dcoll, dd_bdry, self._wall_temp)
+        return 0*state_minus.temperature + wall_temp
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -1732,7 +1734,8 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
-        return 0*state_minus.temperature + self._wall_temp
+        wall_temp = project_from_base(dcoll, dd_bdry, self._wall_temp)
+        return 0*state_minus.temperature + wall_temp
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
