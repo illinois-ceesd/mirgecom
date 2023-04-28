@@ -85,8 +85,10 @@ PoCL stores compilation results (LLVM bitcode and shared libraries) in
 CUDA
 ----
 
-CUDA stores binary kernels in ``~/.nv/ComputeCache`` by default. You can
-export ``CUDA_CACHE_DISABLE=1`` to disable caching. See `here
+CUDA stores binary kernels in ``~/.nv/ComputeCache`` (on Linux only, we do
+not support CUDA devices on MacOS) by default. You can
+export ``CUDA_CACHE_DISABLE=1`` to disable caching, and select a different
+cache directory with ``CUDA_CACHE_PATH``. See `here
 <https://developer.nvidia.com/blog/cuda-pro-tip-understand-fat-binaries-jit-caching/>`__
 for details.
 
