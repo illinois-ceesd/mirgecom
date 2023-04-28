@@ -9,7 +9,7 @@ The following sections discuss |mirgecom|-related packages that use caching.
 
 
 Loopy
-+++++
+-----
 
 :mod:`loopy` stores the source of generated PyOpenCL kernels and their
 invokers in ``$XDG_CACHE_HOME/pytools/pdict-*-loopy`` by default. You can export
@@ -30,7 +30,7 @@ for details.
 
 
 PyOpenCL
-++++++++
+--------
 
 :mod:`pyopencl` caches in ``$XDG_CACHE_HOME/pyopencl`` (kernel source
 code and binaries returned by the OpenCL runtime) and
@@ -57,7 +57,7 @@ for details.
 
 
 PoCL
-++++
+----
 
 PoCL stores compilation results (LLVM bitcode and shared libraries) in
 ``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME/pocl`` by default. You can export
@@ -71,7 +71,7 @@ PoCL stores compilation results (LLVM bitcode and shared libraries) in
 
 
 CUDA
-++++
+----
 
 CUDA stores binary kernels in ``~/.nv/ComputeCache`` by default. You can
 export ``CUDA_CACHE_DISABLE=1`` to disable caching. See `here
