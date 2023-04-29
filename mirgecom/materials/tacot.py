@@ -46,12 +46,13 @@ class BprimeTable():
 
     def __init__(self):
 
-        # FIXME the path is relative to the driver.. How to fix it?
+        from pathlib import Path
+        base_path = Path(__file__).parent
+        file_path = (base_path / "./Bprime_table/B_prime.dat").resolve()
 
-        # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
         bprime_table = (
-            np.genfromtxt("../mirgecom/materials/Bprime_table/B_prime.dat",
-             skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
+            np.genfromtxt(file_path,
+            skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
 
         self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
         self._bounds_B = bprime_table[::-1, 0, 0]
@@ -116,8 +117,7 @@ class Pyrolysis():
             -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
         )
 
-        # include the fiber in the RHS but dont do anything more for now.
-        # TODO at some point, Y2 model can be included here...
+        # include the fiber in the RHS but dont do anything with it.
         source[2] = temperature*0.0
 
         return source
