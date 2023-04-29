@@ -56,6 +56,7 @@ class WallVars:
     .. attribute:: energy
     .. attribute:: ox_mass
     """
+
     mass: DOFArray
     energy: DOFArray
     ox_mass: DOFArray
@@ -74,6 +75,8 @@ class WallVars:
 @dataclass_array_container
 @dataclass(frozen=True)
 class WallDependentVars:
+    """Dependent variables for the oxidation model."""
+
     tau: DOFArray
     thermal_conductivity: DOFArray
     oxygen_diffusivity: DOFArray
@@ -113,11 +116,12 @@ class OxidationWallModel():
         virgin = (self._fiber.intrinsic_density()
                   * self._fiber.solid_volume_fraction(tau=1.0))
         return (
-                (1.0 - (virgin - wv.mass)/virgin) * self._sample_mask +  # fiber
-                1.0*(1.0 - self._sample_mask)  # inert
+            (1.0 - (virgin - wv.mass)/virgin) * self._sample_mask  # fiber
+            + 1.0*(1.0 - self._sample_mask)  # inert
         )
 
     def eval_temperature(self, wv, tseed):
+        """Evaluate the temperature using Newton iteration."""
         temp = tseed*1.0
         for _ in range(0, 3):
             h = self.enthalpy(temp)
@@ -126,15 +130,25 @@ class OxidationWallModel():
         return temp
 
     def enthalpy(self, temperature):
+        """Return the enthalpy of the fibers as a function of temperature."""
         return self._enthalpy_func(temperature=temperature)
 
     def heat_capacity(self, temperature):
+        """Return the heat capacity of the fibers as a function of temperature."""
         return self._heat_capacity_func(temperature=temperature)
 
     def thermal_conductivity(self, temperature, tau):
+        """Return the thermal conductivity of the fibers.
+
+        It is a function of temperature and oxidation progress. As the fibers
+        are oxidized, they reduce their cross area and, consequenctly, their
+        hability to conduct heat.
+        """
         return self._thermal_conductivity_func(temperature=temperature, tau=tau)
 
-    def thermal_diffusivity(self, mass, temperature, thermal_conductivity=None):
+    def thermal_diffusivity(self, mass, temperature, tau,
+                            thermal_conductivity=None):
+        """Thermal diffusivity of the fibers."""
         if thermal_conductivity is None:
             thermal_conductivity = self.thermal_conductivity(
                 temperature=temperature, tau=tau)
@@ -142,9 +156,11 @@ class OxidationWallModel():
 
     # TODO include all species
     def oxygen_diffusivity(self, temperature):
+        """Mass diffusivity of gaseous species through the porous fibers."""
         return self._gas.oxygen_diffusivity(temperature) * self._sample_mask
 
     def dependent_vars(self, wv, tseed):
+        """Get the dependent variables."""
         tau = self.eval_tau(wv=wv)
         temperature = self.eval_temperature(wv=wv, tseed=tseed)
         kappa = self.thermal_conductivity(temperature=temperature, tau=tau)

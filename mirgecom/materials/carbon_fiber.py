@@ -66,12 +66,14 @@ class Oxidation():
 
 
 class GasProperties():
+    """Evaluate properties of the gas permeating the fibers."""
 
     def __init__(self, pyrometheus_mechanism):
         self._pyro = pyrometheus_mechanism
 
     def oxygen_diffusivity(self, temperature):
-        return 1e-4
+        """Return the mass diffusivity of the gaseous species."""
+        return 1e-4 + temperature*0.0
 
 
 class SolidProperties():

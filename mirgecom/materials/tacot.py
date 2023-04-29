@@ -44,15 +44,19 @@ from scipy.interpolate import CubicSpline  # type: ignore[import]
 class BprimeTable():
     """Class containing the table for wall properties."""
 
-    def __init__(self):
+    def __init__(self, path):
 
-        from pathlib import Path
-        base_path = Path(__file__).parent
-        file_path = (base_path / "./Bprime_table/B_prime.dat").resolve()
-
+        # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
         bprime_table = (
-            np.genfromtxt(file_path,
-            skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
+            np.genfromtxt(path + "/B_prime.dat",
+             skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
+
+#        from pathlib import Path
+#        base_path = Path(__file__).parent
+#        file_path = (base_path / "./Bprime_table/B_prime.dat").resolve()
+#        bprime_table = (
+#            np.genfromtxt(file_path,
+#            skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
 
         self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
         self._bounds_B = bprime_table[::-1, 0, 0]

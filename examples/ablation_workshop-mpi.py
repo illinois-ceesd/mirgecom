@@ -246,7 +246,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     import mirgecom.materials.tacot as my_composite
 
     pyrolysis = my_composite.Pyrolysis()
-    bprime_class = my_composite.BprimeTable()
+    bprime_class = my_composite.BprimeTable(path="../mirgecom/materials/Bprime_table")
     my_solid = my_composite.SolidProperties()
     my_gas = my_composite.GasProperties()
 
