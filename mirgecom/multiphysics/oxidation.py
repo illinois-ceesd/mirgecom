@@ -93,10 +93,11 @@ class OxidationWallModel():
     .. automethod:: oxygen_diffusivity
     """
 
-    def __init__(self, solid_data, wall_sample_mask,
+    def __init__(self, solid_data, gas_data, wall_sample_mask,
                  enthalpy_func, heat_capacity_func, thermal_conductivity_func,
                  oxygen_diffusivity_func):
         self._fiber = solid_data
+        self._gas = gas_data
         self._sample_mask = wall_sample_mask
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
@@ -109,8 +110,12 @@ class OxidationWallModel():
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the fibers were all consumed.
         """
-        virgin = self._fiber.intrinsic_density*self._fiber.solid_volume_fraction(0)
-        return 1.0 - (virgin - wv.mass)/virgin
+        virgin = (self._fiber.intrinsic_density()
+                  * self._fiber.solid_volume_fraction(tau=1.0))
+        return (
+                (1.0 - (virgin - wv.mass)/virgin) * self._sample_mask +  # fiber
+                1.0*(1.0 - self._sample_mask)  # inert
+        )
 
     def eval_temperature(self, wv, tseed):
         temp = tseed*1.0
@@ -121,29 +126,29 @@ class OxidationWallModel():
         return temp
 
     def enthalpy(self, temperature):
-        return self._enthalpy_func(temperature)
+        return self._enthalpy_func(temperature=temperature)
 
     def heat_capacity(self, temperature):
-        return self._heat_capacity_func(temperature)
+        return self._heat_capacity_func(temperature=temperature)
 
-    def thermal_conductivity(self, mass, temperature):
-        return self._thermal_conductivity_func(mass, temperature)
+    def thermal_conductivity(self, temperature, tau):
+        return self._thermal_conductivity_func(temperature=temperature, tau=tau)
 
     def thermal_diffusivity(self, mass, temperature, thermal_conductivity=None):
         if thermal_conductivity is None:
-            thermal_conductivity = self.thermal_conductivity(mass,
-                                                             temperature)
+            thermal_conductivity = self.thermal_conductivity(
+                temperature=temperature, tau=tau)
         return thermal_conductivity/(mass * self.heat_capacity(temperature))
 
     # TODO include all species
     def oxygen_diffusivity(self, temperature):
-        return self._fiber.oxygen_diffusivity(temperature) * self._sample_mask
+        return self._gas.oxygen_diffusivity(temperature) * self._sample_mask
 
     def dependent_vars(self, wv, tseed):
-        tau = self.eval_tau(wv)
-        temperature = self.eval_temperature(wv, tseed)
-        kappa = self.thermal_conductivity(wv.mass, temperature)
-        oxygen_diffusivity = self.oxygen_diffusivity(temperature)
+        tau = self.eval_tau(wv=wv)
+        temperature = self.eval_temperature(wv=wv, tseed=tseed)
+        kappa = self.thermal_conductivity(temperature=temperature, tau=tau)
+        oxygen_diffusivity = self.oxygen_diffusivity(temperature=temperature)
         return WallDependentVars(
             tau=tau,
             thermal_conductivity=kappa,

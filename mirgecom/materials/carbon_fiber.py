@@ -65,6 +65,15 @@ class Oxidation():
         return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*ox_mass*k*eff_surf_area
 
 
+class GasProperties():
+
+    def __init__(self, pyrometheus_mechanism):
+        self._pyro = pyrometheus_mechanism
+
+    def oxygen_diffusivity(self, temperature):
+        return 1e-4
+
+
 class SolidProperties():
     """Model for calculating wall quantities."""
 
