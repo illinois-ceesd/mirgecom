@@ -245,12 +245,12 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     import mirgecom.multiphysics.phenolics as wall
     import mirgecom.materials.tacot as my_composite
 
-    import os
-    print( os.path.abspath(__file__) )
+    # FIXME there must be a way to get the table from the "materials" directory
+    bprime_table = \
+        (np.genfromtxt("aw_Bprime.dat", skip_header=1)[:, 2:6]).reshape((25, 151, 4))
 
     pyrolysis = my_composite.Pyrolysis()
-    bprime_class = my_composite.BprimeTable(
-        path="../mirgecom/materials/Bprime_table")
+    bprime_class = my_composite.BprimeTable(table=bprime_table)
     my_solid = my_composite.SolidProperties()
     my_gas = my_composite.GasProperties()
 
