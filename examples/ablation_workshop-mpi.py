@@ -245,8 +245,12 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     import mirgecom.multiphysics.phenolics as wall
     import mirgecom.materials.tacot as my_composite
 
+    import os
+    print( os.path.abspath(__file__) )
+
     pyrolysis = my_composite.Pyrolysis()
-    bprime_class = my_composite.BprimeTable(path="../mirgecom/materials/Bprime_table")
+    bprime_class = my_composite.BprimeTable(
+        path="../mirgecom/materials/Bprime_table")
     my_solid = my_composite.SolidProperties()
     my_gas = my_composite.GasProperties()
 
