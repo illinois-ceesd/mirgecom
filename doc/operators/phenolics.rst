@@ -1,3 +1,7 @@
+Carbon Fiber Oxidation 
+======================
+
+
 Composite Materials
 ===================
 
@@ -9,11 +13,11 @@ Composite Materials
     it degrades and produces gaseous species.
 
     The temporal evolution of
-    :class:`~mirgecom.phenolics.phenolics.PhenolicsConservedVars` is solved in
+    :class:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars` is solved in
     order to predict the material degradation. As the
-    :class:`~mirgecom.phenolics.tacot.Pyrolysis` progresses, the mass of each 
+    :class:`~mirgecom.materials.tacot.Pyrolysis` progresses, the mass of each 
     $i$ constituents of the resin, denoted by
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsConservedVars.solid_species_mass`,
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars.solid_species_mass`,
     is calculated as
 
     .. math ::
@@ -26,7 +30,7 @@ Composite Materials
             - \sum_i \dot{\omega}_i \mbox{ ,}
 
     where the
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsConservedVars.gas_density`
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars.gas_density`
     is $\rho_g$. The source term indicates that all solid resin must become gas
     in order to stisfy mass conservation. Lastly, the gas velocity $\mathbf{u}$
     is obtained by Darcy's law, given by
@@ -39,7 +43,7 @@ Composite Materials
     the gas pressure.
 
     The
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsConservedVars.energy`
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars.energy`
     of the bulk material is given by
 
     .. math::
@@ -63,27 +67,27 @@ Composite Materials
 
     From the conserved variables, it is possible to compute the decomposition
     status, denoted by
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsDependentVars.tau`.
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsDependentVars.tau`.
     This yields the proportion of virgin (unpyrolyzed material) to char (fully
     pyrolyzed) and, consequently, the different thermophysicochemical
     properties of the solid phase. Thus, the instantaneous material properties
     depend on the current state of the material, as well as the 
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsDependentVars.temperature`.
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsDependentVars.temperature`.
     It is evaluated using Newton iteration based on both
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsEOS.gas_enthalpy` and
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsEOS.solid_enthalpy`,
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.gas_enthalpy` and
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_enthalpy`,
     as well as their respective derivatives, namely
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsEOS.gas_heat_capacity_cp` and
-    :attr:`~mirgecom.phenolics.phenolics.PhenolicsEOS.solid_heat_capacity_cp`.
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.gas_heat_capacity_cp` and
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_heat_capacity_cp`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials
     to tabulated data for easy evaluation of the properties based on the
     temperature. The complete list of properties can be find, for instance, in
-    :mod:`~mirgecom.phenolics.tacot`.
+    :mod:`~mirgecom.materials.tacot`.
     Different materials can be incorporated as separated files.
     
     The
-    :class:`~mirgecom.phenolics.tacot.GasProperties` are obtained based on
+    :class:`~mirgecom.materials.tacot.GasProperties` are obtained based on
     tabulated data, assuming chemical equilibrium, and evaluated with splines
     for interpolation of the entries. However, the data is currently obtained
     by PICA.
@@ -96,12 +100,10 @@ Composite Materials
 
 General functions
 ^^^^^^^^^^^^^^^^^
-.. automodule:: mirgecom.phenolics.phenolics
+.. automodule:: mirgecom.multiphysics.phenolics
+.. automodule:: mirgecom.multiphysics.oxidation
 
 Model-specific properties
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: mirgecom.phenolics.tacot
-
-Composite RHS
-^^^^^^^^^^^^^
-.. automodule:: mirgecom.phenolics.operator
+.. automodule:: mirgecom.materials.tacot
+.. automodule:: mirgecom.materials.carbon_fiber

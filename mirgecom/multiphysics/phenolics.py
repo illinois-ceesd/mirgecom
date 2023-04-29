@@ -1,4 +1,4 @@
-""":mod:`mirgecom.phenolics.phenolics` handles phenolics modeling.
+""":mod:`mirgecom.multiphysics.phenolics` handles phenolics modeling.
 
 Conserved Quantities
 ^^^^^^^^^^^^^^^^^^^^
@@ -7,12 +7,11 @@ Conserved Quantities
 Equations of State
 ^^^^^^^^^^^^^^^^^^
 .. autoclass:: PhenolicsDependentVars
-.. autoclass:: PhenolicsEOS
+.. autoclass:: PhenolicsWallModel
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
 .. autofunction:: initializer
-.. autofunction:: make_conserved
 
 """
 
@@ -38,7 +37,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import numpy as np
 from meshmode.dof_array import DOFArray
 from arraycontext import (
@@ -74,8 +73,13 @@ class PhenolicsConservedVars:
 
     @property
     def array_context(self):
-        """Return an array context for the :class:`ConservedVars` object."""
+        """Return an array context for :class:`PhenolicsConservedVars` object."""
         return get_container_context_recursively(self.energy)
+
+    def __reduce__(self):
+        """Return a tuple reproduction of self for pickling."""
+        return (PhenolicsConservedVars, tuple(getattr(self, f.name)
+                                    for f in fields(PhenolicsConservedVars)))
 
     @property
     def nphase(self):
@@ -83,14 +87,14 @@ class PhenolicsConservedVars:
         return len(self.solid_species_mass)
 
 
-def initializer(eos, solid_species_mass, temperature, gas_density=None,
+def initializer(wall_model, solid_species_mass, temperature, gas_density=None,
                 pressure=None):
     """Initialize state of composite material.
 
     Parameters
     ----------
-    eos
-        :class:`~mirgecom.phenolics.phenolics.PhenolicsEOS`
+    wall_model
+        :class:`PhenolicsWallModel`
 
     solid_species_mass: numpy.ndarray
         The initial bulk density of each one of the resin constituents.
@@ -113,32 +117,26 @@ def initializer(eos, solid_species_mass, temperature, gas_density=None,
     if isinstance(temperature, DOFArray) is False:
         raise ValueError("Temperature does not have the proper shape")
 
-    char_mass = eos._solid_data._char_mass
-    virgin_mass = eos._solid_data._virgin_mass
+    char_mass = wall_model._solid_data._char_mass
+    virgin_mass = wall_model._solid_data._virgin_mass
     current_mass = sum(solid_species_mass)
     tau = virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/current_mass)
 
     # gas constant
-    Rg = 8314.46261815324/eos.gas_molar_mass(temperature)  # noqa N806
+    Rg = 8314.46261815324/wall_model.gas_molar_mass(temperature)  # noqa N806
 
     if gas_density is None:
-        eps_gas = eos.void_fraction(tau)
+        eps_gas = wall_model.void_fraction(tau)
         eps_rho_gas = eps_gas*pressure/(Rg*temperature)
 
     eps_rho_solid = sum(solid_species_mass)
     bulk_energy = (
-        eps_rho_solid*eos.solid_enthalpy(temperature, tau)
-        + eps_rho_gas*(eos.gas_enthalpy(temperature) - Rg*temperature)
+        eps_rho_solid*wall_model.solid_enthalpy(temperature, tau)
+        + eps_rho_gas*(wall_model.gas_enthalpy(temperature) - Rg*temperature)
     )
 
     return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
         energy=bulk_energy, gas_density=eps_rho_gas)
-
-
-def make_conserved(solid_species_mass, gas_density, energy):
-    """Create :class:`PhenolicsConservedVars` from separated conserved variables."""
-    return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
-        energy=energy, gas_density=gas_density)
 
 
 @dataclass_array_container
@@ -177,7 +175,7 @@ class PhenolicsDependentVars:
     solid_density: DOFArray
 
 
-class PhenolicsEOS():
+class PhenolicsWallModel():
     """Variables dependent on the wall state.
 
     .. automethod:: __init__
@@ -199,7 +197,7 @@ class PhenolicsEOS():
     """
 
     def __init__(self, solid_data, gas_data):
-        """Initialize EOS for composite."""
+        """Initialize wall model for composite."""
         self._solid_data = solid_data
         self._gas_data = gas_data
 
@@ -364,16 +362,16 @@ class PhenolicsEOS():
         temperature = self.eval_temperature(wv, temperature_seed, tau)
         return PhenolicsDependentVars(
             tau=tau,
-            progress=1.0-tau,
+            progress=1.0-tau,  # dummy
             temperature=temperature,
             thermal_conductivity=self.thermal_conductivity(wv, temperature, tau),
             void_fraction=self.void_fraction(tau),
             gas_pressure=self.gas_pressure(wv, temperature, tau),
             gas_viscosity=self.gas_viscosity(temperature),
-            gas_molar_mass=self.gas_molar_mass(temperature),
+            gas_molar_mass=self.gas_molar_mass(temperature),  # dummy
             # species_diffusivity
             gas_enthalpy=self.gas_enthalpy(temperature),
-            solid_enthalpy=self.solid_enthalpy(temperature, tau),
+            solid_enthalpy=self.solid_enthalpy(temperature, tau),  # dummy
             solid_density=self.solid_density(wv),
             solid_emissivity=self.solid_emissivity(tau),
             solid_permeability=self.solid_permeability(tau)

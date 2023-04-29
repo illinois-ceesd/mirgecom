@@ -22,43 +22,48 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import sys  # noqa
+import logging
 import numpy as np
 import pyopencl as cl
 
+from meshmode.discretization.connection import FACE_RESTR_ALL
+
+from grudge.trace_pair import (
+    TracePair, interior_trace_pairs, tracepair_with_discr_tag
+)
+from grudge import op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import (
     BoundaryDomainTag,
     DISCR_TAG_BASE
 )
+
 from mirgecom.discretization import create_discretization_collection
-
 from mirgecom.integrators.ssprk import ssprk43_step
-
 from mirgecom.diffusion import (
+    diffusion_operator,
     DirichletDiffusionBoundary,
+    PrescribedFluxDiffusionBoundary,
     NeumannDiffusionBoundary
 )
-
 from mirgecom.simutil import (
     check_naninf_local,
     generate_and_distribute_mesh,
     write_visfile
 )
-
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.utils import force_evaluation
-
-import logging
-from logpyle import IntervalTimer, set_dt
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage
 )
+from mirgecom.multiphysics.phenolics import PhenolicsConservedVars
+
+from logpyle import IntervalTimer, set_dt
 
 from pytools.obj_array import make_obj_array
-
-import sys  # noqa
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -73,10 +78,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None, lazy=False,
-         restart_file=None):
-    """.XXX."""
+def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
+         lazy=False, restart_file=None):
+    """Demonstrate the ablation workshop test case 2.1."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
 
@@ -106,7 +110,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     viz_path = "viz_data/"
     vizname = viz_path+casename
 
-    t_final = 1.0
+    t_final = 1.0e-7
 
     dim = 1
 
@@ -238,21 +242,19 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    import mirgecom.phenolics.phenolics as wall
-    import mirgecom.phenolics.tacot as my_composite
+    import mirgecom.multiphysics.phenolics as wall
+    import mirgecom.materials.tacot as my_composite
 
     pyrolysis = my_composite.Pyrolysis()
     bprime_class = my_composite.BprimeTable()
     my_solid = my_composite.SolidProperties()
     my_gas = my_composite.GasProperties()
 
-    eos = wall.PhenolicsEOS(solid_data=my_solid, gas_data=my_gas)
+    wall_model = wall.PhenolicsWallModel(solid_data=my_solid, gas_data=my_gas)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # soln setup and init
-    import mirgecom.phenolics.phenolics as wall
-
     solid_species_mass = np.empty((3,), dtype=object)
 
     solid_species_mass[0] = 30.0 + nodes[0]*0.0
@@ -274,11 +276,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         t = 0
         istep = 0
-        wall_vars = wall.initializer(eos=eos,
+        wall_vars = wall.initializer(wall_model=wall_model,
             solid_species_mass=solid_species_mass,
             pressure=pressure, temperature=temperature)
 
-    wdv = eos.dependent_vars(wv=wall_vars, temperature_seed=temperature)
+    wdv = wall_model.dependent_vars(wv=wall_vars, temperature_seed=temperature)
 
     wall_vars = force_evaluation(actx, wall_vars)
     wdv = force_evaluation(actx, wdv)
@@ -312,16 +314,224 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    from mirgecom.phenolics.operator import phenolics_operator
+    class _MyGradTag:
+        pass
+
+    def compute_div(actx, dcoll, quadrature_tag, field, velocity,
+                    boundaries, dd_vol):
+        """Return divergence for inviscid term."""
+        dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+        dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
+
+        itp_f = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
+                                         comm_tag=_MyGradTag)
+
+        itp_u = interior_trace_pairs(dcoll, velocity, volume_dd=dd_vol,
+                                         comm_tag=_MyGradTag)
+
+        def interior_flux(f_tpair, u_tpair):
+            dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
+            normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
+            bnd_u_tpair_quad = tracepair_with_discr_tag(dcoll, quadrature_tag,
+                                                        u_tpair)
+            bnd_f_tpair_quad = tracepair_with_discr_tag(dcoll, quadrature_tag,
+                                                        f_tpair)
+
+            wavespeed_int = actx.np.sqrt(np.dot(bnd_u_tpair_quad.int,
+                                                bnd_u_tpair_quad.int))
+            wavespeed_ext = actx.np.sqrt(np.dot(bnd_u_tpair_quad.ext,
+                                                bnd_u_tpair_quad.ext))
+            lam = actx.np.maximum(wavespeed_int, wavespeed_ext)
+            jump = bnd_f_tpair_quad.int - bnd_f_tpair_quad.ext
+            numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg + 0.5*lam*jump
+
+            return op.project(dcoll, dd_trace_quad, dd_allfaces_quad,
+                              numerical_flux@normal_quad)
+
+        def boundary_flux(bdtag, bdry):
+            dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
+            normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
+            int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, field*velocity)
+
+            # FIXME make this more organized.
+            # This is necessary for the coupled case.
+            if bdtag.tag == "prescribed":
+                ext_soln_quad = +1.0*int_soln_quad
+            if bdtag.tag == "neumann":
+                ext_soln_quad = -1.0*int_soln_quad
+
+            bnd_tpair = TracePair(dd_bdry_quad,
+                interior=int_soln_quad, exterior=ext_soln_quad)
+
+            return op.project(dcoll, dd_bdry_quad, dd_allfaces_quad,
+                              bnd_tpair.avg@normal_quad)
+
+        # pylint: disable=invalid-unary-operand-type
+        return -op.inverse_mass(
+            dcoll, dd_vol,
+            op.weak_local_div(dcoll, dd_vol, field*velocity)
+            - op.face_mass(dcoll, dd_allfaces_quad,
+                (sum(interior_flux(f_tpair, u_tpair) for f_tpair, u_tpair in
+                    zip(itp_f, itp_u))
+                + sum(boundary_flux(bdtag, bdry) for bdtag, bdry in
+                    boundaries.items()))
+            )
+        )
+
+    def ablation_workshop_flux(dcoll, wv, wdv, wall_model, velocity, bprime_class,
+                               quadrature_tag, dd_wall, time):
+        """Evaluate the prescribed heat flux to be applied at the boundary.
+
+        Function specific for verification against the ablation workshop test
+        case 2.1.
+        """
+        actx = wv.gas_density.array_context
+
+        # restrict variables to the domain boundary
+        dd_vol_quad = dd_wall.with_discr_tag(quadrature_tag)
+        bdtag = dd_wall.trace("prescribed").domain_tag
+        normal_vec = actx.thaw(dcoll.normal(bdtag))
+        dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
+
+        temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.temperature)
+        m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad, wv.gas_density*velocity)
+        emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.solid_emissivity)
+
+        m_dot_g = np.dot(m_dot_g, normal_vec)
+
+        # time-dependent function
+        weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-13, 1.0)
+
+        h_e = 1.5e6*weight
+        conv_coeff_0 = 0.3*weight
+
+        # this is only valid for the non-ablative case (2.1)
+        m_dot_c = 0.0
+        m_dot = m_dot_g + m_dot_c + 1e-13
+
+        # ~~~~
+        # blowing correction: few iterations to converge the coefficient
+        conv_coeff = conv_coeff_0*1.0
+        lambda_corr = 0.5
+        for _ in range(0, 3):
+            phi = 2.0*lambda_corr*m_dot/conv_coeff
+            blowing_correction = phi/(actx.np.exp(phi) - 1.0)
+            conv_coeff = conv_coeff_0*blowing_correction
+
+        Bsurf = m_dot_g/conv_coeff  # noqa N806
+
+        # ~~~~
+        # get the wall enthalpy using spline interpolation
+        bnds_T = bprime_class._bounds_T  # noqa N806
+        bnds_B = bprime_class._bounds_B  # noqa N806
+
+        # couldn't make lazy work without this
+        sys.setrecursionlimit(10000)
+
+        # using spline for temperature interpolation
+        # while using "nearest neighbor" for the "B" parameter
+        h_w = 0.0
+        for j in range(0, 24):
+            for k in range(0, 15):
+                h_w = \
+                    actx.np.where(actx.np.greater_equal(temperature_bc, bnds_T[j]),
+                    actx.np.where(actx.np.less(temperature_bc, bnds_T[j+1]),
+                    actx.np.where(actx.np.greater_equal(Bsurf, bnds_B[k]),
+                    actx.np.where(actx.np.less(Bsurf, bnds_B[k+1]),
+                          bprime_class._cs_Hw[k, 0, j]*(temperature_bc-bnds_T[j])**3
+                        + bprime_class._cs_Hw[k, 1, j]*(temperature_bc-bnds_T[j])**2
+                        + bprime_class._cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
+                        + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0) + h_w
+
+        h_g = wall_model.gas_enthalpy(temperature_bc)
+
+        flux = conv_coeff*(h_e - h_w) - m_dot*h_w + m_dot_g*h_g
+
+        radiation = emissivity*5.67e-8*(temperature_bc**4 - 300**4)
+
+        return make_obj_array([flux - radiation])
+
+    def phenolics_operator(dcoll, state, boundaries, wall_model, pyrolysis,
+                           quadrature_tag, dd_wall, time=0.0, bprime_class=None,
+                           pressure_scaling_factor=1.0, penalty_amount=1.0):
+        """Return the RHS of the composite wall."""
+        wv, tseed = state
+        wdv = wall_model.dependent_vars(wv=wv, temperature_seed=tseed)
+
+        zeros = wdv.tau*0.0
+        actx = zeros.array_context
+
+        pressure_boundaries, velocity_boundaries = boundaries
+
+        gas_pressure_diffusivity = \
+            wall_model.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
+
+        # ~~~~~
+        # viscous RHS
+        pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
+            kappa=wv.gas_density*gas_pressure_diffusivity,
+            boundaries=pressure_boundaries, u=wdv.gas_pressure,
+            penalty_amount=penalty_amount, return_grad_u=True)
+
+        velocity = -gas_pressure_diffusivity*grad_pressure
+
+        boundary_flux = ablation_workshop_flux(dcoll, wv, wdv, wall_model,
+            velocity, bprime_class, quadrature_tag, dd_wall, time)
+
+        energy_boundaries = {
+            BoundaryDomainTag("prescribed"):
+                PrescribedFluxDiffusionBoundary(boundary_flux),
+            BoundaryDomainTag("neumann"):
+                NeumannDiffusionBoundary(0.0)
+        }
+
+        energy_viscous_rhs = diffusion_operator(dcoll,
+            kappa=wdv.thermal_conductivity, boundaries=energy_boundaries,
+            u=wdv.temperature, penalty_amount=penalty_amount)
+
+        viscous_rhs = PhenolicsConservedVars(
+            solid_species_mass=wv.solid_species_mass*0.0,
+            gas_density=pressure_scaling_factor*pressure_viscous_rhs,
+            energy=energy_viscous_rhs)
+
+        # ~~~~~
+        # inviscid RHS, energy equation only
+        field = wv.gas_density*wdv.gas_enthalpy
+        energy_inviscid_rhs = compute_div(actx, dcoll, quadrature_tag, field,
+                                          velocity, velocity_boundaries, dd_wall)
+
+        inviscid_rhs = PhenolicsConservedVars(
+            solid_species_mass=wv.solid_species_mass*0.0,
+            gas_density=zeros,
+            energy=-energy_inviscid_rhs)
+
+        # ~~~~~
+        # decomposition for each component of the resin
+        resin_pyrolysis = pyrolysis.get_source_terms(wdv.temperature,
+                                                wv.solid_species_mass)
+
+        # flip sign due to mass conservation
+        gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
+
+        # viscous dissipation due to friction inside the porous
+        visc_diss_energy = wdv.gas_viscosity*wdv.void_fraction**2*(
+            (1.0/wdv.solid_permeability)*np.dot(velocity, velocity))
+
+        source_terms = PhenolicsConservedVars(
+            solid_species_mass=resin_pyrolysis,
+            gas_density=gas_source_term,
+            energy=visc_diss_energy)
+
+        return inviscid_rhs + viscous_rhs + source_terms
 
     def _rhs(t, state):
 
         boundaries = make_obj_array([pressure_boundaries, velocity_boundaries])
 
         rhs = phenolics_operator(
-            dcoll=dcoll, state=state, boundaries=boundaries,
-            eos=eos, pyrolysis=pyrolysis, quadrature_tag=quadrature_tag,
-            dd_wall=dd_vol, time=t, bprime_class=bprime_class,
+            dcoll=dcoll, state=state, boundaries=boundaries, wall_model=wall_model,
+            pyrolysis=pyrolysis, quadrature_tag=quadrature_tag, dd_wall=dd_vol,
+            time=t, bprime_class=bprime_class,
             pressure_scaling_factor=pressure_scaling_factor, penalty_amount=1.0)
 
         # ~~~~~
@@ -331,7 +541,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 #    def _get_gradients(wv, wdv):
 #        gas_pressure_diffusivity = \
-#            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
+#            wall_model.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
 #        _, grad_pressure = diffusion_operator(dcoll,
 #            kappa=wv.gas_density*gas_pressure_diffusivity,
 #            boundaries=pressure_boundaries, u=wdv.gas_pressure, time=t,
@@ -356,7 +566,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 #        rhs_I, rhs_V, rhs_S = phenolics_operator(
 #            dcoll=dcoll, state=make_obj_array([wv, wdv.temperature]),
 #            boundaries=boundaries, time=t,
-#            wall=wall, eos=eos, pyrolysis=pyrolysis,
+#            wall=wall, wall_model=wall_model, pyrolysis=pyrolysis,
 #            quadrature_tag=quadrature_tag, dd_wall=dd_vol,
 #            pressure_scaling_factor=pressure_scaling_factor,
 #            penalty_amount=1.0,
@@ -386,7 +596,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         viz_fields.append(("x", nodes[0]))
 
 #        gas_pressure_diffusivity = \
-#            eos.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
+#            wall_model.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
 #        gradients = get_gradients(wv, wdv)
 #        grad_P, grad_T = gradients
 #        velocity = -gas_pressure_diffusivity*grad_P
@@ -426,13 +636,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 #    def _eval_temperature(wall_vars, tseed):
-#        tau = eos.eval_tau(wall_vars)
-#        return eos.eval_temperature(wall_vars, tseed, tau)
+#        tau = wall_model.eval_tau(wall_vars)
+#        return wall_model.eval_temperature(wall_vars, tseed, tau)
 
 #    eval_temperature = actx.compile(_eval_temperature)
 
     def _eval_dep_vars(wall_vars, tseed):
-        return eos.dependent_vars(wv=wall_vars, temperature_seed=tseed)
+        return wall_model.dependent_vars(wv=wall_vars, temperature_seed=tseed)
 
     eval_dep_vars = actx.compile(_eval_dep_vars)
 
@@ -489,7 +699,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 print("Freeze gc")
                 freeze_gc_flag = False
 
-                import gc
                 gc.collect()
                 # Freeze the objects that are still alive so they will not
                 # be considered in future gc collections.
@@ -546,7 +755,7 @@ if __name__ == "__main__":
         rst_filename = (args.restart_file).replace("'", "")
         print(f"Restarting from file: {rst_filename}")
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
+    main(actx_class, use_logmgr=args.log, lazy=lazy,
          use_profiling=args.profiling, casename=casename,
          restart_file=rst_filename)
 

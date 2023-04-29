@@ -1,4 +1,4 @@
-""":mod:`~mirgecom.phenolics.tacot` evaluate TACOT-related data.
+""":mod:`~mirgecom.materials.tacot` evaluate TACOT-related data.
 
 .. autoclass:: BprimeTable
 .. autoclass:: Pyrolysis
@@ -46,9 +46,12 @@ class BprimeTable():
 
     def __init__(self):
 
+        # FIXME the path is relative to the driver.. How to fix it?
+
         # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
-        bprime_table = (np.genfromtxt("../Bprime_table/B_prime.dat",
-                                      skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
+        bprime_table = (
+            np.genfromtxt("../mirgecom/materials/Bprime_table/B_prime.dat",
+             skip_header=1)[:, 2:6]).reshape((25,151,4))  # noqa E501
 
         self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
         self._bounds_B = bprime_table[::-1, 0, 0]
@@ -77,13 +80,13 @@ class Pyrolysis():
     The reactions are assumed to happen only after a minimum temperature.
     Different reactions are considered based on the resin constituents.
 
-    .. automethod:: get_sources
+    .. automethod:: get_source_terms
     """
 
     def __init__(self):
         self._Tcrit = np.array([333.3, 555.6])
 
-    def get_sources(self, temperature, xi):
+    def get_source_terms(self, temperature, xi):
         """Return the source terms of pyrolysis decomposition.
 
         Parameters
@@ -283,7 +286,6 @@ class SolidProperties():
     .. automethod:: solid_emissivity
     """
 
-    # TODO not considering any fiber degration for now
     def __init__(self):
         self._char_mass = 220.0
         self._virgin_mass = 280.0
@@ -345,7 +347,6 @@ class SolidProperties():
         char = 1.1
         return virgin*tau + char*(1.0 - tau)
 
-    # TODO when we start considering fiber oxidation, update this function too
     def solid_volume_fraction(self, tau):
         """Void fraction filled by gas around the fibers."""
         fiber = 0.10

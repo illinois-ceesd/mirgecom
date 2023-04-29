@@ -1,4 +1,4 @@
-"""Phenolics module for MIRGE-Com."""
+"""Materials module for MIRGE-Com."""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -25,7 +25,6 @@ THE SOFTWARE.
 """
 
 __doc__ = """
-.. automodule:: mirgecom.phenolics.operator
-.. automodule:: mirgecom.phenolics.tacot
-.. automodule:: mirgecom.phenolics.operator
+.. automodule:: mirgecom.materials.carbon_fiber
+.. automodule:: mirgecom.materials.tacot
 """
