@@ -170,6 +170,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    from meshmode.mesh.processing import rotate_mesh_around_axis
+    local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/4)
+
     order = 4
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              quadrature_order=order+2)
