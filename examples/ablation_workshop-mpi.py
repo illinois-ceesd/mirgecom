@@ -77,6 +77,18 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+class _MyGradTag:
+    pass
+
+
+class _PresDiffTag:
+    pass
+
+
+class _TempDiffTag:
+    pass
+
+
 @mpi_entry_point
 def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
          lazy=False, restart_file=None):
@@ -162,20 +174,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#    from grudge.op import nodal_min, nodal_max
-
-#    def vol_min(x):
-#        return actx.to_numpy(nodal_min(dcoll, "vol", x))[()]
-
-#    def vol_max(x):
-#        return actx.to_numpy(nodal_max(dcoll, "vol", x))[()]
-
-#    from grudge.dt_utils import characteristic_lengthscales
-#    length_scales = characteristic_lengthscales(actx, dcoll, dd=dd_vol)
-
-#    h_min = vol_min(length_scales)
-#    h_max = vol_max(length_scales)
-
     if rank == 0:
         print("----- Discretization info ----")
         #  print(f"Discr: {nodes.shape=}, {order=}, {h_min=}, {h_max=}")
@@ -185,45 +183,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         comm.Barrier()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-#    # ablation workshop case #1.0
-#    def my_presc_energy_func(u_minus, **kwargs):
-#        time = kwargs['time']
-
-#        surface_temperature = actx.np.where(actx.np.less(time, 0.1),
-#            (1644-300)*(time/0.1) + 300,
-#            1644
-#        )
-#        surface_temperature = u_minus*0.0 + 1200
-
-#        return surface_temperature
-
-#    # ablation workshop case #2.1
-#    def my_presc_flux_func(kappa_tpair, u_tpair, grad_u_tpair,
-#                           lengthscales_tpair, normal, penalty_amount):
-
-#        flux = actx.np.where(actx.np.less(time, 0.1),
-#            0.3*(time/0.1)*1.5e6*(time/0.1),
-#            0.3*1.5e6
-#        )
-#
-#        # FIXME add blowing correction
-#        Bsurf = m_dot_g/conv_coeff
-#
-#        temperature = u_tpair.int
-#
-
-#        H11 = bprime_class._H[ idx_B ,  idx_T ]
-#        H21 = bprime_class._H[ idx_B , idx_T+1]
-#        H12 = bprime_class._H[idx_B+1,  idx_T ]
-#        H22 = bprime_class._H[idx_B+1, idx_T+1]
-
-#        print(H11, H21, H12, H22)
-
-#        # FIXME make emissivity function of tau
-#        emissivity = 0.8
-#        radiation = emissivity*5.67e-8*(temperature**4 - 300**4)
-#        return make_obj_array([flux - radiation])
 
     pressure_boundaries = {
         BoundaryDomainTag("prescribed"):
@@ -318,9 +277,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    class _MyGradTag:
-        pass
-
     def compute_div(actx, dcoll, quadrature_tag, field, velocity,
                     boundaries, dd_vol):
         """Return divergence for inviscid term."""
@@ -328,10 +284,10 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
         itp_f = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
-                                         comm_tag=_MyGradTag)
+                                     comm_tag=_MyGradTag)
 
         itp_u = interior_trace_pairs(dcoll, velocity, volume_dd=dd_vol,
-                                         comm_tag=_MyGradTag)
+                                     comm_tag=_MyGradTag)
 
         def interior_flux(f_tpair, u_tpair):
             dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
@@ -357,8 +313,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
             int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, field*velocity)
 
-            # FIXME make this more organized.
-            # This is necessary for the coupled case.
             if bdtag.tag == "prescribed":
                 ext_soln_quad = +1.0*int_soln_quad
             if bdtag.tag == "neumann":
@@ -475,7 +429,8 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
             kappa=wv.gas_density*gas_pressure_diffusivity,
             boundaries=pressure_boundaries, u=wdv.gas_pressure,
-            penalty_amount=penalty_amount, return_grad_u=True)
+            penalty_amount=penalty_amount, return_grad_u=True,
+            comm_tag=_PresDiffTag)
 
         velocity = -gas_pressure_diffusivity*grad_pressure
 
@@ -491,7 +446,8 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         energy_viscous_rhs = diffusion_operator(dcoll,
             kappa=wdv.thermal_conductivity, boundaries=energy_boundaries,
-            u=wdv.temperature, penalty_amount=penalty_amount)
+            u=wdv.temperature, penalty_amount=penalty_amount,
+            comm_tag=_TempDiffTag)
 
         viscous_rhs = PhenolicsConservedVars(
             solid_species_mass=wv.solid_species_mass*0.0,
