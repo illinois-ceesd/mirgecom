@@ -410,8 +410,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             if do_viz:
                 my_write_viz(step=step, t=t, state=state, dv=dv)
 
-            # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-            #                      t_final, constant_cfl)
+            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
+                                  t_final, constant_cfl)
 
             if do_status:  # needed because logging fails to make output
                 if component_errors is None:
