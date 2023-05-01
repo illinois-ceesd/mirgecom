@@ -61,10 +61,7 @@ from grudge.dof_desc import (
     DISCR_TAG_BASE,
 )
 
-from mirgecom.gas_model import (
-    make_operator_fluid_states,
-    make_fluid_state
-)
+from mirgecom.gas_model import make_operator_fluid_states
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux_rusanov,
@@ -313,14 +310,6 @@ def entropy_stable_euler_operator(
         for tpair in interior_trace_pairs(dcoll, entropy_vars)
     ]
 
-    def _project_ev_to_modified_fluid_state(dd_bnd):
-        ev_bnd = op.project(dcoll, dd_vol_quad, dd_bnd, entropy_vars)
-        gamma_bnd = op.project(dcoll, dd_vol, dd_bnd, gamma)
-        cv_mod_bnd = entropy_to_conservative_vars(gamma_bnd, ev_bnd)
-        tseed_bnd = op.project(dcoll, dd_vol, dd_bnd, state.temperature)
-        return make_fluid_state(cv_mod_bnd, gas_model=gas_model,
-                                temperature_seed=tseed_bnd)
-
     boundary_states = {
         # TODO: Use modified conserved vars as the input state?
         # Would need to make an "entropy-projection" variant
@@ -332,18 +321,6 @@ def entropy_stable_euler_operator(
             as_dofdesc(btag).with_discr_tag(quadrature_tag),
             state, gas_model, entropy_stable=True) for btag in boundaries
     }
-
-    # boundary_states = {
-    #    # TODO: Use modified conserved vars as the input state?
-    #    # Would need to make an "entropy-projection" variant
-    #    # of *project_fluid_state*
-    #    btag: project_fluid_state(
-    #        dcoll, dd_vol,
-    #        # Make sure we get the state on the quadrature grid
-    #        # restricted to the tag *btag*
-    #        as_dofdesc(btag).with_discr_tag(quadrature_tag),
-    #        state, gas_model) for btag in boundaries
-    # }
 
     # Interior interface state pairs consisting of modified conservative
     # variables and the corresponding temperature seeds
