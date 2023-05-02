@@ -73,7 +73,4 @@ Try running on more nodes and/or devices.
 What can I do about ``CUDA_ERROR_FILE_NOT_FOUND: file not found`` errors?
 -------------------------------------------------------------------------
 
-The reason for these errors is unknown, they seem to be more common with higher
-rank counts. A theory is that there is a race condition between caching
-a compiled kernel on disk and the loading of that kernel from that cache.
-The only known "fix" at the moment is to restart the application.
+Please see :ref:`caching-errors` for a workaround.

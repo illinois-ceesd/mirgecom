@@ -9,3 +9,4 @@ Running MirgeCOM
    profiling
    scripting-launches
    systems
+   caching
