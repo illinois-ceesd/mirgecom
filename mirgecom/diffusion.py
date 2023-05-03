@@ -349,7 +349,7 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
         u^+ = u^-
 
     when computing the boundary fluxes for $\nabla u$, and applies directly
-    the prescribed flux when computing $\nabla \cdot (\kappa \nabla u)$.
+    the prescribed flux $g$ when computing $\nabla \cdot (\kappa \nabla u)$.
 
     .. automethod:: __init__
     .. automethod:: get_grad_flux

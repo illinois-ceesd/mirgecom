@@ -40,6 +40,8 @@ import numpy as np
 import scipy  # type: ignore[import]
 from scipy.interpolate import CubicSpline  # type: ignore[import]
 
+from meshmode.dof_array import DOFArray
+
 
 class BprimeTable():
     """Class containing the table for wall properties."""
@@ -142,7 +144,7 @@ def eval_spline_derivative(x, x_bnds, coeffs):
     return val
 
 
-class GasProperties():
+class GasProperties:
     """Simplified model of the pyrolysis gas using tabulated data.
 
     This section is to be used when species conservation is not employed and
@@ -160,7 +162,15 @@ class GasProperties():
     """
 
     def __init__(self, prandtl=1.0, lewis=1.0):
-        """Return gas tabulated data and interpolating functions."""
+        """Return gas tabulated data and interpolating functions.
+
+        Parameters
+        ----------
+        prandtl: float
+            the Prandtl number of the mixture. Defaults to 1.
+        lewis: float
+            the Lewis number of the mixture. Defaults to 1.
+        """
         self._prandtl = prandtl
         self._lewis = lewis
 
@@ -206,13 +216,13 @@ class GasProperties():
         self._cs_enthalpy = CubicSpline(gas_data[:, 0], gas_data[:, 4]*1000.0)
         self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 5]*1e-4)
 
-    def gas_enthalpy(self, temperature):
+    def gas_enthalpy(self, temperature: DOFArray) -> DOFArray:
         """Return the gas enthalpy."""
         coeffs = self._cs_enthalpy.c
         bnds = self._cs_enthalpy.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_heat_capacity(self, temperature):
+    def gas_heat_capacity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas heat capacity at constant pressure $(C_p)$.
 
         The heat capacity is the derivative of the enthalpy. Thus, to improve
@@ -223,13 +233,13 @@ class GasProperties():
         bnds = self._cs_enthalpy.x
         return eval_spline_derivative(temperature, bnds, coeffs)
 
-    def gas_molar_mass(self, temperature):
+    def gas_molar_mass(self, temperature: DOFArray) -> DOFArray:
         """Return the gas molar mass."""
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_dMdT(self, temperature):  # noqa N802
+    def gas_dMdT(self, temperature: DOFArray) -> DOFArray:  # noqa N802
         """Return the partial derivative of molar mass wrt temperature.
 
         This is necessary to evaluate the temperature using Newton iteration.
@@ -238,13 +248,13 @@ class GasProperties():
         bnds = self._cs_molar_mass.x
         return eval_spline_derivative(temperature, bnds, coeffs)
 
-    def gas_viscosity(self, temperature):
+    def gas_viscosity(self, temperature: DOFArray) -> DOFArray:
         """Return the gas viscosity."""
         coeffs = self._cs_viscosity.c
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_thermal_conductivity(self, temperature):
+    def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas thermal conductivity.
 
         .. math::
@@ -259,7 +269,7 @@ class GasProperties():
         return mu*cp/self._prandtl
 
 
-class SolidProperties():
+class SolidProperties:
     """Evaluate the properties of the solid state.
 
     Linear weighting between the virgin and chared states. The polynomials
@@ -279,7 +289,7 @@ class SolidProperties():
         self._char_mass = 220.0
         self._virgin_mass = 280.0
 
-    def solid_enthalpy(self, temperature, tau):
+    def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Solid enthalpy as a function of pyrolysis progress."""
         virgin = (
             - 1.360688853105e-11*temperature**5 + 1.521029626150e-07*temperature**4
@@ -293,7 +303,8 @@ class SolidProperties():
 
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_heat_capacity(self, temperature, tau):
+    def solid_heat_capacity(self, temperature: DOFArray,
+                            tau: DOFArray) -> DOFArray:
         """Solid heat capacity as a function of pyrolysis progress."""
         actx = temperature.array_context
 
@@ -310,7 +321,8 @@ class SolidProperties():
 
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_thermal_conductivity(self, temperature, tau):
+    def solid_thermal_conductivity(self, temperature: DOFArray,
+                                   tau: DOFArray) -> DOFArray:
         """Solid thermal conductivity as a function of pyrolysis progress."""
         virgin = (
             + 2.31290019732353e-17*temperature**5 - 2.167785032562e-13*temperature**4
@@ -324,26 +336,26 @@ class SolidProperties():
 
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_permeability(self, tau):
+    def solid_permeability(self, tau: DOFArray) -> DOFArray:
         """Permeability of the composite material."""
         virgin = 1.6e-11
         char = 2.0e-11
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_tortuosity(self, tau):
+    def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
         """Tortuosity affects the species diffusivity."""
         virgin = 1.2
         char = 1.1
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_volume_fraction(self, tau):
+    def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
         """Void fraction filled by gas around the fibers."""
         fiber = 0.10
         virgin = 0.10
         char = 0.05
         return virgin*tau + char*(1.0 - tau) + fiber
 
-    def solid_emissivity(self, tau):
+    def solid_emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
         virgin = 0.8
         char = 0.9

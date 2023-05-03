@@ -1,12 +1,38 @@
 Carbon Fiber Oxidation 
 ======================
 
+    This section covers the response of carbon fiber when exposed to oxygen.
+
+    .. automodule:: mirgecom.multiphysics.simple_oxidation
+
+Conserved Quantities
+^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: mirgecom.multiphysics.simple_oxidation.WallVars
+
+Equations of State
+^^^^^^^^^^^^^^^^^^
+.. autoclass:: mirgecom.multiphysics.simple_oxidation.WallDependentVars
+.. autoclass:: mirgecom.multiphysics.simple_oxidation.SimpleOxidationWallModel
+
+Model-specific properties
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    The properties of the materials can be defined in specific files:
+
+    .. automodule:: mirgecom.materials.carbon_fiber
+
+.. autoclass:: mirgecom.materials.carbon_fiber.Oxidation
+.. autoclass:: mirgecom.materials.carbon_fiber.SolidProperties
 
 Composite Materials
 ===================
 
-    This section convers the response of composite materials made of phenolic
-    resin and carbon fibers. These fibers lead to a highly porous material,
+    This section covers the response of composite materials made of phenolic
+    resin and carbon fibers.
+
+    .. automodule:: mirgecom.multiphysics.phenolics
+
+    The carbon fibers are characterized as a highly porous material,
     with void fraction $\approx 90\%$. Phenolic resins are added to rigidize
     the fibers by permeating the material and filling partially the gaps between
     fibers. As the material is heated up by the flow, the resin pyrolysis, i.e.,
@@ -98,12 +124,19 @@ Composite Materials
     for type 2 code. Additional details, extensive formulation and references
     are provided in https://github.com/illinois-ceesd/phenolics-notes
 
-General functions
-^^^^^^^^^^^^^^^^^
-.. automodule:: mirgecom.multiphysics.phenolics
-.. automodule:: mirgecom.multiphysics.oxidation
+Conserved Quantities
+^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: PhenolicsConservedVars
+
+Equations of State
+^^^^^^^^^^^^^^^^^^
+.. autoclass:: PhenolicsDependentVars
+.. autoclass:: PhenolicsWallModel
+
+Helper Functions
+^^^^^^^^^^^^^^^^
+.. autofunction:: initializer
 
 Model-specific properties
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 .. automodule:: mirgecom.materials.tacot
-.. automodule:: mirgecom.materials.carbon_fiber

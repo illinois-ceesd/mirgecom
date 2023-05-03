@@ -1,19 +1,4 @@
-""":mod:`mirgecom.multiphysics.phenolics` handles phenolics modeling.
-
-Conserved Quantities
-^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: PhenolicsConservedVars
-
-Equations of State
-^^^^^^^^^^^^^^^^^^
-.. autoclass:: PhenolicsDependentVars
-.. autoclass:: PhenolicsWallModel
-
-Helper Functions
-^^^^^^^^^^^^^^^^
-.. autofunction:: initializer
-
-"""
+""":mod:`mirgecom.multiphysics.phenolics` handles phenolics modeling."""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -175,7 +160,7 @@ class PhenolicsDependentVars:
     solid_density: DOFArray
 
 
-class PhenolicsWallModel():
+class PhenolicsWallModel:
     """Variables dependent on the wall state.
 
     .. automethod:: __init__
@@ -197,7 +182,13 @@ class PhenolicsWallModel():
     """
 
     def __init__(self, solid_data, gas_data):
-        """Initialize wall model for composite."""
+        """Initialize wall model for composite.
+
+        solid_data: 
+            The class with the solid properties of the desired material.
+        gas_data: 
+            The class with properties of the product gases.
+        """
         self._solid_data = solid_data
         self._gas_data = gas_data
 
@@ -208,19 +199,41 @@ class PhenolicsWallModel():
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the pyrolysis is locally complete and only charred
         material exists.
+
+        Parameters
+        ----------
+        wv: :class:`PhenolicsConservedVars`
+            the class of conserved variables for the pyrolysis
+
+        Returns
+        -------
+        tau: meshmode.dof_array.DOFArray
         """
         char_mass = self._solid_data._char_mass
         virgin_mass = self._solid_data._virgin_mass
         current_mass = self.solid_density(wv)
         return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/current_mass)
 
-    def eval_temperature(self, wv: PhenolicsConservedVars, tseed: DOFArray,
-                         tau: DOFArray, niter=3) -> DOFArray:
+    def eval_temperature(self, wv, tseed, tau, niter=3):
         """Evaluate the temperature.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
         Newton iteration are used to get the temperature based on the internal
         energy/enthalpy and heat capacity for the bulk (solid+gas) material.
+
+        Parameters
+        ----------
+        wv: :class:`PhenolicsConservedVars`
+        tseed: float or :class:`~meshmode.dof_array.DOFArray`
+            Optional data from which to seed temperature calculation.
+        tau: :class:`~meshmode.dof_array.DOFArray`
+            the progress ratio
+        niter:
+            Optional argument with the number of iterations
+
+        Returns
+        -------
+        temperature: meshmode.dof_array.DOFArray
         """
         temp = tseed*1.0
 
@@ -247,17 +260,24 @@ class PhenolicsWallModel():
         return temp
 
     # ~~~~~~~~~~~~ bulk gas+solid properties
-    def void_fraction(self, tau: DOFArray) -> DOFArray:
+    def void_fraction(self, tau):
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
 
         The fractions of gas and solid phases must sum to one,
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
         progress ratio $\tau$.
+
+        Parameters
+        ----------
+        tau: meshmode.dof_array.DOFArray
+
+        Returns
+        -------
+        void_fraction: meshmode.dof_array.DOFArray
         """
         return 1.0 - self._solid_data.solid_volume_fraction(tau)
 
-    def thermal_conductivity(self, wv: PhenolicsConservedVars,
-                             temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, wv, temperature, tau):
         r"""Return the bulk thermal conductivity, $f(\rho, \tau, T)$.
 
         It is evaluated using a mass-weighted average given by
@@ -265,6 +285,16 @@ class PhenolicsWallModel():
         .. math::
 
             \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
+
+        Parameters
+        ----------
+        wv: :class:`PhenolicsConservedVars`
+        temperature: meshmode.dof_array.DOFArray
+        tau: meshmode.dof_array.DOFArray
+
+        Returns
+        -------
+        thermal_conductivity: meshmode.dof_array.DOFArray
         """
         y_g = wv.gas_density/(wv.gas_density + self.solid_density(wv))
         y_s = 1.0 - y_g
@@ -313,11 +343,6 @@ class PhenolicsWallModel():
         Rg = 8314.46261815324/self.gas_molar_mass(temperature)  # noqa N806
         eps_gas = self.void_fraction(tau)
         return (1.0/eps_gas)*wv.gas_density*Rg*temperature
-
-#    # TODO future task
-#    # need the pyrometheus mechanism to account for this
-#    def species_diffusivity(self, wv, temperature, tau):
-#        return temperature*0.0
 
     # ~~~~~~~~~~~~ solid
     def solid_density(self, wv: PhenolicsConservedVars) -> DOFArray:

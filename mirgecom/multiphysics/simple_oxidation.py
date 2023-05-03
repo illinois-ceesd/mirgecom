@@ -1,14 +1,4 @@
-""":mod:`mirgecom.multiphysics.oxidation` handles carbon oxidation modeling.
-
-Conserved Quantities
-^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: WallVars
-
-Equations of State
-^^^^^^^^^^^^^^^^^^
-.. autoclass:: WallDependentVars
-.. autoclass:: SimpleOxidationWallModel
-"""
+""":mod:`mirgecom.multiphysics.simple_oxidation` handles Y2 oxidation model."""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -83,7 +73,7 @@ class WallDependentVars:
     temperature: DOFArray
 
 
-class SimpleOxidationWallModel():
+class SimpleOxidationWallModel:
     """Variables dependent on the wall state.
 
     .. automethod:: __init__
@@ -96,13 +86,32 @@ class SimpleOxidationWallModel():
     .. automethod:: oxygen_diffusivity
     """
 
-    def __init__(self, solid_data, gas_data, wall_sample_mask,
+    def __init__(self, solid_data, wall_sample_mask,
                  enthalpy_func, heat_capacity_func, thermal_conductivity_func,
                  oxygen_diffusivity_func):
+        """
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        solid_data: 
+            The class with the solid properties of the desired material.
+        wall_sample_mask: meshmode.dof_array.DOFArray
+            Array with 1 for the reactive wall and 0 otherwise
+        enthalpy_func: 
+            function that computes the enthalpy of the entire wall.
+            Must include the non-reactive part of the wall, if existing.
+        heat_capacity_func: 
+            function that computes the heat capacity of the entire wall
+            Must include the non-reactive part of the wall, if existing.
+        thermal_conductivity_func: 
+            function that computes the thermal conductivity of the entire wall.
+            Must include the non-reactive part of the wall, if existing.
+        oxygen_diffusivity_func: 
+            function that computes the oxygen diffusivity inside the wall.
+            Must include the non-reactive part of the wall, if existing.
+        """
         self._fiber = solid_data
-        self._gas = gas_data
-        from warnings import warn
-        warn("Gas data is not used in SimpleOxidationWallModel.", stacklevel=2)
         self._sample_mask = wall_sample_mask
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
@@ -114,6 +123,15 @@ class SimpleOxidationWallModel():
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the fibers were all consumed.
+
+        Parameters
+        ----------
+        wv: :class:`WallVars`
+            the class of conserved variables for the oxidation
+
+        Returns
+        -------
+        tau: meshmode.dof_array.DOFArray
         """
         virgin = (self._fiber.intrinsic_density()
                   * self._fiber.solid_volume_fraction(tau=1.0))
@@ -123,7 +141,16 @@ class SimpleOxidationWallModel():
         )
 
     def eval_temperature(self, wv, tseed):
-        """Evaluate the temperature using Newton iteration."""
+        """Evaluate the temperature using Newton iteration.
+
+        Parameters
+        ----------
+        wv: :class:`WallVars`
+
+        Returns
+        -------
+        temperature: meshmode.dof_array.DOFArray
+        """
         temp = tseed*1.0
         for _ in range(0, 3):
             h = self.enthalpy(temp)
@@ -132,32 +159,87 @@ class SimpleOxidationWallModel():
         return temp
 
     def enthalpy(self, temperature):
-        """Return the enthalpy of the fibers as a function of temperature."""
+        """Return the enthalpy of the wall as a function of temperature.
+
+        Parameters
+        ----------
+        temperature: meshmode.dof_array.DOFArray
+
+        Returns
+        -------
+        enthalpy: meshmode.dof_array.DOFArray
+            the wall enthalpy, including all of its components
+        """
         return self._enthalpy_func(temperature=temperature)
 
     def heat_capacity(self, temperature):
-        """Return the heat capacity of the fibers as a function of temperature."""
+        """Return the heat capacity of the fibers as a function of temperature.
+
+        Parameters
+        ----------
+        temperature: meshmode.dof_array.DOFArray
+
+        Returns
+        -------
+        heat capacity: meshmode.dof_array.DOFArray
+            the wall heat capacity, including all of its components
+        """
         return self._heat_capacity_func(temperature=temperature)
 
     def thermal_conductivity(self, temperature, tau):
-        """Return the thermal conductivity of the fibers.
+        """Return the thermal conductivity of the wall.
 
         It is a function of temperature and oxidation progress. As the fibers
         are oxidized, they reduce their cross area and, consequenctly, their
         hability to conduct heat.
+
+        Parameters
+        ----------
+        temperature: meshmode.dof_array.DOFArray
+        tau: meshmode.dof_array.DOFArray
+
+        Returns
+        -------
+        thermal_conductivity: meshmode.dof_array.DOFArray
+            the wall thermal conductivity, including all of its components
         """
         return self._thermal_conductivity_func(temperature=temperature, tau=tau)
 
     def thermal_diffusivity(self, mass, temperature, tau,
                             thermal_conductivity=None):
-        """Thermal diffusivity of the fibers."""
+        """Thermal diffusivity of the wall.
+
+        Parameters
+        ----------
+        mass: meshmode.dof_array.DOFArray
+        temperature: meshmode.dof_array.DOFArray
+        tau: meshmode.dof_array.DOFArray
+        thermal_conductivity: meshmode.dof_array.DOFArray
+            Optional. If not given, it will be evaluated using
+            :func:`thermal_conductivity`
+
+        Returns
+        -------
+        thermal_diffusivity: meshmode.dof_array.DOFArray
+            the wall thermal diffusivity, including all of its components
+        """
         if thermal_conductivity is None:
             thermal_conductivity = self.thermal_conductivity(
                 temperature=temperature, tau=tau)
         return thermal_conductivity/(mass * self.heat_capacity(temperature))
 
     def oxygen_diffusivity(self, temperature):
-        """Mass diffusivity of oxygen through the porous fibers."""
+        """Mass diffusivity of oxygen through the (porous) wall.
+
+        Parameters
+        ----------
+        temperature: meshmode.dof_array.DOFArray
+
+        Returns
+        -------
+        oxygen_diffusivity: meshmode.dof_array.DOFArray
+            the oxygen diffusivity inside the wall
+        """
         return self._oxygen_diffusivity_func(temperature)
 
     def dependent_vars(self, wv, tseed):

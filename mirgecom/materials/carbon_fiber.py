@@ -1,8 +1,4 @@
-r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
-
-.. autoclass:: Oxidation
-.. autoclass:: SolidProperties
-"""
+r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data."""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -39,24 +35,44 @@ mw_co = 28.010
 univ_gas_const = 8314.46261815324
 
 
-class Oxidation():
+class Oxidation:
     """Evaluate the source terms for the oxidation of carbon fibers."""
 
-    def puma_effective_surface_area(self, progress):
-        """Polynomial fit based on PUMA data."""
+    def puma_effective_surface_area(self, progress) -> DOFArray:
+        """Polynomial fit based on PUMA data.
+
+        Parameters
+        ----------
+        progress: meshmode.dof_array.DOFArray
+            the rate of decomposition of the fibers
+        """
         # Original fit function: -1.1012e5*x**2 - 0.0646e5*x + 1.1794e5
         # Rescale by x==0 value and rearrange
         return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
 
-    def _get_wall_effective_surface_area_fiber(self, progress):
-        """Evaluate the effective surface of the fibers."""
+    def _get_wall_effective_surface_area_fiber(self, progress) -> DOFArray:
+        """Evaluate the effective surface of the fibers.
+
+        Parameters
+        ----------
+        progress: meshmode.dof_array.DOFArray
+            the rate of decomposition of the fibers
+        """
         return self.puma_effective_surface_area(progress)
 
-    def get_source_terms(self, temperature, tau, ox_mass):
-        """Return the effective source terms for the oxidation."""
+    def get_source_terms(self, temperature, tau, ox_mass) -> DOFArray:
+        """Return the effective source terms for the oxidation.
+
+        Parameters
+        ----------
+        temperature: meshmode.dof_array.DOFArray
+        tau: meshmode.dof_array.DOFArray
+            the progress ratio of the oxidation
+        ox_mass: meshmode.dof_array.DOFArray
+            the mass fraction of oxygen
+        """
         actx = temperature.array_context
-        progress = 1.0-tau
-        eff_surf_area = self._get_wall_effective_surface_area_fiber(progress)
+        eff_surf_area = self._get_wall_effective_surface_area_fiber(1.0-tau)
         alpha = (
             (0.00143+0.01*actx.np.exp(-1450.0/temperature))
             / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
@@ -65,18 +81,19 @@ class Oxidation():
         return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*ox_mass*k*eff_surf_area
 
 
-class GasProperties():
+class GasProperties:
     """Evaluate properties of the gas permeating the fibers."""
 
+    # TODO this will be useful for more complex models
     def __init__(self, pyrometheus_mechanism):
         self._pyro = pyrometheus_mechanism
 
-    def oxygen_diffusivity(self, temperature):
+    def oxygen_diffusivity(self, temperature: DOFArray) -> DOFArray:
         """Return the mass diffusivity of the gaseous species."""
         return 1e-4 + temperature*0.0
 
 
-class SolidProperties():
+class SolidProperties:
     """Model for calculating wall quantities."""
 
     def intrinsic_density(self):
@@ -90,7 +107,7 @@ class SolidProperties():
             + 9.685398830530e-07*temperature**3 - 2.599755262540e-03*temperature**2
             + 3.667295510844e+00*temperature - 7.816218435655e+01)
 
-    def solid_enthalpy(self, temperature) -> DOFArray:
+    def solid_enthalpy(self, temperature: DOFArray) -> DOFArray:
         """Evaluate the solid enthalpy of the fibers."""
         return (
             - 1.279887694729e-11*temperature**5 + 1.491175465285e-07*temperature**4
@@ -98,7 +115,7 @@ class SolidProperties():
             - 3.441837408320e+01*temperature - 1.235438104496e+05)
 
     # ~~~~~~~~ fiber conductivity
-    def experimental_kappa(self, temperature):
+    def experimental_kappa(self, temperature: DOFArray) -> DOFArray:
         """Experimental data of thermal conductivity."""
         return (
             1.766e-10 * temperature**3
@@ -106,7 +123,7 @@ class SolidProperties():
             + 6.252e-4 * temperature
             + 6.707e-3)
 
-    def puma_kappa(self, progress):
+    def puma_kappa(self, progress: DOFArray) -> DOFArray:
         """Numerical data of thermal conductivity evaluated by PUMA."""
         return 0.0988*progress**2 - 0.2751*progress + 0.201
 
@@ -127,6 +144,6 @@ class SolidProperties():
         """Void fraction filled by gas around the fibers."""
         return 0.10*tau
 
-    def solid_emissivity(self, tau):
+    def solid_emissivity(self, tau) -> DOFArray:
         """Emissivity for energy radiation."""
         return 0.9 + tau*0.0
