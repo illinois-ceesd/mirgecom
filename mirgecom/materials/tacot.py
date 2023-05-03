@@ -99,22 +99,17 @@ class Pyrolysis():
         """
         actx = temperature.array_context
 
-        # FIXME is this the right way to initialize?
-        source = np.empty((3,), dtype=object)
-
-        source[0] = actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
-            0.0,
-            -(30.*((xi[0] - 0.00)/30.)**3)*12000.*actx.np.exp(-8556.000/temperature)
-        )
-        source[1] = actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
-            0.0,
-            -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9*actx.np.exp(-20444.44/temperature)
-        )
-
-        # include the fiber in the RHS but dont do anything with it.
-        source[2] = temperature*0.0
-
-        return source
+        return make_obj_array([
+            actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
+                0.0, (
+                    -(30.*((xi[0] - 0.00)/30.)**3)*12000.
+                    * actx.np.exp(-8556.000/temperature))),
+            actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
+            0.0, (
+                -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9
+                * actx.np.exp(-20444.44/temperature))),
+            # include the fiber in the RHS but dont do anything with it.
+            temperature*0.0])
 
 
 def eval_spline(x, x_bnds, coeffs):
