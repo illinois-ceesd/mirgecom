@@ -118,6 +118,14 @@ class _NSGradTemperatureTag:
     pass
 
 
+class _ESFluidCVTag():
+    pass
+
+
+class _ESFluidTemperatureTag():
+    pass
+
+
 def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
     """Compute interior face flux for gradient operator."""
     from arraycontext import outer
@@ -664,7 +672,9 @@ def entropy_stable_ns_operator(
             # discretization (if any)
             interp_to_surf_quad(tpair)
             for tpair in interior_trace_pairs(dcoll, state.temperature,
-                                              volume_dd=dd_vol)
+                                              volume_dd=dd_vol,
+                                              comm_tag=(_ESFluidTemperatureTag,
+                                                        comm_tag))
         ]
 
     def _interp_to_surf_modified_conservedvars(gamma, utpair):
@@ -688,8 +698,8 @@ def entropy_stable_ns_operator(
         # variables on the quadrature grid
         # (obtaining state from projected entropy variables)
         _interp_to_surf_modified_conservedvars(gamma, tpair)
-        for tpair in interior_trace_pairs(dcoll, entropy_vars,
-                                          volume_dd=dd_vol)
+        for tpair in interior_trace_pairs(dcoll, entropy_vars, volume_dd=dd_vol,
+                                          comm_tag=(_ESFluidCVTag, comm_tag))
     ]
 
     boundary_states = {
