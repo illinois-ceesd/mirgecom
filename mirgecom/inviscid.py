@@ -440,8 +440,8 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
 
     beta_ll = 0.5 * rho_ll / p_ll
     beta_rr = 0.5 * rho_rr / p_rr
-    specific_kin_ll = 0.5 * sum(v**2 for v in u_ll)
-    specific_kin_rr = 0.5 * sum(v**2 for v in u_rr)
+    specific_kin_ll = 0.5 * np.dot(u_ll, u_ll)
+    specific_kin_rr = 0.5 * np.dot(u_rr, u_rr)
 
     rho_avg = 0.5 * (rho_ll + rho_rr)
     rho_mean = ln_mean(rho_ll,  rho_rr)

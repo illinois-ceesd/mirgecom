@@ -96,6 +96,14 @@ from grudge.flux_differencing import volume_flux_differencing
 import grudge.op as op
 
 
+class _ESFluidCVTag():
+    pass
+
+
+class _ESFluidTemperatureTag():
+    pass
+
+
 def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                    quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
@@ -183,9 +191,9 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
 
 
 def entropy_stable_euler_operator(
-        dcoll, state, gas_model, boundaries, time=0.0,
+        dcoll, gas_model, state, boundaries, time=0.0,
         inviscid_numerical_flux_func=entropy_stable_inviscid_flux_rusanov,
-        dd=DD_VOLUME_ALL, quadrature_tag=None):
+        dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None):
     """Compute RHS of the Euler flow equations using flux-differencing.
 
     Parameters
@@ -252,7 +260,7 @@ def entropy_stable_euler_operator(
         return DOFArray(ary.array_context, data=tuple(
             subary.reshape(grp.nelements, *shape)
             # Just need group for determining the number of elements
-            for grp, subary in zip(dcoll.discr_from_dd("vol").groups, ary)))
+            for grp, subary in zip(dcoll.discr_from_dd(dd_vol).groups, ary)))
 
     flux_matrices = entropy_conserving_flux_chandrashekar(
         gas_model,
@@ -283,7 +291,10 @@ def entropy_stable_euler_operator(
             # Get the interior trace pairs onto the surface quadrature
             # discretization (if any)
             interp_to_surf_quad(tpair)
-            for tpair in interior_trace_pairs(dcoll, state.temperature)
+            for tpair in interior_trace_pairs(dcoll, state.temperature,
+                                              volume_dd=dd_vol,
+                                              comm_tag=(_ESFluidTemperatureTag,
+                                                        comm_tag))
         ]
 
     def _interp_to_surf_modified_conservedvars(gamma, utpair):
@@ -307,8 +318,8 @@ def entropy_stable_euler_operator(
         # variables on the quadrature grid
         # (obtaining state from projected entropy variables)
         _interp_to_surf_modified_conservedvars(gamma, tpair)
-        for tpair in interior_trace_pairs(dcoll, entropy_vars)
-    ]
+        for tpair in interior_trace_pairs(dcoll, entropy_vars, volume_dd=dd_vol,
+                                          comm_tag=(_ESFluidCVTag, comm_tag))]
 
     boundary_states = {
         # TODO: Use modified conserved vars as the input state?
@@ -337,7 +348,9 @@ def entropy_stable_euler_operator(
 
     return op.inverse_mass(
         dcoll,
-        inviscid_vol_term - op.face_mass(dcoll, dd_allfaces_quad, inviscid_flux_bnd)
+        dd_vol,
+        inviscid_vol_term - op.face_mass(dcoll, dd_allfaces_quad,
+                                         inviscid_flux_bnd)
     )
 
 

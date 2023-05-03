@@ -403,11 +403,14 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
 
     if entropy_stable:
-        gamma = gas_model.eos.gamma(state.cv, state.temperature)
-        if isinstance(gamma, DOFArray):
-            gamma = op.project(dcoll, src, tgt, gamma)
-            ev_sd = conservative_to_entropy_vars(gamma, cv_sd)
-            cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
+        temp_state = make_fluid_state(cv=cv_sd, gas_model=gas_model,
+                                      temperature_seed=temperature_seed,
+                                      limiter_func=limiter_func, limiter_dd=tgt)
+        gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
+        # if isinstance(gamma, DOFArray):
+        #    gamma = op.project(dcoll, src, tgt, gamma)
+        ev_sd = conservative_to_entropy_vars(gamma, temp_state)
+        cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
 
     smoothness_mu = None
     if state.dv.smoothness_mu is not None:
@@ -805,7 +808,7 @@ def conservative_to_entropy_vars(gamma, state):
     p = state.pressure
     rho_species = state.species_mass_density
 
-    u_square = sum(v ** 2 for v in u)
+    u_square = np.dot(u, u)
     s = actx.np.log(p) - gamma*actx.np.log(rho)
     rho_p = rho / p
     rho_species_p = rho_species / p
@@ -850,7 +853,7 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
     v5 = ev_state.energy
     v6ns = ev_state.species_mass
 
-    v_square = sum(v**2 for v in v234)
+    v_square = np.dot(v234, v234)
     s = gamma - v1 + v_square/(2*v5)
     s_species = gamma - v6ns + v_square/(2*v5)
     iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
