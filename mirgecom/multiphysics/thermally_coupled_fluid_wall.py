@@ -1058,6 +1058,7 @@ def coupled_ns_heat_operator(
         time=0.,
         use_kappa_weighted_grad_flux_in_fluid=False,
         quadrature_tag=DISCR_TAG_BASE,
+        limiter_func=None,
         fluid_gradient_numerical_flux_func=num_flux_central,
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
@@ -1161,6 +1162,13 @@ def coupled_ns_heat_operator(
         for the divergence of the viscous transport flux.  This defaults to
         :func:`~mirgecom.viscous.viscous_facial_flux_harmonic`.
 
+    limiter_func:
+
+        Callable function to be passed to
+        :func:`~mirgecom.gas_model.make_operator_fluid_states`
+        that filters or limits the produced fluid states.  This is used to keep
+        species mass fractions in physical and realizable states, for example.
+
     Returns
     -------
 
@@ -1220,7 +1228,8 @@ def coupled_ns_heat_operator(
 
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
-        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag)
+        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag,
+        limiter_func=limiter_func)
 
     # Compute the temperature gradient for both subdomains
 
