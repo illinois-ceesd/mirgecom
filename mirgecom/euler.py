@@ -104,95 +104,10 @@ class _ESFluidTemperatureTag():
     pass
 
 
-def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
-                   inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-                   quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
-                   comm_tag=None,
-                   operator_states_quad=None):
-    r"""Compute RHS of the Euler flow equations.
-
-    Returns
-    -------
-    :class:`~mirgecom.fluid.ConservedVars`
-
-        The right-hand-side of the Euler flow equations:
-
-        .. math::
-
-            \dot{\mathbf{q}} = - \nabla\cdot\mathbf{F} +
-                (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
-
-    Parameters
-    ----------
-    state: :class:`~mirgecom.gas_model.FluidState`
-
-        Fluid state object with the conserved state, and dependent
-        quantities.
-
-    boundaries
-
-        Dictionary of boundary functions, one for each valid
-        :class:`~grudge.dof_desc.BoundaryDomainTag`
-
-    time
-
-        Time
-
-    gas_model: :class:`~mirgecom.gas_model.GasModel`
-
-        Physical gas model including equation of state, transport,
-        and kinetic properties as required by fluid state
-
-    quadrature_tag
-
-        An optional identifier denoting a particular quadrature
-        discretization to use during operator evaluations.
-
-    dd: grudge.dof_desc.DOFDesc
-
-        the DOF descriptor of the discretization on which *state* lives. Must be a
-        volume on the base discretization.
-
-    comm_tag: Hashable
-
-        Tag for distributed communication
-    """
-    boundaries = normalize_boundaries(boundaries)
-
-    if not isinstance(dd.domain_tag, VolumeDomainTag):
-        raise TypeError("dd must represent a volume")
-    if dd.discretization_tag != DISCR_TAG_BASE:
-        raise ValueError("dd must belong to the base discretization")
-
-    dd_vol = dd
-    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
-    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
-
-    if operator_states_quad is None:
-        operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
-
-    volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
-        operator_states_quad
-
-    # Compute volume contributions
-    inviscid_flux_vol = inviscid_flux(volume_state_quad)
-
-    # Compute interface contributions
-    inviscid_flux_bnd = inviscid_flux_on_element_boundary(
-        dcoll, gas_model, boundaries, interior_state_pairs_quad,
-        domain_boundary_states_quad, quadrature_tag=quadrature_tag,
-        numerical_flux_func=inviscid_numerical_flux_func, time=time,
-        dd=dd_vol)
-
-    return -div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
-                         inviscid_flux_vol, inviscid_flux_bnd)
-
-
 def entropy_stable_euler_operator(
         dcoll, gas_model, state, boundaries, time=0.0,
         inviscid_numerical_flux_func=entropy_stable_inviscid_flux_rusanov,
+        operator_states_quad=None,
         dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None):
     """Compute RHS of the Euler flow equations using flux-differencing.
 
@@ -238,20 +153,27 @@ def entropy_stable_euler_operator(
     # we are re-using gamma from here and *not* recomputing
     # after applying entropy projections. It is unclear at this
     # time whether it's strictly necessary or if this is good enough
-    gamma = gas_model.eos.gamma(state.cv, state.temperature)
+    gamma_base = gas_model.eos.gamma(state.cv, state.temperature)
 
     # Interpolate state to vol quad grid
-    state_quad = project_fluid_state(dcoll, dd_vol, dd_vol_quad, state, gas_model)
+    if operator_states_quad is not None:
+        state_quad = operator_states_quad[0]
+    else:
+        state_quad = project_fluid_state(
+            dcoll, dd_vol, dd_vol_quad, state, gas_model)
+
+    gamma_quad = gas_model.eos.gamma(state_quad.cv, state_quad.temperature)
 
     # Compute the projected (nodal) entropy variables
     entropy_vars = volume_quadrature_project(
         dcoll, dd_vol_quad,
         # Map to entropy variables
-        conservative_to_entropy_vars(gamma, state_quad))
+        conservative_to_entropy_vars(gamma_quad, state_quad))
 
     modified_conserved_fluid_state = \
         make_entropy_projected_fluid_state(dcoll, dd_vol_quad, dd_allfaces_quad,
-                                           state, entropy_vars, gamma, gas_model)
+                                           state, entropy_vars, gamma_base,
+                                           gas_model)
 
     def _reshape(shape, ary):
         if not isinstance(ary, DOFArray):
@@ -317,7 +239,7 @@ def entropy_stable_euler_operator(
         # Compute interior trace pairs using modified conservative
         # variables on the quadrature grid
         # (obtaining state from projected entropy variables)
-        _interp_to_surf_modified_conservedvars(gamma, tpair)
+        _interp_to_surf_modified_conservedvars(gamma_base, tpair)
         for tpair in interior_trace_pairs(dcoll, entropy_vars, volume_dd=dd_vol,
                                           comm_tag=(_ESFluidCVTag, comm_tag))]
 
@@ -352,6 +274,103 @@ def entropy_stable_euler_operator(
         inviscid_vol_term - op.face_mass(dcoll, dd_allfaces_quad,
                                          inviscid_flux_bnd)
     )
+
+
+def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
+                   inviscid_numerical_flux_func=None,
+                   quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
+                   comm_tag=None, use_esdg=False, operator_states_quad=None):
+    r"""Compute RHS of the Euler flow equations.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        The right-hand-side of the Euler flow equations:
+
+        .. math::
+
+            \dot{\mathbf{q}} = - \nabla\cdot\mathbf{F} +
+                (\mathbf{F}\cdot\hat{n})_{\partial\Omega}
+
+    Parameters
+    ----------
+    state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state, and dependent
+        quantities.
+
+    boundaries
+
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
+
+    time
+
+        Time
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    quadrature_tag
+
+        An optional identifier denoting a particular quadrature
+        discretization to use during operator evaluations.
+
+    dd: grudge.dof_desc.DOFDesc
+
+        the DOF descriptor of the discretization on which *state* lives. Must be a
+        volume on the base discretization.
+
+    comm_tag: Hashable
+
+        Tag for distributed communication
+    """
+    boundaries = normalize_boundaries(boundaries)
+
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
+
+    if operator_states_quad is None:
+        operator_states_quad = make_operator_fluid_states(
+            dcoll, state, gas_model, boundaries, quadrature_tag,
+            dd=dd_vol, comm_tag=comm_tag)
+
+    if use_esdg:
+        if inviscid_numerical_flux_func is None:
+            inviscid_numerical_flux_func = entropy_stable_inviscid_flux_rusanov
+        return entropy_stable_euler_operator(
+            dcoll, gas_model=gas_model, state=state, boundaries=boundaries,
+            time=time, operator_states_quad=operator_states_quad, dd=dd,
+            inviscid_numerical_flux_func=inviscid_numerical_flux_func,
+            quadrature_tag=quadrature_tag, comm_tag=comm_tag)
+
+    if inviscid_numerical_flux_func is None:
+        inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
+
+    volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
+        operator_states_quad
+
+    # Compute volume contributions
+    inviscid_flux_vol = inviscid_flux(volume_state_quad)
+
+    # Compute interface contributions
+    inviscid_flux_bnd = inviscid_flux_on_element_boundary(
+        dcoll, gas_model, boundaries, interior_state_pairs_quad,
+        domain_boundary_states_quad, quadrature_tag=quadrature_tag,
+        numerical_flux_func=inviscid_numerical_flux_func, time=time,
+        dd=dd_vol)
+
+    return -div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
+                         inviscid_flux_vol, inviscid_flux_bnd)
 
 
 # By default, run unitless
