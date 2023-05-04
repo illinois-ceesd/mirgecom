@@ -1065,7 +1065,7 @@ def coupled_ns_heat_operator(
         interface_noslip=True,
         return_gradients=False,
         wall_penalty_amount=None,
-        fluid_operator=ns_operator):
+        ns_operator=ns_operator):
     r"""Compute the RHS of the fluid and wall subdomains.
 
     Augments *fluid_boundaries* and *wall_boundaries* with the boundaries for the
@@ -1281,7 +1281,7 @@ def coupled_ns_heat_operator(
     wall_all_boundaries.update(wall_interface_boundaries)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
-    fluid_op_result = fluid_operator(
+    ns_op_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         inviscid_numerical_flux_func=inviscid_numerical_flux_func,
@@ -1291,9 +1291,9 @@ def coupled_ns_heat_operator(
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
 
     if return_gradients:
-        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = fluid_op_result
+        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_op_result
     else:
-        fluid_rhs = fluid_op_result
+        fluid_rhs = ns_op_result
 
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
