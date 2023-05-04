@@ -36,7 +36,7 @@ from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
-from mirgecom.navierstokes import ns_operator, entropy_stable_ns_operator
+from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import get_sim_timestep
 
 from mirgecom.io import make_init_message
@@ -441,13 +441,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             logmgr.tick_after()
         return state, dt
 
-    rhs_operator = entropy_stable_ns_operator if use_esdg else ns_operator
-
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return rhs_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
-                           state=fluid_state, time=t,
-                           quadrature_tag=quadrature_tag)
+        return ns_operator(dcoll, gas_model=gas_model,
+                            boundaries=boundaries,
+                            state=fluid_state, time=t, use_esdg=use_esdg,
+                            quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -504,6 +503,13 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
 
     lazy = args.lazy or args.esdg
     if args.profiling:

@@ -34,7 +34,7 @@ from functools import partial
 
 from grudge.shortcuts import make_visualizer
 
-from mirgecom.euler import euler_operator, entropy_stable_euler_operator
+from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     generate_and_distribute_mesh
 )
@@ -104,13 +104,6 @@ def main(actx_class, ctx_factory=cl.create_some_context,
         actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
-
-    if use_esdg and not actx.supports_nonscalar_broadcasting:
-        raise RuntimeError(
-            f"{actx} is not a suitable array context for using flux-differencing. "
-            "The underlying array context must be capable of performing basic "
-            "array broadcasting operations. Use PytatoPyOpenCLArrayContext instead."
-        )
 
     # timestepping control
     current_step = 0
@@ -190,11 +183,6 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     boundaries = {}
 
     initial_condition = InviscidTaylorGreenVortex()
-
-    if use_esdg:
-        operator_rhs = entropy_stable_euler_operator
-    else:
-        operator_rhs = euler_operator
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -308,10 +296,10 @@ def main(actx_class, ctx_factory=cl.create_some_context,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return operator_rhs(dcoll, state=fluid_state, time=t,
-                            boundaries=boundaries,
-                            gas_model=gas_model,
-                            quadrature_tag=quadrature_tag)
+        return euler_operator(dcoll, state=fluid_state, time=t,
+                              boundaries=boundaries,
+                              gas_model=gas_model, use_esdg=use_esdg,
+                              quadrature_tag=quadrature_tag)
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -360,6 +348,14 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
     lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:

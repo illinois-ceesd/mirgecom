@@ -35,10 +35,7 @@ from grudge.shortcuts import make_visualizer
 
 
 from mirgecom.transport import SimpleTransport
-from mirgecom.navierstokes import (
-    ns_operator,
-    entropy_stable_ns_operator
-)
+from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
@@ -107,8 +104,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
-
-    rhs_operator = entropy_stable_ns_operator if use_esdg else ns_operator
 
     # timestepping control
     current_step = 0
@@ -381,9 +376,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return rhs_operator(dcoll, state=fluid_state, time=t,
-                            boundaries=boundaries, gas_model=gas_model,
-                            quadrature_tag=quadrature_tag)
+        return ns_operator(dcoll, state=fluid_state, time=t,
+                           boundaries=boundaries, gas_model=gas_model,
+                           quadrature_tag=quadrature_tag, use_esdg=use_esdg)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -435,6 +430,14 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
     lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:

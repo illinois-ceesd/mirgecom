@@ -78,7 +78,7 @@ class MyRuntimeError(RuntimeError):
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_overintegration=False, use_profiling=False,
          casename=None, lazy=False, rst_filename=None, log_dependent=True,
-         viscous_terms_on=False):
+         viscous_terms_on=False, use_esdg=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -618,8 +618,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_rhs = fluid_operator(
             dcoll, state=fluid_state, gas_model=gas_model, time=t,
             boundaries=boundaries, operator_states_quad=fluid_operator_states,
-            quadrature_tag=quadrature_tag,
+            quadrature_tag=quadrature_tag, use_esdg=use_esdg,
             inviscid_numerical_flux_func=inv_num_flux_func)
+
         chem_rhs = eos.get_species_source_terms(cv, fluid_state.temperature)
         tseed_rhs = fluid_state.temperature - tseed
         cv_rhs = fluid_rhs + chem_rhs
@@ -674,6 +675,8 @@ if __name__ == "__main__":
                         help="turns on compressible Navier-Stokes RHS")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
@@ -683,8 +686,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
     log_dependent = False
-    lazy = args.lazy
+    lazy = args.lazy or args.esdg
     viscous_terms_on = args.navierstokes
     if args.profiling:
         if lazy:
@@ -701,7 +709,8 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration, use_profiling=args.profiling,
+         use_overintegration=args.overintegration or args.esdg,
+         use_profiling=args.profiling, use_esdg=args.esdg,
          lazy=lazy, casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
 

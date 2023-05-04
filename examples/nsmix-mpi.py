@@ -81,7 +81,8 @@ class MyRuntimeError(RuntimeError):
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
          rst_filename=None, actx_class=None, lazy=False,
-         log_dependent=True, use_overintegration=False):
+         log_dependent=True, use_overintegration=False,
+         use_esdg=False):
     """Drive example."""
     if actx_class is None:
         raise RuntimeError("Array context class missing.")
@@ -294,7 +295,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         ns_rhs, grad_cv, grad_t = \
             ns_operator(dcoll, state=fluid_state, time=time,
                         boundaries=visc_bnds, gas_model=gas_model,
-                        return_gradients=True, quadrature_tag=quadrature_tag)
+                        return_gradients=True, quadrature_tag=quadrature_tag,
+                        use_esdg=use_esdg)
         return make_obj_array([ns_rhs, grad_cv, grad_t])
 
     get_temperature_update = actx.compile(_get_temperature_update)
@@ -564,7 +566,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                              boundaries=visc_bnds, gas_model=gas_model,
                              gradient_numerical_flux_func=grad_num_flux_func,
                              viscous_numerical_flux_func=viscous_num_flux_func,
-                             quadrature_tag=quadrature_tag)
+                             quadrature_tag=quadrature_tag, use_esdg=use_esdg)
         cv_rhs = ns_rhs + pyro_eos.get_species_source_terms(cv,
                                                             fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
@@ -593,7 +595,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     ns_rhs, grad_cv, grad_t = \
         ns_operator(dcoll, state=current_state, time=current_t,
                     boundaries=visc_bnds, gas_model=gas_model,
-                    return_gradients=True)
+                    return_gradients=True, use_esdg=use_esdg)
     grad_v = velocity_gradient(current_state.cv, grad_cv)
     chem_rhs = \
         pyro_eos.get_species_source_terms(current_state.cv,
@@ -629,12 +631,20 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
 
     from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+    lazy = args.lazy or args.esdg
+
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
 
@@ -655,7 +665,7 @@ if __name__ == "__main__":
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent, lazy=lazy,
-         use_overintegration=args.overintegration)
+         log_dependent=log_dependent, lazy=lazy, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg)
 
 # vim: foldmethod=marker

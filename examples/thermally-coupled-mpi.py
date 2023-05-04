@@ -72,9 +72,7 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-from mirgecom.navierstokes import (
-    ns_operator, entropy_stable_ns_operator
-)
+from mirgecom.navierstokes import ns_operator
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     coupled_ns_heat_operator,
 )
@@ -117,7 +115,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    fluid_operator = entropy_stable_ns_operator if use_esdg else ns_operator
+    ns_op = partial(ns_operator, use_esdg=use_esdg)
 
     from mirgecom.simutil import get_reasonable_memory_pool
     alloc = get_reasonable_memory_pool(cl_ctx, queue)
@@ -527,7 +525,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             time=t,
             return_gradients=return_gradients,
             quadrature_tag=quadrature_tag,
-            fluid_operator=fluid_operator)
+            ns_operator=ns_op)
 
         if return_gradients:
             (
@@ -604,11 +602,19 @@ if __name__ == "__main__":
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
-    if args.profiling:
-        if args.lazy:
-            raise ValueError("Can't use lazy and profiling together.")
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
 
     lazy = args.lazy or args.esdg
+
+    if args.profiling:
+        if lazy:
+            raise ValueError("Can't use lazy and profiling together.")
+
     from grudge.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 

@@ -40,14 +40,9 @@ from mirgecom.discretization import create_discretization_collection
 
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.euler import (
-    euler_operator,
-    entropy_stable_euler_operator
-)
-from mirgecom.navierstokes import (
-    ns_operator,
-    entropy_stable_ns_operator
-)
+from mirgecom.euler import euler_operator
+from mirgecom.navierstokes import ns_operator
+
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
@@ -1129,11 +1124,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         pre_step_func = my_pre_step
         post_step_func = my_post_step
 
-    inviscid_operator = \
-        entropy_stable_euler_operator if use_esdg else euler_operator
-    viscous_operator = \
-        entropy_stable_ns_operator if use_esdg else ns_operator
-
     from mirgecom.flux import num_flux_central
     from mirgecom.gas_model import make_operator_fluid_states
     from mirgecom.navierstokes import grad_cv_operator
@@ -1148,12 +1138,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
         if inviscid_only:
             fluid_rhs = \
-                inviscid_operator(
+                euler_operator(
                     dcoll, state=fluid_state, time=t,
                     boundaries=boundaries, gas_model=gas_model,
                     inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                     quadrature_tag=quadrature_tag,
-                    operator_states_quad=fluid_operator_states)
+                    operator_states_quad=fluid_operator_states,
+                    use_esdg=use_esdg)
         else:
             grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                        time=t,
@@ -1161,10 +1152,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                        quadrature_tag=quadrature_tag,
                                        operator_states_quad=fluid_operator_states)
             fluid_rhs = \
-                viscous_operator(
+                ns_operator(
                     dcoll, state=fluid_state, time=t, boundaries=boundaries,
                     gas_model=gas_model, quadrature_tag=quadrature_tag,
-                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov)
+                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                    operator_states_quad=fluid_operator_states,
+                    use_esdg=use_esdg)
 
         if not inert_only:
             fluid_rhs = fluid_rhs + eos.get_species_source_terms(
@@ -1275,6 +1268,8 @@ if __name__ == "__main__":
         help="Turn off force lazy eval between timesteps")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
+    parser.add_argument("--esdg", action="store_true", default=True,
+        help="use entropy-stable for inviscid terms")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
@@ -1282,11 +1277,20 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
-    lazy = args.lazy
+
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
     log_dependent = False
     force_eval = not args.no_force
+
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -1311,9 +1315,9 @@ if __name__ == "__main__":
     print(f"Calling main: {time.ctime(time.time())}")
 
     main(use_logmgr=args.log, use_leap=args.leap, input_file=input_file,
-         use_overintegration=args.overintegration,
+         use_overintegration=args.overintegration or args.esdg,
          use_profiling=args.profiling, lazy=lazy,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent, force_eval=force_eval)
+         log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

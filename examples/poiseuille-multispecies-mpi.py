@@ -465,7 +465,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
-                           state=fluid_state, time=t,
+                           state=fluid_state, time=t, use_esdg=use_esdg,
                            quadrature_tag=quadrature_tag)
 
     current_state = make_fluid_state(
@@ -519,10 +519,20 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
 
     if args.profiling:
         if lazy:
@@ -539,7 +549,8 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration, lazy=lazy,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         use_overintegration=args.overintegration or args.esdg, lazy=lazy,
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         use_esdg=args.esdg)
 
 # vim: foldmethod=marker

@@ -34,10 +34,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import (
-    euler_operator,
-    entropy_stable_euler_operator
-)
+from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh
@@ -157,8 +154,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         quadrature_tag = DISCR_TAG_QUAD
     else:
         quadrature_tag = None
-
-    rhs_operator = entropy_stable_euler_operator if use_esdg else euler_operator
 
     vis_timer = None
 
@@ -356,9 +351,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return rhs_operator(dcoll, state=fluid_state, time=t,
-                            boundaries=boundaries, gas_model=gas_model,
-                            quadrature_tag=quadrature_tag)
+        return euler_operator(dcoll, state=fluid_state, time=t,
+                              boundaries=boundaries, gas_model=gas_model,
+                              quadrature_tag=quadrature_tag, use_esdg=use_esdg)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)

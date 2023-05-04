@@ -118,7 +118,8 @@ def get_doublemach_mesh():
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, use_overintegration=False,
-         casename=None, rst_filename=None, actx_class=None, lazy=False):
+         casename=None, rst_filename=None, actx_class=None, lazy=False,
+         use_esdg=False):
     """Drive the example."""
     if actx_class is None:
         raise RuntimeError("Array context class missing.")
@@ -403,7 +404,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         return (
             euler_operator(dcoll, state=fluid_state, time=t,
                            boundaries=boundaries,
-                           gas_model=gas_model, quadrature_tag=quadrature_tag)
+                           gas_model=gas_model, quadrature_tag=quadrature_tag,
+                           use_esdg=use_esdg)
             + av_laplacian_operator(dcoll, fluid_state=fluid_state,
                                     boundaries=boundaries,
                                     time=t, gas_model=gas_model,
@@ -451,12 +453,20 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -472,7 +482,8 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration, lazy=lazy,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         use_overintegration=args.overintegration or args.esdg, lazy=lazy,
+         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         use_esdg=args.esdg)
 
 # vim: foldmethod=marker
