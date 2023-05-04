@@ -118,7 +118,8 @@ def entropy_stable_euler_operator(
         quantities.
 
     boundaries
-        Dictionary of boundary functions, one for each valid btag
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`
 
     time
 
