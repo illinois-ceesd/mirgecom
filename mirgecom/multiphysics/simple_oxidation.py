@@ -94,20 +94,20 @@ class SimpleOxidationWallModel:
 
         Parameters
         ----------
-        solid_data: 
+        solid_data:
             The class with the solid properties of the desired material.
         wall_sample_mask: meshmode.dof_array.DOFArray
             Array with 1 for the reactive wall and 0 otherwise
-        enthalpy_func: 
+        enthalpy_func:
             function that computes the enthalpy of the entire wall.
             Must include the non-reactive part of the wall, if existing.
-        heat_capacity_func: 
+        heat_capacity_func:
             function that computes the heat capacity of the entire wall
             Must include the non-reactive part of the wall, if existing.
-        thermal_conductivity_func: 
+        thermal_conductivity_func:
             function that computes the thermal conductivity of the entire wall.
             Must include the non-reactive part of the wall, if existing.
-        oxygen_diffusivity_func: 
+        oxygen_diffusivity_func:
             function that computes the oxygen diffusivity inside the wall.
             Must include the non-reactive part of the wall, if existing.
         """
@@ -118,8 +118,8 @@ class SimpleOxidationWallModel:
         self._thermal_conductivity_func = thermal_conductivity_func
         self._oxygen_diffusivity_func = oxygen_diffusivity_func
 
-    def eval_tau(self, wv):
-        r"""Evaluate the progress ratio of the oxidation.
+    def eval_tau(self, wv) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the oxidation.
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the fibers were all consumed.
@@ -128,10 +128,6 @@ class SimpleOxidationWallModel:
         ----------
         wv: :class:`WallVars`
             the class of conserved variables for the oxidation
-
-        Returns
-        -------
-        tau: meshmode.dof_array.DOFArray
         """
         virgin = (self._fiber.intrinsic_density()
                   * self._fiber.solid_volume_fraction(tau=1.0))
@@ -140,18 +136,20 @@ class SimpleOxidationWallModel:
             + 1.0*(1.0 - self._sample_mask)  # inert
         )
 
-    def eval_temperature(self, wv, tseed):
+    def eval_temperature(self, wv, tseed) -> DOFArray:
         """Evaluate the temperature using Newton iteration.
 
         Parameters
         ----------
         wv: :class:`WallVars`
-
-        Returns
-        -------
-        temperature: meshmode.dof_array.DOFArray
+        tseed: numbers.Number or meshmode.dof_array.DOFArray
+            Initial guess for the temperature
         """
-        temp = tseed*1.0
+        if isinstance(tseed, DOFArray) is False:
+            temp = tseed + wv.energy*0.0
+        else:
+            temp = tseed*1.0
+
         for _ in range(0, 3):
             h = self.enthalpy(temp)
             cp = self.heat_capacity(temp)
@@ -173,7 +171,7 @@ class SimpleOxidationWallModel:
         return self._enthalpy_func(temperature=temperature)
 
     def heat_capacity(self, temperature):
-        """Return the heat capacity of the fibers as a function of temperature.
+        """Return the heat capacity of the wall.
 
         Parameters
         ----------
@@ -187,7 +185,7 @@ class SimpleOxidationWallModel:
         return self._heat_capacity_func(temperature=temperature)
 
     def thermal_conductivity(self, temperature, tau):
-        """Return the thermal conductivity of the wall.
+        """Return the effective thermal conductivity of the wall.
 
         It is a function of temperature and oxidation progress. As the fibers
         are oxidized, they reduce their cross area and, consequenctly, their

@@ -40,20 +40,35 @@ from arraycontext import (
 @dataclass_array_container
 @dataclass(frozen=True)
 class PhenolicsConservedVars:
-    r"""Class of conserved variables.
+    r"""Store and resolve quantities according to the conservation equations.
 
     .. attribute:: solid_species_mass
+
+        Object array (:class:`numpy.ndarray`) with shape ``(nspecies,)``:
+
+        .. math::
+            \epsilon_i \rho_i
+
     .. attribute:: gas_density
+
+        :class:`~meshmode.dof_array.DOFArray` for the gas phase. It must
+        consider the void fraction:
+
+        .. math::
+            \epsilon_g \rho_g      
+
     .. attribute:: energy
+
+        :class:`~meshmode.dof_array.DOFArray` for the total energy of the
+        gas+solid phases:
+
+        .. math::
+            \rho e = \epsilon_g \rho_g e_g + \epsilon_s \rho_s e_s
+
     """
 
-    # the "epsilon_density" of each phase in the solid
     solid_species_mass: np.ndarray
-
-    # it includes the epsilon/void fraction
     gas_density: DOFArray
-
-    # bulk energy = solid + gas energy
     energy: DOFArray
 
     @property
@@ -95,6 +110,11 @@ def initializer(wall_model, solid_species_mass, temperature, gas_density=None,
     pressure: :class:`~meshmode.dof_array.DOFArray`
         Optional argument with the gas pressure. It will be used to evaluate
         the gas density.
+
+    Returns
+    -------
+    wv: :class:`PhenolicsConservedVars`
+        The wall conserved variables
     """
     if gas_density is None and pressure is None:
         raise ValueError("Must specify one of 'gas_density' or 'pressure'")
@@ -184,9 +204,9 @@ class PhenolicsWallModel:
     def __init__(self, solid_data, gas_data):
         """Initialize wall model for composite.
 
-        solid_data: 
+        solid_data:
             The class with the solid properties of the desired material.
-        gas_data: 
+        gas_data:
             The class with properties of the product gases.
         """
         self._solid_data = solid_data
@@ -194,32 +214,41 @@ class PhenolicsWallModel:
 
     # ~~~~~~~~~~~~
     def eval_tau(self, wv: PhenolicsConservedVars) -> DOFArray:
-        r"""Evaluate the progress ratio of the phenolics decomposition.
+        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the pyrolysis is locally complete and only charred
-        material exists.
+        material exists:
+
+        .. math::
+            \tau = \frac{\rho_0}{\rho_0 - \rho_c} \left( 1- \frac{\rho_c}{\rho(t)} \right)
 
         Parameters
         ----------
         wv: :class:`PhenolicsConservedVars`
             the class of conserved variables for the pyrolysis
-
-        Returns
-        -------
-        tau: meshmode.dof_array.DOFArray
         """
         char_mass = self._solid_data._char_mass
         virgin_mass = self._solid_data._virgin_mass
         current_mass = self.solid_density(wv)
         return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/current_mass)
 
-    def eval_temperature(self, wv, tseed, tau, niter=3):
-        """Evaluate the temperature.
+    def eval_temperature(self, wv, tseed, tau, niter=3) -> DOFArray:
+        r"""Evaluate the temperature.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
         Newton iteration are used to get the temperature based on the internal
-        energy/enthalpy and heat capacity for the bulk (solid+gas) material.
+        energy/enthalpy and heat capacity for the bulk (solid+gas) material:
+
+        .. math::
+            T^{n+1} = T^n - 
+                \frac
+                {\epsilon_g \rho_g(h_g - R_g T^n) + \rho_s h_s}
+                {\epsilon_g \rho_g \left( 
+                    C_{p_g} - R_g\left[1 - \frac{\partial M}{\partial T} \right]
+                \right)
+                + \epsilon_s \rho_s C_{p_s}
+                }
 
         Parameters
         ----------
@@ -230,12 +259,11 @@ class PhenolicsWallModel:
             the progress ratio
         niter:
             Optional argument with the number of iterations
-
-        Returns
-        -------
-        temperature: meshmode.dof_array.DOFArray
         """
-        temp = tseed*1.0
+        if isinstance(tseed, DOFArray) is False:
+            temp = tseed + wv.energy*0.0
+        else:
+            temp = tseed*1.0
 
         rho_gas = wv.gas_density
         rho_solid = self.solid_density(wv)
@@ -260,7 +288,7 @@ class PhenolicsWallModel:
         return temp
 
     # ~~~~~~~~~~~~ bulk gas+solid properties
-    def void_fraction(self, tau):
+    def void_fraction(self, tau) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
 
         The fractions of gas and solid phases must sum to one,
@@ -270,14 +298,10 @@ class PhenolicsWallModel:
         Parameters
         ----------
         tau: meshmode.dof_array.DOFArray
-
-        Returns
-        -------
-        void_fraction: meshmode.dof_array.DOFArray
         """
         return 1.0 - self._solid_data.solid_volume_fraction(tau)
 
-    def thermal_conductivity(self, wv, temperature, tau):
+    def thermal_conductivity(self, wv, temperature, tau) -> DOFArray:
         r"""Return the bulk thermal conductivity, $f(\rho, \tau, T)$.
 
         It is evaluated using a mass-weighted average given by
@@ -291,10 +315,6 @@ class PhenolicsWallModel:
         wv: :class:`PhenolicsConservedVars`
         temperature: meshmode.dof_array.DOFArray
         tau: meshmode.dof_array.DOFArray
-
-        Returns
-        -------
-        thermal_conductivity: meshmode.dof_array.DOFArray
         """
         y_g = wv.gas_density/(wv.gas_density + self.solid_density(wv))
         y_s = 1.0 - y_g
@@ -305,15 +325,15 @@ class PhenolicsWallModel:
 
     # ~~~~~~~~~~~~ gas
     def gas_enthalpy(self, temperature: DOFArray) -> DOFArray:
-        """Return the gas enthalpy."""
+        r"""Return the gas enthalpy $h_g$."""
         return self._gas_data.gas_enthalpy(temperature)
 
     def gas_molar_mass(self, temperature: DOFArray) -> DOFArray:
-        """Return the gas molar mass."""
+        r"""Return the gas molar mass $M$."""
         return self._gas_data.gas_molar_mass(temperature)
 
     def gas_viscosity(self, temperature: DOFArray) -> DOFArray:
-        """Return the gas viscosity."""
+        r"""Return the gas viscosity $\mu$."""
         return self._gas_data.gas_viscosity(temperature)
 
     def gas_pressure_diffusivity(self, temperature: DOFArray,
@@ -358,11 +378,11 @@ class PhenolicsWallModel:
         return sum(wv.solid_species_mass)
 
     def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
-        """Return the solid enthalpy."""
+        """Return the solid enthalpy $h_s$."""
         return self._solid_data.solid_enthalpy(temperature, tau)
 
     def solid_permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Return the wall permeability based on the progress ratio $\tau$."""
+        r"""Return the wall permeability $K$ based on the progress ratio $\tau$."""
         return self._solid_data.solid_permeability(tau)
 
     def solid_emissivity(self, tau: DOFArray) -> DOFArray:
@@ -371,12 +391,12 @@ class PhenolicsWallModel:
 
     # ~~~~~~~~~~~~ auxiliary functions
     def gas_heat_capacity_cp(self, temperature: DOFArray) -> DOFArray:
-        """Return the gas heat capacity."""
+        r"""Return the gas heat capacity at constant pressure $C_p$."""
         return self._gas_data.gas_heat_capacity(temperature)
 
     def solid_heat_capacity_cp(self, temperature: DOFArray,
                                tau: DOFArray) -> DOFArray:
-        """Return the solid heat capacity."""
+        r"""Return the solid heat capacity $C_p$."""
         return self._solid_data.solid_heat_capacity(temperature, tau)
 
     # ~~~~~~~~~~~~
@@ -387,16 +407,16 @@ class PhenolicsWallModel:
         temperature = self.eval_temperature(wv, temperature_seed, tau)
         return PhenolicsDependentVars(
             tau=tau,
-            progress=1.0-tau,  # dummy
+            progress=1.0-tau,
             temperature=temperature,
             thermal_conductivity=self.thermal_conductivity(wv, temperature, tau),
             void_fraction=self.void_fraction(tau),
             gas_pressure=self.gas_pressure(wv, temperature, tau),
             gas_viscosity=self.gas_viscosity(temperature),
-            gas_molar_mass=self.gas_molar_mass(temperature),  # dummy
+            gas_molar_mass=self.gas_molar_mass(temperature),
             # species_diffusivity
             gas_enthalpy=self.gas_enthalpy(temperature),
-            solid_enthalpy=self.solid_enthalpy(temperature, tau),  # dummy
+            solid_enthalpy=self.solid_enthalpy(temperature, tau),
             solid_density=self.solid_density(wv),
             solid_emissivity=self.solid_emissivity(tau),
             solid_permeability=self.solid_permeability(tau)

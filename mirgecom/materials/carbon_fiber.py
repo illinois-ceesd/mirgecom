@@ -140,10 +140,10 @@ class SolidProperties:
             * self.puma_kappa(progress) / self.puma_kappa(0)
         )
 
-    def solid_volume_fraction(self, tau) -> DOFArray:
+    def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
         """Void fraction filled by gas around the fibers."""
         return 0.10*tau
 
-    def solid_emissivity(self, tau) -> DOFArray:
+    def solid_emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
         return 0.9 + tau*0.0

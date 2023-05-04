@@ -467,8 +467,8 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         # ~~~~~
         # decomposition for each component of the resin
-        resin_pyrolysis = pyrolysis.get_source_terms(wdv.temperature,
-                                                wv.solid_species_mass)
+        resin_pyrolysis = pyrolysis.get_source_terms(temperature=wdv.temperature,
+                                                     chi=wv.solid_species_mass)
 
         # flip sign due to mass conservation
         gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
@@ -614,9 +614,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     gc.collect()
 
     my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
-
-#    rhs = get_rhs_terms(t, wall_vars, wdv)
-#    rhs_I, rhs_V, rhs_S = rhs
 
     freeze_gc_flag = True
     while t < t_final:

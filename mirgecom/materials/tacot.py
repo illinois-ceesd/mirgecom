@@ -39,12 +39,15 @@ THE SOFTWARE.
 import numpy as np
 import scipy  # type: ignore[import]
 from scipy.interpolate import CubicSpline  # type: ignore[import]
-
 from meshmode.dof_array import DOFArray
+from pytools.obj_array import make_obj_array
 
 
 class BprimeTable():
-    """Class containing the table for wall properties."""
+    """Class containing the table for energy balance at the surface.
+
+    This class is only required for uncoupled cases, where only the wall portion
+    is evaluated. This is NOT used for fully-coupled cases."""
 
     # FIXME read from the "materials" folder to not get explictly the table
     def __init__(self, table):
@@ -74,25 +77,31 @@ class Pyrolysis():
         \left( \frac{\epsilon_i \rho_i -
             \epsilon^c_i \rho^c_i}{\epsilon^0_i \rho^0_i} \right)^{m_i}
 
-    The reactions are assumed to happen only after a minimum temperature.
-    Different reactions are considered based on the resin constituents.
+    For TACOT, 2 different reactions are considered based on the resin
+    constituents, and these are assumed to only happen after a minimum
+    temperature.
+
+    The third reaction is the fiber oxidation, which is not handled here for now.
 
     .. automethod:: get_source_terms
     """
 
     def __init__(self):
+        """Temperature in which each reaction starts."""
         self._Tcrit = np.array([333.3, 555.6])
 
-    def get_source_terms(self, temperature, xi):
-        """Return the source terms of pyrolysis decomposition.
+    def get_source_terms(self, temperature, chi):
+        r"""Return the source terms of pyrolysis decomposition.
 
         Parameters
         ----------
         temperature: :class:`~meshmode.dof_array.DOFArray`
             The temperature of the bulk material.
 
-        xi: numpy.ndarray
-            The progress ratio of the decomposition.
+        chi: numpy.ndarray
+            Either the solid mass $\rho_i$ of all fractions of the resin or
+            the progress ratio $\chi$ of the decomposition. The actual
+            parameter depends on the modeling itself.
 
         Returns
         -------
@@ -102,20 +111,32 @@ class Pyrolysis():
         actx = temperature.array_context
 
         return make_obj_array([
+            # reaction 1
             actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
                 0.0, (
                     -(30.*((xi[0] - 0.00)/30.)**3)*12000.
                     * actx.np.exp(-8556.000/temperature))),
             actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
+            # reaction 2
             0.0, (
                 -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9
                 * actx.np.exp(-20444.44/temperature))),
-            # include the fiber in the RHS but dont do anything with it.
+            # fiber oxidation: include in the RHS but dont do anything with it.
             temperature*0.0])
 
 
-def eval_spline(x, x_bnds, coeffs):
-    """Evaluate spline."""
+def eval_spline(x, x_bnds, coeffs) -> DOFArray:
+    r"""Evaluate spline $a(x-x_i)^3 + b(x-x_i)^2 + c(x-x_i) + d$.
+
+    Parameters
+    ----------
+    x: :class:`~meshmode.dof_array.DOFArray`
+        The value where $f(x)$ will be evaluated.
+    x_bnds: :class:`numpy.ndarray` with shape ``(m,)``
+        The $m$ nodes $x_i$ for the different segments of the spline.
+    coeffs: :class:`numpy.ndarray` with shape ``(4,m)``
+        The 4 coefficients for each segment $i$ of the spline.
+    """
     actx = x.array_context
 
     val = x*0.0
@@ -129,8 +150,18 @@ def eval_spline(x, x_bnds, coeffs):
     return val
 
 
-def eval_spline_derivative(x, x_bnds, coeffs):
-    """Evaluate analytical derivative of a spline."""
+def eval_spline_derivative(x, x_bnds, coeffs) -> DOFArray:
+    """Evaluate analytical derivative of a spline $3a(x-x_i)^2 + 2b(x-x_i) + c$.
+
+    Parameters
+    ----------
+    x: :class:`~meshmode.dof_array.DOFArray`
+        The value where $f(x)$ will be evaluatead.
+    x_bnds: :class:`numpy.ndarray` with shape ``(m,)``
+        The $m$ nodes $x_i$ for the different segments of the spline.
+    coeffs: :class:`numpy.ndarray` with shape ``(4,m)``
+        The 4 coefficients for each segment $i$ of the spline.
+    """
     actx = x.array_context
 
     val = x*0.0
@@ -217,7 +248,7 @@ class GasProperties:
         self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 5]*1e-4)
 
     def gas_enthalpy(self, temperature: DOFArray) -> DOFArray:
-        """Return the gas enthalpy."""
+        r"""Return the gas enthalpy $h_g$."""
         coeffs = self._cs_enthalpy.c
         bnds = self._cs_enthalpy.x
         return eval_spline(temperature, bnds, coeffs)
@@ -234,7 +265,7 @@ class GasProperties:
         return eval_spline_derivative(temperature, bnds, coeffs)
 
     def gas_molar_mass(self, temperature: DOFArray) -> DOFArray:
-        """Return the gas molar mass."""
+        r"""Return the gas molar mass $M$."""
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         return eval_spline(temperature, bnds, coeffs)
@@ -249,20 +280,20 @@ class GasProperties:
         return eval_spline_derivative(temperature, bnds, coeffs)
 
     def gas_viscosity(self, temperature: DOFArray) -> DOFArray:
-        """Return the gas viscosity."""
+        r"""Return the gas viscosity $\mu$."""
         coeffs = self._cs_viscosity.c
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
     def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas thermal conductivity.
+        r"""Return the gas thermal conductivity $\kappa_g$.
 
         .. math::
 
             \kappa = \frac{\mu C_p}{Pr}
 
         with gas viscosity $\mu$, heat capacity at constant pressure $C_p$
-        and the Prandtl number $Pr$ (by default, $Pr=1.0$).
+        and the Prandtl number $Pr$ (default to 1).
         """
         cp = self.gas_heat_capacity(temperature)
         mu = self.gas_viscosity(temperature)

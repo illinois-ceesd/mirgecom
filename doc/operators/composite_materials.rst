@@ -2,6 +2,7 @@ Carbon Fiber Oxidation
 ======================
 
     This section covers the response of carbon fiber when exposed to oxygen.
+    The specific files used are:
 
     .. automodule:: mirgecom.multiphysics.simple_oxidation
 
@@ -28,7 +29,7 @@ Composite Materials
 ===================
 
     This section covers the response of composite materials made of phenolic
-    resin and carbon fibers.
+    resin and carbon fibers. The specific files used are:
 
     .. automodule:: mirgecom.multiphysics.phenolics
 

@@ -1,7 +1,7 @@
 """Multiphysics module for MIRGE-Com."""
 
 __copyright__ = """
-Copyright (C) 2022 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
