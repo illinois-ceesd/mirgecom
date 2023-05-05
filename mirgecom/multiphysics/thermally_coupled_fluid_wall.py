@@ -68,7 +68,6 @@ from mirgecom.boundary import (
     _NoSlipBoundaryComponent,
     _ImpermeableBoundaryComponent)
 from mirgecom.flux import num_flux_central
-from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from mirgecom.viscous import viscous_facial_flux_harmonic
 from mirgecom.gas_model import (
     replace_fluid_state,
@@ -1060,8 +1059,6 @@ def coupled_ns_heat_operator(
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
         fluid_gradient_numerical_flux_func=num_flux_central,
-        inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-        viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         interface_noslip=True,
         return_gradients=False,
         wall_penalty_amount=None,
@@ -1284,8 +1281,6 @@ def coupled_ns_heat_operator(
     ns_op_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
-        inviscid_numerical_flux_func=inviscid_numerical_flux_func,
-        viscous_numerical_flux_func=viscous_numerical_flux_func,
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
