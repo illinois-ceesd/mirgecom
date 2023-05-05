@@ -243,12 +243,12 @@ def entropy_stable_euler_operator(
         # TODO: Use modified conserved vars as the input state?
         # Would need to make an "entropy-projection" variant
         # of *project_fluid_state*
-        btag: project_fluid_state(
+        bdtag: project_fluid_state(
             dcoll, dd_vol,
             # Make sure we get the state on the quadrature grid
             # restricted to the tag *btag*
-            as_dofdesc(btag).with_discr_tag(quadrature_tag),
-            state, gas_model, entropy_stable=True) for btag in boundaries
+            dd_vol_quad.with_domain_tag(bdtag),
+            state, gas_model, entropy_stable=True) for bdtag in boundaries
     }
 
     # Interior interface state pairs consisting of modified conservative
