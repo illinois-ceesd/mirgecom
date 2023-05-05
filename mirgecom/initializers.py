@@ -1568,7 +1568,7 @@ class InviscidTaylorGreenVortex:
     """Initialize Taylor-Green Vortex."""
 
     def __init__(
-            self, *, mach_number=0.05, domain_lengthscale=1, v0=1, p0=1,
+            self, *, dim=3, mach_number=0.05, domain_lengthscale=1, v0=1, p0=1,
             viscosity=1e-5
     ):
         """Initialize vortex parameters."""
@@ -1577,6 +1577,7 @@ class InviscidTaylorGreenVortex:
         self._v0 = v0
         self._p0 = p0
         self._mu = viscosity
+        self._dim = dim
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
