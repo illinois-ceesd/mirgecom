@@ -398,6 +398,8 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable DG for inviscid terms")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
