@@ -25,14 +25,7 @@ THE SOFTWARE.
 """
 
 import numpy as np
-
 from meshmode.dof_array import DOFArray
-
-
-mw_o = 15.999
-mw_o2 = mw_o*2
-mw_co = 28.010
-univ_gas_const = 8314.46261815324
 
 
 class Oxidation:
@@ -72,6 +65,12 @@ class Oxidation:
             the mass fraction of oxygen
         """
         actx = temperature.array_context
+
+        mw_o = 15.999
+        mw_o2 = mw_o*2
+        mw_co = 28.010
+        univ_gas_const = 8314.46261815324
+
         eff_surf_area = self._get_wall_effective_surface_area_fiber(1.0-tau)
         alpha = (
             (0.00143+0.01*actx.np.exp(-1450.0/temperature))
@@ -97,18 +96,18 @@ class SolidProperties:
     """Model for calculating wall quantities."""
 
     def intrinsic_density(self):
-        """Return the intrinsic density of the fibers."""
+        r"""Return the intrinsic density $\rho$ of the fibers."""
         return 1600.0
 
     def solid_heat_capacity(self, temperature: DOFArray) -> DOFArray:
-        """Evaluate the heat capacity of the fibers."""
+        r"""Evaluate the heat capacity $C_{p_s}$ of the fibers."""
         return (
             + 1.461303669323e-14*temperature**5 - 1.862489701581e-10*temperature**4
             + 9.685398830530e-07*temperature**3 - 2.599755262540e-03*temperature**2
             + 3.667295510844e+00*temperature - 7.816218435655e+01)
 
     def solid_enthalpy(self, temperature: DOFArray) -> DOFArray:
-        """Evaluate the solid enthalpy of the fibers."""
+        r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
         return (
             - 1.279887694729e-11*temperature**5 + 1.491175465285e-07*temperature**4
             - 6.994595296860e-04*temperature**3 + 1.691564018108e+00*temperature**2
@@ -129,7 +128,7 @@ class SolidProperties:
 
     def solid_thermal_conductivity(self, temperature: DOFArray,
                                    tau: DOFArray) -> DOFArray:
-        """Evaluate the thermal conductivity of the fibers.
+        r"""Evaluate the thermal conductivity $\kappa$ of the fibers.
 
         It employs a rescaling of the experimental data based on the fiber
         shrinkage during the oxidation.
@@ -141,7 +140,7 @@ class SolidProperties:
         )
 
     def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
-        """Void fraction filled by gas around the fibers."""
+        r"""Void fraction $\epsilon$ filled by gas around the fibers."""
         return 0.10*tau
 
     def solid_emissivity(self, tau: DOFArray) -> DOFArray:

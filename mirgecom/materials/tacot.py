@@ -1,4 +1,8 @@
-""":mod:`~mirgecom.materials.tacot` evaluate TACOT-related data.
+""":mod:`~mirgecom.materials.tacot` evaluates TACOT-related data.
+
+    TACOT is the Theoretical Ablative Composite for Open Testing, a surrogate
+    composite material closely related to PICA (Phenolic Impregnated Carbon
+    Ablator) proposed as an open-source material for the Ablation Workshop.
 
 .. autoclass:: BprimeTable
 .. autoclass:: Pyrolysis
@@ -9,7 +13,6 @@ Helper Functions
 ================
 .. autofunction:: eval_spline
 .. autofunction:: eval_spline_derivative
-
 """
 
 __copyright__ = """
@@ -47,7 +50,8 @@ class BprimeTable():
     """Class containing the table for energy balance at the surface.
 
     This class is only required for uncoupled cases, where only the wall portion
-    is evaluated. This is NOT used for fully-coupled cases."""
+    is evaluated. This is NOT used for fully-coupled cases.
+    """
 
     # FIXME read from the "materials" folder to not get explictly the table
     def __init__(self, table):
@@ -77,10 +81,8 @@ class Pyrolysis():
         \left( \frac{\epsilon_i \rho_i -
             \epsilon^c_i \rho^c_i}{\epsilon^0_i \rho^0_i} \right)^{m_i}
 
-    For TACOT, 2 different reactions are considered based on the resin
-    constituents, and these are assumed to only happen after a minimum
-    temperature.
-
+    For TACOT, 2 different reactions, which are assumed to only happen after
+    a minimum temperature, are considered based on the resin constituents.
     The third reaction is the fiber oxidation, which is not handled here for now.
 
     .. automethod:: get_source_terms
@@ -91,7 +93,7 @@ class Pyrolysis():
         self._Tcrit = np.array([333.3, 555.6])
 
     def get_source_terms(self, temperature, chi):
-        r"""Return the source terms of pyrolysis decomposition.
+        r"""Return the source terms of pyrolysis decomposition for TACOT.
 
         Parameters
         ----------
@@ -114,12 +116,12 @@ class Pyrolysis():
             # reaction 1
             actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
                 0.0, (
-                    -(30.*((xi[0] - 0.00)/30.)**3)*12000.
+                    -(30.*((chi[0] - 0.00)/30.)**3)*12000.
                     * actx.np.exp(-8556.000/temperature))),
             actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
             # reaction 2
             0.0, (
-                -(90.*((xi[1] - 60.0)/90.)**3)*4.48e9
+                -(90.*((chi[1] - 60.0)/90.)**3)*4.48e9
                 * actx.np.exp(-20444.44/temperature))),
             # fiber oxidation: include in the RHS but dont do anything with it.
             temperature*0.0])
@@ -254,7 +256,7 @@ class GasProperties:
         return eval_spline(temperature, bnds, coeffs)
 
     def gas_heat_capacity(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas heat capacity at constant pressure $(C_p)$.
+        r"""Return the gas heat capacity at constant pressure $C_{p_g}$.
 
         The heat capacity is the derivative of the enthalpy. Thus, to improve
         accuracy and avoid issues with Newton iteration, this is computed
@@ -289,7 +291,6 @@ class GasProperties:
         r"""Return the gas thermal conductivity $\kappa_g$.
 
         .. math::
-
             \kappa = \frac{\mu C_p}{Pr}
 
         with gas viscosity $\mu$, heat capacity at constant pressure $C_p$
@@ -301,11 +302,11 @@ class GasProperties:
 
 
 class SolidProperties:
-    """Evaluate the properties of the solid state.
+    """Evaluate the properties of the solid state containing resin and fibers.
 
-    Linear weighting between the virgin and chared states. The polynomials
-    were generated offline to avoid interpolation and they are not valid for
-    temperatures above 3200K.
+    A linear weighting between the virgin and chared states is applied to
+    yield the material properties. Polynomials were generated offline to avoid
+    interpolation and they are not valid for temperatures above 3200K.
 
     .. automethod:: solid_enthalpy
     .. automethod:: solid_heat_capacity
@@ -317,6 +318,7 @@ class SolidProperties:
     """
 
     def __init__(self):
+        """Solid volumetric density considering all resin constituents."""
         self._char_mass = 220.0
         self._virgin_mass = 280.0
 
@@ -336,7 +338,7 @@ class SolidProperties:
 
     def solid_heat_capacity(self, temperature: DOFArray,
                             tau: DOFArray) -> DOFArray:
-        """Solid heat capacity as a function of pyrolysis progress."""
+        r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
 
         virgin = actx.np.where(actx.np.less(temperature, 2222.0),
@@ -368,19 +370,19 @@ class SolidProperties:
         return virgin*tau + char*(1.0 - tau)
 
     def solid_permeability(self, tau: DOFArray) -> DOFArray:
-        """Permeability of the composite material."""
+        r"""Permeability $K$ of the composite material."""
         virgin = 1.6e-11
         char = 2.0e-11
         return virgin*tau + char*(1.0 - tau)
 
     def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
-        """Tortuosity affects the species diffusivity."""
+        r"""Tortuosity $\eta$ affects the species diffusivity."""
         virgin = 1.2
         char = 1.1
         return virgin*tau + char*(1.0 - tau)
 
     def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
-        """Void fraction filled by gas around the fibers."""
+        r"""Void fraction $\epsilon$ filled by gas around the fibers."""
         fiber = 0.10
         virgin = 0.10
         char = 0.05

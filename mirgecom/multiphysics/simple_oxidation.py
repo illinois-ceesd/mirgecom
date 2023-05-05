@@ -40,7 +40,7 @@ from arraycontext import (
 @dataclass_array_container
 @dataclass(frozen=True)
 class WallVars:
-    r"""Class of conserved variables.
+    r"""Class of conserved variables for wall oxidation.
 
     .. attribute:: mass
     .. attribute:: energy
@@ -58,14 +58,13 @@ class WallVars:
 
     def __reduce__(self):
         """Return a tuple reproduction of self for pickling."""
-        return (WallVars, tuple(getattr(self, f.name)
-                                    for f in fields(WallVars)))
+        return (WallVars, tuple(getattr(self, f.name) for f in fields(WallVars)))
 
 
 @dataclass_array_container
 @dataclass(frozen=True)
 class WallDependentVars:
-    """Dependent variables for the oxidation model."""
+    """Dependent variables for the Y2 oxidation model."""
 
     tau: DOFArray
     thermal_conductivity: DOFArray
@@ -74,7 +73,13 @@ class WallDependentVars:
 
 
 class SimpleOxidationWallModel:
-    """Variables dependent on the wall state.
+    """Oxidation model used for the Y2 prediction.
+
+    This class evaluates the variables dependent on the wall state. It requires
+    functions are inputs in order to consider the different materials employed
+    at wall (for instance, carbon fibers, graphite, alumina, steel etc). The
+    number and type of material is case dependent and, hence, must be defined
+    at the respective simulation driver.
 
     .. automethod:: __init__
     .. automethod:: eval_tau
@@ -90,14 +95,14 @@ class SimpleOxidationWallModel:
                  enthalpy_func, heat_capacity_func, thermal_conductivity_func,
                  oxygen_diffusivity_func):
         """
-        Initialize the boundary condition.
+        Initialize the model.
 
         Parameters
         ----------
         solid_data:
             The class with the solid properties of the desired material.
         wall_sample_mask: meshmode.dof_array.DOFArray
-            Array with 1 for the reactive wall and 0 otherwise
+            Array with 1 for the reactive part of the wall and 0 otherwise.
         enthalpy_func:
             function that computes the enthalpy of the entire wall.
             Must include the non-reactive part of the wall, if existing.
@@ -137,7 +142,14 @@ class SimpleOxidationWallModel:
         )
 
     def eval_temperature(self, wv, tseed) -> DOFArray:
-        """Evaluate the temperature using Newton iteration.
+        r"""Evaluate the temperature using Newton iteration.
+
+        .. math::
+            T^{n+1} = T^n - \frac{h_s(T^n) - e(t)}{C_{p_s}(T^n)}
+
+        where $h_s(T^n)$ and $C_{p_s}(T^n)$ are evaluated every iteration $n$
+        until convergence towards the conserved energy $e(t)$. Note that, for
+        solids, both enthalpy and internal are exactly the same.
 
         Parameters
         ----------

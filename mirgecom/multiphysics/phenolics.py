@@ -55,7 +55,7 @@ class PhenolicsConservedVars:
         consider the void fraction:
 
         .. math::
-            \epsilon_g \rho_g      
+            \epsilon_g \rho_g
 
     .. attribute:: energy
 
@@ -205,9 +205,13 @@ class PhenolicsWallModel:
         """Initialize wall model for composite.
 
         solid_data:
-            The class with the solid properties of the desired material.
+            The class with the solid properties of the desired material. For
+            example, :class:`mirgecom.materials.tacot.SolidProperties` contains
+            data for TACOT.
         gas_data:
-            The class with properties of the product gases.
+            The class with properties of the product gases. For example,
+            :class:`mirgecom.materials.tacot.GasProperties` contains data for
+            gaseous products of TACOT decomposition.
         """
         self._solid_data = solid_data
         self._gas_data = gas_data
@@ -221,7 +225,8 @@ class PhenolicsWallModel:
         material exists:
 
         .. math::
-            \tau = \frac{\rho_0}{\rho_0 - \rho_c} \left( 1- \frac{\rho_c}{\rho(t)} \right)
+            \tau = \frac{\rho_0}{\rho_0 - \rho_c}
+                    \left( 1 - \frac{\rho_c}{\rho(t)} \right)
 
         Parameters
         ----------
@@ -237,14 +242,14 @@ class PhenolicsWallModel:
         r"""Evaluate the temperature.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
-        Newton iteration are used to get the temperature based on the internal
+        Newton iteration is used to get the temperature based on the internal
         energy/enthalpy and heat capacity for the bulk (solid+gas) material:
 
         .. math::
-            T^{n+1} = T^n - 
+            T^{n+1} = T^n -
                 \frac
-                {\epsilon_g \rho_g(h_g - R_g T^n) + \rho_s h_s}
-                {\epsilon_g \rho_g \left( 
+                {\epsilon_g \rho_g(h_g - R_g T^n) + \rho_s h_s - \rho e}
+                {\epsilon_g \rho_g \left(
                     C_{p_g} - R_g\left[1 - \frac{\partial M}{\partial T} \right]
                 \right)
                 + \epsilon_s \rho_s C_{p_s}
@@ -307,7 +312,6 @@ class PhenolicsWallModel:
         It is evaluated using a mass-weighted average given by
 
         .. math::
-
             \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
 
         Parameters
@@ -341,7 +345,6 @@ class PhenolicsWallModel:
         r"""Return the normalized pressure diffusivity.
 
         .. math::
-
             \frac{1}{\epsilon_g \rho_g} d_{P} = \frac{\mathbf{K}}{\mu \epsilon_g}
 
         where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
@@ -357,7 +360,6 @@ class PhenolicsWallModel:
         r"""Return the gas pressure.
 
         .. math::
-
             P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
         """
         Rg = 8314.46261815324/self.gas_molar_mass(temperature)  # noqa N806
@@ -368,11 +370,11 @@ class PhenolicsWallModel:
     def solid_density(self, wv: PhenolicsConservedVars) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
 
-        The material density is relative to the entire control volume and it
-        is computed as the sum of all N solid phases:
+        The material density is relative to the entire control volume, and
+        is not to be confused with the intrinsic density, hence the $\epsilon$
+        dependence. It is computed as the sum of all N solid phases:
 
         .. math::
-
             \epsilon_s \rho_s = \sum_i^N \epsilon_i \rho_i
         """
         return sum(wv.solid_species_mass)
@@ -391,18 +393,18 @@ class PhenolicsWallModel:
 
     # ~~~~~~~~~~~~ auxiliary functions
     def gas_heat_capacity_cp(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas heat capacity at constant pressure $C_p$."""
+        r"""Return the gas heat capacity at constant pressure $C_{p_g}$."""
         return self._gas_data.gas_heat_capacity(temperature)
 
     def solid_heat_capacity_cp(self, temperature: DOFArray,
                                tau: DOFArray) -> DOFArray:
-        r"""Return the solid heat capacity $C_p$."""
+        r"""Return the solid heat capacity $C_{p_s}$."""
         return self._solid_data.solid_heat_capacity(temperature, tau)
 
     # ~~~~~~~~~~~~
     def dependent_vars(self, wv: PhenolicsConservedVars,
             temperature_seed: DOFArray) -> PhenolicsDependentVars:
-        """Get the dependent variables."""
+        """Get the state-dependent variables."""
         tau = self.eval_tau(wv)
         temperature = self.eval_temperature(wv, temperature_seed, tau)
         return PhenolicsDependentVars(
