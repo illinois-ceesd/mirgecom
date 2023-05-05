@@ -1,5 +1,4 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
-
 .. autofunction:: grad_facial_flux_central
 .. autofunction:: grad_facial_flux_weighted
 .. autofunction:: diffusion_flux
@@ -24,10 +23,8 @@ in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
-
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -61,11 +58,8 @@ from mirgecom.utils import normalize_boundaries
 
 def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$.
-
     Uses a simple average of the two sides' values:
-
     .. math::
-
         F = -\frac{u^- + u^+}{2} \hat{n}.
     """
     return -u_tpair.avg * normal
@@ -73,11 +67,8 @@ def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
 
 def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$.
-
     Weights each side's value by the corresponding thermal conductivity $\kappa$:
-
     .. math::
-
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}.
     """
     actx = u_tpair.int.array_context
@@ -94,21 +85,15 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
 def diffusion_flux(kappa, grad_u):
     r"""
     Compute the diffusive flux $-\kappa \nabla u$.
-
     Parameters
     ----------
     kappa: float or :class:`meshmode.dof_array.DOFArray`
-
         The thermal conductivity.
-
     grad_u: numpy.ndarray
-
         Gradient of the state variable *u*.
-
     Returns
     -------
     meshmode.dof_array.DOFArray
-
         The diffusive flux.
     """
     return -kappa * grad_u
@@ -118,11 +103,8 @@ def diffusion_facial_flux_central(
         kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal, *,
         penalty_amount=None):
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$.
-
     Uses a simple average of the two sides' values:
-
     .. math::
-
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n}.
     """
     if penalty_amount is None:
@@ -146,12 +128,9 @@ def diffusion_facial_flux_harmonic(
         kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal, *,
         penalty_amount=None):
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$.
-
     Uses a modified average of the two sides' values that replaces $\kappa^-$
     and $\kappa^+$ with their harmonic mean:
-
     .. math::
-
         F = -\frac{2 \kappa^- \kappa^+}{\kappa^- + \kappa^+}\frac{u^- + u^+}{2}
                 \cdot \hat{n}.
     """
@@ -177,7 +156,6 @@ def diffusion_facial_flux_harmonic(
 class DiffusionBoundary(metaclass=abc.ABCMeta):
     """
     Diffusion boundary base class.
-
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
     """
@@ -201,17 +179,11 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 class DirichletDiffusionBoundary(DiffusionBoundary):
     r"""
     Dirichlet boundary condition for the diffusion operator.
-
     For the boundary condition $u|_\Gamma = f$, uses external data
-
     .. math::
-
                  u^+ &= 2 f - u^-
-
         (\nabla u)^+ &= (\nabla u)^-
-
     to compute boundary fluxes as shown in [Hesthaven_2008]_, Section 7.1.
-
     .. automethod:: __init__
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
@@ -220,7 +192,6 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     def __init__(self, value):
         """
         Initialize the boundary condition.
-
         Parameters
         ----------
         value: float or meshmode.dof_array.DOFArray
@@ -266,25 +237,16 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 class NeumannDiffusionBoundary(DiffusionBoundary):
     r"""
     Neumann boundary condition for the diffusion operator.
-
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma = g$, uses
     external data
-
     .. math::
-
         u^+ = u^-
-
     when computing the boundary fluxes for $\nabla u$, and uses
-
     .. math::
-
         (-\kappa \nabla u\cdot\mathbf{\hat{n}})|_\Gamma &=
             -\kappa^- (\nabla u\cdot\mathbf{\hat{n}})|_\Gamma
-
                                                         &= -\kappa^- g
-
     when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
-
     .. automethod:: __init__
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
@@ -293,7 +255,6 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     def __init__(self, value):
         """
         Initialize the boundary condition.
-
         Parameters
         ----------
         value: float or meshmode.dof_array.DOFArray
@@ -422,7 +383,6 @@ def grad_operator(
         u_tpairs=None):
     r"""
     Compute the gradient of *u*.
-
     Parameters
     ----------
     dcoll: grudge.discretization.DiscretizationCollection
@@ -445,7 +405,6 @@ def grad_operator(
         on the base discretization.
     comm_tag: Hashable
         Tag for distributed communication
-
     Returns
     -------
     grad_u: numpy.ndarray
@@ -535,11 +494,9 @@ def diffusion_operator(
         grad_u=None):
     r"""
     Compute the diffusion operator.
-
     The diffusion operator is defined as
     $\nabla\cdot(\kappa\nabla u)$, where $\kappa$ is the conductivity and
     $u$ is a scalar field.
-
     Parameters
     ----------
     dcoll: grudge.discretization.DiscretizationCollection
@@ -569,7 +526,6 @@ def diffusion_operator(
         on the base discretization.
     comm_tag: Hashable
         Tag for distributed communication
-
     Returns
     -------
     diff_u: meshmode.dof_array.DOFArray or numpy.ndarray
