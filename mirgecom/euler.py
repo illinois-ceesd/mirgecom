@@ -87,7 +87,8 @@ from functools import partial
 
 from grudge.trace_pair import (
     TracePair,
-    interior_trace_pairs
+    interior_trace_pairs,
+    tracepair_with_discr_tag
 )
 from grudge.dof_desc import as_dofdesc
 from grudge.projection import volume_quadrature_project
@@ -146,9 +147,6 @@ def entropy_stable_euler_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-    # dd_base = as_dofdesc("vol")
-    # dd_vol = DOFDesc("vol", quadrature_tag)
-    # dd_faces = DOFDesc("all_faces", quadrature_tag)
     # NOTE: For single-gas this is just a fixed scalar.
     # However, for mixtures, gamma is a DOFArray. For now,
     # we are re-using gamma from here and *not* recomputing
@@ -195,14 +193,8 @@ def entropy_stable_euler_operator(
         -volume_flux_differencing(dcoll, dd_vol_quad, dd_allfaces_quad,
                                   flux_matrices)
 
-    def interp_to_surf_quad(utpair):
-        local_dd = utpair.dd
-        local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
-        return TracePair(
-            local_dd_quad,
-            interior=op.project(dcoll, local_dd, local_dd_quad, utpair.int),
-            exterior=op.project(dcoll, local_dd, local_dd_quad, utpair.ext)
-        )
+    # transfer trace pairs to quad grid, update pair dd
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
     tseed_interior_pairs = None
     if state.is_mixture:
@@ -220,20 +212,23 @@ def entropy_stable_euler_operator(
                                                         comm_tag))
         ]
 
-    def _interp_to_surf_modified_conservedvars(gamma, utpair):
+    def _interp_to_surf_modified_conservedvars(gamma, ev_pair):
         # Takes a trace pair containing the projected entropy variables
         # and converts them into conserved variables on the quadrature grid.
-        local_dd = utpair.dd
+        local_dd = ev_pair.dd
         local_dd_quad = local_dd.with_discr_tag(quadrature_tag)
+
         # Interpolate entropy variables to the surface quadrature grid
-        vtilde_tpair = op.project(dcoll, local_dd, local_dd_quad, utpair)
+        ev_pair_surf = op.project(dcoll, local_dd, local_dd_quad, ev_pair)
+
         if isinstance(gamma, DOFArray):
             gamma = op.project(dcoll, dd_vol, local_dd_quad, gamma)
+
         return TracePair(
             local_dd_quad,
             # Convert interior and exterior states to conserved variables
-            interior=entropy_to_conservative_vars(gamma, vtilde_tpair.int),
-            exterior=entropy_to_conservative_vars(gamma, vtilde_tpair.ext)
+            interior=entropy_to_conservative_vars(gamma, ev_pair_surf.int),
+            exterior=entropy_to_conservative_vars(gamma, ev_pair_surf.ext)
         )
 
     cv_interior_pairs = [

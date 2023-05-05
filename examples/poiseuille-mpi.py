@@ -448,11 +448,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                             state=fluid_state, time=t, use_esdg=use_esdg,
                             quadrature_tag=quadrature_tag)
 
+    from mirgecom.simutil import force_evaluation
+    current_state = force_evaluation(actx, current_state)
+
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
-    from mirgecom.simutil import force_evaluation
-    current_state = force_evaluation(actx, current_state)
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
@@ -464,6 +465,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
+
     final_dv = current_state.dv
     final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
