@@ -27,7 +27,7 @@ THE SOFTWARE.
 import logging
 from mirgecom.mpi import mpi_entry_point
 import numpy as np
-from functools import partial
+from functools import partial, update_wrapper
 from pytools.obj_array import make_obj_array
 import pyopencl as cl
 
@@ -115,8 +115,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         queue = cl.CommandQueue(cl_ctx)
 
-    ns_op = partial(ns_operator, use_esdg=use_esdg)
-
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    from mirgecom.viscous import viscous_facial_flux_harmonic
+    inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
+    viscous_numerical_flux_func = viscous_facial_flux_harmonic
+    ns_op = partial(ns_operator, use_esdg=use_esdg,
+                    inviscid_numerical_flux_func=inviscid_numerical_flux_func,
+                    viscous_numerical_flux_func=viscous_numerical_flux_func)
+    update_wrapper(ns_op, ns_operator)
     from mirgecom.simutil import get_reasonable_memory_pool
     alloc = get_reasonable_memory_pool(cl_ctx, queue)
 
