@@ -1268,7 +1268,7 @@ if __name__ == "__main__":
         help="Turn off force lazy eval between timesteps")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--esdg", action="store_true", default=True,
+    parser.add_argument("--esdg", action="store_true",
         help="use entropy-stable for inviscid terms")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")

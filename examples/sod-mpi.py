@@ -106,7 +106,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.2
+    t_final = 1e-4
     current_cfl = 0.01
     current_dt = 1e-6
     current_t = 0

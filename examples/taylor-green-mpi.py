@@ -69,7 +69,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context,
-         order=1, t_final=1, resolution=8,
+         order=1, t_final=1, resolution=4,
          use_logmgr=True, lazy=False,
          use_overintegration=False, use_esdg=False,
          use_profiling=False, casename=None,
@@ -108,7 +108,7 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     # timestepping control
     current_step = 0
     timestepper = lsrk54_step
-    t_final = 1
+    t_final = 5e-3
     current_cfl = 1.0
     current_dt = 1e-3
     current_t = 0
@@ -120,7 +120,7 @@ def main(actx_class, ctx_factory=cl.create_some_context,
     nviz = 100
     nhealth = 100
 
-    dim = 2
+    dim = 3
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
