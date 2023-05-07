@@ -245,10 +245,8 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         use_kappa_weighted_grad_flux: bool
 
         """
-        InterfaceFluidBoundary.__init__(
-            self,
-            flux_penalty_amount=flux_penalty_amount,
-            lengthscales_minus=lengthscales_minus)
+        self._flux_penalty_amount=flux_penalty_amount
+        self._lengthscales_minus=lengthscales_minus
 
         self._coupled = _MultiphysicsCoupledHarmonicMeanBoundaryComponent(
             state_plus=state_plus,
@@ -421,10 +419,8 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         use_kappa_weighted_grad_flux: bool
 
         """
-        InterfaceFluidBoundary.__init__(
-            self,
-            flux_penalty_amount=flux_penalty_amount,
-            lengthscales_minus=lengthscales_minus)
+        self._flux_penalty_amount=flux_penalty_amount
+        self._lengthscales_minus=lengthscales_minus
 
         self._coupled = _MultiphysicsCoupledHarmonicMeanBoundaryComponent(
             state_plus=state_plus,
@@ -515,7 +511,7 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         """
         Return the viscous flux as defined by
         :meth:`mirgecom.boundary.MengaldoBoundaryCondition.viscous_divergence_flux`
-        with the additional heat flux interior penalty term.
+        with the additional flux penalty term.
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
@@ -891,7 +887,7 @@ def coupled_grad_t_operator(
             comm_tag=_WallGradTag))
 
 
-def coupled_ns_heat_operator(
+def coupled_ns_operator(
         dcoll,
         gas_model,
         fluid_dd, wall_dd,
