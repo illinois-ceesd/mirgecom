@@ -39,7 +39,7 @@ from arraycontext import (
                            rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
-class PhenolicsConservedVars:
+class WallConservedVars:
     r"""Store and resolve quantities according to the conservation equations.
 
     .. attribute:: solid_species_mass
@@ -73,13 +73,13 @@ class PhenolicsConservedVars:
 
     @property
     def array_context(self):
-        """Return an array context for :class:`PhenolicsConservedVars` object."""
+        """Return an array context for :class:`WallConservedVars` object."""
         return get_container_context_recursively(self.energy)
 
     def __reduce__(self):
         """Return a tuple reproduction of self for pickling."""
-        return (PhenolicsConservedVars, tuple(getattr(self, f.name)
-                                    for f in fields(PhenolicsConservedVars)))
+        return (WallConservedVars, tuple(getattr(self, f.name)
+                                    for f in fields(WallConservedVars)))
 
     @property
     def nphase(self):
@@ -113,7 +113,7 @@ def initializer(wall_model, solid_species_mass, temperature, gas_density=None,
 
     Returns
     -------
-    wv: :class:`PhenolicsConservedVars`
+    wv: :class:`WallConservedVars`
         The wall conserved variables
     """
     if gas_density is None and pressure is None:
@@ -140,13 +140,13 @@ def initializer(wall_model, solid_species_mass, temperature, gas_density=None,
         + eps_rho_gas*(wall_model.gas_enthalpy(temperature) - Rg*temperature)
     )
 
-    return PhenolicsConservedVars(solid_species_mass=solid_species_mass,
+    return WallConservedVars(solid_species_mass=solid_species_mass,
         energy=bulk_energy, gas_density=eps_rho_gas)
 
 
 @dataclass_array_container
 @dataclass(frozen=True)
-class PhenolicsDependentVars:
+class WallDependentVars:
     """State-dependent quantities.
 
     .. attribute:: tau
@@ -217,7 +217,7 @@ class PhenolicsWallModel:
         self._gas_data = gas_data
 
     # ~~~~~~~~~~~~
-    def eval_tau(self, wv: PhenolicsConservedVars) -> DOFArray:
+    def eval_tau(self, wv: WallConservedVars) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
@@ -230,7 +230,7 @@ class PhenolicsWallModel:
 
         Parameters
         ----------
-        wv: :class:`PhenolicsConservedVars`
+        wv: :class:`WallConservedVars`
             the class of conserved variables for the pyrolysis
         """
         char_mass = self._solid_data._char_mass
@@ -257,7 +257,7 @@ class PhenolicsWallModel:
 
         Parameters
         ----------
-        wv: :class:`PhenolicsConservedVars`
+        wv: :class:`WallConservedVars`
         tseed: float or :class:`~meshmode.dof_array.DOFArray`
             Optional data from which to seed temperature calculation.
         tau: :class:`~meshmode.dof_array.DOFArray`
@@ -316,7 +316,7 @@ class PhenolicsWallModel:
 
         Parameters
         ----------
-        wv: :class:`PhenolicsConservedVars`
+        wv: :class:`WallConservedVars`
         temperature: meshmode.dof_array.DOFArray
         tau: meshmode.dof_array.DOFArray
         """
@@ -355,7 +355,7 @@ class PhenolicsWallModel:
         permeability = self.solid_permeability(tau)
         return permeability/(mu*epsilon)
 
-    def gas_pressure(self, wv: PhenolicsConservedVars,
+    def gas_pressure(self, wv: WallConservedVars,
                      temperature: DOFArray, tau: DOFArray) -> DOFArray:
         r"""Return the gas pressure.
 
@@ -367,7 +367,7 @@ class PhenolicsWallModel:
         return (1.0/eps_gas)*wv.gas_density*Rg*temperature
 
     # ~~~~~~~~~~~~ solid
-    def solid_density(self, wv: PhenolicsConservedVars) -> DOFArray:
+    def solid_density(self, wv: WallConservedVars) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
 
         The material density is relative to the entire control volume, and
@@ -402,12 +402,12 @@ class PhenolicsWallModel:
         return self._solid_data.solid_heat_capacity(temperature, tau)
 
     # ~~~~~~~~~~~~
-    def dependent_vars(self, wv: PhenolicsConservedVars,
-            temperature_seed: DOFArray) -> PhenolicsDependentVars:
+    def dependent_vars(self, wv: WallConservedVars,
+            temperature_seed: DOFArray) -> WallConservedVars:
         """Get the state-dependent variables."""
         tau = self.eval_tau(wv)
         temperature = self.eval_temperature(wv, temperature_seed, tau)
-        return PhenolicsDependentVars(
+        return WallDependentVars(
             tau=tau,
             progress=1.0-tau,
             temperature=temperature,
