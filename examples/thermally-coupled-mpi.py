@@ -97,6 +97,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if casename is None:
         casename = "mirgecom"
 
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        from warnings import warn
+        warn("This example requires a coupling-enabled branch of grudge; exiting.")
+        return
+
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()

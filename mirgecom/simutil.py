@@ -78,7 +78,7 @@ from meshmode.dof_array import DOFArray
 from mirgecom.viscous import get_viscous_timestep
 
 from typing import List, Dict, Optional
-from grudge.discretization import DiscretizationCollection, PartID
+from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
 import pyopencl as cl
@@ -891,6 +891,9 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
 
             if np.any(volume_index_per_element < 0):
                 raise ValueError("Missing volume specification for some elements.")
+
+            from grudge.discretization import \
+                PartID  # pylint: disable=no-name-in-module
 
             part_id_to_elements = {
                 PartID(volumes[vol_idx], rank):

@@ -53,7 +53,6 @@ from abc import abstractmethod
 
 from grudge.trace_pair import (
     TracePair,
-    inter_volume_trace_pairs
 )
 from grudge.dof_desc import (
     DISCR_TAG_BASE,
@@ -661,6 +660,8 @@ def _kappa_inter_volume_trace_pairs(
 
     pairwise_kappa = {
         (fluid_dd, wall_dd): (fluid_kappa, wall_kappa)}
+    from grudge.trace_pair import \
+        inter_volume_trace_pairs  # pylint: disable=no-name-in-module
     return inter_volume_trace_pairs(
         dcoll, pairwise_kappa, comm_tag=_KappaInterVolTag)
 
@@ -674,6 +675,8 @@ def _temperature_inter_volume_trace_pairs(
     pairwise_temperature = {
         (fluid_dd, wall_dd):
             (fluid_state.temperature, wall_temperature)}
+    from grudge.trace_pair import \
+        inter_volume_trace_pairs  # pylint: disable=no-name-in-module
     return inter_volume_trace_pairs(
         dcoll, pairwise_temperature, comm_tag=_TemperatureInterVolTag)
 
@@ -687,6 +690,8 @@ def _grad_temperature_inter_volume_trace_pairs(
     pairwise_grad_temperature = {
         (fluid_dd, wall_dd):
             (fluid_grad_temperature, wall_grad_temperature)}
+    from grudge.trace_pair import \
+        inter_volume_trace_pairs  # pylint: disable=no-name-in-module
     return inter_volume_trace_pairs(
         dcoll, pairwise_grad_temperature, comm_tag=_GradTemperatureInterVolTag)
 
