@@ -46,6 +46,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import sys
 # from dataclasses import replace
 import numpy as np
 # from abc import abstractmethod
@@ -76,6 +77,7 @@ from mirgecom.gas_model import (
     # replace_fluid_state,
     make_fluid_state,
     make_operator_fluid_states,
+    ViscousFluidState
 )
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
@@ -139,12 +141,56 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         self._grad_t_plus = grad_t_plus
         self._use_kappa_weighted_bc = use_kappa_weighted_bc
 
-    def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
-        if self._grad_cv_plus is None:
-            raise ValueError(
-                "Boundary does not have external CV gradient data.")
-        grad_cv_plus = _project_from_base(dcoll, dd_bdry, self._grad_cv_plus)
-        return (grad_cv_plus + grad_cv_minus)/2
+    def state_plus():
+        return self._state_plus
+
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus):
+        mass_bc = 0.5*(state_minus.mass_density + self._state_plus.mass_density)
+
+        u_bc = self.velocity_bc(dcoll, dd_bdry,
+            state_minus.tv.viscosity, state_minus.cv.velocity)
+
+        t_bc = self.temperature_bc(dcoll, dd_bdry,
+            state_minus.tv.thermal_conductivity, state_minus.temperature)
+
+        y_bc = self.species_mass_fractions_bc(dcoll, dd_bdry,
+            state_minus.tv.species_diffusivity, state_minus.species_mass_fractions)
+
+        internal_energy_bc = gas_model.eos.get_internal_energy(
+            temperature=t_bc, species_mass_fractions=y_bc)
+
+        # general case
+        total_energy_bc = mass_bc*(internal_energy_bc + 0.5*np.dot(u_bc, u_bc))
+
+        smoothness_mu = 0.5*(
+            state_minus.dv.smoothness_mu + self._state_plus.dv.smoothness_mu)
+        smoothness_kappa = 0.5*(
+            state_minus.dv.smoothness_kappa + self._state_plus.dv.smoothness_kappa)
+        smoothness_beta = 0.5*(
+            state_minus.dv.smoothness_beta + self._state_plus.dv.smoothness_beta)
+
+        cv_bc = make_conserved(dim=dcoll.dim, mass=mass_bc, momentum=mass_bc*u_bc,
+            energy=total_energy_bc, species_mass=mass_bc*y_bc)
+
+        state_bc = make_fluid_state(cv=cv_bc, gas_model=gas_model,
+            temperature_seed=t_bc, smoothness_mu=smoothness_mu,
+            smoothness_kappa=smoothness_kappa, smoothness_beta=smoothness_beta)
+
+        new_kappa = harmonic_mean(state_minus.tv.thermal_conductivity,
+                                  self._state_plus.tv.thermal_conductivity)
+        new_diff = harmonic_mean(state_minus.tv.species_diffusivity,
+                                 self._state_plus.tv.species_diffusivity)
+        new_mu = harmonic_mean(state_minus.tv.viscosity,
+                               self._state_plus.tv.viscosity)
+
+        new_tv = GasTransportVars(
+            bulk_viscosity=state_bc.tv.bulk_viscosity,
+            viscosity=new_mu,
+            thermal_conductivity=new_kappa,
+            species_diffusivity=new_diff
+        )
+
+        return ViscousFluidState(cv=state_bc.cv, dv=state_bc.dv, tv=new_tv)
 
     def velocity_bc(self, dcoll, dd_bdry, kappa_minus, u_minus):
         u_plus = _project_from_base(dcoll, dd_bdry, self._state_plus.velocity)
@@ -191,6 +237,13 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
 #    def temperature_plus(self, dcoll, dd_bdry):
 #        return _project_from_base(dcoll, dd_bdry, self._state_plus.temperature)
+
+    def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
+        if self._grad_cv_plus is None:
+            raise ValueError(
+                "Boundary does not have external CV gradient data.")
+        grad_cv_plus = _project_from_base(dcoll, dd_bdry, self._grad_cv_plus)
+        return (grad_cv_plus + grad_cv_minus)/2
 
     def grad_temperature_bc(
             self, dcoll, dd_bdry, grad_t_minus):
@@ -245,6 +298,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         use_kappa_weighted_grad_flux: bool
 
         """
+        self._state_plus=state_plus
         self._flux_penalty_amount=flux_penalty_amount
         self._lengthscales_minus=lengthscales_minus
 
@@ -262,56 +316,12 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     def state_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
         dd_bdry = as_dofdesc(dd_bdry)
-
-        mass_bc = 0.5*(state_minus.mass_density + self._state_plus.mass_density)
-
-        u_bc = self._coupled.velocity_bc(dcoll, dd_bdry,
-            state_minus.tv.viscosity, state_minus.cv.velocity)
-
-        t_bc = self._coupled.temperature_bc(dcoll, dd_bdry,
-            state_minus.tv.thermal_conductivity, state_minus.temperature)
-
-        y_bc = self._coupled.species_mass_fractions_bc(dcoll, dd_bdry,
-            state_minus.tv.species_diffusivity, state_minus.species_mass_fractions)
-
-        internal_energy_bc = gas_model.eos.get_internal_energy(
-            temperature=t_bc, species_mass_fractions=y_bc)
-
-        # general case
-        total_energy_bc = mass_bc*(internal_energy_bc + 0.5*np.dot(u_bc, u_bc))
-
-        smoothness_mu = 0.5*(
-            state_minus.dv.smoothness_mu + self._state_plus.dv.smoothness_mu)
-        smoothness_kappa = 0.5*(
-            state_minus.dv.smoothness_kappa + self._state_plus.dv.smoothness_kappa)
-        smoothness_beta = 0.5*(
-            state_minus.dv.smoothness_beta + self._state_plus.dv.smoothness_beta)
-
-        cv_bc = make_conserved(dim=dcoll.dim, mass=mass_bc, momentum=mass_bc*u_bc,
-            energy=total_energy_bc, species_mass=mass_bc*y_bc)
-
-        state_bc = make_fluid_state(cv=cv_bc, gas_model=gas_model,
-            temperature_seed=t_bc, smoothness_mu=smoothness_mu,
-            smoothness_kappa=smoothness_kappa, smoothness_beta=smoothness_beta)
-
-        new_kappa = harmonic_mean(state_minus.tv.thermal_conductivity,
-                                  self._state_plus.tv.thermal_conductivity)
-        new_diff = harmonic_mean(state_minus.tv.species_diffusivity,
-                                 self._state_plus.tv.species_diffusivity)
-        new_mu = harmonic_mean(state_minus.tv.viscosity,
-                               self._state_plus.tv.viscosity)
-
-        return GasTransportVars(
-            bulk_viscosity=state_bc.tv.bulk_viscosity,
-            viscosity=new_mu,
-            thermal_conductivity=new_kappa,
-            species_diffusivity=new_diff
-        )
+        return self._coupled.state_bc(dcoll, dd_bdry, gas_model, state_minus)
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, normal,
             **kwargs):  # noqa: D102
-        return self._coupled.grad_cv_bc(dcoll, dd_bdry)
+        return self._coupled.grad_cv_bc(dcoll, dd_bdry, grad_cv_minus)
 
 #    def temperature_plus(
 #            self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
@@ -353,9 +363,9 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         lengthscales_minus = _project_from_base(
             dcoll, dd_bdry, self._lengthscales_minus)
 
-        tau = (
-            self._penalty_amount * state_bc.thermal_conductivity
-            / lengthscales_minus)
+        tau_mu = self._flux_penalty_amount * state_bc.tv.viscosity / lengthscales_minus
+        tau_kappa = self._flux_penalty_amount * state_bc.tv.thermal_conductivity / lengthscales_minus
+        tau_diff = self._flux_penalty_amount * state_bc.tv.species_diffusivity / lengthscales_minus
 
 #        t_minus = state_minus.temperature
 #        t_plus = self.temperature_plus(
@@ -363,14 +373,13 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
 
         # XXX double check this
         return make_conserved(dim=dcoll.dim,
-            mass=flux_without_penalty.mass
-            - tau*(self._state_plus.cv.mass - state_minus.cv.mass),
+            mass=flux_without_penalty.mass,
             momentum=flux_without_penalty.momentum
-            - tau*(self._state_plus.cv.momentum - state_minus.cv.momentum),
+            - tau_mu*(self._state_plus.cv.momentum - state_minus.cv.momentum),
             energy=flux_without_penalty.energy
-            - tau*(self._state_plus.temperature - state_minus.temperature),
-            species_mass=flux_without_penalty.momentum
-            - tau*(self._state_plus.cv.species_mass - state_minus.cv.species_mass)
+            - tau_kappa*(self._state_plus.temperature - state_minus.temperature),
+            species_mass=flux_without_penalty.species_mass
+            - tau_diff*(self._state_plus.cv.species_mass - state_minus.cv.species_mass)
         )
 
 
@@ -419,6 +428,7 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         use_kappa_weighted_grad_flux: bool
 
         """
+        self._state_plus=state_plus
         self._flux_penalty_amount=flux_penalty_amount
         self._lengthscales_minus=lengthscales_minus
 
@@ -436,56 +446,12 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
     def state_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
         dd_bdry = as_dofdesc(dd_bdry)
-
-        mass_bc = 0.5*(state_minus.mass_density + self._state_plus.mass_density)
-
-        u_bc = self._coupled.velocity_bc(dcoll, dd_bdry,
-            state_minus.tv.viscosity, state_minus.cv.velocity)
-
-        t_bc = self._coupled.temperature_bc(dcoll, dd_bdry,
-            state_minus.tv.thermal_conductivity, state_minus.temperature)
-
-        y_bc = self._coupled.species_mass_fractions_bc(dcoll, dd_bdry,
-            state_minus.tv.species_diffusivity, state_minus.species_mass_fractions)
-
-        internal_energy_bc = gas_model.eos.get_internal_energy(
-            temperature=t_bc, species_mass_fractions=y_bc)
-
-        # general case
-        total_energy_bc = mass_bc*(internal_energy_bc + 0.5*np.dot(u_bc, u_bc))
-
-        smoothness_mu = 0.5*(
-            state_minus.dv.smoothness_mu + self._state_plus.dv.smoothness_mu)
-        smoothness_kappa = 0.5*(
-            state_minus.dv.smoothness_kappa + self._state_plus.dv.smoothness_kappa)
-        smoothness_beta = 0.5*(
-            state_minus.dv.smoothness_beta + self._state_plus.dv.smoothness_beta)
-
-        cv_bc = make_conserved(dim=dcoll.dim, mass=mass_bc, momentum=mass_bc*u_bc,
-            energy=total_energy_bc, species_mass=mass_bc*y_bc)
-
-        state_bc = make_fluid_state(cv=cv_bc, gas_model=gas_model,
-            temperature_seed=t_bc, smoothness_mu=smoothness_mu,
-            smoothness_kappa=smoothness_kappa, smoothness_beta=smoothness_beta)
-
-        new_kappa = harmonic_mean(state_minus.tv.thermal_conductivity,
-                                  self._state_plus.tv.thermal_conductivity)
-        new_diff = harmonic_mean(state_minus.tv.species_diffusivity,
-                                 self._state_plus.tv.species_diffusivity)
-        new_mu = harmonic_mean(state_minus.tv.viscosity,
-                               self._state_plus.tv.viscosity)
-
-        return GasTransportVars(
-            bulk_viscosity=state_bc.tv.bulk_viscosity,
-            viscosity=new_mu,
-            thermal_conductivity=new_kappa,
-            species_diffusivity=new_diff
-        )
+        return self._coupled.state_bc(dcoll, dd_bdry, gas_model, state_minus)
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, normal,
             **kwargs):  # noqa: D102
-        return self._coupled.grad_cv_bc(dcoll, dd_bdry)
+        return self._coupled.grad_cv_bc(dcoll, dd_bdry, grad_cv_minus)
 
 #    def temperature_plus(
 #            self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
@@ -527,9 +493,9 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         lengthscales_minus = _project_from_base(
             dcoll, dd_bdry, self._lengthscales_minus)
 
-        tau = (
-            self._penalty_amount * state_bc.thermal_conductivity
-            / lengthscales_minus)
+        tau_mu = self._flux_penalty_amount * state_bc.tv.viscosity / lengthscales_minus
+        tau_kappa = self._flux_penalty_amount * state_bc.tv.thermal_conductivity / lengthscales_minus
+        tau_diff = self._flux_penalty_amount * state_bc.tv.species_diffusivity / lengthscales_minus
 
 #        t_minus = state_minus.temperature
 #        t_plus = self.temperature_plus(
@@ -537,14 +503,13 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
 
         # XXX double check this
         return make_conserved(dim=dcoll.dim,
-            mass=flux_without_penalty.mass
-            - tau*(self._state_plus.cv.mass - state_minus.cv.mass),
+            mass=flux_without_penalty.mass,
             momentum=flux_without_penalty.momentum
-            - tau*(self._state_plus.cv.momentum - state_minus.cv.momentum),
+            - tau_mu*(self._state_plus.cv.momentum - state_minus.cv.momentum),
             energy=flux_without_penalty.energy
-            - tau*(self._state_plus.temperature - state_minus.temperature),
-            species_mass=flux_without_penalty.momentum
-            - tau*(self._state_plus.cv.species_mass - state_minus.cv.species_mass)
+            - tau_kappa*(self._state_plus.temperature - state_minus.temperature),
+            species_mass=flux_without_penalty.species_mass
+            - tau_diff*(self._state_plus.cv.species_mass - state_minus.cv.species_mass)
         )
 
 
@@ -634,7 +599,7 @@ def get_interface_boundaries(
                     dcoll,
                     gas_model,
                     fluid_dd, wall_dd,
-                    fluid_grad_temperature, wall_grad_temperature)
+                    fluid_grad_cv, wall_grad_cv)
         else:
             grad_cv_inter_vol_tpairs = _grad_cv_inter_vol_tpairs
 
@@ -665,6 +630,11 @@ def get_interface_boundaries(
                 fluid_state.array_context, dcoll, fluid_dd)
             * (0*fluid_state.temperature+1))
 
+        wall_lengthscales = (
+            characteristic_lengthscales(
+                wall_state.array_context, dcoll, wall_dd)
+            * (0*wall_state.temperature+1))
+
         # Construct interface boundaries with temperature gradient
 
         fluid_interface_boundaries = {
@@ -688,12 +658,12 @@ def get_interface_boundaries(
                 grad_temperature_tpair.ext,
                 wall_penalty_amount,
                 lengthscales_minus=op.project(dcoll,
-                    fluid_dd, state_tpair.dd, fluid_lengthscales),
+                    wall_dd, state_tpair.dd, wall_lengthscales),
                 use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
             for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
-                state_inter_vol_tpairs[wall_dd, fluid_dd],
-                grad_cv_inter_vol_tpairs[wall_dd, fluid_dd],
-                grad_temperature_inter_vol_tpairs[wall_dd, fluid_dd])}
+                state_inter_vol_tpairs[fluid_dd, wall_dd],
+                grad_cv_inter_vol_tpairs[fluid_dd, wall_dd],
+                grad_temperature_inter_vol_tpairs[fluid_dd, wall_dd])}
     else:
 
         # Construct interface boundaries without gradient
@@ -708,7 +678,7 @@ def get_interface_boundaries(
             state_tpair.dd.domain_tag: InterfaceWallBoundary(
                 state_tpair.ext,
                 use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
-            for state_tpair in state_inter_vol_tpairs[wall_dd, fluid_dd]}
+            for state_tpair in state_inter_vol_tpairs[fluid_dd, wall_dd]}
 
     return fluid_interface_boundaries, wall_interface_boundaries
 
@@ -797,7 +767,8 @@ def coupled_grad_cv_operator(
             time=time, quadrature_tag=quadrature_tag,
             numerical_flux_func=fluid_numerical_flux_func, dd=wall_dd,
             operator_states_quad=_wall_operator_states_quad,
-            comm_tag=_WallGradTag))
+            comm_tag=_WallGradTag)
+    )
 
 
 def coupled_grad_t_operator(
@@ -952,7 +923,6 @@ def coupled_ns_operator(
     wall_all_boundaries_no_grad.update(wall_interface_boundaries_no_grad)
 
     # Get the operator fluid states
-
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
         quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag,
@@ -963,8 +933,8 @@ def coupled_ns_operator(
         quadrature_tag, dd=wall_dd, comm_tag=_WallOpStatesTag,
         limiter_func=limiter_func)
 
-    # Compute the CV gradient for both subdomains
-    fluid_grad_cv, wall_grad_cv = coupled_grad_cv_operator(
+    # Compute the temperature gradient for both subdomains
+    fluid_grad_temperature, wall_grad_temperature = coupled_grad_t_operator(
         dcoll,
         gas_model,
         fluid_dd, wall_dd,
@@ -974,16 +944,15 @@ def coupled_ns_operator(
         interface_noslip=interface_noslip,
         use_kappa_weighted_grad_flux_in_fluid=use_kappa_weighted_grad_flux_in_fluid,
         quadrature_tag=quadrature_tag,
-        fluid_numerical_flux_func=fluid_operator_states_quad,
+        fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
         _state_inter_vol_tpairs=state_inter_volume_trace_pairs,
         _fluid_operator_states_quad=fluid_operator_states_quad,
         _wall_operator_states_quad=wall_operator_states_quad,
         _fluid_interface_boundaries_no_grad=fluid_interface_boundaries_no_grad,
         _wall_interface_boundaries_no_grad=wall_interface_boundaries_no_grad)
 
-    # Compute the temperature gradient for both subdomains
-
-    fluid_grad_temperature, wall_grad_temperature = coupled_grad_t_operator(
+    # Compute the CV gradient for both subdomains
+    fluid_grad_cv, wall_grad_cv = coupled_grad_cv_operator(
         dcoll,
         gas_model,
         fluid_dd, wall_dd,
@@ -1009,6 +978,8 @@ def coupled_ns_operator(
             gas_model=gas_model,
             fluid_dd=fluid_dd, wall_dd=wall_dd,
             fluid_state=fluid_state, wall_state=wall_state,
+            fluid_grad_cv=fluid_grad_cv,
+            wall_grad_cv=wall_grad_cv,
             fluid_grad_temperature=fluid_grad_temperature,
             wall_grad_temperature=wall_grad_temperature,
             interface_noslip=interface_noslip,

@@ -169,15 +169,15 @@ class SingleLevelFilter(logging.Filter):
             return (record.levelno == self.passlevel)
 
 
-h1 = logging.StreamHandler(sys.stdout)
-f1 = SingleLevelFilter(logging.INFO, False)
-h1.addFilter(f1)
-root_logger = logging.getLogger()
-root_logger.addHandler(h1)
-h2 = logging.StreamHandler(sys.stderr)
-f2 = SingleLevelFilter(logging.INFO, True)
-h2.addFilter(f2)
-root_logger.addHandler(h2)
+#h1 = logging.StreamHandler(sys.stdout)
+#f1 = SingleLevelFilter(logging.INFO, False)
+#h1.addFilter(f1)
+#root_logger = logging.getLogger()
+#root_logger.addHandler(h1)
+#h2 = logging.StreamHandler(sys.stderr)
+#f2 = SingleLevelFilter(logging.INFO, True)
+#h2.addFilter(f2)
+#root_logger.addHandler(h2)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -246,7 +246,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     rst_pattern = rst_path+"{cname}-{step:06d}-{rank:04d}.pkl"
 
     # default i/o frequencies
-    nviz = 25000
+    nviz = 500
     nrestart = 25000
     nhealth = 1
     nstatus = 100
@@ -256,15 +256,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # default timestepping control
 #    integrator = "compiled_lsrk45"
     integrator = "ssprk43"
-    current_dt = 2.5e-6 #order == 2
+    current_dt = 4.0e-5 #order == 2
     t_final = 2.0
 
     local_dt = False
-    constant_cfl = True
+    constant_cfl = False
     current_cfl = 0.4
     
     # discretization and model control
-    order = 4
+    order = 3
     use_overintegration = False
 
     speedup_factor = 1
@@ -388,7 +388,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from grudge.dof_desc import DISCR_TAG_MODAL
     from meshmode.transform_metadata import FirstAxisIsElementsTag
 
-    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
+    def _limit_fluid_cv(cv, pressure, temperature, dd):
 
         # limit species
         spec_lim = make_obj_array([
@@ -417,12 +417,19 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
             momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
 
-    def _get_fluid_state(cv, temp_seed, limiter_dd):
+    def _get_fluid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model,
             temperature_seed=temp_seed, limiter_func=_limit_fluid_cv,
-            limiter_dd=limiter_dd)
+            limiter_dd=dd_vol_fluid)
 
     get_fluid_state = actx.compile(_get_fluid_state)
+
+    def _get_solid_state(cv, temp_seed):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+            temperature_seed=temp_seed, limiter_func=_limit_fluid_cv,
+            limiter_dd=dd_vol_solid)
+
+    get_solid_state = actx.compile(_get_solid_state)
 
 ##################################
 
@@ -449,6 +456,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             from meshmode.mesh.io import read_gmsh
             mesh, tag_to_elements = read_gmsh(
                 "multivolume-v2.msh", force_ambient_dim=2,
+#                "multivolume.msh", force_ambient_dim=2,
                 return_tag_to_elements_map=True)
             volume_to_tags = {
                 "Fluid": ["Upper"],
@@ -544,13 +552,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             current_wv = restart_data["wv"]
             wv_tseed = restart_data["wall_temperature_seed"]
 
+    first_step = force_evaluation(actx, current_step)
+
     current_cv = force_evaluation(actx, current_cv)
     tseed = force_evaluation(actx, tseed)
-    fluid_state = get_fluid_state(current_cv, tseed, dd_vol_fluid)
+    fluid_state = get_fluid_state(current_cv, tseed)
 
     current_wv = force_evaluation(actx, current_wv)
     wv_tseed = force_evaluation(actx, wv_tseed)
-    solid_state = get_fluid_state(current_wv, wv_tseed, dd_vol_solid)
+    solid_state = get_solid_state(current_wv, wv_tseed)
 
 ##############################################################################
 
@@ -596,7 +606,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     solid_boundaries = {
         dd_vol_solid.trace("Lower Sides").domain_tag:  # pylint: disable=no-member
-        NeumannDiffusionBoundary(0.0)}
+        AdiabaticSlipBoundary()}
 
 ##############################################################################
 
@@ -726,11 +736,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         wv_tseed = force_evaluation(actx, wv_tseed)
 
         # construct species-limited fluid state
-        fluid_state = get_fluid_state(cv, tseed, dd_vol_fluid)
+        fluid_state = get_fluid_state(cv, tseed)
         cv = fluid_state.cv
 
         # construct species-limited fluid state
-        solid_state = get_fluid_state(wv, wv_tseed, dd_vol_solid)
+        solid_state = get_solid_state(wv, wv_tseed)
         wv = solid_state.cv
 
         if constant_cfl:
