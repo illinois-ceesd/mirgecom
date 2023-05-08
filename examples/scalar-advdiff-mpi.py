@@ -112,20 +112,20 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.1
+    t_final = 1e-3
     current_cfl = 0.1
-    current_dt = .001
+    current_dt = 1e-6
     current_t = 0
-    constant_cfl = True
+    constant_cfl = False
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 5
+    nstatus = 100
+    nrestart = 100
     nviz = 100
-    nhealth = 1
+    nhealth = 100
 
     dim = 2
-    nel_1d = 4
+    nel_1d = 8
     order = 3
 
     rst_path = "restart_data/"
@@ -208,10 +208,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     spec_omegas = 2. * np.pi * np.ones(shape=(nspecies,))
 
     kappa = 1e-5
-    sigma = 1e-5
-    spec_diff = .1
+    mu = 1e-5
+    spec_diff = mu
     spec_diffusivities = spec_diff * np.ones(nspecies)
-    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa,
+    transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
                                       species_diffusivity=spec_diffusivities)
 
     eos = IdealSingleGas()
@@ -361,8 +361,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 logger.info("Errors detected; attempting graceful exit.")
             raise
 
-        dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
-                              constant_cfl)
+        # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
+        #                      constant_cfl)
+
         return state, dt
 
     def my_post_step(step, t, dt, state):
@@ -380,8 +381,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                            boundaries=boundaries, gas_model=gas_model,
                            quadrature_tag=quadrature_tag, use_esdg=use_esdg)
 
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-                                  current_cfl, t_final, constant_cfl)
+    # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+    #                              current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
