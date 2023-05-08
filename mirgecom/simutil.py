@@ -80,7 +80,7 @@ import grudge.op as op
 import numpy as np
 import pyopencl as cl
 from arraycontext import flatten, map_array_container
-from grudge.discretization import DiscretizationCollection, PartID
+from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
 
@@ -994,6 +994,9 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                 if np.any(volume_index_per_element < 0):
                     raise ValueError("Missing volume specification "
                                      "for some elements.")
+
+                from grudge.discretization import \
+                PartID  # pylint: disable=no-name-in-module
 
                 part_id_to_elements = {
                     PartID(volumes[vol_idx], rank):
