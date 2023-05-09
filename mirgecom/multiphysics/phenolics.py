@@ -180,7 +180,7 @@ class WallDependentVars:
     solid_density: DOFArray
 
 
-class PhenolicsWallModel:
+class PhenolicsWallModel(WallDegradationModel):
     """Variables dependent on the wall state.
 
     .. automethod:: __init__

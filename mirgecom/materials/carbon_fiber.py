@@ -145,4 +145,8 @@ class SolidProperties:
 
     def solid_emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
-        return 0.9 + tau*0.0
+        return 0.9
+
+    def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
+        r"""Tortuosity $\eta$ affects the species diffusivity."""
+        return 1.1

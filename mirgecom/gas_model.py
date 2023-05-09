@@ -60,6 +60,9 @@ from mirgecom.transport import (
     TransportModel,
     GasTransportVars
 )
+from mirgecom.multiphysics.wall_model import (
+    WallEOS, WallConservedVars, WallDependentVars
+)
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
@@ -91,7 +94,7 @@ class GasModel:
 
     eos: GasEOS
     transport: Optional[TransportModel] = None
-    wall: Optional[WallModel] = None
+    wall: Optional[WallEOS] = None
 
 
 @dataclass_array_container
@@ -279,22 +282,17 @@ class ViscousFluidState(FluidState):
 
 @dataclass_array_container
 @dataclass(frozen=True)
-class WallModelState(ViscousFluidState):
-    r"""
-
-    .. attribute:: wv
-
-    """
+class PorousFluidState(ViscousFluidState):
 
     wv: WallConservedVars
-    wdv: WallDependentVars
+#    wdv: WallDependentVars
 
 
 def make_fluid_state(cv, gas_model, temperature_seed=None,
                      smoothness_mu=None,
                      smoothness_kappa=None,
                      smoothness_beta=None,
-                     wall_vars=None
+                     wall_vars=None,
                      limiter_func=None, limiter_dd=None):
     """Create a fluid state from the conserved vars and physical gas model.
 
@@ -324,60 +322,93 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
 
         Thermally consistent fluid state
     """
-    if wall_vars is None:
-        temperature = gas_model.eos.temperature(cv, temperature_seed=temperature_seed)
-        pressure = gas_model.eos.pressure(cv, temperature=temperature)
-    else:
-        tau = gas_model.wall.eval_tau(wall_vars)
-        temperature = gas_model.wall.temperature(wv=wall_vars,
-            tseed=temperature_seed, tau=tau)
-        pressure = gas_model.wall.pressure()
-
-    if limiter_func:
-        cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
-                          dd=limiter_dd)
-
     actx = cv.array_context
 
     # FIXME work-around for now
-    smoothness_mu = (actx.zeros_like(pressure) if smoothness_mu
+    smoothness_mu = (actx.zeros_like(cv.mass) if smoothness_mu
                      is None else smoothness_mu)
-    smoothness_kappa = (actx.zeros_like(pressure) if smoothness_kappa
+    smoothness_kappa = (actx.zeros_like(cv.mass) if smoothness_kappa
                         is None else smoothness_kappa)
-    smoothness_beta = (actx.zeros_like(pressure) if smoothness_beta
+    smoothness_beta = (actx.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
 
-    dv = GasDependentVars(
-        temperature=temperature,
-        pressure=pressure,
-        speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
-        smoothness_mu=smoothness_mu,
-        smoothness_kappa=smoothness_kappa,
-        smoothness_beta=smoothness_beta
-    )
+    if wall_vars is None:
+        temperature = gas_model.eos.temperature(cv=cv,
+                                                temperature_seed=temperature_seed)
+        pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
 
-    from mirgecom.eos import MixtureEOS, MixtureDependentVars
-    if isinstance(gas_model.eos, MixtureEOS):
+        if limiter_func:
+            cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
+                              epsilon=1.0, dd=limiter_dd)
+
+        dv = GasDependentVars(
+            temperature=temperature,
+            pressure=pressure,
+            speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
+            smoothness_mu=smoothness_mu,
+            smoothness_kappa=smoothness_kappa,
+            smoothness_beta=smoothness_beta
+        )
+
+        from mirgecom.eos import MixtureEOS, MixtureDependentVars
+        if isinstance(gas_model.eos, MixtureEOS):
+            dv = MixtureDependentVars(
+                temperature=dv.temperature,
+                pressure=dv.pressure,
+                speed_of_sound=dv.speed_of_sound,
+                smoothness_mu=dv.smoothness_mu,
+                smoothness_kappa=dv.smoothness_kappa,
+                smoothness_beta=dv.smoothness_beta,
+                species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature))
+
+        if gas_model.transport is not None:
+            tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
+            return ViscousFluidState(cv=cv, dv=dv, tv=tv)
+
+        return FluidState(cv=cv, dv=dv)
+
+    else:
+
+        tau = gas_model.wall.eval_tau(wall_vars)
+        epsilon = gas_model.wall._sample_model.void_fraction(tau)
+        temperature = gas_model.wall.eval_temperature(cv=cv, wv=wall_vars,
+            tseed=temperature_seed, tau=tau, eos=gas_model.eos)
+
+        pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
+                                                      temperature=temperature)
+
+        if limiter_func:
+            cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
+                              epsilon=epsilon, dd=limiter_dd)
+
+        from mirgecom.eos import MixtureEOS, MixtureDependentVars
         dv = MixtureDependentVars(
-            temperature=dv.temperature,
-            pressure=dv.pressure,
-            speed_of_sound=dv.speed_of_sound,
-            smoothness_mu=dv.smoothness_mu,
-            smoothness_kappa=dv.smoothness_kappa,
-            smoothness_beta=dv.smoothness_beta,
-            species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature))
+            temperature=temperature,
+            pressure=pressure,
+            speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
+            smoothness_mu=smoothness_mu,
+            smoothness_kappa=smoothness_kappa,
+            smoothness_beta=smoothness_beta,
+            species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
+        )
 
-    if gas_model.wall is not None:
-        tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
+        gas_tv = gas_model.transport.transport_vars(cv=cv, dv=dv,
+                                                    eos=gas_model.eos)
+
+        mu = gas_model.wall.viscosity(temperature, tau, gas_tv)
+        kappa = gas_model.wall.thermal_conductivity(cv, wall_vars,
+                                                    temperature, tau, gas_tv)
+        diff = gas_model.wall.species_diffusivity(temperature, tau, gas_tv)
+
+        tv = GasTransportVars(
+            bulk_viscosity=gas_tv.bulk_viscosity,
+            viscosity=mu,
+            thermal_conductivity=kappa,
+            species_diffusivity=diff
+        )
+
         wv = wall_vars
-        wdv = gas_model.wall.dependent_vars(wv=wv, temperature=temperature)
-        return WallModelState(cv=cv, dv=dv, tv=tv, wv=wv, wdv=wdv)
-
-    if gas_model.transport is not None:
-        tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
-        return ViscousFluidState(cv=cv, dv=dv, tv=tv)
-
-    return FluidState(cv=cv, dv=dv)
+        return PorousFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
 
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
@@ -531,7 +562,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
             tseed_pair,
             smoothness_mu_pair,
             smoothness_kappa_pair,
-            smoothness_beta_pair
+            smoothness_beta_pair,
             wall_vars_pair in zip(cv_pairs, temperature_seed_pairs,
                                   smoothness_mu_pairs, smoothness_kappa_pairs,
                                   smoothness_beta_pairs, wall_vars_pairs)]
@@ -554,6 +585,10 @@ class _FluidSmoothnessKappaTag:
 
 
 class _FluidSmoothnessBetaTag:
+    pass
+
+
+class _WallVarsTag:
     pass
 
 
