@@ -112,7 +112,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1e-3
+    t_final = 1e-2
     current_cfl = 0.1
     current_dt = 1e-6
     current_t = 0
@@ -195,7 +195,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         ])
 
     # soln setup and init
-    nspecies = 1
+    nspecies = 4
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 1.
@@ -210,7 +210,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     kappa = 1e-5
     mu = 1e-5
     spec_diff = mu
-    spec_diffusivities = spec_diff * np.ones(nspecies)
+    spec_diffusivities = np.array([spec_diff * 1./float(j+1)
+                                   for j in range(nspecies)])
     transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
                                       species_diffusivity=spec_diffusivities)
 
