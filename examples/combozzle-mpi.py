@@ -1234,11 +1234,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     my_write_restart(step=current_step, t=current_t, state=final_fluid_state,
                      temperature_seed=tseed)
 
-    if logmgr:
-        logmgr.close()
-    elif use_profiling:
-        print(actx.tabulate_profiling_data())
-
     comm.Barrier()
 
     finish_tol = 1e-16
@@ -1255,6 +1250,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         print(f"Simulation end time: {time.ctime(time.time())}")
 
     comm.Barrier()
+
+    if logmgr:
+        logmgr.close()
+    elif use_profiling:
+        print(actx.tabulate_profiling_data())
 
 
 if __name__ == "__main__":
