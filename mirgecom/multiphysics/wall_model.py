@@ -17,6 +17,7 @@ from abc import (
 )
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS
+from mirgecom.transport import GasTransportVars
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -37,10 +38,9 @@ class WallDependentVars:
     """Dependent variables for the Y3 oxidation model."""
 
     tau: DOFArray
-    thermal_conductivity: DOFArray
-    species_diffusivity: DOFArray
-    species_viscosity: DOFArray
-    temperature: DOFArray
+    void_fraction: DOFArray
+    solid_emissivity: DOFArray
+    solid_permeability: DOFArray
 
 
 class WallDegradationModel:
@@ -48,6 +48,17 @@ class WallDegradationModel:
     @abstractmethod
     def intrinsic_density(self):
         r"""Return the intrinsic density $\rho$ of the solid."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def pressure_diffusivity(self, temperature: DOFArray,
+                             tau: DOFArray) -> DOFArray:
+        r"""Return the normalized pressure diffusivity."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def solid_density(self, wv: WallConservedVars) -> DOFArray:
+        r"""Return the solid density $\epsilon_s \rho_s$."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -77,7 +88,7 @@ class WallDegradationModel:
 
     @abstractmethod
     def solid_tortuosity(self, tau: DOFArray):
-        """."""
+        """Tortuosity of the porous material."""
         raise NotImplementedError()
 
 
@@ -156,8 +167,7 @@ class WallEOS:
             T^{n+1} = T^n -
                 \frac
                 {\epsilon_g \rho_g e_g + \rho_s h_s - \rho e}
-                {\epsilon_g \rho_g C_{p_g} + \epsilon_s \rho_s C_{p_s}
-                }
+                {\epsilon_g \rho_g C_{p_g} + \epsilon_s \rho_s C_{p_s}}
 
         """
         if isinstance(tseed, DOFArray) is False:
@@ -167,7 +177,7 @@ class WallEOS:
 
         rho_gas = cv.mass
         rho_solid = self.solid_density(wv)
-        rhoe = cv.energy #FIXME minus kinetic energy
+        rhoe = cv.energy  # FIXME minus kinetic energy
         for _ in range(0, niter):
 
             gas_internal_energy = \
@@ -185,8 +195,8 @@ class WallEOS:
         return temp
 
     def solid_density(self, wv):
-        return sum(wv.mass)
-#        return wv.mass
+        r"""Return the solid density $\epsilon_s \rho_s$."""
+        return self._sample_model.solid_density(wv)
 
     def enthalpy(self, temperature: DOFArray, tau: DOFArray):
         """Return the enthalpy of the wall as a function of temperature.
@@ -208,7 +218,9 @@ class WallEOS:
         """
         return self._heat_capacity_func(temperature=temperature, tau=tau)
 
-    def thermal_conductivity(self, cv, wv, temperature, tau, gas_tv) -> DOFArray:
+    def thermal_conductivity(self, cv: ConservedVars, wv: WallConservedVars,
+                             temperature: DOFArray, tau: DOFArray,
+                             gas_tv: GasTransportVars) -> DOFArray:
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the fibers
@@ -219,42 +231,14 @@ class WallEOS:
 
         .. math::
             \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
-
-        Parameters
-        ----------
-        wv: :class:`WallConservedVars`
-        temperature: meshmode.dof_array.DOFArray
-        tau: meshmode.dof_array.DOFArray
         """
+
         y_g = cv.mass/(cv.mass + self.solid_density(wv))
         y_s = 1.0 - y_g
         kappa_s = self._thermal_conductivity_func(temperature=temperature, tau=tau)
         kappa_g = gas_tv.thermal_conductivity
 
         return y_s*kappa_s + y_g*kappa_g
-
-#    def thermal_diffusivity(self, mass, temperature, tau,
-#                            thermal_conductivity=None):
-#        """Thermal diffusivity of the wall.
-
-#        Parameters
-#        ----------
-#        mass: meshmode.dof_array.DOFArray
-#        temperature: meshmode.dof_array.DOFArray
-#        tau: meshmode.dof_array.DOFArray
-#        thermal_conductivity: meshmode.dof_array.DOFArray
-#            Optional. If not given, it will be evaluated using
-#            :func:`thermal_conductivity`
-
-#        Returns
-#        -------
-#        thermal_diffusivity: meshmode.dof_array.DOFArray
-#            the wall thermal diffusivity, including all of its components
-#        """
-#        if thermal_conductivity is None:
-#            thermal_conductivity = self.thermal_conductivity(
-#                temperature=temperature, tau=tau)
-#        return thermal_conductivity/(mass * self.heat_capacity(temperature))
 
     def viscosity(self, temperature: DOFArray, tau: DOFArray, gas_tv):
         """Viscosity of the gas through the (porous) wall.
@@ -276,18 +260,39 @@ class WallEOS:
             the species mass diffusivity inside the wall
         """
         tortuosity = self._sample_model.solid_tortuosity(tau)
-        #FIXME
-        #return self._species_diffusivity_func(temperature)/tortuosity
+        #  FIXME
+        #  return self._species_diffusivity_func(temperature)/tortuosity
         return gas_tv.species_diffusivity/tortuosity
 
-#    def dependent_vars(self, cv, wv, tseed):
-#        """Get the dependent variables."""
-#        tau = self.eval_tau(wv=wv)
-#        temperature = self.eval_temperature(cv=cv, wv=wv, tseed=tseed, tau=tau)
-#        kappa = self.thermal_conductivity(temperature=temperature, tau=tau)
-#        species_diffusivity = self.species_diffusivity(temperature=temperature)
-#        return WallDependentVars(
-#            tau=tau,
-#            thermal_conductivity=kappa,
-#            temperature=temperature,
-#            species_diffusivity=species_diffusivity)
+    def pressure_diffusivity(self, cv: ConservedVars, temperature: DOFArray,
+                             tau: DOFArray, gas_tv: GasTransportVars) -> DOFArray:
+        r"""Return the normalized pressure diffusivity.
+
+        .. math::
+            d_{P} = \epsilon_g \rho_g \frac{\mathbf{K}}{\mu \epsilon_g}
+
+        where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
+        and $\mathbf{K}$ is the permeability matrix.
+        """
+        mu = gas_tv.viscosity
+        epsilon = self._sample_model.void_fraction(tau)
+        permeability = self._sample_model.solid_permeability(tau)
+        return cv.mass*permeability/(mu*epsilon)
+
+    def dependent_vars(self, wv: WallConservedVars,
+            temperature: DOFArray) -> WallConservedVars:
+        """Get the state-dependent variables."""
+        tau=self.eval_tau(wv)
+        return WallDependentVars(
+            tau=tau,
+            void_fraction=self._sample_model.void_fraction(tau),
+            solid_emissivity=self._sample_model.solid_emissivity(tau),
+            solid_permeability=self._sample_model.solid_permeability(tau)
+        )
+
+
+@dataclass_array_container
+@dataclass(frozen=True)
+class PorousTransportVars(GasTransportVars):
+    
+    pressure_diffusivity: DOFArray

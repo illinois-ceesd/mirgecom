@@ -60,6 +60,9 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage
 )
 from mirgecom.multiphysics.phenolics import WallConservedVars
+from mirgecom.eos import GasDependentVars
+from mirgecom.transport import GasTransportVars
+from mirgecom.gas_model import PorousFluidState
 
 from logpyle import IntervalTimer, set_dt
 
@@ -203,25 +206,18 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#    import mirgecom.multiphysics.phenolics as wall
-#    import mirgecom.materials.tacot as my_composite
-
-#    # FIXME there must be a way to get the table from the "materials" directory
-#    bprime_table = \
-#        (np.genfromtxt("aw_Bprime.dat", skip_header=1)[:, 2:6]).reshape((25, 151, 4))
-
-#    pyrolysis = my_composite.Pyrolysis()
-#    bprime_class = my_composite.BprimeTable(table=bprime_table)
-#    my_solid = my_composite.SolidProperties()
-#    my_gas = my_composite.GasProperties()
-
-
     # {{{ Initialize wall model
 
     import mirgecom.multiphysics.phenolics as wall
     import mirgecom.materials.tacot as my_composite
     my_solid = my_composite.SolidProperties()
     my_gas = my_composite.GasProperties()
+    pyrolysis = my_composite.Pyrolysis()
+
+#    # FIXME there must be a way to get the table from the "materials" directory
+    bprime_table = \
+        (np.genfromtxt("aw_Bprime.dat", skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+    bprime_class = my_composite.BprimeTable(table=bprime_table)
 
     def _get_wall_enthalpy(temperature, tau):
         wall_sample_h = my_solid.solid_enthalpy(temperature, tau)
@@ -285,11 +281,20 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             solid_species_mass=solid_species_mass,
             pressure=pressure, temperature=temperature)
 
-
     temperature_seed = nodes[0]*0.0 + 300.0
 
+    from mirgecom.multiphysics.wall_model import PorousTransportVars
+    def make_state(cv, gas_model, temperature_seed, wall_vars):
+        """Return the fluid+wall state for porous media flow.
 
-    def make_state():
+        Ideally one would use the gas_model.make_fluid_state but, since this
+        case use tabulated data and equilibrium gas assumption, it was
+        implemented in this stand-alone function. Note that some functions
+        have slightly different calls and the absence of species.
+        """
+
+        zeros = cv.mass*0.0
+
         tau = gas_model.wall.eval_tau(wall_vars)
         epsilon = gas_model.wall._sample_model.void_fraction(tau)
         temperature = gas_model.wall.eval_temperature(cv=cv, wv=wall_vars,
@@ -298,44 +303,43 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
                                                       temperature=temperature)
 
-        print(tau)
-        print(epsilon)
-        print(temperature)
-        print(pressure)
-
-        sys.exit()
-
-        from mirgecom.eos import MixtureEOS, MixtureDependentVars
-        dv = MixtureDependentVars(
+        dv = GasDependentVars(
             temperature=temperature,
             pressure=pressure,
-            speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
-            smoothness_mu=smoothness_mu,
-            smoothness_kappa=smoothness_kappa,
-            smoothness_beta=smoothness_beta,
-            species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
+            speed_of_sound=zeros,
+            smoothness_mu=zeros,
+            smoothness_kappa=zeros,
+            smoothness_beta=zeros,
         )
 
-        mu = gas_model.wall.viscosity(temperature, tau, gas_tv)
-        kappa = gas_model.wall.thermal_conductivity(cv, wall_vars,
-                                                    temperature, tau, gas_tv)
-        diff = gas_model.wall.species_diffusivity(temperature, tau, gas_tv)
+        # gas only transport vars
+        gas_mu = gas_model.eos.gas_viscosity(temperature)
+        gas_kappa = gas_model.eos.gas_thermal_conductivity(temperature)
+        gas_tv = GasTransportVars(
+            bulk_viscosity=zeros,
+            viscosity=gas_mu,
+            thermal_conductivity=gas_kappa,
+            species_diffusivity=np.empty((0,), dtype=object))
 
-        tv = GasTransportVars(
-            bulk_viscosity=gas_tv.bulk_viscosity,
-            viscosity=mu,
+        # coupled thermal conductivity
+        kappa = wall_model.thermal_conductivity(cv, wall_vars,
+                                                temperature, tau, gas_tv)
+        pressure_diffusivity = \
+            wall_model.pressure_diffusivity(cv, temperature, tau, gas_tv)
+
+        # return modified transport vars
+        tv = PorousTransportVars(
+            bulk_viscosity=zeros,
+            viscosity=gas_mu,
             thermal_conductivity=kappa,
-            species_diffusivity=diff
+            species_diffusivity=np.empty((0,), dtype=object),
+            pressure_diffusivity=pressure_diffusivity
         )
 
-        wv = wall_vars
-        return PorousFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
+        wdv = gas_model.wall.dependent_vars(wall_vars, temperature)
+        return PorousFluidState(cv=cv, dv=dv, tv=tv, wv=wall_vars, wdv=wdv)
 
-
-
-
-
-
+    fluid_state = make_state(cv, gas_model, temperature_seed, wall_vars)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -425,14 +429,19 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             )
         )
 
-    def ablation_workshop_flux(dcoll, wv, wdv, wall_model, velocity, bprime_class,
+    def ablation_workshop_flux(dcoll, state, wall_model, velocity, bprime_class,
                                quadrature_tag, dd_wall, time):
         """Evaluate the prescribed heat flux to be applied at the boundary.
 
         Function specific for verification against the ablation workshop test
         case 2.1.
         """
-        actx = wv.gas_density.array_context
+        cv = state.cv
+        dv = state.dv
+        wv = state.wv
+        wdv = state.wdv
+
+        actx = cv.mass.array_context
 
         # restrict variables to the domain boundary
         dd_vol_quad = dd_wall.with_discr_tag(quadrature_tag)
@@ -440,8 +449,8 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         normal_vec = actx.thaw(dcoll.normal(bdtag))
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
 
-        temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.temperature)
-        m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad, wv.gas_density*velocity)
+        temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, dv.temperature)
+        m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity)
         emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.solid_emissivity)
 
         m_dot_g = np.dot(m_dot_g, normal_vec)
@@ -490,7 +499,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
                         + bprime_class._cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
                         + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0) + h_w
 
-        h_g = wall_model.gas_enthalpy(temperature_bc)
+        h_g = wall_model.eos.gas_enthalpy(temperature_bc)
 
         flux = conv_coeff*(h_e - h_w) - m_dot*h_w + m_dot_g*h_g
 
@@ -498,33 +507,41 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         return make_obj_array([flux - radiation])
 
-    def phenolics_operator(dcoll, state, boundaries, wall_model, pyrolysis,
+    def phenolics_operator(dcoll, state, boundaries, gas_model, pyrolysis,
                            quadrature_tag, dd_wall, time=0.0, bprime_class=None,
                            pressure_scaling_factor=1.0, penalty_amount=1.0):
         """Return the RHS of the composite wall."""
-        wv, tseed = state
-        wdv = wall_model.dependent_vars(wv=wv, temperature_seed=tseed)
+
+        cv, wv, tseed = state
+
+        fluid_state = make_state(cv, gas_model, temperature_seed, wall_vars)
+
+        cv = fluid_state.cv
+        wv = fluid_state.wv
+        dv = fluid_state.dv
+        wdv = fluid_state.wdv
 
         zeros = wdv.tau*0.0
         actx = zeros.array_context
 
         pressure_boundaries, velocity_boundaries = boundaries
 
-        gas_pressure_diffusivity = \
-            wall_model.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
+        gas_pressure_diffusivity = wdv.pressure_diffusivity
 
         # ~~~~~
         # viscous RHS
         pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
-            kappa=wv.gas_density*gas_pressure_diffusivity,
-            boundaries=pressure_boundaries, u=wdv.gas_pressure,
+            kappa=cv.mass*gas_pressure_diffusivity,
+            boundaries=pressure_boundaries, u=dv.pressure,
             penalty_amount=penalty_amount, return_grad_u=True,
             comm_tag=_PresDiffTag)
 
         velocity = -gas_pressure_diffusivity*grad_pressure
 
-        boundary_flux = ablation_workshop_flux(dcoll, wv, wdv, wall_model,
+        boundary_flux = ablation_workshop_flux(dcoll, fluid_state, gas_model,
             velocity, bprime_class, quadrature_tag, dd_wall, time)
+
+        # FIXME try to use NS operator for the fluid inside the wall
 
         energy_boundaries = {
             BoundaryDomainTag("prescribed"):
@@ -629,39 +646,24 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     visualizer = make_visualizer(dcoll)
 
-    def my_write_viz(step, t, wall_vars, dep_vars):
+    def my_write_viz(step, t, state):
 
-        wdv = force_evaluation(actx, dep_vars)
-        wv = force_evaluation(actx, wall_vars)
+        cv = state.cv
+        dv = state.dv
+        wv = state.wv
+        wdv = state.wdv
 
-        viz_fields = [("WV_gas_density", wv.gas_density),
-                      ("WV_energy", wv.energy),
-                      ("WV_phase_1", wall_vars.solid_species_mass[0]),
-                      ("WV_phase_2", wall_vars.solid_species_mass[1]),
-                      ("WV_phase_3", wall_vars.solid_species_mass[2]),
-                      ("DV", wdv)]
+        viz_fields = [("CV_density", cv.mass),
+                      ("CV_energy", cv.energy),
+                      ("DV", dv),
+                      ("WV_phase_1", wall_vars.mass[0]),
+                      ("WV_phase_2", wall_vars.mass[1]),
+                      ("WV_phase_3", wall_vars.mass[2]),
+                      ("WDV", wdv)
+                      ]
 
         # depending on the version, paraview may complain without this
         viz_fields.append(("x", nodes[0]))
-
-#        gas_pressure_diffusivity = \
-#            wall_model.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
-#        gradients = get_gradients(wv, wdv)
-#        grad_P, grad_T = gradients
-#        velocity = -gas_pressure_diffusivity*grad_P
-#        mass_flux = wv.gas_density*velocity
-
-#        rhs = get_rhs_terms(t, wv, wdv)
-#        rhs_I, rhs_V, rhs_S = rhs
-
-#        viz_fields.extend((
-#            ("DV_velocity", velocity),
-#            ("DV_mass_flux", mass_flux),
-#            ("grad_P", grad_P),
-#            ("grad_T", grad_T),
-#            ("RHS_I", rhs_I),
-#            ("RHS_V", rhs_V),
-#            ("RHS_S", rhs_S)))
 
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
             step=step, t=t, overwrite=True, vis_timer=vis_timer, comm=comm)
@@ -684,25 +686,14 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-#    def _eval_temperature(wall_vars, tseed):
-#        tau = wall_model.eval_tau(wall_vars)
-#        return wall_model.eval_temperature(wall_vars, tseed, tau)
-
-#    eval_temperature = actx.compile(_eval_temperature)
-
-    def _eval_dep_vars(wall_vars, tseed):
-        return wall_model.dependent_vars(wv=wall_vars, temperature_seed=tseed)
-
-    eval_dep_vars = actx.compile(_eval_dep_vars)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     from warnings import warn
     warn("Running gc.collect() to work around memory growth issue ")
     import gc
     gc.collect()
 
-    my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
+    my_write_viz(step=istep, t=t, state=fluid_state)
+
+    sys.exit()
 
     freeze_gc_flag = True
     while t < t_final:
@@ -712,8 +703,9 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         try:
 
-            tseed = wdv.temperature
-            state = make_obj_array([wall_vars, tseed])
+            fluid_state = make_state(cv, gas_model, dv.temperature, wall_vars)
+
+            state = make_obj_array([cv, wall_vars, tseed])
 
             state = ssprk43_step(state, t, dt, compiled_rhs)
             state = force_evaluation(actx, state)
@@ -731,15 +723,13 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
                 raise MyRuntimeError("Failed simulation health check.")
 
             if istep % nviz == 0:
-                my_write_viz(step=istep, t=t, wall_vars=wall_vars,
-                             dep_vars=wdv)
+                my_write_viz(step=istep, t=t, state=fluid_state)
 
             if istep % ngarbage == 0:
                 gc.collect()
 
             if istep % nrestart == 0:
-                my_write_restart(step=istep, t=t, wall_vars=wall_vars,
-                             tseed=wdv.temperature)
+                my_write_restart(step=istep, t=t, state=fluid_state)
 
             if freeze_gc_flag is True:
                 print("Freeze gc")

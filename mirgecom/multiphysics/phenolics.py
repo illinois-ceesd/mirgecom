@@ -258,56 +258,6 @@ class PhenolicsWallModel(WallDegradationModel):
         """
         return 1.0 - self._solid_data.solid_volume_fraction(tau)
 
-    def thermal_conductivity(self, wv, temperature, tau) -> DOFArray:
-        r"""Return the bulk thermal conductivity, $f(\rho, \tau, T)$.
-
-        It is evaluated using a mass-weighted average given by
-
-        .. math::
-            \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
-
-        Parameters
-        ----------
-        wv: :class:`WallConservedVars`
-        temperature: meshmode.dof_array.DOFArray
-        tau: meshmode.dof_array.DOFArray
-        """
-        y_g = wv.gas_density/(wv.gas_density + self.solid_density(wv))
-        y_s = 1.0 - y_g
-        return (
-            y_s*self._solid_data.solid_thermal_conductivity(temperature, tau)
-            #+ y_g*self._gas_data.gas_thermal_conductivity(temperature)
-        )
-
-#    # ~~~~~~~~~~~~ gas
-#    def gas_enthalpy(self, temperature: DOFArray) -> DOFArray:
-#        r"""Return the gas enthalpy $h_g$."""
-#        return self._gas_data.gas_enthalpy(temperature)
-
-#    def gas_molar_mass(self, temperature: DOFArray) -> DOFArray:
-#        r"""Return the gas molar mass $M$."""
-#        return self._gas_data.gas_molar_mass(temperature)
-
-#    def gas_viscosity(self, temperature: DOFArray) -> DOFArray:
-#        r"""Return the gas viscosity $\mu$."""
-#        return self._gas_data.gas_viscosity(temperature)
-
-#    def gas_pressure_diffusivity(self, temperature: DOFArray,
-#                                 tau: DOFArray) -> DOFArray:
-#        r"""Return the normalized pressure diffusivity.
-
-#        .. math::
-#            \frac{1}{\epsilon_g \rho_g} d_{P} = \frac{\mathbf{K}}{\mu \epsilon_g}
-
-#        where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
-#        and $\mathbf{K}$ is the permeability matrix.
-#        """
-#        mu = self.gas_viscosity(temperature)
-#        epsilon = self.void_fraction(tau)
-#        permeability = self.solid_permeability(tau)
-#        return permeability/(mu*epsilon)
-
-    # ~~~~~~~~~~~~ solid
     def solid_density(self, wv: WallConservedVars) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
 
@@ -319,6 +269,10 @@ class PhenolicsWallModel(WallDegradationModel):
             \epsilon_s \rho_s = \sum_i^N \epsilon_i \rho_i
         """
         return sum(wv.mass)
+
+    def solid_thermal_conductivity(self, temperature, tau) -> DOFArray:
+        r"""Return the solid thermal conductivity, $f(\rho, \tau, T)$."""
+        return self._solid_data.solid_thermal_conductivity(temperature, tau)
 
     def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Return the solid enthalpy $h_s$."""
@@ -332,32 +286,7 @@ class PhenolicsWallModel(WallDegradationModel):
         r"""Return the wall emissivity based on the progress ratio $\tau$."""
         return self._solid_data.solid_emissivity(tau)
 
-#    # ~~~~~~~~~~~~ auxiliary functions
-#    def gas_heat_capacity_cp(self, temperature: DOFArray) -> DOFArray:
-#        r"""Return the gas heat capacity at constant pressure $C_{p_g}$."""
-#        return self._gas_data.gas_heat_capacity(temperature)
-
     def solid_heat_capacity_cp(self, temperature: DOFArray,
                                tau: DOFArray) -> DOFArray:
         r"""Return the solid heat capacity $C_{p_s}$."""
         return self._solid_data.solid_heat_capacity(temperature, tau)
-
-#    # ~~~~~~~~~~~~
-#    def dependent_vars(self, wv: WallConservedVars,
-#            temperature_seed: DOFArray) -> WallConservedVars:
-#        """Get the state-dependent variables."""
-#        tau = self.eval_tau(wv)
-#        temperature = self.eval_temperature(wv, temperature_seed, tau)
-#        return WallDependentVars(
-#            tau=tau,
-#            temperature=temperature,
-#            thermal_conductivity=self.thermal_conductivity(wv, temperature, tau),
-#            void_fraction=self.void_fraction(tau),
-#            gas_pressure=self.gas_pressure(wv, temperature, tau),
-#            gas_viscosity=self.gas_viscosity(temperature),
-#            gas_enthalpy=self.gas_enthalpy(temperature),
-#            solid_enthalpy=self.solid_enthalpy(temperature, tau),
-#            solid_density=self.solid_density(wv),
-#            solid_emissivity=self.solid_emissivity(tau),
-#            solid_permeability=self.solid_permeability(tau)
-#        )

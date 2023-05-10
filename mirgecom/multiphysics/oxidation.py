@@ -63,6 +63,19 @@ class OxidationWallModel(WallDegradationModel):
         """
         return 1.0 - self._fiber.solid_volume_fraction(tau)
 
+    def solid_density(self, wv: WallConservedVars) -> DOFArray:
+        r"""Return the solid density $\epsilon_s \rho_s$.
+
+        The material density is relative to the entire control volume, and
+        is not to be confused with the intrinsic density, hence the $\epsilon$
+        dependence. For carbon fiber, it has a single constituent.
+        """
+        return wv.mass
+
+    def solid_thermal_conductivity(self, temperature, tau) -> DOFArray:
+        r"""Return the solid thermal conductivity, $f(\rho, \tau, T)$."""
+        return self._solid_data.solid_thermal_conductivity(temperature, tau)
+
     def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Return the solid enthalpy $h_s$."""
         return self._fiber.solid_enthalpy(temperature, tau)

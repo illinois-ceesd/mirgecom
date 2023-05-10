@@ -10,6 +10,7 @@ Fluid State Encapsulation
 
 .. autoclass:: FluidState
 .. autoclass:: ViscousFluidState
+.. autoclass:: PorousFluidState
 
 Fluid State Handling Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -22,7 +23,7 @@ Fluid State Handling Utilities
 """
 
 __copyright__ = """
-Copyright (C) 2021 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -285,7 +286,7 @@ class ViscousFluidState(FluidState):
 class PorousFluidState(ViscousFluidState):
 
     wv: WallConservedVars
-#    wdv: WallDependentVars
+    wdv: WallDependentVars
 
 
 def make_fluid_state(cv, gas_model, temperature_seed=None,
@@ -408,7 +409,8 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
         )
 
         wv = wall_vars
-        return PorousFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
+        wdv = gas_model.wall.dependent_vars(wv, temperature)
+        return PorousFluidState(cv=cv, dv=dv, tv=tv, wv=wv, wdv=wdv)
 
 
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
