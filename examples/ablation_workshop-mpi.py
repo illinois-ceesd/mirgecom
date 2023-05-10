@@ -59,7 +59,7 @@ from mirgecom.logging_quantities import (
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage
 )
-from mirgecom.multiphysics.phenolics import PhenolicsConservedVars
+from mirgecom.multiphysics.phenolics import WallConservedVars
 
 from logpyle import IntervalTimer, set_dt
 
@@ -172,6 +172,8 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     from grudge.dof_desc import DD_VOLUME_ALL
     dd_vol = DD_VOLUME_ALL
 
+    wall_sample_mask = nodes[0]*0.0 + 1.0
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     if rank == 0:
@@ -201,19 +203,59 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+#    import mirgecom.multiphysics.phenolics as wall
+#    import mirgecom.materials.tacot as my_composite
+
+#    # FIXME there must be a way to get the table from the "materials" directory
+#    bprime_table = \
+#        (np.genfromtxt("aw_Bprime.dat", skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+
+#    pyrolysis = my_composite.Pyrolysis()
+#    bprime_class = my_composite.BprimeTable(table=bprime_table)
+#    my_solid = my_composite.SolidProperties()
+#    my_gas = my_composite.GasProperties()
+
+
+    # {{{ Initialize wall model
+
     import mirgecom.multiphysics.phenolics as wall
     import mirgecom.materials.tacot as my_composite
-
-    # FIXME there must be a way to get the table from the "materials" directory
-    bprime_table = \
-        (np.genfromtxt("aw_Bprime.dat", skip_header=1)[:, 2:6]).reshape((25, 151, 4))
-
-    pyrolysis = my_composite.Pyrolysis()
-    bprime_class = my_composite.BprimeTable(table=bprime_table)
     my_solid = my_composite.SolidProperties()
     my_gas = my_composite.GasProperties()
 
-    wall_model = wall.PhenolicsWallModel(solid_data=my_solid, gas_data=my_gas)
+    def _get_wall_enthalpy(temperature, tau):
+        wall_sample_h = my_solid.solid_enthalpy(temperature, tau)
+        return wall_sample_h * wall_sample_mask
+
+    def _get_wall_heat_capacity(temperature, tau):
+        wall_sample_cp = my_solid.solid_heat_capacity(temperature, tau)
+        return wall_sample_cp * wall_sample_mask
+
+    def _get_wall_thermal_conductivity(temperature, tau):
+        scaled_sample_kappa = \
+            my_solid.solid_thermal_conductivity(temperature, tau)
+        return scaled_sample_kappa * wall_sample_mask
+
+    wall_degradation_model = wall.PhenolicsWallModel(solid_data=my_solid)
+
+    from mirgecom.multiphysics.phenolics import WallTabulatedEOS
+    wall_model = WallTabulatedEOS(
+        wall_degradation_model=wall_degradation_model,
+        wall_sample_mask=wall_sample_mask,
+        enthalpy_func=_get_wall_enthalpy,
+        heat_capacity_func=_get_wall_heat_capacity,
+        thermal_conductivity_func=_get_wall_thermal_conductivity)
+
+#    def _create_wall_dependent_vars(wv, wv_tseed):
+#        return wall_model.dependent_vars(wv, wv_tseed)
+
+#    create_wall_dependent_vars_compiled = actx.compile(
+#        _create_wall_dependent_vars)
+
+    # }}}
+
+    from mirgecom.gas_model import GasModel
+    gas_model = GasModel(eos=my_gas, wall=wall_model)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -239,14 +281,61 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     else:
         t = 0
         istep = 0
-        wall_vars = wall.initializer(wall_model=wall_model,
+        cv, wall_vars = wall.initializer(dcoll=dcoll, gas_model=gas_model,
             solid_species_mass=solid_species_mass,
             pressure=pressure, temperature=temperature)
 
-    wdv = wall_model.dependent_vars(wv=wall_vars, temperature_seed=temperature)
 
-    wall_vars = force_evaluation(actx, wall_vars)
-    wdv = force_evaluation(actx, wdv)
+    temperature_seed = nodes[0]*0.0 + 300.0
+
+
+    def make_state():
+        tau = gas_model.wall.eval_tau(wall_vars)
+        epsilon = gas_model.wall._sample_model.void_fraction(tau)
+        temperature = gas_model.wall.eval_temperature(cv=cv, wv=wall_vars,
+            tseed=temperature_seed, tau=tau, eos=my_gas)
+
+        pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
+                                                      temperature=temperature)
+
+        print(tau)
+        print(epsilon)
+        print(temperature)
+        print(pressure)
+
+        sys.exit()
+
+        from mirgecom.eos import MixtureEOS, MixtureDependentVars
+        dv = MixtureDependentVars(
+            temperature=temperature,
+            pressure=pressure,
+            speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
+            smoothness_mu=smoothness_mu,
+            smoothness_kappa=smoothness_kappa,
+            smoothness_beta=smoothness_beta,
+            species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
+        )
+
+        mu = gas_model.wall.viscosity(temperature, tau, gas_tv)
+        kappa = gas_model.wall.thermal_conductivity(cv, wall_vars,
+                                                    temperature, tau, gas_tv)
+        diff = gas_model.wall.species_diffusivity(temperature, tau, gas_tv)
+
+        tv = GasTransportVars(
+            bulk_viscosity=gas_tv.bulk_viscosity,
+            viscosity=mu,
+            thermal_conductivity=kappa,
+            species_diffusivity=diff
+        )
+
+        wv = wall_vars
+        return PorousFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
+
+
+
+
+
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -449,7 +538,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             u=wdv.temperature, penalty_amount=penalty_amount,
             comm_tag=_TempDiffTag)
 
-        viscous_rhs = PhenolicsConservedVars(
+        viscous_rhs = WallConservedVars(
             solid_species_mass=wv.solid_species_mass*0.0,
             gas_density=pressure_scaling_factor*pressure_viscous_rhs,
             energy=energy_viscous_rhs)
@@ -460,7 +549,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         energy_inviscid_rhs = compute_div(actx, dcoll, quadrature_tag, field,
                                           velocity, velocity_boundaries, dd_wall)
 
-        inviscid_rhs = PhenolicsConservedVars(
+        inviscid_rhs = WallConservedVars(
             solid_species_mass=wv.solid_species_mass*0.0,
             gas_density=zeros,
             energy=-energy_inviscid_rhs)
@@ -477,7 +566,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         visc_diss_energy = wdv.gas_viscosity*wdv.void_fraction**2*(
             (1.0/wdv.solid_permeability)*np.dot(velocity, velocity))
 
-        source_terms = PhenolicsConservedVars(
+        source_terms = WallConservedVars(
             solid_species_mass=resin_pyrolysis,
             gas_density=gas_source_term,
             energy=visc_diss_energy)

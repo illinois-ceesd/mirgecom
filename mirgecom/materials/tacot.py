@@ -287,6 +287,16 @@ class GasProperties:
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
+    from mirgecom.fluid import ConservedVars
+    def pressure(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
+        r"""Return the gas pressure.
+
+        .. math::
+            P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
+        """
+        Rg = 8314.46261815324/self.gas_molar_mass(temperature)  # noqa N806
+        return cv.mass*Rg*temperature
+
     def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas thermal conductivity $\kappa_g$.
 

@@ -43,12 +43,6 @@ class WallDependentVars:
     temperature: DOFArray
 
 
-@dataclass_array_container
-@dataclass(frozen=True)
-class PhenolicsDependentVars(WallDependentVars):
-    """Dependent variables for the Y3 phenolics model."""
-
-
 class WallDegradationModel:
 
     @abstractmethod
@@ -81,6 +75,11 @@ class WallDegradationModel:
         """Emissivity for energy radiation."""
         raise NotImplementedError()
 
+    @abstractmethod
+    def solid_tortuosity(self, tau: DOFArray):
+        """."""
+        raise NotImplementedError()
+
 
 class WallEOS:
     """Oxidation model used for the Y3 wall model.
@@ -99,6 +98,7 @@ class WallEOS:
     .. automethod:: thermal_conductivity
     .. automethod:: thermal_diffusivity
     .. automethod:: species_diffusivity
+    .. automethod:: viscosity
     """
 
     def __init__(self, wall_degradation_model, wall_sample_mask,
@@ -145,7 +145,7 @@ class WallEOS:
 
     def eval_temperature(self, cv: ConservedVars, wv: WallConservedVars,
                          tseed: DOFArray, tau: DOFArray, eos: GasEOS,
-                         niter=20) -> DOFArray:
+                         niter=3) -> DOFArray:
         r"""Evaluate the temperature.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -185,7 +185,8 @@ class WallEOS:
         return temp
 
     def solid_density(self, wv):
-        return wv.mass
+        return sum(wv.mass)
+#        return wv.mass
 
     def enthalpy(self, temperature: DOFArray, tau: DOFArray):
         """Return the enthalpy of the wall as a function of temperature.
