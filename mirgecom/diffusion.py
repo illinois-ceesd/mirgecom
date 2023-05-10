@@ -61,6 +61,7 @@ def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$.
 
     Uses a simple average of the two sides' values:
+
     .. math::
         F = -\frac{u^- + u^+}{2} \hat{n}.
     """
@@ -71,6 +72,7 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$.
 
     Weights each side's value by the corresponding thermal conductivity $\kappa$:
+
     .. math::
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}.
     """
@@ -109,6 +111,7 @@ def diffusion_facial_flux_central(
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$.
 
     Uses a simple average of the two sides' values:
+
     .. math::
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n}.
     """
@@ -136,6 +139,7 @@ def diffusion_facial_flux_harmonic(
 
     Uses a modified average of the two sides' values that replaces $\kappa^-$
     and $\kappa^+$ with their harmonic mean:
+
     .. math::
         F = -\frac{2 \kappa^- \kappa^+}{\kappa^- + \kappa^+}\frac{u^- + u^+}{2}
                 \cdot \hat{n}.
@@ -186,10 +190,13 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     r"""Dirichlet boundary condition for the diffusion operator.
 
     For the boundary condition $u|_\Gamma = f$, uses external data
+
     .. math::
                  u^+ &= 2 f - u^-
         (\nabla u)^+ &= (\nabla u)^-
+
     to compute boundary fluxes as shown in [Hesthaven_2008]_, Section 7.1.
+
     .. automethod:: __init__
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
@@ -245,14 +252,19 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma = g$, uses
     external data
+
     .. math::
         u^+ = u^-
+
     when computing the boundary fluxes for $\nabla u$, and uses
+
     .. math::
         (-\kappa \nabla u\cdot\mathbf{\hat{n}})|_\Gamma &=
             -\kappa^- (\nabla u\cdot\mathbf{\hat{n}})|_\Gamma
                                                         &= -\kappa^- g
+
     when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
+
     .. automethod:: __init__
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux

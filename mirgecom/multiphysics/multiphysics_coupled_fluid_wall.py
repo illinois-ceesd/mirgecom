@@ -330,15 +330,16 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         return self._coupled.grad_temperature_bc(
             dcoll, dd_bdry, grad_t_minus)
 
-    # FIXME
     def viscous_divergence_flux(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
             grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
             **kwargs):
-        """
-        Return the viscous flux as defined by
+        """Return the viscous flux at the interface boundaries.
+
+        It is defined by
         :meth:`mirgecom.boundary.MengaldoBoundaryCondition.viscous_divergence_flux`
-        with the additional heat flux interior penalty term.
+        with the additional flux penalty term.
+        the additional heat flux interior penalty term.
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
@@ -375,8 +376,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
 # FIXME: Interior penalty should probably use an average of the lengthscales on
 # both sides of the interface
 class InterfaceWallBoundary(InterfaceFluidBoundary):
-    """
-    Boundary for the wall side of the fluid-wall interface.
+    """Boundary for the wall side of the fluid-wall interface.
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -386,6 +386,7 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
     .. automethod:: temperature_bc
     .. automethod:: grad_temperature_bc
     """
+
     def __init__(
             self, state_plus, grad_cv_plus=None, grad_t_plus=None,
             flux_penalty_amount=None, lengthscales_minus=None,
@@ -454,13 +455,13 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         return self._coupled.grad_temperature_bc(
             dcoll, dd_bdry, grad_t_minus)
 
-    # FIXME
     def viscous_divergence_flux(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
             grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
             **kwargs):
-        """
-        Return the viscous flux as defined by
+        """Return the viscous flux at the interface boundaries.
+
+        It is defined by
         :meth:`mirgecom.boundary.MengaldoBoundaryCondition.viscous_divergence_flux`
         with the additional flux penalty term.
         """
@@ -777,7 +778,6 @@ def coupled_grad_t_operator(
 
     Returns
     -------
-
         The tuple `(fluid_grad_temperature, wall_grad_temperature)`.
     """
     fluid_boundaries = {
@@ -857,14 +857,12 @@ def coupled_ns_operator(
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         return_gradients=False):
-    r"""
-    Compute the RHS of the fluid and wall subdomains.
+    r"""Compute the RHS of the fluid and wall subdomains.
 
     Returns
     -------
         The tuple `(fluid_rhs, wall_rhs)`.
     """
-
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
         # makes sense to use as a default here
