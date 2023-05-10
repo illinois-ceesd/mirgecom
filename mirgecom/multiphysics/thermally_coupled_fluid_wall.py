@@ -700,8 +700,8 @@ def get_interface_boundaries(
         *,
         interface_noslip=True,
         use_kappa_weighted_grad_flux_in_fluid=False,
-        wall_penalty_amount=None,
-        quadrature_tag=DISCR_TAG_BASE,
+        wall_penalty_amount=None, #FIXME can't default to None and not double check
+        quadrature_tag=DISCR_TAG_BASE, #FIXME unused
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         _kappa_inter_vol_tpairs=None,

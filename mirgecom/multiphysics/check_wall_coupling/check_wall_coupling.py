@@ -113,7 +113,7 @@ class case1:
         self._vel = velocity
         self._yu = species_mass_right
         self._yb = species_mass_left
-        self._disc = 10.0
+        self._disc = 1.0
 
     def __call__(self, x_vec, eos, *, time=0.0):
 
@@ -128,21 +128,14 @@ class case1:
         u_y = x*0.0 + self._vel[1]
         velocity = make_obj_array([u_x, u_y])
         
-        aux1 = - actx.np.tanh( 1.0/(self._sigma)*(x_vec[1] - self._disc ) )
-        aux2 = + actx.np.tanh( 1.0/(self._sigma)*(x_vec[1] + self._disc ) )
-        aux = 0.5*(aux1 + aux2)
+        aux = 0.5*(1.0 - actx.np.tanh( 1.0/(self._sigma)*(x_vec[1] - self._disc ) ))
         y1 = self._yu*aux
         y2 = self._yb*(1.0-aux)
         
         y = y1+y2
 
-#        aux1 = - actx.np.tanh( 1.0/(self._sigma)*(x_vec[0] - (self._disc + 10.0*time) ) )
-#        aux2 = + actx.np.tanh( 1.0/(self._sigma)*(x_vec[0] + (self._disc - 10.0*time) ) )
-#        aux = 0.5*(aux1 + aux2)
-#        theta = 7.0
-#        temperature = 1.0 + aux*theta
-#        temperature = temperature*300.0
-        temperature = 300.0 + x*0.0
+        aux = 0.5*(1.0 - actx.np.tanh( 1.0/(self._sigma)*(x_vec[1] - (self._disc) ) ))
+        temperature = 300.0 + 300.0*aux
         
         pressure = 101325.0 + x*0.0
 
@@ -189,25 +182,6 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-def mask_from_elements(vol_discr, actx, elements):
-    mesh = vol_discr.mesh
-    zeros = vol_discr.zeros(actx)
-
-    group_arrays = []
-
-    for igrp in range(len(mesh.groups)):
-        start_elem_nr = mesh.base_element_nrs[igrp]
-        end_elem_nr = start_elem_nr + mesh.groups[igrp].nelements
-        grp_elems = elements[
-            (elements >= start_elem_nr)
-            & (elements < end_elem_nr)] - start_elem_nr
-        grp_ary_np = actx.to_numpy(zeros[igrp])
-        grp_ary_np[grp_elems] = 1
-        group_arrays.append(actx.from_numpy(grp_ary_np))
-
-    return DOFArray(actx, tuple(group_arrays))
-
-
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, lazy=False,
@@ -251,13 +225,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nhealth = 1
     nstatus = 100
 
-    plot_gradients = True
-
     # default timestepping control
 #    integrator = "compiled_lsrk45"
     integrator = "ssprk43"
-    current_dt = 4.0e-5 #order == 2
-    t_final = 2.0
+    current_dt = 0.2 #order == 2
+    t_final = 50000.0
 
     local_dt = False
     constant_cfl = False
@@ -333,7 +305,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     x_left = np.zeros(nspecies)
     x_left[cantera_soln.species_index("Ar")] = 1.0
-    x_left[cantera_soln.species_index("He")] = 0.0
+    x_left[cantera_soln.species_index("N2")] = 0.0
 
     pres_cantera = cantera.one_atm
 
@@ -342,7 +314,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     x_right = np.zeros(nspecies)
     x_right[cantera_soln.species_index("Ar")] = 0.0
-    x_right[cantera_soln.species_index("He")] = 1.0
+    x_right[cantera_soln.species_index("N2")] = 1.0
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_right
     y_right = cantera_soln.Y
@@ -436,7 +408,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     velocity = np.zeros(shape=(dim,))
 
     # use the burned conditions with a lower temperature
-    flow_init = case1(dim=dim, sigma=0.5, nspecies=nspecies,
+    flow_init = case1(dim=dim, sigma=0.2, nspecies=nspecies,
                       velocity=velocity,
                       species_mass_right=y_right,
                       species_mass_left=y_left)
@@ -599,14 +571,19 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 ##############################################################################
 
-    isothermal_wall_temp = 300.0
     fluid_boundaries = {
+        dd_vol_fluid.trace("Upper Top").domain_tag:  # pylint: disable=no-member
+            IsothermalWallBoundary(wall_temperature=300.0),
         dd_vol_fluid.trace("Upper Sides").domain_tag:  # pylint: disable=no-member
-        IsothermalWallBoundary(wall_temperature=isothermal_wall_temp)}
+            AdiabaticSlipBoundary(),
+    }
 
     solid_boundaries = {
+        dd_vol_solid.trace("Lower Bottom").domain_tag:  # pylint: disable=no-member
+            IsothermalWallBoundary(wall_temperature=600.0),
         dd_vol_solid.trace("Lower Sides").domain_tag:  # pylint: disable=no-member
-        AdiabaticSlipBoundary()}
+            AdiabaticSlipBoundary()
+    }
 
 ##############################################################################
 
@@ -626,16 +603,22 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 ##############################################################################
 
-    def my_write_viz(step, t, dt, fluid_state, wall_state):
+    def my_write_viz(step, t, dt, fluid_state, wall_state,
+                    fluid_rhs=None, solid_rhs=None,
+                    fluid_grad_cv=None, fluid_grad_t=None,
+                    wall_grad_cv=None, wall_grad_t=None):
 
         fluid_viz_fields = [
-            ("fluid_CV_rho", fluid_state.cv.mass),
-            ("fluid_CV_rhoU", fluid_state.cv.momentum),
-            ("fluid_CV_rhoE", fluid_state.cv.energy),
-            ("fluid_DV_P", fluid_state.pressure),
-            ("fluid_DV_T", fluid_state.temperature),
-            ("fluid_DV_U", fluid_state.velocity[0]),
-            ("fluid_DV_V", fluid_state.velocity[1]),
+            ("CV_rho", fluid_state.cv.mass),
+            ("CV_rhoU", fluid_state.cv.momentum),
+            ("CV_rhoE", fluid_state.cv.energy),
+            ("DV_P", fluid_state.pressure),
+            ("DV_T", fluid_state.temperature),
+#            ("Grad_rho", fluid_grad_cv.mass),
+#            ("Grad_rhoE", fluid_grad_cv.energy),
+#            ("Grad_rhoU", fluid_grad_cv.momentum[0]),
+#            ("Grad_rhoV", fluid_grad_cv.momentum[1]),
+#            ("Grad_T", fluid_grad_t),
         ]
 
         # species mass fractions
@@ -644,13 +627,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 for i in range(nspecies))
 
         solid_viz_fields = [
-            ("solid_CV_rho", wall_state.cv.mass),
-            ("solid_CV_rhoU", wall_state.cv.momentum),
-            ("solid_CV_rhoE", wall_state.cv.energy),
-            ("solid_DV_P", wall_state.pressure),
-            ("solid_DV_T", wall_state.temperature),
-            ("solid_DV_U", wall_state.velocity[0]),
-            ("solid_DV_V", wall_state.velocity[1]),
+            ("CV_rho", wall_state.cv.mass),
+            ("CV_rhoU", wall_state.cv.momentum),
+            ("CV_rhoE", wall_state.cv.energy),
+            ("DV_P", wall_state.pressure),
+            ("DV_T", wall_state.temperature),
+#            ("Grad_CV_rho", wall_grad_cv.mass),
+#            ("Grad_CV_rhoE", wall_grad_cv.energy),
+#            ("Grad_CV_rhoU", wall_grad_cv.momentum[0]),
+#            ("Grad_CV_rhoV", wall_grad_cv.momentum[1]),
+#            ("Grad_T", wall_grad_t),
         ]
 
         # species mass fractions
@@ -720,6 +706,31 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     my_get_timestep_fluid = actx.compile(_my_get_timestep_fluid)
 
+#    from grudge.dof_desc import DD_VOLUME_ALL
+#    def my_get_wall_timestep(wall_state):
+#        wall_kappa = wall_state.tv.thermal_conductivity
+#        wall_mu = wall_state.tv.viscosity
+#        return char_length_solid**2/(actx.np.maximum(
+#            wall_diffusivity, wdv.oxygen_diffusivity))
+
+#    def _my_get_timestep_wall(wv, wdv, t, dt):
+
+#        if not constant_cfl:
+#            return dt
+
+#        actx = wv.mass.array_context
+#        if local_dt:
+#            mydt = current_cfl*my_get_wall_timestep(wv, wdv)
+#        else:
+#            if constant_cfl:
+#                ts_field = current_cfl*my_get_wall_timestep(wv, wdv)
+#                mydt = actx.to_numpy(
+#                    nodal_min(dcoll, dd_vol_solid, ts_field, initial=np.inf))[()]
+
+#        return mydt
+
+#    my_get_timestep_wall = actx.compile(_my_get_timestep_wall)
+
 ##############################################################################
 
     import os
@@ -744,8 +755,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         wv = solid_state.cv
 
         if constant_cfl:
-            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                t_final, constant_cfl, local_dt, dd_vol_fluid)
+            dt = my_get_timestep_fluid(fluid_state, t, dt, dd=dd_vol_fluid)
+#            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
+#                t_final, constant_cfl, local_dt, dd_vol_fluid)
 
         try:
             do_viz = check_step(step=step, interval=nviz)
@@ -786,10 +798,21 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_viz:
 
-                print('Writing solution file')
+#                fluid_rhs, solid_rhs, fluid_grad_cv, fluid_grad_t, \
+#                    wall_grad_cv, wall_grad_t = coupled_ns_operator(
+#                        dcoll, gas_model, dd_vol_fluid, dd_vol_solid,
+#                        fluid_boundaries, solid_boundaries,
+#                        fluid_state, solid_state,
+#                        time=t, limiter_func=_limit_fluid_cv,
+#                        return_gradients=True, quadrature_tag=quadrature_tag)
 
+                print('Writing solution file')
                 my_write_viz(step=step, t=t, dt=dt, fluid_state=fluid_state,
-                    wall_state=solid_state)
+                    wall_state=solid_state,
+#                    fluid_rhs=fluid_rhs, solid_rhs=solid_rhs,
+#                    fluid_grad_cv=fluid_grad_cv, fluid_grad_t=fluid_grad_t,
+#                    wall_grad_cv=wall_grad_cv, wall_grad_t=wall_grad_t
+                    )
 
             if do_restart:
                 my_write_restart(step, t, state)
@@ -798,7 +821,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
             my_write_viz(step=step, t=t, dt=dt, fluid_state=fluid_state,
-                wv=wv, wdv=wdv, smoothness=smoothness)
+                         wall_state=solid_state)
             raise
 
         return state, dt
@@ -816,10 +839,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             limiter_dd=dd_vol_solid)
 
         fluid_rhs, solid_rhs = coupled_ns_operator(
-                dcoll, gas_model, dd_vol_fluid, dd_vol_solid,
-                fluid_boundaries, solid_boundaries, fluid_state, wall_state,
-                time=t, limiter_func=_limit_fluid_cv,
-                quadrature_tag=quadrature_tag)
+            dcoll, gas_model, dd_vol_fluid, dd_vol_solid,
+            fluid_boundaries, solid_boundaries, fluid_state, wall_state,
+            time=t, limiter_func=_limit_fluid_cv,
+            quadrature_tag=quadrature_tag)
 
         return make_obj_array([fluid_rhs, fluid_zeros, solid_rhs, solid_zeros])
 
@@ -844,10 +867,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 ##############################################################################
 
-    stepper_state = make_obj_array([fluid_state.cv,
-                                    fluid_state.temperature,
-                                    solid_state.cv,
-                                    solid_state.temperature])
+    stepper_state = make_obj_array([fluid_state.cv, fluid_state.temperature,
+                                    solid_state.cv, solid_state.temperature])
 
     if constant_cfl:
         t = current_t

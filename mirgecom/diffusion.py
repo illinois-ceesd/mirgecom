@@ -1,4 +1,5 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
+
 .. autofunction:: grad_facial_flux_central
 .. autofunction:: grad_facial_flux_weighted
 .. autofunction:: diffusion_flux
@@ -58,6 +59,7 @@ from mirgecom.utils import normalize_boundaries
 
 def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$.
+
     Uses a simple average of the two sides' values:
     .. math::
         F = -\frac{u^- + u^+}{2} \hat{n}.
@@ -67,6 +69,7 @@ def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
 
 def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$.
+
     Weights each side's value by the corresponding thermal conductivity $\kappa$:
     .. math::
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}.
@@ -83,14 +86,15 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
 
 
 def diffusion_flux(kappa, grad_u):
-    r"""
-    Compute the diffusive flux $-\kappa \nabla u$.
+    r"""Compute the diffusive flux $-\kappa \nabla u$.
+
     Parameters
     ----------
     kappa: float or :class:`meshmode.dof_array.DOFArray`
         The thermal conductivity.
     grad_u: numpy.ndarray
         Gradient of the state variable *u*.
+
     Returns
     -------
     meshmode.dof_array.DOFArray
@@ -103,6 +107,7 @@ def diffusion_facial_flux_central(
         kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal, *,
         penalty_amount=None):
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$.
+
     Uses a simple average of the two sides' values:
     .. math::
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n}.
@@ -128,6 +133,7 @@ def diffusion_facial_flux_harmonic(
         kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal, *,
         penalty_amount=None):
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$.
+
     Uses a modified average of the two sides' values that replaces $\kappa^-$
     and $\kappa^+$ with their harmonic mean:
     .. math::
@@ -154,8 +160,8 @@ def diffusion_facial_flux_harmonic(
 
 
 class DiffusionBoundary(metaclass=abc.ABCMeta):
-    """
-    Diffusion boundary base class.
+    """Diffusion boundary base class.
+
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
     """
@@ -177,8 +183,8 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
 
 class DirichletDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Dirichlet boundary condition for the diffusion operator.
+    r"""Dirichlet boundary condition for the diffusion operator.
+
     For the boundary condition $u|_\Gamma = f$, uses external data
     .. math::
                  u^+ &= 2 f - u^-
@@ -190,8 +196,8 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """
-        Initialize the boundary condition.
+        """Initialize the boundary condition.
+
         Parameters
         ----------
         value: float or meshmode.dof_array.DOFArray
@@ -235,8 +241,8 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Neumann boundary condition for the diffusion operator.
+    r"""Neumann boundary condition for the diffusion operator.
+
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma = g$, uses
     external data
     .. math::
@@ -253,8 +259,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """
-        Initialize the boundary condition.
+        """Initialize the boundary condition.
+
         Parameters
         ----------
         value: float or meshmode.dof_array.DOFArray
@@ -381,8 +387,8 @@ def grad_operator(
         # FIXME: See if there's a better way to do this
         kappa_tpairs=None,
         u_tpairs=None):
-    r"""
-    Compute the gradient of *u*.
+    r"""Compute the gradient of *u*.
+
     Parameters
     ----------
     dcoll: grudge.discretization.DiscretizationCollection
@@ -405,6 +411,7 @@ def grad_operator(
         on the base discretization.
     comm_tag: Hashable
         Tag for distributed communication
+
     Returns
     -------
     grad_u: numpy.ndarray
@@ -492,11 +499,12 @@ def diffusion_operator(
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         grad_u=None):
-    r"""
-    Compute the diffusion operator.
+    r"""Compute the diffusion operator.
+
     The diffusion operator is defined as
     $\nabla\cdot(\kappa\nabla u)$, where $\kappa$ is the conductivity and
     $u$ is a scalar field.
+
     Parameters
     ----------
     dcoll: grudge.discretization.DiscretizationCollection
@@ -526,6 +534,7 @@ def diffusion_operator(
         on the base discretization.
     comm_tag: Hashable
         Tag for distributed communication
+
     Returns
     -------
     diff_u: meshmode.dof_array.DOFArray or numpy.ndarray

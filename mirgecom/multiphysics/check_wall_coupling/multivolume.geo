@@ -1,9 +1,9 @@
-Point(1) = {-20,-20,0.0};
-Point(2) = {20,-20,0.0};
-Point(3) = {20,0.0,0.0};
-Point(4) = {-20,0.0,0.0};
-Point(5) = {20,20,0.0};
-Point(6) = {-20,20,0.0};
+Point(1) = {-2,-2,0.0};
+Point(2) = {2,-2,0.0};
+Point(3) = {2,0.0,0.0};
+Point(4) = {-2,0.0,0.0};
+Point(5) = {2,2,0.0};
+Point(6) = {-2,2,0.0};
 
 Line(1) = {1,2};
 Line(2) = {2,3};
@@ -31,5 +31,7 @@ Transfinite Line {7} = 21 Using Progression 1.0;
 Physical Surface("Lower") = {1};
 Physical Surface("Upper") = {2};
 
-Physical Curve("Lower Sides") = {1,2,4};
-Physical Curve("Upper Sides") = {5,6,7};
+Physical Curve("Lower Bottom") = {1};
+Physical Curve("Upper Top") = {6};
+Physical Curve("Lower Sides") = {4,2};
+Physical Curve("Upper Sides") = {7,5};
