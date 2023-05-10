@@ -4,13 +4,13 @@
     composite material closely related to PICA (Phenolic Impregnated Carbon
     Ablator) proposed as an open-source material for the Ablation Workshop.
 
-.. autoclass:: BprimeTable
 .. autoclass:: Pyrolysis
 .. autoclass:: SolidProperties
 .. autoclass:: GasProperties
+.. autoclass:: BprimeTable
 
 Helper Functions
-================
+----------------
 .. autofunction:: eval_spline
 .. autofunction:: eval_spline_derivative
 """
@@ -44,6 +44,7 @@ import scipy  # type: ignore[import]
 from scipy.interpolate import CubicSpline  # type: ignore[import]
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
+from mirgecom.fluid import ConservedVars
 
 
 class BprimeTable():
@@ -192,6 +193,7 @@ class GasProperties:
     .. automethod:: gas_dMdT
     .. automethod:: gas_viscosity
     .. automethod:: gas_thermal_conductivity
+    .. automethod:: pressure
     """
 
     def __init__(self, prandtl=1.0, lewis=1.0):
@@ -287,15 +289,14 @@ class GasProperties:
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
-    from mirgecom.fluid import ConservedVars
     def pressure(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the gas pressure.
 
         .. math::
             P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
         """
-        Rg = 8314.46261815324/self.gas_molar_mass(temperature)  # noqa N806
-        return cv.mass*Rg*temperature
+        gas_const = 8314.46261815324/self.gas_molar_mass(temperature)
+        return cv.mass*gas_const*temperature
 
     def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas thermal conductivity $\kappa_g$.
@@ -331,6 +332,12 @@ class SolidProperties:
         """Solid volumetric density considering all resin constituents."""
         self._char_mass = 220.0
         self._virgin_mass = 280.0
+
+    def solid_decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the pyrolysis."""
+        char_mass = self._char_mass
+        virgin_mass = self._virgin_mass
+        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/mass)
 
     def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Solid enthalpy as a function of pyrolysis progress."""

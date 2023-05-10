@@ -1,32 +1,43 @@
+Wall Degradation Modeling
+=========================
+
+Conserved Quantities
+^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: mirgecom.multiphysics.wall_model.WallConservedVars
+
+Equations of State
+^^^^^^^^^^^^^^^^^^
+.. autoclass:: mirgecom.multiphysics.wall_model.WallDependentVars
+.. autoclass:: mirgecom.multiphysics.oxidation.OxidationWallModel
+.. autoclass:: mirgecom.multiphysics.phenolics.PhenolicsWallModel
+
+Model-specific properties
+^^^^^^^^^^^^^^^^^^^^^^^^^
+    The properties of the materials can be defined in specific files:
+
+
+Carbon fiber
+------------
+.. automodule:: mirgecom.materials.carbon_fiber
+
+TACOT
+-----
+.. automodule:: mirgecom.materials.tacot
+
+HARLEM
+------
+.. automodule:: mirgecom.materials.harlem
+
 Carbon Fiber Oxidation 
-======================
+^^^^^^^^^^^^^^^^^^^^^^
 
     This section covers the response of carbon fiber when exposed to oxygen.
     The specific files used are:
 
-    .. automodule:: mirgecom.multiphysics.simple_oxidation
-
-Conserved Quantities
-^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: mirgecom.multiphysics.simple_oxidation.WallVars
-
-Equations of State
-^^^^^^^^^^^^^^^^^^
-.. autoclass:: mirgecom.multiphysics.simple_oxidation.WallDependentVars
-.. autoclass:: mirgecom.multiphysics.simple_oxidation.SimpleOxidationWallModel
-
-Model-specific properties
-^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    The properties of the materials can be defined in specific files:
-
-    .. automodule:: mirgecom.materials.carbon_fiber
-
-.. autoclass:: mirgecom.materials.carbon_fiber.Oxidation
-.. autoclass:: mirgecom.materials.carbon_fiber.SolidProperties
+    .. automodule:: mirgecom.multiphysics.oxidation
 
 Composite Materials
-===================
+^^^^^^^^^^^^^^^^^^^
 
     This section covers the response of composite materials made of phenolic
     resin and carbon fibers. The specific files used are:
@@ -40,11 +51,11 @@ Composite Materials
     it degrades and produces gaseous species.
 
     The temporal evolution of
-    :class:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars` is solved in
+    :class:`~mirgecom.multiphysics.wall_model.WallConservedVars` is solved in
     order to predict the material degradation. As the
     :class:`~mirgecom.materials.tacot.Pyrolysis` progresses, the mass of each 
     $i$ constituents of the resin, denoted by
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars.solid_species_mass`,
+    :attr:`~mirgecom.multiphysics.wall_model.WallConservedVars.mass`,
     is calculated as
 
     .. math ::
@@ -57,7 +68,7 @@ Composite Materials
             - \sum_i \dot{\omega}_i \mbox{ ,}
 
     where the
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars.gas_density`
+    :attr:`~mirgecom.fluid.ConservedVars.mass`
     is $\rho_g$. The source term indicates that all solid resin must become gas
     in order to stisfy mass conservation. Lastly, the gas velocity $\mathbf{u}$
     is obtained by Darcy's law, given by
@@ -70,7 +81,7 @@ Composite Materials
     the gas pressure.
 
     The
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsConservedVars.energy`
+    :attr:`~mirgecom.fluid.ConservedVars.energy`
     of the bulk material is given by
 
     .. math::
@@ -94,18 +105,21 @@ Composite Materials
 
     From the conserved variables, it is possible to compute the decomposition
     status, denoted by
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsDependentVars.tau`.
+    :attr:`~mirgecom.multiphysics.wall_model.WallDependentVars.tau`.
     This yields the proportion of virgin (unpyrolyzed material) to char (fully
     pyrolyzed) and, consequently, the different thermophysicochemical
     properties of the solid phase. Thus, the instantaneous material properties
     depend on the current state of the material, as well as the 
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsDependentVars.temperature`.
+    :attr:`~mirgecom.eos.GasDependentVars.temperature`.
     It is evaluated using Newton iteration based on both
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.gas_enthalpy` and
+    :attr:`~mirgecom.materials.tacot.GasProperties.gas_enthalpy` (tabulated
+    data) or 
+    :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` (Pyrometheus)
+    and
     :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_enthalpy`,
     as well as their respective derivatives, namely
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.gas_heat_capacity_cp` and
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_heat_capacity_cp`.
+    :attr:`~mirgecom.materials.tacot.GasProperties.gas_heat_capacity` and
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_heat_capacity`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials
     to tabulated data for easy evaluation of the properties based on the
@@ -125,19 +139,6 @@ Composite Materials
     for type 2 code. Additional details, extensive formulation and references
     are provided in https://github.com/illinois-ceesd/phenolics-notes
 
-Conserved Quantities
-^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: PhenolicsConservedVars
-
-Equations of State
-^^^^^^^^^^^^^^^^^^
-.. autoclass:: PhenolicsDependentVars
-.. autoclass:: PhenolicsWallModel
-
 Helper Functions
-^^^^^^^^^^^^^^^^
-.. autofunction:: initializer
-
-Model-specific properties
-^^^^^^^^^^^^^^^^^^^^^^^^^
-.. automodule:: mirgecom.materials.tacot
+----------------
+.. autofunction:: mirgecom.multiphysics.phenolics.initializer

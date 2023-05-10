@@ -1,4 +1,8 @@
-r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data."""
+r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
+
+.. autoclass:: Oxidation
+.. autoclass:: SolidProperties
+"""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -80,31 +84,27 @@ class Oxidation:
         return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*ox_mass*k*eff_surf_area
 
 
-class GasProperties:
-    """Evaluate properties of the gas permeating the fibers."""
-
-    # TODO this will be useful for more complex models
-    def __init__(self, pyrometheus_mechanism):
-        self._pyro = pyrometheus_mechanism
-
-    def oxygen_diffusivity(self, temperature: DOFArray) -> DOFArray:
-        """Return the mass diffusivity of the gaseous species."""
-        return 1e-4 + temperature*0.0
-
-
 class SolidProperties:
-    """Model for calculating wall quantities."""
+    """Model for calculating wall quantities.
+
+    .. automethod:: intrinsic_density
+    .. automethod:: solid_heat_capacity
+    .. automethod:: solid_enthalpy
+    .. automethod:: solid_thermal_conductivity
+    .. automethod:: solid_volume_fraction
+    .. automethod:: solid_emissivity
+    .. automethod:: solid_tortuosity
+    """
 
     def intrinsic_density(self):
         r"""Return the intrinsic density $\rho$ of the fibers."""
         return 1600.0
 
-    def solid_heat_capacity(self, temperature: DOFArray) -> DOFArray:
-        r"""Evaluate the heat capacity $C_{p_s}$ of the fibers."""
-        return (
-            + 1.461303669323e-14*temperature**5 - 1.862489701581e-10*temperature**4
-            + 9.685398830530e-07*temperature**3 - 2.599755262540e-03*temperature**2
-            + 3.667295510844e+00*temperature - 7.816218435655e+01)
+    def solid_decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the oxidation."""
+        virgin_mass = (self.intrinsic_density()
+                  * self.solid_volume_fraction(tau=1.0))
+        return 1.0 - (virgin_mass - mass)/virgin_mass
 
     def solid_enthalpy(self, temperature: DOFArray) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
@@ -112,6 +112,13 @@ class SolidProperties:
             - 1.279887694729e-11*temperature**5 + 1.491175465285e-07*temperature**4
             - 6.994595296860e-04*temperature**3 + 1.691564018108e+00*temperature**2
             - 3.441837408320e+01*temperature - 1.235438104496e+05)
+
+    def solid_heat_capacity(self, temperature: DOFArray) -> DOFArray:
+        r"""Evaluate the heat capacity $C_{p_s}$ of the fibers."""
+        return (
+            + 1.461303669323e-14*temperature**5 - 1.862489701581e-10*temperature**4
+            + 9.685398830530e-07*temperature**3 - 2.599755262540e-03*temperature**2
+            + 3.667295510844e+00*temperature - 7.816218435655e+01)
 
     # ~~~~~~~~ fiber conductivity
     def experimental_kappa(self, temperature: DOFArray) -> DOFArray:
@@ -139,14 +146,19 @@ class SolidProperties:
             * self.puma_kappa(progress) / self.puma_kappa(0)
         )
 
+    def solid_permeability(self, tau: DOFArray) -> DOFArray:
+        r"""Permeability $K$ of the composite material."""
+        return 6.0e-11 + tau*0.0
+
     def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ filled by gas around the fibers."""
         return 0.10*tau
 
     def solid_emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
-        return 0.9
+        return 0.9 + tau*0.0
 
     def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
-        return 1.1
+        #FIXME find a relation to make it change as a function of "tau"
+        return 1.1 + tau*0.0

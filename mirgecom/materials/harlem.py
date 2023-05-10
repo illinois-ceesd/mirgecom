@@ -37,7 +37,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import scipy  # type: ignore[import]
 from scipy.interpolate import CubicSpline  # type: ignore[import]
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array

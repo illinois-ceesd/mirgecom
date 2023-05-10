@@ -22,22 +22,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import dataclass, fields
-import numpy as np
 from meshmode.dof_array import DOFArray
-from arraycontext import (
-    dataclass_array_container,
-    with_container_arithmetic,
-    get_container_context_recursively
-)
+from mirgecom.fluid import ConservedVars
 from mirgecom.multiphysics.wall_model import (
-    WallDegradationModel, WallConservedVars
+    WallEOS, WallDegradationModel, WallConservedVars
 )
 from pytools.obj_array import make_obj_array
-from mirgecom.multiphysics.wall_model import WallEOS
 
 
 class WallTabulatedEOS(WallEOS):
+    """EOS for wall using tabulated data.
+
+    Inherits WallEOS and add an temperature-evaluation function exclusive
+    for TACOT-tabulated data."""
 
     def eval_temperature(self, cv, wv, tseed, tau, eos, niter=3) -> DOFArray:
         r"""Evaluate the temperature.
@@ -78,15 +75,15 @@ class WallTabulatedEOS(WallEOS):
 
             # gas constant R/M
             molar_mass = eos.gas_molar_mass(temp)
-            Rg = 8314.46261815324/molar_mass  # noqa N806
+            gas_const = 8314.46261815324/molar_mass  # noqa N806
 
             eps_rho_e = (
-                rho_gas*(eos.gas_enthalpy(temp) - Rg*temp)
+                rho_gas*(eos.gas_enthalpy(temp) - gas_const*temp)
                 + rho_solid*self.enthalpy(temp, tau))
 
             bulk_cp = (
                 rho_gas*(eos.gas_heat_capacity(temp)
-                         - Rg*(1.0 - temp/molar_mass*eos.gas_dMdT(temp)))
+                         - gas_const*(1.0 - temp/molar_mass*eos.gas_dMdT(temp)))
                 + rho_solid*self.heat_capacity(temp, tau))
 
             temp = temp - (eps_rho_e - rhoe)/bulk_cp
@@ -94,14 +91,14 @@ class WallTabulatedEOS(WallEOS):
         return temp
 
 
-def initializer(dcoll, gas_model, solid_species_mass, temperature, gas_density=None,
-                pressure=None):
+def initializer(dcoll, gas_model, solid_species_mass, temperature,
+                gas_density=None, pressure=None):
     """Initialize state of composite material.
 
     Parameters
     ----------
-    wall_model
-        :class:`PhenolicsWallModel`
+    gas_model
+        :class:`mirgecom.gas_model.GasModel`
 
     solid_species_mass: numpy.ndarray
         The initial bulk density of each one of the resin constituents.
@@ -120,7 +117,9 @@ def initializer(dcoll, gas_model, solid_species_mass, temperature, gas_density=N
 
     Returns
     -------
-    wv: :class:`WallConservedVars`
+    cv: :class:`mirgecom.fluid.ConservedVars`
+        The conserved variables of the fluid permeating the porous wall.
+    wv: :class:`mirgecom.multiphysics.wall_model.WallConservedVars`
         The wall conserved variables
     """
     if gas_density is None and pressure is None:
@@ -131,81 +130,41 @@ def initializer(dcoll, gas_model, solid_species_mass, temperature, gas_density=N
 
     wv = WallConservedVars(mass=solid_species_mass)
 
-    tau = gas_model.wall.eval_tau(wv)
+    tau = gas_model.wall.decomposition_progress(wv)
 
     # gas constant
-    Rg = 8314.46261815324/gas_model.eos.gas_molar_mass(temperature)  # noqa N806
+    gas_const = 8314.46261815324/gas_model.eos.gas_molar_mass(temperature)
 
     if gas_density is None:
-        eps_gas = gas_model.wall._sample_model.void_fraction(tau)
-        eps_rho_gas = eps_gas*pressure/(Rg*temperature)
+        eps_gas = gas_model.wall.void_fraction(tau)
+        eps_rho_gas = eps_gas*pressure/(gas_const*temperature)
 
     eps_rho_solid = sum(solid_species_mass)
     bulk_energy = (
         eps_rho_solid*gas_model.wall.enthalpy(temperature, tau)
-        + eps_rho_gas*(gas_model.eos.gas_enthalpy(temperature) - Rg*temperature)
+        + eps_rho_gas*(gas_model.eos.gas_enthalpy(temperature)
+                       - gas_const*temperature)
     )
 
-    dim = dcoll.dim
-    momentum = make_obj_array([tau*0.0 for i in range(dim)])
+    momentum = make_obj_array([tau*0.0 for i in range(dcoll.dim)])
 
-    from mirgecom.fluid import ConservedVars
     cv = ConservedVars(mass=eps_rho_gas, energy=bulk_energy, momentum=momentum)
 
     return cv, wv
 
 
-@dataclass_array_container
-@dataclass(frozen=True)
-class WallDependentVars:
-    """State-dependent quantities.
-
-    .. attribute:: tau
-    .. attribute:: temperature
-    .. attribute:: void_fraction
-    .. attribute:: gas_pressure
-    .. attribute:: gas_viscosity
-    .. attribute:: thermal_conductivity
-    .. attribute:: solid_emissivity
-    .. attribute:: solid_permeability
-    .. attribute:: solid_density
-    """
-
-    tau: DOFArray
-    temperature: DOFArray
-
-    thermal_conductivity: DOFArray
-    void_fraction: DOFArray
-
-    gas_pressure: DOFArray
-    gas_enthalpy: DOFArray
-    gas_viscosity: DOFArray
-
-    solid_enthalpy: DOFArray
-    solid_emissivity: DOFArray
-    solid_permeability: DOFArray
-    solid_density: DOFArray
-
-
 class PhenolicsWallModel(WallDegradationModel):
     """Variables dependent on the wall state.
 
-    .. automethod:: __init__
-    .. automethod:: eval_tau
-    .. automethod:: eval_temperature
+    .. automethod:: decomposition_progress
     .. automethod:: void_fraction
-    .. automethod:: thermal_conductivity
-    .. automethod:: gas_enthalpy
-    .. automethod:: gas_molar_mass
-    .. automethod:: gas_viscosity
-    .. automethod:: gas_heat_capacity_cp
-    .. automethod:: gas_pressure_diffusivity
-    .. automethod:: gas_pressure
     .. automethod:: solid_density
+    .. automethod:: solid_thermal_conductivity
+    .. automethod:: solid_enthalpy
     .. automethod:: solid_permeability
     .. automethod:: solid_emissivity
-    .. automethod:: solid_enthalpy
-    .. automethod:: solid_heat_capacity_cp
+    .. automethod:: solid_heat_capacity
+    .. automethod:: solid_tortuosity
     """
 
     def __init__(self, solid_data):
@@ -215,15 +174,11 @@ class PhenolicsWallModel(WallDegradationModel):
             The class with the solid properties of the desired material. For
             example, :class:`mirgecom.materials.tacot.SolidProperties` contains
             data for TACOT.
-        gas_data:
-            The class with properties of the product gases. For example,
-            :class:`mirgecom.materials.tacot.GasProperties` contains data for
-            gaseous products of TACOT decomposition.
         """
         self._solid_data = solid_data
 
     # ~~~~~~~~~~~~
-    def eval_tau(self, wv: WallConservedVars) -> DOFArray:
+    def decomposition_progress(self, current_mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
@@ -233,28 +188,16 @@ class PhenolicsWallModel(WallDegradationModel):
         .. math::
             \tau = \frac{\rho_0}{\rho_0 - \rho_c}
                     \left( 1 - \frac{\rho_c}{\rho(t)} \right)
-
-        Parameters
-        ----------
-        wv: :class:`WallConservedVars`
-            the class of conserved variables for the pyrolysis
         """
-        char_mass = self._solid_data._char_mass
-        virgin_mass = self._solid_data._virgin_mass
-        current_mass = self.solid_density(wv)
-        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/current_mass)
+        return self._solid_data.solid_decomposition_progress(current_mass)
 
     # ~~~~~~~~~~~~ bulk gas+solid properties
-    def void_fraction(self, tau) -> DOFArray:
+    def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
 
         The fractions of gas and solid phases must sum to one,
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
         progress ratio $\tau$.
-
-        Parameters
-        ----------
-        tau: meshmode.dof_array.DOFArray
         """
         return 1.0 - self._solid_data.solid_volume_fraction(tau)
 
@@ -270,7 +213,8 @@ class PhenolicsWallModel(WallDegradationModel):
         """
         return sum(wv.mass)
 
-    def solid_thermal_conductivity(self, temperature, tau) -> DOFArray:
+    def solid_thermal_conductivity(self, temperature: DOFArray,
+                                   tau: DOFArray) -> DOFArray:
         r"""Return the solid thermal conductivity, $f(\rho, \tau, T)$."""
         return self._solid_data.solid_thermal_conductivity(temperature, tau)
 
@@ -286,7 +230,11 @@ class PhenolicsWallModel(WallDegradationModel):
         r"""Return the wall emissivity based on the progress ratio $\tau$."""
         return self._solid_data.solid_emissivity(tau)
 
-    def solid_heat_capacity_cp(self, temperature: DOFArray,
+    def solid_heat_capacity(self, temperature: DOFArray,
                                tau: DOFArray) -> DOFArray:
         r"""Return the solid heat capacity $C_{p_s}$."""
         return self._solid_data.solid_heat_capacity(temperature, tau)
+
+    def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
+        r"""Return the solid tortuosity $\eta$."""
+        return self._solid_data.solid_tortuosity(tau)

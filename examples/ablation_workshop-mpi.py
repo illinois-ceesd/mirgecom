@@ -40,7 +40,7 @@ from grudge.dof_desc import (
 )
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.integrators.ssprk import ssprk43_step
+from mirgecom.integrators import ssprk43_step
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
@@ -59,10 +59,12 @@ from mirgecom.logging_quantities import (
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage
 )
-from mirgecom.multiphysics.phenolics import WallConservedVars
 from mirgecom.eos import GasDependentVars
+from mirgecom.fluid import ConservedVars
 from mirgecom.transport import GasTransportVars
 from mirgecom.gas_model import PorousFluidState
+from mirgecom.multiphysics.phenolics import WallConservedVars
+from mirgecom.multiphysics.wall_model import PorousTransportVars
 
 from logpyle import IntervalTimer, set_dt
 
@@ -208,8 +210,10 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     # {{{ Initialize wall model
 
+    from mirgecom.multiphysics.phenolics import WallTabulatedEOS
     import mirgecom.multiphysics.phenolics as wall
     import mirgecom.materials.tacot as my_composite
+
     my_solid = my_composite.SolidProperties()
     my_gas = my_composite.GasProperties()
     pyrolysis = my_composite.Pyrolysis()
@@ -234,7 +238,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     wall_degradation_model = wall.PhenolicsWallModel(solid_data=my_solid)
 
-    from mirgecom.multiphysics.phenolics import WallTabulatedEOS
     wall_model = WallTabulatedEOS(
         wall_degradation_model=wall_degradation_model,
         wall_sample_mask=wall_sample_mask,
@@ -283,8 +286,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     temperature_seed = nodes[0]*0.0 + 300.0
 
-    from mirgecom.multiphysics.wall_model import PorousTransportVars
-    def make_state(cv, gas_model, temperature_seed, wall_vars):
+    def _make_state(cv, gas_model, temperature_seed, wall_vars):
         """Return the fluid+wall state for porous media flow.
 
         Ideally one would use the gas_model.make_fluid_state but, since this
@@ -295,8 +297,8 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         zeros = cv.mass*0.0
 
-        tau = gas_model.wall.eval_tau(wall_vars)
-        epsilon = gas_model.wall._sample_model.void_fraction(tau)
+        tau = gas_model.wall.decomposition_progress(wall_vars)
+        epsilon = gas_model.wall.void_fraction(tau)
         temperature = gas_model.wall.eval_temperature(cv=cv, wv=wall_vars,
             tseed=temperature_seed, tau=tau, eos=my_gas)
 
@@ -324,8 +326,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         # coupled thermal conductivity
         kappa = wall_model.thermal_conductivity(cv, wall_vars,
                                                 temperature, tau, gas_tv)
-        pressure_diffusivity = \
-            wall_model.pressure_diffusivity(cv, temperature, tau, gas_tv)
+        pressure_diffusivity = wall_model.pressure_diffusivity(cv, tau, gas_tv)
 
         # return modified transport vars
         tv = PorousTransportVars(
@@ -339,7 +340,12 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         wdv = gas_model.wall.dependent_vars(wall_vars, temperature)
         return PorousFluidState(cv=cv, dv=dv, tv=tv, wv=wall_vars, wdv=wdv)
 
-    fluid_state = make_state(cv, gas_model, temperature_seed, wall_vars)
+    def make_state(cv, temperature_seed, wall_vars):
+        return _make_state(cv, gas_model, temperature_seed, wall_vars)
+
+    compiled_make_state = actx.compile(make_state)
+
+    fluid_state = compiled_make_state(cv, temperature_seed, wall_vars)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -438,7 +444,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         """
         cv = state.cv
         dv = state.dv
-        wv = state.wv
         wdv = state.wdv
 
         actx = cv.mass.array_context
@@ -456,7 +461,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         m_dot_g = np.dot(m_dot_g, normal_vec)
 
         # time-dependent function
-        weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-13, 1.0)
+        weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-7, 1.0)
 
         h_e = 1.5e6*weight
         conv_coeff_0 = 0.3*weight
@@ -507,17 +512,14 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         return make_obj_array([flux - radiation])
 
-    def phenolics_operator(dcoll, state, boundaries, gas_model, pyrolysis,
+    def phenolics_operator(dcoll, fluid_state, boundaries, gas_model, pyrolysis,
                            quadrature_tag, dd_wall, time=0.0, bprime_class=None,
                            pressure_scaling_factor=1.0, penalty_amount=1.0):
         """Return the RHS of the composite wall."""
 
-        cv, wv, tseed = state
-
-        fluid_state = make_state(cv, gas_model, temperature_seed, wall_vars)
-
         cv = fluid_state.cv
         wv = fluid_state.wv
+        tv = fluid_state.tv
         dv = fluid_state.dv
         wdv = fluid_state.wdv
 
@@ -526,17 +528,15 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         pressure_boundaries, velocity_boundaries = boundaries
 
-        gas_pressure_diffusivity = wdv.pressure_diffusivity
-
         # ~~~~~
         # viscous RHS
         pressure_viscous_rhs, grad_pressure = diffusion_operator(dcoll,
-            kappa=cv.mass*gas_pressure_diffusivity,
+            kappa=tv.pressure_diffusivity,
             boundaries=pressure_boundaries, u=dv.pressure,
             penalty_amount=penalty_amount, return_grad_u=True,
             comm_tag=_PresDiffTag)
 
-        velocity = -gas_pressure_diffusivity*grad_pressure
+        velocity = -(tv.pressure_diffusivity/cv.mass)*grad_pressure
 
         boundary_flux = ablation_workshop_flux(dcoll, fluid_state, gas_model,
             velocity, bprime_class, quadrature_tag, dd_wall, time)
@@ -551,96 +551,69 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         }
 
         energy_viscous_rhs = diffusion_operator(dcoll,
-            kappa=wdv.thermal_conductivity, boundaries=energy_boundaries,
-            u=wdv.temperature, penalty_amount=penalty_amount,
+            kappa=tv.thermal_conductivity, boundaries=energy_boundaries,
+            u=dv.temperature, penalty_amount=penalty_amount,
             comm_tag=_TempDiffTag)
 
-        viscous_rhs = WallConservedVars(
-            solid_species_mass=wv.solid_species_mass*0.0,
-            gas_density=pressure_scaling_factor*pressure_viscous_rhs,
-            energy=energy_viscous_rhs)
+        viscous_rhs = ConservedVars(
+            mass=pressure_scaling_factor*pressure_viscous_rhs,
+            momentum=cv.momentum*0.0,
+            energy=energy_viscous_rhs,
+            species_mass=cv.species_mass)
 
         # ~~~~~
         # inviscid RHS, energy equation only
-        field = wv.gas_density*wdv.gas_enthalpy
+        field = cv.mass*gas_model.eos.gas_enthalpy(temperature)
         energy_inviscid_rhs = compute_div(actx, dcoll, quadrature_tag, field,
                                           velocity, velocity_boundaries, dd_wall)
 
-        inviscid_rhs = WallConservedVars(
-            solid_species_mass=wv.solid_species_mass*0.0,
-            gas_density=zeros,
-            energy=-energy_inviscid_rhs)
+        inviscid_rhs = ConservedVars(
+            mass=zeros,
+            momentum=cv.momentum*0.0,
+            energy=-energy_inviscid_rhs,
+            species_mass=cv.species_mass)
 
         # ~~~~~
         # decomposition for each component of the resin
-        resin_pyrolysis = pyrolysis.get_source_terms(temperature=wdv.temperature,
-                                                     chi=wv.solid_species_mass)
+        resin_pyrolysis = pyrolysis.get_source_terms(temperature=dv.temperature,
+                                                     chi=wv.mass)
 
         # flip sign due to mass conservation
         gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
 
         # viscous dissipation due to friction inside the porous
-        visc_diss_energy = wdv.gas_viscosity*wdv.void_fraction**2*(
+        visc_diss_energy = tv.viscosity*wdv.void_fraction**2*(
             (1.0/wdv.solid_permeability)*np.dot(velocity, velocity))
 
-        source_terms = WallConservedVars(
-            solid_species_mass=resin_pyrolysis,
-            gas_density=gas_source_term,
-            energy=visc_diss_energy)
+        source_terms = ConservedVars(
+            mass=gas_source_term,
+            momentum=cv.momentum*0.0,
+            energy=visc_diss_energy,
+            species_mass=cv.species_mass)
 
-        return inviscid_rhs + viscous_rhs + source_terms
+        cv_rhs = inviscid_rhs + viscous_rhs + source_terms
+        wv_rhs = WallConservedVars(mass=resin_pyrolysis)
+
+        return cv_rhs, wv_rhs
 
     def _rhs(t, state):
 
+        cv, wv, tseed = state
+
+        fluid_state = _make_state(cv, gas_model, temperature_seed, wall_vars)
+
         boundaries = make_obj_array([pressure_boundaries, velocity_boundaries])
 
-        rhs = phenolics_operator(
-            dcoll=dcoll, state=state, boundaries=boundaries, wall_model=wall_model,
-            pyrolysis=pyrolysis, quadrature_tag=quadrature_tag, dd_wall=dd_vol,
-            time=t, bprime_class=bprime_class,
+        cv_rhs, wv_rhs = phenolics_operator(
+            dcoll=dcoll, fluid_state=fluid_state, boundaries=boundaries,
+            gas_model=gas_model, pyrolysis=pyrolysis, quadrature_tag=quadrature_tag,
+            dd_wall=dd_vol, time=t, bprime_class=bprime_class,
             pressure_scaling_factor=pressure_scaling_factor, penalty_amount=1.0)
 
         # ~~~~~
-        return make_obj_array([rhs, tseed*0.0])
+        return make_obj_array([cv_rhs, wv_rhs, tseed*0.0])
 
     compiled_rhs = actx.compile(_rhs)
-
-#    def _get_gradients(wv, wdv):
-#        gas_pressure_diffusivity = \
-#            wall_model.gas_pressure_diffusivity(wdv.temperature, wdv.tau)
-#        _, grad_pressure = diffusion_operator(dcoll,
-#            kappa=wv.gas_density*gas_pressure_diffusivity,
-#            boundaries=pressure_boundaries, u=wdv.gas_pressure, time=t,
-#            penalty_amount=1.0,
-#            return_grad_u=True)
-
-#        _, grad_temperature = diffusion_operator(dcoll,
-#            kappa=wdv.thermal_conductivity,
-#            boundaries=energy_boundaries, u=wdv.temperature, time=t,
-#            penalty_amount=1.0,
-#            return_grad_u=True)
-
-#        return make_obj_array([grad_pressure, grad_temperature])
-
-#    get_gradients = actx.compile(_get_gradients)
-
-#    def _get_rhs_terms(t, wv, wdv):
-
-#        boundaries = make_obj_array([pressure_boundaries, energy_boundaries,
-#                                     velocity_boundaries])
-#
-#        rhs_I, rhs_V, rhs_S = phenolics_operator(
-#            dcoll=dcoll, state=make_obj_array([wv, wdv.temperature]),
-#            boundaries=boundaries, time=t,
-#            wall=wall, wall_model=wall_model, pyrolysis=pyrolysis,
-#            quadrature_tag=quadrature_tag, dd_wall=dd_vol,
-#            pressure_scaling_factor=pressure_scaling_factor,
-#            penalty_amount=1.0,
-#            split=True)
-
-#        return make_obj_array([rhs_I, rhs_V, rhs_S])
-
-#    get_rhs_terms = actx.compile(_get_rhs_terms)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -656,9 +629,9 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         viz_fields = [("CV_density", cv.mass),
                       ("CV_energy", cv.energy),
                       ("DV", dv),
-                      ("WV_phase_1", wall_vars.mass[0]),
-                      ("WV_phase_2", wall_vars.mass[1]),
-                      ("WV_phase_3", wall_vars.mass[2]),
+                      ("WV_phase_1", wv.mass[0]),
+                      ("WV_phase_2", wv.mass[1]),
+                      ("WV_phase_3", wv.mass[2]),
                       ("WDV", wdv)
                       ]
 
@@ -693,7 +666,9 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     my_write_viz(step=istep, t=t, state=fluid_state)
 
-    sys.exit()
+    cv = fluid_state.cv
+    dv = fluid_state.dv
+    wv = fluid_state.wv
 
     freeze_gc_flag = True
     while t < t_final:
@@ -703,21 +678,18 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         try:
 
-            fluid_state = make_state(cv, gas_model, dv.temperature, wall_vars)
-
-            state = make_obj_array([cv, wall_vars, tseed])
+            state = make_obj_array([cv, wv, fluid_state.temperature])
 
             state = ssprk43_step(state, t, dt, compiled_rhs)
             state = force_evaluation(actx, state)
 
-            wall_vars, tseed = state
-
-            wdv = eval_dep_vars(wall_vars, tseed)
+            cv, wv, tseed = state
+            fluid_state = compiled_make_state(cv, tseed, wv)
 
             t += dt
             istep += 1
 
-            if check_naninf_local(dcoll, "vol", wdv.temperature):
+            if check_naninf_local(dcoll, "vol", dv.temperature):
                 if rank == 0:
                     logger.info("Fluid solution failed health check.")
                 raise MyRuntimeError("Failed simulation health check.")
@@ -743,7 +715,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=istep, t=t, wall_vars=wall_vars, dep_vars=wdv)
+            my_write_viz(step=istep, t=t, state=fluid_state)
             raise
 
         if logmgr:

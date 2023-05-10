@@ -22,37 +22,41 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import dataclass, fields  # noqa
-
-import numpy as np
-
 from meshmode.dof_array import DOFArray
 
-from arraycontext import (
-    dataclass_array_container,
-    with_container_arithmetic,
-    # get_container_context_recursively
-)
 from mirgecom.multiphysics.wall_model import (
     WallDegradationModel, WallConservedVars
 )
 
 
 class OxidationWallModel(WallDegradationModel):
-    """Oxidation model used for the Y3 oxidation model."""
+    """Oxidation model used for the Y3 oxidation model.
+
+    .. automethod:: decomposition_progress
+    .. automethod:: void_fraction
+    .. automethod:: solid_density
+    .. automethod:: solid_thermal_conductivity
+    .. automethod:: solid_enthalpy
+    .. automethod:: solid_permeability
+    .. automethod:: solid_emissivity
+    .. automethod:: solid_heat_capacity
+    .. automethod:: solid_tortuosity
+    """
 
     def __init__(self, solid_data):
         self._fiber = solid_data
 
-    def eval_tau(self, wv: WallConservedVars) -> DOFArray:
+    def decomposition_progress(self, current_mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the oxidation.
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the fibers were all consumed.
         """
-        virgin = (self._fiber.intrinsic_density()
-                  * self._fiber.solid_volume_fraction(tau=1.0))
-        return 1.0 - (virgin - wv.mass)/virgin
+        return self._solid_data.solid_decomposition_progress(current_mass)
+
+    def intrinsic_density(self):
+        r"""Return the intrinsic density of carbon."""
+        return self._fiber.intrinsic_density()
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -74,7 +78,11 @@ class OxidationWallModel(WallDegradationModel):
 
     def solid_thermal_conductivity(self, temperature, tau) -> DOFArray:
         r"""Return the solid thermal conductivity, $f(\rho, \tau, T)$."""
-        return self._solid_data.solid_thermal_conductivity(temperature, tau)
+        return self._fiber.solid_thermal_conductivity(temperature, tau)
+
+    def solid_permeability(self, tau: DOFArray) -> DOFArray:
+        r"""Return the wall permeability $K$ based on the progress ratio $\tau$."""
+        return self._solid_data.solid_permeability(tau)
 
     def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Return the solid enthalpy $h_s$."""
@@ -90,5 +98,5 @@ class OxidationWallModel(WallDegradationModel):
         return self._fiber.solid_heat_capacity(temperature, tau)
 
     def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
-        r"""."""
+        r"""Return the solid tortuosity $\eta$."""
         return self._fiber.solid_tortuosity(tau)
