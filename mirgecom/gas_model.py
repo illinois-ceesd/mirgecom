@@ -64,7 +64,7 @@ from mirgecom.transport import (
     GasTransportVars
 )
 from mirgecom.multiphysics.wall_model import (
-    WallEOS, WallConservedVars, WallDependentVars
+    WallEOS, WallConservedVars, WallDependentVars, PorousTransportVars
 )
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -294,8 +294,8 @@ class ViscousFluidState(FluidState):
 class PorousFluidState(ViscousFluidState):
     """Gas model-consistent fluid state for viscous gas in porous media flows.
 
-    It inherits the :class:ViscousFluidState and add variables related to 
-    the flow inside porous materials (like carbon fibers or composite materials).
+    It inherits the :class:ViscousFluidState and add variables related to the
+    flow inside porous materials (like carbon fibers or composite materials).
     """
 
     wv: WallConservedVars
@@ -392,7 +392,8 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
                 smoothness_mu=dv.smoothness_mu,
                 smoothness_kappa=dv.smoothness_kappa,
                 smoothness_beta=dv.smoothness_beta,
-                species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature))
+                species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
+            )
 
         if gas_model.transport is not None:
             tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
@@ -404,11 +405,13 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
 
         tau = gas_model.wall.eval_tau(wall_vars)
         epsilon = gas_model.wall._sample_model.void_fraction(tau)
-        temperature = gas_model.wall.eval_temperature(cv=cv, wv=wall_vars,
-            tseed=temperature_seed, tau=tau, eos=gas_model.eos)
+        temperature = \
+            gas_model.wall.get_temperature(cv=cv, wv=wall_vars,
+                                           tseed=temperature_seed, tau=tau,
+                                           eos=gas_model.eos)
 
-        pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
-                                                      temperature=temperature)
+        pressure = (
+            1.0/epsilon*gas_model.eos.pressure(cv=cv, temperature=temperature))
 
         if limiter_func:
             cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
@@ -425,20 +428,18 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
         )
 
-        gas_tv = gas_model.transport.transport_vars(cv=cv, dv=dv,
-                                                    eos=gas_model.eos)
-
-        mu = gas_model.wall.viscosity(temperature, tau, gas_tv)
-        kappa = gas_model.wall.thermal_conductivity(cv, wall_vars,
-                                                    temperature, tau, gas_tv)
-        diff = gas_model.wall.species_diffusivity(temperature, tau, gas_tv)
+        gas_tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
 
         tv = PorousTransportVars(
             bulk_viscosity=gas_tv.bulk_viscosity,
-            viscosity=mu,
-            thermal_conductivity=kappa,
-            species_diffusivity=diff,
-            pressure_diffusivity=wall_model.pressure_diffusivity(cv, tau, gas_tv)
+            viscosity=gas_model.wall.viscosity(temperature, tau, gas_tv),
+            thermal_conductivity=gas_model.wall.thermal_conductivity(cv, wall_vars,
+                                                                     temperature,
+                                                                     tau, gas_tv),
+            species_diffusivity=gas_model.wall.species_diffusivity(temperature,
+                                                                   tau, gas_tv),
+            pressure_diffusivity=gas_model.wall.pressure_diffusivity(cv, tau,
+                                                                     gas_tv)
         )
 
         wv = wall_vars

@@ -7,6 +7,7 @@ Conserved Quantities
 
 Equations of State
 ^^^^^^^^^^^^^^^^^^
+.. autoclass:: mirgecom.multiphysics.wall_model.WallEOS
 .. autoclass:: mirgecom.multiphysics.wall_model.WallDependentVars
 .. autoclass:: mirgecom.multiphysics.oxidation.OxidationWallModel
 .. autoclass:: mirgecom.multiphysics.phenolics.PhenolicsWallModel

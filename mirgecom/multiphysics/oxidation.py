@@ -52,7 +52,7 @@ class OxidationWallModel(WallDegradationModel):
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the fibers were all consumed.
         """
-        return self._solid_data.solid_decomposition_progress(current_mass)
+        return self._fiber.solid_decomposition_progress(current_mass)
 
     def intrinsic_density(self):
         r"""Return the intrinsic density of carbon."""
@@ -82,7 +82,7 @@ class OxidationWallModel(WallDegradationModel):
 
     def solid_permeability(self, tau: DOFArray) -> DOFArray:
         r"""Return the wall permeability $K$ based on the progress ratio $\tau$."""
-        return self._solid_data.solid_permeability(tau)
+        return self._fiber.solid_permeability(tau)
 
     def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Return the solid enthalpy $h_s$."""

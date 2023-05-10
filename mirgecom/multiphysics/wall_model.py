@@ -111,21 +111,21 @@ class WallDegradationModel:
 class WallEOS:
     """Interface for the wall model used for the Y3 prediction.
 
-    This class evaluates the variables dependent on the wall state. It requires
-    functions are inputs in order to consider the different materials employed
-    at wall (for instance, carbon fibers, graphite, alumina, steel etc). The
-    number and type of material is case-dependent and, hence, must be defined
-    at the respective simulation driver.
+    This class evaluates the variables dependent on the wall decomposition state
+    and its different parts. For that, the user must supply external functions
+    in order to consider the different materials employed at wall (for instance,
+    carbon fibers, graphite, alumina, steel etc). The number and types of the
+    materials is case-dependent and, hence, must be defined in the respective
+    simulation driver.
 
     .. automethod:: __init__
     .. automethod:: decomposition_progress
-    .. automethod:: eval_temperature
+    .. automethod:: get_temperature
     .. automethod:: void_fraction
     .. automethod:: solid_density
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: thermal_conductivity
-    .. automethod:: thermal_diffusivity
     .. automethod:: species_diffusivity
     .. automethod:: viscosity
     .. automethod:: pressure_diffusivity
@@ -162,7 +162,7 @@ class WallEOS:
         self._heat_capacity_func = heat_capacity_func
         self._thermal_conductivity_func = thermal_conductivity_func
 
-    def solid_density(self, wv):
+    def solid_density(self, wv: WallConservedVars) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$."""
         return self._model.solid_density(wv)
 
@@ -180,14 +180,13 @@ class WallEOS:
         )
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
-        r"""Void fraction $\epsilon$ filled by gas."""
-        # FIXME pass a function to make it depend on the holder as well
-        return self._model.void_fraction(tau)
+        r"""Void fraction $\epsilon$ of the sample filled with gas."""
+        return self._model.void_fraction(tau) * self._sample_mask
 
-    def eval_temperature(self, cv: ConservedVars, wv: WallConservedVars,
+    def get_temperature(self, cv: ConservedVars, wv: WallConservedVars,
                          tseed: DOFArray, tau: DOFArray, eos: GasEOS,
                          niter=3) -> DOFArray:
-        r"""Evaluate the temperature.
+        r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
         Newton iteration is used to get the temperature based on the internal
@@ -207,7 +206,7 @@ class WallEOS:
 
         rho_gas = cv.mass
         rho_solid = self.solid_density(wv)
-        rhoe = cv.energy  # FIXME minus kinetic energy
+        rhoe = cv.energy  # FIXME minus kinetic energy (non-existent for now)
         for _ in range(0, niter):
 
             gas_internal_energy = \
@@ -230,7 +229,7 @@ class WallEOS:
         Returns
         -------
         enthalpy: meshmode.dof_array.DOFArray
-            the wall enthalpy, including all of its components
+            the wall enthalpy, including all parts of the solid
         """
         return self._enthalpy_func(temperature=temperature, tau=tau)
 
@@ -240,13 +239,13 @@ class WallEOS:
         Returns
         -------
         heat capacity: meshmode.dof_array.DOFArray
-            the wall heat capacity, including all of its components
+            the wall heat capacity, including all parts of the solid
         """
         return self._heat_capacity_func(temperature=temperature, tau=tau)
 
     def thermal_conductivity(self, cv: ConservedVars, wv: WallConservedVars,
                              temperature: DOFArray, tau: DOFArray,
-                             gas_tv: GasTransportVars) -> DOFArray:
+                             gas_tv: GasTransportVars):
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the fibers
@@ -257,6 +256,11 @@ class WallEOS:
 
         .. math::
             \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
+
+        Returns
+        -------
+        thermal_conductivity: meshmode.dof_array.DOFArray
+            the thermal_conductivity, including all parts of the solid
         """
         y_g = cv.mass/(cv.mass + self.solid_density(wv))
         y_s = 1.0 - y_g
@@ -265,18 +269,14 @@ class WallEOS:
 
         return y_s*kappa_s + y_g*kappa_g
 
-    def viscosity(self, temperature: DOFArray, tau: DOFArray, gas_tv):
-        """Viscosity of the gas through the (porous) wall.
-
-        Returns
-        -------
-        species_diffusivity: meshmode.dof_array.DOFArray
-            the species mass diffusivity inside the wall
-        """
+    def viscosity(self, temperature: DOFArray, tau: DOFArray,
+                  gas_tv: GasTransportVars) -> DOFArray:
+        """Viscosity of the gas through the (porous) wall."""
         epsilon = self._model.void_fraction(tau)
-        return gas_tv.viscosity/epsilon
+        return gas_tv.viscosity/epsilon * self._sample_mask
 
-    def species_diffusivity(self, temperature: DOFArray, tau: DOFArray, gas_tv):
+    def species_diffusivity(self, temperature: DOFArray, tau: DOFArray,
+                            gas_tv: GasTransportVars) -> DOFArray:
         """Mass diffusivity of gaseous species through the (porous) wall.
 
         Returns
@@ -285,9 +285,11 @@ class WallEOS:
             the species mass diffusivity inside the wall
         """
         tortuosity = self._model.solid_tortuosity(tau)
-        #  FIXME
-        #  return self._species_diffusivity_func(temperature)/tortuosity
-        return gas_tv.species_diffusivity/tortuosity
+        return gas_tv.species_diffusivity/tortuosity * self._sample_mask
+
+    def permeability(self, tau: DOFArray) -> DOFArray:
+        r"""Permeability $K$ of the porous material."""
+        return self._model.solid_permeability(tau) * self._sample_mask
 
     def pressure_diffusivity(self, cv: ConservedVars, tau: DOFArray,
                              gas_tv: GasTransportVars) -> DOFArray:
@@ -301,11 +303,11 @@ class WallEOS:
         """
         mu = gas_tv.viscosity
         epsilon = self.void_fraction(tau)
-        permeability = self._model.solid_permeability(tau)
-        return cv.mass*permeability/(mu*epsilon)
+        permeability = self.permeability(tau)
+        return cv.mass*permeability/(mu*epsilon) * self._sample_mask
 
     def dependent_vars(self, wv: WallConservedVars,
-                       temperature: DOFArray) -> WallConservedVars:
+                       temperature: DOFArray) -> WallDependentVars:
         """Get the state-dependent variables."""
         tau = self.decomposition_progress(wv)
         return WallDependentVars(
@@ -319,6 +321,9 @@ class WallEOS:
 @dataclass_array_container
 @dataclass(frozen=True)
 class PorousTransportVars(GasTransportVars):
-    """Extra transport variable for porous media flow."""
+    """Extra transport variable for porous media flow.
+
+    .. attribute:: pressure_diffusivity
+    """
 
     pressure_diffusivity: DOFArray

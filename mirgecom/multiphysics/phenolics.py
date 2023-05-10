@@ -23,21 +23,22 @@ THE SOFTWARE.
 """
 
 from meshmode.dof_array import DOFArray
+from pytools.obj_array import make_obj_array
 from mirgecom.fluid import ConservedVars
 from mirgecom.multiphysics.wall_model import (
     WallEOS, WallDegradationModel, WallConservedVars
 )
-from pytools.obj_array import make_obj_array
 
 
 class WallTabulatedEOS(WallEOS):
     """EOS for wall using tabulated data.
 
     Inherits WallEOS and add an temperature-evaluation function exclusive
-    for TACOT-tabulated data."""
+    for TACOT-tabulated data.
+    """
 
-    def eval_temperature(self, cv, wv, tseed, tau, eos, niter=3) -> DOFArray:
-        r"""Evaluate the temperature.
+    def get_temperature(self, cv, wv, tseed, tau, eos, niter=3) -> DOFArray:
+        r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
         Newton iteration is used to get the temperature based on the internal

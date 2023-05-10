@@ -160,5 +160,5 @@ class SolidProperties:
 
     def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
-        #FIXME find a relation to make it change as a function of "tau"
+        # FIXME find a relation to make it change as a function of "tau"
         return 1.1 + tau*0.0
