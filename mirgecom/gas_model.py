@@ -45,6 +45,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
+
 import numpy as np  # noqa
 from functools import partial
 from meshmode.dof_array import DOFArray  # noqa
@@ -87,10 +89,16 @@ class GasModel:
 
         A gas equation of state to provide thermal properties.
 
-    .. attribute:: transport_model
+    .. attribute:: transport
 
         A gas transport model to provide transport properties.  None for inviscid
         models.
+
+    .. attribute:: wall
+
+        The class :class:`~mirgecom.multiphysics.wall_model.WallEOS` with the
+        wall model that provide properties for porous media flow.
+        None for pure-fluid flows.
     """
 
     eos: GasEOS
@@ -284,6 +292,11 @@ class ViscousFluidState(FluidState):
 @dataclass_array_container
 @dataclass(frozen=True)
 class PorousFluidState(ViscousFluidState):
+    """Gas model-consistent fluid state for viscous gas in porous media flows.
+
+    It inherits the :class:ViscousFluidState and add variables related to 
+    the flow inside porous materials (like carbon fibers or composite materials).
+    """
 
     wv: WallConservedVars
     wdv: WallDependentVars
@@ -311,6 +324,25 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
 
         An optional array or number with the temperature to use as a seed
         for a temperature evaluation for the created fluid state
+
+    smoothness_mu: :class:`~meshmode.dof_array.DOFArray`
+
+        Optional array containing the smoothness parameter for extra shear
+        viscosity in the artificial viscosity.
+
+    smoothness_kappa: :class:`~meshmode.dof_array.DOFArray`
+
+        Optional array containing the smoothness parameter for extra thermal
+        conductivity in the artificial viscosity.
+
+    smoothness_beta: :class:`~meshmode.dof_array.DOFArray`
+
+        Optional array containing the smoothness parameter for extra bulk
+        viscosity in the artificial viscosity.
+
+    wall_vars: :class:`~mirgecom.multiphysics.wall_model.WallConservedVars`
+
+        Optional quantity containing the mass of the porous solid.
 
     limiter_func:
 
@@ -401,11 +433,12 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
                                                     temperature, tau, gas_tv)
         diff = gas_model.wall.species_diffusivity(temperature, tau, gas_tv)
 
-        tv = GasTransportVars(
+        tv = PorousTransportVars(
             bulk_viscosity=gas_tv.bulk_viscosity,
             viscosity=mu,
             thermal_conductivity=kappa,
-            species_diffusivity=diff
+            species_diffusivity=diff,
+            pressure_diffusivity=wall_model.pressure_diffusivity(cv, tau, gas_tv)
         )
 
         wv = wall_vars

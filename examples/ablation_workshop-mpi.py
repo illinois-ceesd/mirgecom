@@ -323,9 +323,10 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             thermal_conductivity=gas_kappa,
             species_diffusivity=np.empty((0,), dtype=object))
 
-        # coupled thermal conductivity
+        # coupled solid-gas thermal conductivity
         kappa = wall_model.thermal_conductivity(cv, wall_vars,
                                                 temperature, tau, gas_tv)
+        # pressure diffusivity for Darcy flow
         pressure_diffusivity = wall_model.pressure_diffusivity(cv, tau, gas_tv)
 
         # return modified transport vars

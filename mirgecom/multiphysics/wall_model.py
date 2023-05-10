@@ -1,5 +1,6 @@
-"""handles the wall model.
+""":mod:`mirgecom.multiphysics.wall_model` handles the EOS for wall model.
 
+.. autoclass:: WallEOS
 .. autoclass:: WallConservedVars
 .. autoclass:: WallDependentVars
 .. autoclass:: WallDegradationModel
@@ -108,12 +109,12 @@ class WallDegradationModel:
 
 
 class WallEOS:
-    """Oxidation model used for the Y3 wall model.
+    """Interface for the wall model used for the Y3 prediction.
 
     This class evaluates the variables dependent on the wall state. It requires
     functions are inputs in order to consider the different materials employed
     at wall (for instance, carbon fibers, graphite, alumina, steel etc). The
-    number and type of material is case dependent and, hence, must be defined
+    number and type of material is case-dependent and, hence, must be defined
     at the respective simulation driver.
 
     .. automethod:: __init__
