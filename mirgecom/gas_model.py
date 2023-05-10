@@ -506,7 +506,7 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
         smoothness_beta = op.project(dcoll, src, tgt, state.dv.smoothness_beta)
 
     wall_vars = None
-    if state.wv.wall_vars is not None:
+    if gas_model.wall is not None:
         wall_vars = op.project(dcoll, src, tgt, state.wv.wall_vars)
 
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
@@ -584,7 +584,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
             smoothness_mu=_getattr_ish(smoothness_mu_pair, "int"),
             smoothness_kappa=_getattr_ish(smoothness_kappa_pair, "int"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "int"),
-            wall_vars=_getattr_ish(wall_vars_pairs, "int"),
+            wall_vars=_getattr_ish(wall_vars_pair, "int"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd),
         exterior=make_fluid_state(
             cv_pair.ext, gas_model,
@@ -592,7 +592,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model, temperature_seed_pairs=Non
             smoothness_mu=_getattr_ish(smoothness_mu_pair, "ext"),
             smoothness_kappa=_getattr_ish(smoothness_kappa_pair, "ext"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "ext"),
-            wall_vars=_getattr_ish(wall_vars_pairs, "ext"),
+            wall_vars=_getattr_ish(wall_vars_pair, "ext"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd))
         for cv_pair,
             tseed_pair,
@@ -755,7 +755,8 @@ def make_operator_fluid_states(
                 dcoll, volume_state.smoothness_beta, volume_dd=dd_vol,
                 tag=(_FluidSmoothnessBetaTag, comm_tag))]
 
-    if volume_state.wall_vars is not None:
+    wall_vars_interior_pairs = None
+    if gas_model.wall is not None:
         wall_vars_interior_pairs = [
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(

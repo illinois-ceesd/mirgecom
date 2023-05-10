@@ -299,7 +299,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         tau = gas_model.wall.decomposition_progress(wall_vars)
         epsilon = gas_model.wall.void_fraction(tau)
-        temperature = gas_model.wall.eval_temperature(cv=cv, wv=wall_vars,
+        temperature = gas_model.wall.get_temperature(cv=cv, wv=wall_vars,
             tseed=temperature_seed, tau=tau, eos=my_gas)
 
         pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
@@ -642,13 +642,17 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
             step=step, t=t, overwrite=True, vis_timer=vis_timer, comm=comm)
 
-    def my_write_restart(step, t, wall_vars, tseed):
+    def my_write_restart(step, t, state):
+        cv = state.cv
+        dv = state.dv
+        wv = state.wv
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != restart_file:
             rst_data = {
                 "local_mesh": local_mesh,
-                "wall_vars": wall_vars,
-                "tseed": tseed,
+                "cv": cv,
+                "wv": wv,
+                "tseed": dv.temperature,
                 "t": t,
                 "step": step,
                 "order": order,
