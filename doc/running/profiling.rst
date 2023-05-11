@@ -2,6 +2,44 @@ Profiling and logging
 =====================
 
 
+Profiling performance
+---------------------
+
+
+Desired Features:
+- MPI
+- Native support
+- Output options
+
+cProfile
+^^^^^^^^
+
+https://docs.python.org/3/library/profile.html
+``python -m cProfile -m mpi4py``
+
+Py-Spy
+^^^^^^
+
+``sudo py-spy record -- python -m mpi4py``
+
+
+Pyinstrument
+^^^^^^^^^^^^
+
+- output options
+``pyinstrument --show-all -m mpi4py [...]
+
+Vmprof
+^^^^^^
+
++ native support
+- <= Python 3.10
+
+FunctionTrace
+^^^^^^^^^^^^^
+
+- does not run
+
 Profiling memory consumption with :mod:`memray`
 -----------------------------------------------
 
