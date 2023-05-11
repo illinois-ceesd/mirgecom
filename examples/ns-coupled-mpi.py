@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 import logging
 import sys
+import gc
 import numpy as np
 import pyopencl as cl
 
@@ -47,7 +48,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticSlipBoundary,
-    PrescribedFluidBoundary,
+    PrescribedFluidBoundary
 )
 from mirgecom.fluid import make_conserved
 from mirgecom.transport import PowerLawTransport
@@ -143,8 +144,9 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None, lazy=False,
+         use_profiling=False, casename="ns_coupling", lazy=False,
          restart_filename=None):
+    """Driver the coupled NS example."""
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -183,6 +185,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nrestart = 10000
     nhealth = 10
     nstatus = 100
+    ngarbage = 50
 
     # default timestepping control
     integrator = "ssprk43"
@@ -251,7 +254,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     x_left[cantera_soln.species_index("O2")] = 1.0
     x_left[cantera_soln.species_index("N2")] = 0.0
 
-    pres_cantera = cantera.one_atm
+    pres_cantera = cantera.one_atm  # pylint: disable=no-member
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_left
     y_left = cantera_soln.Y
@@ -277,20 +280,18 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                              temperature_guess=temperature_seed)
 
     species_names = pyrometheus_mechanism.species_names
+    print(f"Pyrometheus mechanism species names {species_names}")
 
     # }}}
 
     fluid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
        beta=4.093e-7*0.2)
 
-    gas_model_fluid = GasModel(eos=eos, transport=fluid_transport_model)
-
     solid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
        beta=4.093e-7)
 
+    gas_model_fluid = GasModel(eos=eos, transport=fluid_transport_model)
     gas_model_solid = GasModel(eos=eos, transport=solid_transport_model)
-
-    print(f"Pyrometheus mechanism species names {species_names}")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -517,7 +518,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = state_minus.array_context
         bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
-        cv = actx.thaw(flow_init(nodes, gas_model.eos))
+        cv = flow_init(nodes, gas_model.eos)
         return make_fluid_state(cv=cv,
                                 gas_model=gas_model,
                                 temperature_seed=nodes[0]*0.0+300.0)
@@ -526,7 +527,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = state_minus.array_context
         bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
-        cv = actx.thaw(flow_init(nodes, gas_model.eos))
+        cv = flow_init(nodes, gas_model.eos)
         return make_fluid_state(cv=cv,
                                 gas_model=gas_model,
                                 temperature_seed=nodes[0]*0.0+600.0)
@@ -563,10 +564,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def my_write_viz(step, t, dt, fluid_state, wall_state,
-                    fluid_rhs=None, solid_rhs=None,
-                    fluid_grad_cv=None, fluid_grad_t=None,
-                    wall_grad_cv=None, wall_grad_t=None):
+    def my_write_viz(step, t, dt, fluid_state, wall_state):
 
         fluid_viz_fields = [
             ("CV_rho", fluid_state.cv.mass),
@@ -664,22 +662,17 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         wv = solid_state.cv
 
         try:
-            do_viz = check_step(step=step, interval=nviz)
-            do_restart = check_step(step=step, interval=nrestart)
-            do_health = check_step(step=step, interval=nhealth)
 
-            ngarbage = 50
             if check_step(step=step, interval=ngarbage):
                 with gc_timer.start_sub_timer():
                     from warnings import warn
                     warn("Running gc.collect() to work around memory growth issue ")
-                    import gc
                     gc.collect()
 
             state = make_obj_array([fluid_state.cv, fluid_state.temperature,
                                     solid_state.cv, solid_state.temperature])
 
-            if do_health:
+            if check_step(step=step, interval=nhealth):
                 health_errors = global_reduce(
                     my_health_check(fluid_state.cv, fluid_state.dv), op="lor")
                 if health_errors:
@@ -687,12 +680,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
-            if do_viz:
+            if check_step(step=step, interval=nviz):
                 print("Writing solution file")
                 my_write_viz(step=step, t=t, dt=dt, fluid_state=fluid_state,
                     wall_state=solid_state)
 
-            if do_restart:
+            if check_step(step=step, interval=nrestart):
                 my_write_restart(step, t, state)
 
         except MyRuntimeError:
@@ -728,7 +721,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         if step == first_step + 1:
             with gc_timer.start_sub_timer():
-                import gc
                 gc.collect()
                 # Freeze the objects that are still alive so they will not
                 # be considered in future gc collections.
@@ -786,7 +778,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     elif use_profiling:
         print(actx.tabulate_profiling_data())
 
-    exit()
+    sys.exit()
 
 
 if __name__ == "__main__":
@@ -813,7 +805,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # for writing output
-    casename = "ns_coupling"
     if (args.casename):
         print(f"Custom casename {args.casename}")
         casename = (args.casename).replace("'", "")
