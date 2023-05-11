@@ -372,7 +372,7 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
 
         if limiter_func:
             cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
-                              epsilon=1.0, dd=limiter_dd)
+                              dd=limiter_dd)
 
         dv = GasDependentVars(
             temperature=temperature,
@@ -414,6 +414,7 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
             1.0/epsilon*gas_model.eos.pressure(cv=cv, temperature=temperature))
 
         if limiter_func:
+            # FIXME this is something that may give trouble in the future. Lets see.
             cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
                               epsilon=epsilon, dd=limiter_dd)
 
@@ -852,6 +853,11 @@ def replace_fluid_state(
         if temperature_seed is not None
         else state.temperature)
 
+    if gas_model.wall is None:
+        wall_vars = None
+    else:
+        wall_vars = state.wv
+
     return make_fluid_state(
         cv=new_cv,
         gas_model=gas_model,
@@ -859,6 +865,6 @@ def replace_fluid_state(
         smoothness_mu=state.smoothness_mu,
         smoothness_kappa=state.smoothness_kappa,
         smoothness_beta=state.smoothness_beta,
-        wall_vars=state.wv,
+        wall_vars=wall_vars,
         limiter_func=limiter_func,
         limiter_dd=limiter_dd)
