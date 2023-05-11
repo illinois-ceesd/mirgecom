@@ -144,7 +144,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_profiling=False, casename="ns_coupling", lazy=False,
+         use_profiling=False, casename=None, lazy=False,
          restart_filename=None):
     """Driver the coupled NS example."""
 
@@ -805,6 +805,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # for writing output
+    casename = "ns_coupling"
     if (args.casename):
         print(f"Custom casename {args.casename}")
         casename = (args.casename).replace("'", "")
