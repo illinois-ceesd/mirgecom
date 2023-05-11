@@ -38,10 +38,8 @@ THE SOFTWARE.
 import abc
 from functools import partial
 import numpy as np
-import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
@@ -193,6 +191,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
     .. math::
                  u^+ &= 2 f - u^-
+
         (\nabla u)^+ &= (\nabla u)^-
 
     to compute boundary fluxes as shown in [Hesthaven_2008]_, Section 7.1.
@@ -261,6 +260,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     .. math::
         (-\kappa \nabla u\cdot\mathbf{\hat{n}})|_\Gamma &=
             -\kappa^- (\nabla u\cdot\mathbf{\hat{n}})|_\Gamma
+
                                                         &= -\kappa^- g
 
     when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
