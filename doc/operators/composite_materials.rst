@@ -9,13 +9,11 @@ Equations of State
 ^^^^^^^^^^^^^^^^^^
 .. autoclass:: mirgecom.multiphysics.wall_model.WallEOS
 .. autoclass:: mirgecom.multiphysics.wall_model.WallDependentVars
-.. autoclass:: mirgecom.multiphysics.oxidation.OxidationWallModel
-.. autoclass:: mirgecom.multiphysics.phenolics.PhenolicsWallModel
 
 Model-specific properties
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-    The properties of the materials can be defined in specific files:
-
+    The properties of the materials are defined in specific files. These files
+    are required by :class:`~mirgecom.multiphysics.wall_model.WallEOS`.
 
 Carbon fiber
 ------------
@@ -25,17 +23,80 @@ TACOT
 -----
 .. automodule:: mirgecom.materials.tacot
 
-HARLEM
-------
-.. automodule:: mirgecom.materials.harlem
-
 Carbon Fiber Oxidation 
 ^^^^^^^^^^^^^^^^^^^^^^
 
     This section covers the response of carbon fiber when exposed to oxygen.
-    The specific files used are:
+    The specific file used is:
 
     .. automodule:: mirgecom.multiphysics.oxidation
+
+    The carbon fibers are characterized as a highly porous material,
+    with void fraction $\approx 90\%$. As the material is exposed to the flow,
+    oxygen can diffuse inside the wall and result in oxidation, not only
+    limited to the surface but also as a volumetric process. For now, convection
+    inside the wall will be neglected and the species are only allowed to diffuse.
+
+    The temporal evolution of
+    :class:`~mirgecom.multiphysics.wall_model.WallConservedVars` is solved in
+    order to predict the material degradation. As the
+    :class:`~mirgecom.materials.carbon_fiber.Oxidation` progresses,
+    the temporal evolution of the fibers mass is given by
+
+    .. math ::
+        \frac{\partial \rho_s}{\partial t} = \dot{\omega_s} \mbox{ .}
+
+    This process creates gaseous species following
+
+    .. math ::
+        \frac{\partial \rho_g}{\partial t} = - \dot{\omega}_s \mbox{ ,}
+
+    where the
+    :attr:`~mirgecom.fluid.ConservedVars.mass`
+    is $\rho_g$. The source term indicates that the fibers become gas in order
+    to satisfy mass conservation.
+
+    The
+    :attr:`~mirgecom.fluid.ConservedVars.energy`
+    of the bulk material is given by
+
+    .. math::
+        \frac{\partial \rho_b e_b}{\partial t}
+        = \nabla \cdot \left( \bar{\boldsymbol{\kappa}} \nabla T 
+        + h_\alpha \mathbf{J}_{\alpha} \right)
+        \mbox{ .}
+
+    The first term on the RHS is modeled as an effective diffusive transfer
+    using Fourier's law, where the thermal conductivity is given by
+    $\bar{\boldsymbol{\kappa}}$.
+    The second term on the RHS is due to the species diffusion, where the
+    species specific enthalpy ${h}_{\alpha}$, and the species
+    diffusive flux vector $\mathbf{J}_{\alpha}$. The sub-index $b$ is the bulk
+    material consisting of both solid and gas phases, where
+
+    .. math::
+        \rho_b e_b = \epsilon_{g} \rho_g e_g + \epsilon_s \rho_s h_s \mbox{ .}
+
+    The internal energy of the gas is given by $e_g(T)$ and the solid 
+    energy/enthalpy is $h_s(T)$.
+
+    From the conserved variables, it is possible to compute the oxidation
+    progress, denoted by
+    :attr:`~mirgecom.multiphysics.wall_model.WallDependentVars.tau`.
+    As a consequence, the instantaneous material properties will change due to
+    the mass loss.
+
+    The
+    :attr:`~mirgecom.eos.GasDependentVars.temperature`
+    is evaluated using Newton iteration based on both
+    :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_enthalpy`,
+    as well as their respective derivatives, namely
+    :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
+    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_heat_capacity`.
+    Note that :mod:`pyrometheus` is used to handle the species properties.
+
+.. autoclass:: mirgecom.multiphysics.oxidation.OxidationWallModel
 
 Composite Materials
 ^^^^^^^^^^^^^^^^^^^
@@ -70,9 +131,9 @@ Composite Materials
 
     where the
     :attr:`~mirgecom.fluid.ConservedVars.mass`
-    is $\rho_g$. The source term indicates that all solid resin must become gas
-    in order to stisfy mass conservation. Lastly, the gas velocity $\mathbf{u}$
-    is obtained by Darcy's law, given by
+    is $\rho_g$. The source term indicates that all solid resin must become
+    gas in order to satisfy mass conservation. Lastly, the gas velocity
+    $\mathbf{u}$ is obtained by Darcy's law, given by
 
     .. math::
         \mathbf{u} = \frac{\mathbf{K}}{\mu \epsilon} \cdot \nabla P \mbox{ .}
@@ -140,6 +201,9 @@ Composite Materials
     for type 2 code. Additional details, extensive formulation and references
     are provided in https://github.com/illinois-ceesd/phenolics-notes
 
+.. autoclass:: mirgecom.multiphysics.phenolics.PhenolicsWallModel
+
 Helper Functions
 ----------------
+.. autoclass:: mirgecom.multiphysics.phenolics.WallTabulatedEOS
 .. autofunction:: mirgecom.multiphysics.phenolics.initializer

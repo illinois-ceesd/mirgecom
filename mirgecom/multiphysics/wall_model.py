@@ -293,7 +293,7 @@ class WallEOS:
 
     def pressure_diffusivity(self, cv: ConservedVars, tau: DOFArray,
                              gas_tv: GasTransportVars) -> DOFArray:
-        r"""Return the normalized pressure diffusivity.
+        r"""Return the pressure diffusivity for Darcy flow.
 
         .. math::
             d_{P} = \epsilon_g \rho_g \frac{\mathbf{K}}{\mu \epsilon_g}

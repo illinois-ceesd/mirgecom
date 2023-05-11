@@ -33,7 +33,13 @@ from meshmode.dof_array import DOFArray
 
 
 class Oxidation:
-    """Evaluate the source terms for the oxidation of carbon fibers."""
+    """Evaluate the source terms for the oxidation of carbon fibers.
+
+    .. automethod:: puma_effective_surface_area
+    .. automethod:: _get_wall_effective_surface_area_fiber
+    .. automethod:: get_source_terms
+
+    """
 
     def puma_effective_surface_area(self, progress) -> DOFArray:
         """Polynomial fit based on PUMA data.
@@ -88,10 +94,12 @@ class SolidProperties:
     """Model for calculating wall quantities.
 
     .. automethod:: intrinsic_density
+    .. automethod:: solid_decomposition_progress
     .. automethod:: solid_heat_capacity
     .. automethod:: solid_enthalpy
     .. automethod:: solid_thermal_conductivity
     .. automethod:: solid_volume_fraction
+    .. automethod:: solid_permeability
     .. automethod:: solid_emissivity
     .. automethod:: solid_tortuosity
     """
@@ -146,12 +154,14 @@ class SolidProperties:
             * self.puma_kappa(progress) / self.puma_kappa(0)
         )
 
+    # ~~~~~~~~ other properties
     def solid_permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the composite material."""
         return 6.0e-11 + tau*0.0
 
     def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ filled by gas around the fibers."""
+        # FIXME maybe use the PUMA function?
         return 0.10*tau
 
     def solid_emissivity(self, tau: DOFArray) -> DOFArray:

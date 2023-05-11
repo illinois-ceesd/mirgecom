@@ -557,6 +557,8 @@ class PyrometheusMixture(MixtureEOS):
     .. automethod:: dependent_vars
     .. automethod:: total_energy
     .. automethod:: kinetic_energy
+    .. automethod:: heat_capacity_cv
+    .. automethod:: heat_capacity_cp
     .. automethod:: gamma
     .. automethod:: get_internal_energy
     .. automethod:: get_density
