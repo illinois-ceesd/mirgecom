@@ -175,8 +175,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # ~~~~~~~~~~~~~~~~~~
 
-    rst_path = "restart_data/"
-    viz_path = "viz_data/"
+    rst_path = "./"
+    viz_path = "./"
     vizname = viz_path+casename
     rst_pattern = rst_path+"{cname}-{step:06d}-{rank:04d}.pkl"
 
@@ -198,7 +198,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # discretization and model control
     order = 2
-    use_overintegration = False
+    use_overintegration = True
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -284,9 +284,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
+    # change the transport coefficients
     fluid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
        beta=4.093e-7*0.2)
 
+    # keep the original transport coefficients
     solid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
        beta=4.093e-7)
 
@@ -423,7 +425,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     local_nelements = local_fluid_mesh.nelements + local_solid_mesh.nelements
 
     dcoll = create_discretization_collection(actx, volume_to_local_mesh,
-                                             order=order)
+                                             order=order, mpi_communicator=comm)
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
