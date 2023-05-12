@@ -342,7 +342,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
-        state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus, 
+        state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus,
                                      **kwargs)
 
         state_bc = self.state_bc(
@@ -473,7 +473,7 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
-        state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus, 
+        state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus,
                                      **kwargs)
 
         state_bc = self.state_bc(
@@ -1060,8 +1060,6 @@ def coupled_ns_operator(
         dcoll, wall_state, gas_model_wall, wall_all_boundaries_no_grad,
         quadrature_tag, dd=wall_dd, comm_tag=_WallOpStatesTag,
         limiter_func=limiter_func)
-
-    
 
     # Compute the gradients of CV and T for both subdomains
 
