@@ -23,6 +23,8 @@ parameter to ``install.sh`` when installing emirge, or by running
 ``makezip.sh`` after installation.
 
 
+.. _caching-errors:
+
 Avoiding errors and overheads due to caching of kernels
 -------------------------------------------------------
 

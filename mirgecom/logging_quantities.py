@@ -425,7 +425,7 @@ class DeviceMemoryUsage(PostLogQuantity):
 
         if ret != 0:
             from warnings import warn
-            warn(f"cudaMemGetInfo failed with error {ret}.")
+            warn(f"cuMemGetInfo failed with error {ret}.")
             return None
         else:
             if free.value / total.value < 0.1:
