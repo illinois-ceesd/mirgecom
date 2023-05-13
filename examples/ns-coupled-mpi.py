@@ -181,14 +181,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     rst_pattern = rst_path+"{cname}-{step:06d}-{rank:04d}.pkl"
 
     # default i/o frequencies
-    nviz = 500
-    nrestart = 10000
+    nviz = 100
+    nrestart = 1000
     nhealth = 10
     nstatus = 100
     ngarbage = 50
 
     # default timestepping control
-    integrator = "ssprk43"
+    integrator = "euler"
     current_dt = 1.0
     t_final = 10.0
 
@@ -213,8 +213,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         force_eval = False
 
     if integrator == "ssprk43":
-        from mirgecom.integrators.ssprk import ssprk43_step
+        from mirgecom.integrators import ssprk43_step
         timestepper = ssprk43_step
+        force_eval = True
+
+    if integrator == "euler":
+        from mirgecom.integrators import euler_step
+        timestepper = euler_step
         force_eval = True
 
     if rank == 0:
@@ -232,13 +237,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         print(f"\torder = {order}")
         print(f"\tTime integration = {integrator}")
 
-
 ##########################################################################
 
     # {{{  Set up initial state using Cantera
 
     # Use Cantera for initialization
-    mechanism_file = "uiuc"
+    mechanism_file = "inert"
 
     from mirgecom.mechanisms import get_mechanism_input
     mech_input = get_mechanism_input(mechanism_file)
@@ -251,7 +255,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     temp_cantera = 300.0
 
     x_left = np.zeros(nspecies)
-    x_left[cantera_soln.species_index("O2")] = 1.0
+    x_left[cantera_soln.species_index("Ar")] = 1.0
     x_left[cantera_soln.species_index("N2")] = 0.0
 
     pres_cantera = cantera.one_atm  # pylint: disable=no-member
@@ -260,7 +264,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     y_left = cantera_soln.Y
 
     x_right = np.zeros(nspecies)
-    x_right[cantera_soln.species_index("O2")] = 0.0
+    x_right[cantera_soln.species_index("Ar")] = 0.0
     x_right[cantera_soln.species_index("N2")] = 1.0
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_right
@@ -388,7 +392,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         os.system("gmsh ns-coupled.geo -2 ns-coupled.msh")
         os.system("gmsh ns-coupled.msh -save -format msh2 -o ns-coupled-v2.msh")
     else:
-        os.system("sleep 1s")
+        os.system("sleep 2s")
 
     restart_step = None
     if restart_filename:
