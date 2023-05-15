@@ -45,8 +45,6 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 import pytest
 
-from numbers import Number
-
 import logging
 logger = logging.getLogger(__name__)
 
@@ -554,41 +552,42 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             assert err < 1e-9
 
 
-def test_diffusion_obj_array_vectorize(actx_factory):
+@pytest.mark.parametrize("vector_kappa", [False, True])
+def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
     """
     Checks that the diffusion operator can be called with either scalars or object
     arrays for `u`.
     """
     actx = actx_factory()
 
-    p = DecayingTrig(1, 2.)
+    if vector_kappa:
+        kappa1 = 2
+        kappa2 = 3
+    else:
+        kappa1 = 2
+        kappa2 = kappa1
 
-    sym_x = pmbl.make_sym_vector("x", p.dim)
+    p1 = DecayingTrig(1, kappa1)
+    p2 = DecayingTrig(1, kappa2)
+
+    sym_x = pmbl.make_sym_vector("x", 1)
     sym_t = pmbl.var("t")
 
     def get_u1(x, t):
-        return p.get_solution(x, t)
+        return p1.get_solution(x, t)
 
     def get_u2(x, t):
-        return 2*p.get_solution(x, t)
+        return 2*p2.get_solution(x, t)
 
     sym_u1 = get_u1(sym_x, sym_t)
     sym_u2 = get_u2(sym_x, sym_t)
 
-    sym_kappa1 = p.get_kappa(sym_x, sym_t, sym_u1)
-    sym_kappa2 = p.get_kappa(sym_x, sym_t, sym_u2)
-
-    assert isinstance(sym_kappa1, Number)
-    assert isinstance(sym_kappa2, Number)
-
-    kappa = sym_kappa1
-
-    sym_diffusion_u1 = sym_diffusion(p.dim, kappa, sym_u1)
-    sym_diffusion_u2 = sym_diffusion(p.dim, kappa, sym_u2)
+    sym_diffusion_u1 = sym_diffusion(1, kappa1, sym_u1)
+    sym_diffusion_u2 = sym_diffusion(1, kappa2, sym_u2)
 
     n = 128
 
-    mesh = p.get_mesh(n)
+    mesh = p1.get_mesh(n)
 
     dcoll = create_discretization_collection(actx, mesh, order=4)
 
@@ -599,12 +598,10 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     u1 = get_u1(nodes, t)
     u2 = get_u2(nodes, t)
 
-    kappa = p.get_kappa(nodes, t, u1)
-
-    boundaries = p.get_boundaries(dcoll, actx, t)
+    boundaries = p1.get_boundaries(dcoll, actx, t)
 
     diffusion_u1 = diffusion_operator(
-        dcoll, kappa=kappa, boundaries=boundaries, u=u1)
+        dcoll, kappa=kappa1, boundaries=boundaries, u=u1)
 
     assert isinstance(diffusion_u1, DOFArray)
 
@@ -617,8 +614,13 @@ def test_diffusion_obj_array_vectorize(actx_factory):
     boundaries_vector = [boundaries, boundaries]
     u_vector = make_obj_array([u1, u2])
 
-    diffusion_u_vector = diffusion_operator(
-        dcoll, kappa=kappa, boundaries=boundaries_vector, u=u_vector)
+    if vector_kappa:
+        kappa_vector = make_obj_array([kappa1, kappa2])
+        diffusion_u_vector = diffusion_operator(
+            dcoll, kappa=kappa_vector, boundaries=boundaries_vector, u=u_vector)
+    else:
+        diffusion_u_vector = diffusion_operator(
+            dcoll, kappa=kappa1, boundaries=boundaries_vector, u=u_vector)
 
     assert isinstance(diffusion_u_vector, np.ndarray)
     assert diffusion_u_vector.shape == (2,)

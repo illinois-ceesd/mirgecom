@@ -485,7 +485,7 @@ def diffusion_operator(
     ----------
     dcoll: grudge.discretization.DiscretizationCollection
         the discretization collection to use
-    kappa: numbers.Number or meshmode.dof_array.DOFArray
+    kappa: numbers.Number or meshmode.dof_array.DOFArray or numpy.ndarray
         the conductivity value(s)
     boundaries:
         dictionary (or list of dictionaries) mapping boundary domain tags to
@@ -523,14 +523,19 @@ def diffusion_operator(
             raise TypeError("boundaries must be a list if u is an object array")
         if len(boundaries) != len(u):
             raise TypeError("boundaries must be the same length as u")
+        if isinstance(kappa, np.ndarray):
+            if len(kappa) != len(u):
+                raise TypeError("kappa must be the same length as u")
+        else:
+            kappa = make_obj_array([kappa for _ in range(len(u))])
         return obj_array_vectorize_n_args(
-            lambda boundaries_i, u_i: diffusion_operator(
-                dcoll, kappa, boundaries_i, u_i, return_grad_u=return_grad_u,
+            lambda kappa_i, boundaries_i, u_i: diffusion_operator(
+                dcoll, kappa_i, boundaries_i, u_i, return_grad_u=return_grad_u,
                 penalty_amount=penalty_amount,
                 gradient_numerical_flux_func=gradient_numerical_flux_func,
                 diffusion_numerical_flux_func=diffusion_numerical_flux_func,
                 quadrature_tag=quadrature_tag, dd=dd),
-            make_obj_array(boundaries), u)
+            kappa, make_obj_array(boundaries), u)
 
     actx = u.array_context
 
