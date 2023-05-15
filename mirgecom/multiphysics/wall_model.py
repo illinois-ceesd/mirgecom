@@ -132,7 +132,7 @@ class WallEOS:
     .. automethod:: dependent_vars
     """
 
-    def __init__(self, wall_degradation_model, wall_sample_mask,
+    def __init__(self, wall_material, wall_sample_mask,
                  enthalpy_func, heat_capacity_func, thermal_conductivity_func):
         """
         Initialize the model.
@@ -156,7 +156,7 @@ class WallEOS:
             function that computes the species mass diffusivity inside the wall.
             Must include the non-reactive part of the wall, if existing.
         """
-        self._model = wall_degradation_model
+        self._material = wall_material
         self._sample_mask = wall_sample_mask
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
@@ -164,7 +164,7 @@ class WallEOS:
 
     def solid_density(self, wv: WallConservedVars) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$."""
-        return self._model.solid_density(wv)
+        return self._material.solid_density(wv)
 
     def decomposition_progress(self, wv: WallConservedVars) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the oxidation.
@@ -173,7 +173,7 @@ class WallEOS:
         $\tau=0$, then the fibers were all consumed.
         """
         mass = self.solid_density(wv)
-        tau_sample = self._model.decomposition_progress(mass)
+        tau_sample = self._material.solid_decomposition_progress(mass)
         return (
             tau_sample * self._sample_mask  # reactive material
             + 1.0*(1.0 - self._sample_mask)  # inert material
@@ -181,7 +181,7 @@ class WallEOS:
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ of the sample filled with gas."""
-        return self._model.void_fraction(tau) * self._sample_mask
+        return self._material.void_fraction(tau) * self._sample_mask
 
     def get_temperature(self, cv: ConservedVars, wv: WallConservedVars,
                          tseed: DOFArray, tau: DOFArray, eos: GasEOS,
@@ -272,7 +272,7 @@ class WallEOS:
     def viscosity(self, temperature: DOFArray, tau: DOFArray,
                   gas_tv: GasTransportVars) -> DOFArray:
         """Viscosity of the gas through the (porous) wall."""
-        epsilon = self._model.void_fraction(tau)
+        epsilon = self._material.void_fraction(tau)
         return gas_tv.viscosity/epsilon * self._sample_mask
 
     def species_diffusivity(self, temperature: DOFArray, tau: DOFArray,
@@ -284,12 +284,12 @@ class WallEOS:
         species_diffusivity: meshmode.dof_array.DOFArray
             the species mass diffusivity inside the wall
         """
-        tortuosity = self._model.solid_tortuosity(tau)
+        tortuosity = self._material.solid_tortuosity(tau)
         return gas_tv.species_diffusivity/tortuosity * self._sample_mask
 
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the porous material."""
-        return self._model.solid_permeability(tau) * self._sample_mask
+        return self._material.solid_permeability(tau) * self._sample_mask
 
     def pressure_diffusivity(self, cv: ConservedVars, tau: DOFArray,
                              gas_tv: GasTransportVars) -> DOFArray:
@@ -313,8 +313,8 @@ class WallEOS:
         return WallDependentVars(
             tau=tau,
             void_fraction=self.void_fraction(tau),
-            solid_emissivity=self._model.solid_emissivity(tau),
-            solid_permeability=self._model.solid_permeability(tau)
+            solid_emissivity=self._material.solid_emissivity(tau),
+            solid_permeability=self._material.solid_permeability(tau)
         )
 
 

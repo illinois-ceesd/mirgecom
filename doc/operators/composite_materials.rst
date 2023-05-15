@@ -27,10 +27,6 @@ Carbon Fiber Oxidation
 ^^^^^^^^^^^^^^^^^^^^^^
 
     This section covers the response of carbon fiber when exposed to oxygen.
-    The specific file used is:
-
-    .. automodule:: mirgecom.multiphysics.oxidation
-
     The carbon fibers are characterized as a highly porous material,
     with void fraction $\approx 90\%$. As the material is exposed to the flow,
     oxygen can diffuse inside the wall and result in oxidation, not only
@@ -90,22 +86,17 @@ Carbon Fiber Oxidation
     :attr:`~mirgecom.eos.GasDependentVars.temperature`
     is evaluated using Newton iteration based on both
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_enthalpy`,
+    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.enthalpy`,
     as well as their respective derivatives, namely
     :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_heat_capacity`.
+    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.heat_capacity`.
     Note that :mod:`pyrometheus` is used to handle the species properties.
-
-.. autoclass:: mirgecom.multiphysics.oxidation.OxidationWallModel
 
 Composite Materials
 ^^^^^^^^^^^^^^^^^^^
 
     This section covers the response of composite materials made of phenolic
-    resin and carbon fibers. The specific files used are:
-
-    .. automodule:: mirgecom.multiphysics.phenolics
-
+    resin and carbon fibers.
     The carbon fibers are characterized as a highly porous material,
     with void fraction $\approx 90\%$. Phenolic resins are added to rigidize
     the fibers by permeating the material and filling partially the gaps between
@@ -178,10 +169,10 @@ Composite Materials
     data) or 
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` (Pyrometheus)
     and
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_enthalpy`,
+    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.enthalpy`,
     as well as their respective derivatives, namely
     :attr:`~mirgecom.materials.tacot.GasProperties.gas_heat_capacity` and
-    :attr:`~mirgecom.multiphysics.phenolics.PhenolicsWallModel.solid_heat_capacity`.
+    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.heat_capacity`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials
     to tabulated data for easy evaluation of the properties based on the
@@ -201,9 +192,6 @@ Composite Materials
     for type 2 code. Additional details, extensive formulation and references
     are provided in https://github.com/illinois-ceesd/phenolics-notes
 
-.. autoclass:: mirgecom.multiphysics.phenolics.PhenolicsWallModel
-
 Helper Functions
 ----------------
-.. autoclass:: mirgecom.multiphysics.phenolics.WallTabulatedEOS
 .. autofunction:: mirgecom.multiphysics.phenolics.initializer

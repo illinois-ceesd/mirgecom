@@ -210,7 +210,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     # {{{ Initialize wall model
 
-    from mirgecom.multiphysics.phenolics import WallTabulatedEOS
+    from mirgecom.materials.tacot import WallTabulatedEOS
     import mirgecom.multiphysics.phenolics as wall
     import mirgecom.materials.tacot as my_composite
 
@@ -236,20 +236,12 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             my_solid.solid_thermal_conductivity(temperature, tau)
         return scaled_sample_kappa * wall_sample_mask
 
-    wall_degradation_model = wall.PhenolicsWallModel(solid_data=my_solid)
-
     wall_model = WallTabulatedEOS(
-        wall_degradation_model=wall_degradation_model,
+        wall_material=my_solid,
         wall_sample_mask=wall_sample_mask,
         enthalpy_func=_get_wall_enthalpy,
         heat_capacity_func=_get_wall_heat_capacity,
         thermal_conductivity_func=_get_wall_thermal_conductivity)
-
-#    def _create_wall_dependent_vars(wv, wv_tseed):
-#        return wall_model.dependent_vars(wv, wv_tseed)
-
-#    create_wall_dependent_vars_compiled = actx.compile(
-#        _create_wall_dependent_vars)
 
     # }}}
 
@@ -590,7 +582,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             mass=gas_source_term,
             momentum=cv.momentum*0.0,
             energy=visc_diss_energy,
-            species_mass=cv.species_mass)
+            species_mass=cv.species_mass) #this should be empty in this case
 
         cv_rhs = inviscid_rhs + viscous_rhs + source_terms
         wv_rhs = WallConservedVars(mass=resin_pyrolysis)

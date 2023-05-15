@@ -8,6 +8,7 @@
 .. autoclass:: SolidProperties
 .. autoclass:: GasProperties
 .. autoclass:: BprimeTable
+.. autoclass:: WallTabulatedEOS
 
 Helper Functions
 ----------------
@@ -45,6 +46,9 @@ from scipy.interpolate import CubicSpline  # type: ignore[import]
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import ConservedVars
+from mirgecom.multiphysics.wall_model import (
+    WallConservedVars, WallEOS
+)
 
 
 class BprimeTable():
@@ -333,8 +337,38 @@ class SolidProperties:
         self._char_mass = 220.0
         self._virgin_mass = 280.0
 
+    def void_fraction(self, tau: DOFArray) -> DOFArray:
+        r"""Return the volumetric fraction $\epsilon$ filled with gas.
+
+        The fractions of gas and solid phases must sum to one,
+        $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
+        progress ratio $\tau$.
+        """
+        return 1.0 - self.solid_volume_fraction(tau)
+
+    def solid_density(self, wv: WallConservedVars) -> DOFArray:
+        r"""Return the solid density $\epsilon_s \rho_s$.
+
+        The material density is relative to the entire control volume, and
+        is not to be confused with the intrinsic density, hence the $\epsilon$
+        dependence. It is computed as the sum of all N solid phases:
+
+        .. math::
+            \epsilon_s \rho_s = \sum_i^N \epsilon_i \rho_i
+        """
+        return sum(wv.mass)
+
     def solid_decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the pyrolysis."""
+        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
+
+        Where $\tau=1$, the material is locally virgin. On the other hand, if
+        $\tau=0$, then the pyrolysis is locally complete and only charred
+        material exists:
+
+        .. math::
+            \tau = \frac{\rho_0}{\rho_0 - \rho_c}
+                    \left( 1 - \frac{\rho_c}{\rho(t)} \right)
+        """
         char_mass = self._char_mass
         virgin_mass = self._virgin_mass
         return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/mass)
@@ -410,3 +444,65 @@ class SolidProperties:
         virgin = 0.8
         char = 0.9
         return virgin*tau + char*(1.0 - tau)
+
+
+class WallTabulatedEOS(WallEOS):
+    """EOS for wall using tabulated data.
+
+    Inherits WallEOS and add an temperature-evaluation function exclusive
+    for TACOT-tabulated data.
+    """
+
+    def get_temperature(self, cv, wv, tseed, tau, eos, niter=3) -> DOFArray:
+        r"""Evaluate the temperature based on solid+gas properties.
+
+        It uses the assumption of thermal equilibrium between solid and fluid.
+        Newton iteration is used to get the temperature based on the internal
+        energy/enthalpy and heat capacity for the bulk (solid+gas) material:
+
+        .. math::
+            T^{n+1} = T^n -
+                \frac
+                {\epsilon_g \rho_g(h_g - R_g T^n) + \rho_s h_s - \rho e}
+                {\epsilon_g \rho_g \left(
+                    C_{p_g} - R_g\left[1 - \frac{\partial M}{\partial T} \right]
+                \right)
+                + \epsilon_s \rho_s C_{p_s}
+                }
+
+        Parameters
+        ----------
+        wv: :class:`WallConservedVars`
+        tseed: float or :class:`~meshmode.dof_array.DOFArray`
+            Optional data from which to seed temperature calculation.
+        tau: :class:`~meshmode.dof_array.DOFArray`
+            the progress ratio
+        niter:
+            Optional argument with the number of iterations
+        """
+        if isinstance(tseed, DOFArray) is False:
+            temp = tseed + wv.energy*0.0
+        else:
+            temp = tseed*1.0
+
+        rho_gas = cv.mass
+        rho_solid = self.solid_density(wv)
+        rhoe = cv.energy
+        for _ in range(0, niter):
+
+            # gas constant R/M
+            molar_mass = eos.gas_molar_mass(temp)
+            gas_const = 8314.46261815324/molar_mass  # noqa N806
+
+            eps_rho_e = (
+                rho_gas*(eos.gas_enthalpy(temp) - gas_const*temp)
+                + rho_solid*self.enthalpy(temp, tau))
+
+            bulk_cp = (
+                rho_gas*(eos.gas_heat_capacity(temp)
+                         - gas_const*(1.0 - temp/molar_mass*eos.gas_dMdT(temp)))
+                + rho_solid*self.heat_capacity(temp, tau))
+
+            temp = temp - (eps_rho_e - rhoe)/bulk_cp
+
+        return temp

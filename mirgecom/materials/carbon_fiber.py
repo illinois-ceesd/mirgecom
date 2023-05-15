@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
+from mirgecom.multiphysics.wall_model import WallConservedVars
 
 
 class Oxidation:
@@ -94,6 +95,8 @@ class SolidProperties:
     """Model for calculating wall quantities.
 
     .. automethod:: intrinsic_density
+    .. automethod:: void_fraction
+    .. automethod:: solid_density
     .. automethod:: solid_decomposition_progress
     .. automethod:: solid_heat_capacity
     .. automethod:: solid_enthalpy
@@ -107,6 +110,24 @@ class SolidProperties:
     def intrinsic_density(self):
         r"""Return the intrinsic density $\rho$ of the fibers."""
         return 1600.0
+
+    def void_fraction(self, tau: DOFArray) -> DOFArray:
+        r"""Return the volumetric fraction $\epsilon$ filled with gas.
+
+        The fractions of gas and solid phases must sum to one,
+        $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
+        progress ratio $\tau$.
+        """
+        return 1.0 - self.solid_volume_fraction(tau)
+
+    def solid_density(self, wv: WallConservedVars) -> DOFArray:
+        r"""Return the solid density $\epsilon_s \rho_s$.
+
+        The material density is relative to the entire control volume, and
+        is not to be confused with the intrinsic density, hence the $\epsilon$
+        dependence. For carbon fiber, it has a single constituent.
+        """
+        return wv.mass
 
     def solid_decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the oxidation."""
