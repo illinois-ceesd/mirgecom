@@ -403,12 +403,10 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
 
     else:
 
-        tau = gas_model.wall.eval_tau(wall_vars)
-        epsilon = gas_model.wall._sample_model.void_fraction(tau)
-        temperature = \
-            gas_model.wall.get_temperature(cv=cv, wv=wall_vars,
-                                           tseed=temperature_seed, tau=tau,
-                                           eos=gas_model.eos)
+        tau = gas_model.wall.decomposition_progress(wall_vars)
+        epsilon = gas_model.wall.void_fraction(tau)
+        temperature = gas_model.wall.get_temperature(cv=cv, wv=wall_vars,
+            tseed=temperature_seed, tau=tau, eos=gas_model.eos)
 
         pressure = (
             1.0/epsilon*gas_model.eos.pressure(cv=cv, temperature=temperature))
