@@ -582,7 +582,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             mass=gas_source_term,
             momentum=cv.momentum*0.0,
             energy=visc_diss_energy,
-            species_mass=cv.species_mass) #this should be empty in this case
+            species_mass=cv.species_mass)  # this should be empty in this case
 
         cv_rhs = inviscid_rhs + viscous_rhs + source_terms
         wv_rhs = WallConservedVars(mass=resin_pyrolysis)
