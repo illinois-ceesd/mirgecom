@@ -73,8 +73,8 @@ from pytools.obj_array import make_obj_array
 class Initializer:
 
     def __init__(
-            self, nspecies, velocity,
-            species_mass_right, species_mass_left, *, dim=2, sigma=1.0):
+            self, nspecies, velocity, species_mass_right, species_mass_left, *,
+            dim=2, sigma=1.0, discontinuity_location=1.0):
 
         self._dim = dim
         self._nspecies = nspecies
@@ -82,7 +82,7 @@ class Initializer:
         self._vel = velocity
         self._yu = species_mass_right
         self._yb = species_mass_left
-        self._disc = 1.0
+        self._disc = discontinuity_location
 
     def __call__(self, x_vec, eos, *, time=0.0):
 

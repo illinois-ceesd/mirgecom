@@ -2,8 +2,8 @@ r""":mod:`mirgecom.multiphysics.multiphysics_coupled_fluid_wall` for fully-coupl
 fluid and wall.
 
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
-with a wall subdomain governed by the diffusion equation by enforcing
-continuity of quantities and their respective fluxes
+with a wall subdomain governed by the porous media equation (on-going work)
+by enforcing continuity of quantities and their respective fluxes
 
 .. math::
     q_\text{fluid} &= q_\text{wall} \\
@@ -119,38 +119,53 @@ def _project_from_base(dcoll, dd_bdry, field):
 
 
 class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
+    """."""
 
-    def __init__(
-            self, state_plus, grad_cv_plus=None, grad_t_plus=None,
+    def __init__(self, state_plus, no_slip, grad_cv_plus=None, grad_t_plus=None,
             use_kappa_weighted_bc=False):
+        """."""
         self._state_plus = state_plus
         self._grad_cv_plus = grad_cv_plus
         self._grad_t_plus = grad_t_plus
+        self._no_slip = no_slip
         self._use_kappa_weighted_bc = use_kappa_weighted_bc
 
-    def state_plus(self, dcoll, dd_bdry):
+    def state_plus(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """State to enforce inviscid BC at the interface."""
         projected_state = _project_from_base(dcoll, dd_bdry, self._state_plus)
+
+        if self._no_slip:
+            # use the same idea of no-slip walls
+            cv_plus = make_conserved(dim=dcoll.dim,
+                                     mass=state_minus.cv.mass,
+                                     energy=state_minus.cv.energy,
+                                     momentum=-state_minus.cv.momentum,
+                                     species_mass=state_minus.cv.species_mass)
+
+            # FIXME compute temperature from the projected cv?
+            return ViscousFluidState(cv=cv_plus, dv=state_minus.dv,
+                                     tv=state_minus.tv)
+
+        # FIXME compute temperature from the projected cv?
         return ViscousFluidState(cv=projected_state.cv, dv=projected_state.dv,
                                  tv=projected_state.tv)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus):
-        state_plus = self.state_plus(dcoll, dd_bdry)
+        """State to enforce viscous BC at the interface."""
+        # do not use the state_plus function because that is for inviscid fluxes
+        state_plus = _project_from_base(dcoll, dd_bdry, self._state_plus)
 
         mass_bc = 0.5*(state_minus.mass_density + state_plus.mass_density)
 
-        u_bc = self.velocity_bc(dcoll, dd_bdry,
-            state_minus.tv.viscosity, state_minus.cv.velocity)
+        u_bc = self.velocity_bc(dcoll, dd_bdry, state_minus)
 
-        t_bc = self.temperature_bc(dcoll, dd_bdry,
-            state_minus.tv.thermal_conductivity, state_minus.temperature)
+        t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus)
 
-        y_bc = self.species_mass_fractions_bc(dcoll, dd_bdry,
-            state_minus.tv.species_diffusivity, state_minus.species_mass_fractions)
+        y_bc = self.species_mass_fractions_bc(dcoll, dd_bdry, state_minus)
 
         internal_energy_bc = gas_model.eos.get_internal_energy(
             temperature=t_bc, species_mass_fractions=y_bc)
 
-        # general case
         total_energy_bc = mass_bc*(internal_energy_bc + 0.5*np.dot(u_bc, u_bc))
 
         smoothness_mu = 0.5*(
@@ -167,12 +182,17 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
             temperature_seed=t_bc, smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa, smoothness_beta=smoothness_beta)
 
+        if self._no_slip:
+            new_mu = state_minus.tv.viscosity
+        else:
+            new_mu = harmonic_mean(state_minus.tv.viscosity,
+                                   state_plus.tv.viscosity)
+
         new_kappa = harmonic_mean(state_minus.tv.thermal_conductivity,
                                   state_plus.tv.thermal_conductivity)
+
         new_diff = harmonic_mean(state_minus.tv.species_diffusivity,
                                  state_plus.tv.species_diffusivity)
-        new_mu = harmonic_mean(state_minus.tv.viscosity,
-                               state_plus.tv.viscosity)
 
         new_tv = GasTransportVars(
             bulk_viscosity=state_bc.tv.bulk_viscosity,
@@ -183,70 +203,93 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
         return ViscousFluidState(cv=state_bc.cv, dv=state_bc.dv, tv=new_tv)
 
-    def velocity_bc(self, dcoll, dd_bdry, kappa_minus, u_minus):
-        state_plus = self.state_plus(dcoll, dd_bdry)
+    def velocity_bc(self, dcoll, dd_bdry, state_minus):
+        """Velocity at the interface.
+
+        If no-slip, force the velocity to be zero. Else, uses an averaging.
+        """
+        kappa_minus = state_minus.tv.viscosity
+        u_minus = state_minus.cv.velocity
+
+        # if the coupling involves a no-slip wall:
+        if self._no_slip:
+            return u_minus*0.0
+
+        # do not use the state_plus function because that is for inviscid fluxes
+        state_plus = _project_from_base(dcoll, dd_bdry, self._state_plus)
         u_plus = state_plus.velocity
         if self._use_kappa_weighted_bc:
-            actx = u_minus.array_context
             kappa_plus = _project_from_base(dcoll, dd_bdry,
                                             state_plus.tv.viscosity)
-            kappa_sum = actx.np.where(
-                actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
-                kappa_minus + kappa_plus,
-                0*kappa_minus + 1)
+            kappa_sum = kappa_minus + kappa_plus
             return (u_minus * kappa_minus + u_plus * kappa_plus)/kappa_sum
         else:
             return (u_minus + u_plus)/2
 
-    def species_mass_fractions_bc(self, dcoll, dd_bdry, kappa_minus, y_minus):
-        state_plus = self.state_plus(dcoll, dd_bdry)
+    def species_mass_fractions_bc(self, dcoll, dd_bdry, state_minus):
+        """Speciess mass fractions at the interface."""
+        kappa_minus = state_minus.tv.species_diffusivity
+        y_minus = state_minus.species_mass_fractions
+
+        # do not use the state_plus function because that is for inviscid fluxes
+        state_plus = _project_from_base(dcoll, dd_bdry, self._state_plus)
         y_plus = state_plus.species_mass_fractions
         if self._use_kappa_weighted_bc:
-            actx = y_minus.array_context
             kappa_plus = _project_from_base(dcoll, dd_bdry,
                                             state_plus.tv.species_diffusivity)
-            kappa_sum = actx.np.where(
-                actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
-                kappa_minus + kappa_plus,
-                0*kappa_minus + 1)
+            kappa_sum = kappa_minus + kappa_plus
             return (y_minus * kappa_minus + y_plus * kappa_plus)/kappa_sum
         else:
             return (y_minus + y_plus)/2
 
-    def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
-        state_plus = self.state_plus(dcoll, dd_bdry)
+    def temperature_bc(self, dcoll, dd_bdry, state_minus):
+        """Temperature at the interface."""
+        kappa_minus = state_minus.tv.thermal_conductivity
+        t_minus = state_minus.temperature
+
+        # do not use the state_plus function because that is for inviscid fluxes
+        state_plus = _project_from_base(dcoll, dd_bdry, self._state_plus)
         t_plus = state_plus.temperature
         if self._use_kappa_weighted_bc:
-            actx = t_minus.array_context
             kappa_plus = _project_from_base(dcoll, dd_bdry,
                                             state_plus.tv.thermal_conductivity)
-            kappa_sum = actx.np.where(
-                actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
-                kappa_minus + kappa_plus,
-                0*kappa_minus + 1)
+            kappa_sum = kappa_minus + kappa_plus
             return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
         else:
             return (t_minus + t_plus)/2
 
     def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
+        """Gradient averaging for viscous flux."""
         if self._grad_cv_plus is None:
             raise ValueError(
                 "Boundary does not have external CV gradient data.")
         grad_cv_plus = _project_from_base(dcoll, dd_bdry, self._grad_cv_plus)
+
+        # if the coupling involves a no-slip wall:
+        if self._no_slip:
+            grad_cv_bc = (grad_cv_plus + grad_cv_minus)/2
+            return make_conserved(dim=dcoll.dim, mass=grad_cv_bc.mass,
+                                  momentum=grad_cv_minus.momentum,
+                                  energy=grad_cv_bc.energy,
+                                  species_mass=grad_cv_bc.species_mass)
+
         return (grad_cv_plus + grad_cv_minus)/2
 
-    def grad_temperature_bc(
-            self, dcoll, dd_bdry, grad_t_minus):
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
+        """Gradient averaging for viscous flux."""
         if self._grad_t_plus is None:
             raise ValueError(
                 "Boundary does not have external temperature gradient data.")
+
         grad_t_plus = _project_from_base(dcoll, dd_bdry, self._grad_t_plus)
         return (grad_t_plus + grad_t_minus)/2
 
 
+# Although Fluid and Wall look identical, keep separated due to radiation
+# FIXME: Interior penalty should probably use an average of the lengthscales on
+# both sides of the interface
 class InterfaceFluidBoundary(MengaldoBoundaryCondition):
-    """
-    Boundary for the fluid side on the interface between fluid and no-slip wall.
+    """Boundary for the fluid side on the interface between fluid and wall.
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -257,12 +300,11 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     .. automethod:: viscous_divergence_flux
     """
 
-    def __init__(
-            self, state_plus, grad_cv_plus=None, grad_t_plus=None,
-            flux_penalty_amount=None, lengthscales_minus=None,
-            use_kappa_weighted_grad_flux=False):
-        r"""
-        Initialize InterfaceFluidNoslipBoundary.
+    def __init__(self, state_plus, interface_noslip,
+                 grad_cv_plus=None, grad_t_plus=None,
+                 flux_penalty_amount=None, lengthscales_minus=None,
+                 use_kappa_weighted_grad_flux=False):
+        r"""Initialize InterfaceFluidBoundary.
 
         Arguments *grad_cv_plus*, *grad_t_plus*, *flux_penalty_amount*, and
         *lengthscales_minus* are only required if the boundary will be used to
@@ -272,6 +314,10 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         ----------
         state_plus: :class:`~mirgecom.gas_model.FluidState`
             Fluid state from the wall side.
+
+        interface_noslip: bool
+            If `True`, interface boundaries on the fluid side will be treated
+            as no-slip walls. If `False` they will be treated as slip walls.
 
         grad_cv_plus: :class:`meshmode.dof_array.DOFArray` or None
             CV gradient from the wall side.
@@ -296,43 +342,39 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
 
         self._coupled = _MultiphysicsCoupledHarmonicMeanBoundaryComponent(
             state_plus=state_plus,
+            no_slip=interface_noslip,
             grad_cv_plus=grad_cv_plus,
             grad_t_plus=grad_t_plus,
             use_kappa_weighted_bc=use_kappa_weighted_grad_flux)
 
-    def state_plus(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """State to enforce inviscid BC at the interface."""
         # Don't bother replacing anything since this is just for inviscid
-        projected_state = _project_from_base(dcoll, dd_bdry, self._state_plus)
-        return ViscousFluidState(cv=projected_state.cv, dv=projected_state.dv,
-                                 tv=projected_state.tv)
+        return self._coupled.state_plus(dcoll, dd_bdry, state_minus, **kwargs)
 
-    def state_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """State to enforce viscous BC at the interface."""
         dd_bdry = as_dofdesc(dd_bdry)
         return self._coupled.state_bc(dcoll, dd_bdry, gas_model, state_minus)
 
-    def grad_cv_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, normal,
-            **kwargs):  # noqa: D102
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """Interface temperature to enforce viscous BC."""
+        return self._coupled.temperature_bc(dcoll, dd_bdry, state_minus)
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+            normal, **kwargs):
+        """Gradient of CV to enforce viscous BC."""
         return self._coupled.grad_cv_bc(dcoll, dd_bdry, grad_cv_minus)
 
-    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
-        return self._coupled.temperature_bc(
-            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
-
-    def grad_temperature_bc(
-            self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):  # noqa: D102
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Gradient of temperature to enforce viscous BC."""
         return self._coupled.grad_temperature_bc(
             dcoll, dd_bdry, grad_t_minus)
 
-    def viscous_divergence_flux(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-            grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
-            **kwargs):
+    def viscous_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                                grad_cv_minus, grad_t_minus,
+                                numerical_flux_func=viscous_facial_flux_harmonic,
+                                **kwargs):
         """Return the viscous flux at the interface boundaries.
 
         It is defined by
@@ -345,9 +387,8 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus,
                                      **kwargs)
 
-        state_bc = self.state_bc(
-            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-            state_minus=state_minus, **kwargs)
+        state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
+            gas_model=gas_model, state_minus=state_minus, **kwargs)
 
         flux_without_penalty = super().viscous_divergence_flux(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
@@ -364,17 +405,17 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         tau_diff = self._flux_penalty_amount * (
             state_bc.tv.species_diffusivity / lengthscales_minus)
 
-        return make_conserved(dim=dcoll.dim,
-            mass=flux_without_penalty.mass,
-            momentum=flux_without_penalty.momentum + tau_mu*(
-                state_plus.cv.momentum - state_minus.cv.momentum),
-            energy=flux_without_penalty.energy + tau_kappa*(
-                state_plus.temperature - state_minus.temperature),
-            species_mass=flux_without_penalty.species_mass + tau_diff*(
-                state_plus.cv.species_mass - state_minus.cv.species_mass)
+        penalization = make_conserved(dim=dcoll.dim, mass=0.0,
+            momentum=tau_mu*(state_plus.cv.momentum - state_minus.cv.momentum),
+            energy=tau_kappa*(state_plus.temperature - state_minus.temperature),
+            species_mass=tau_diff*(state_plus.cv.species_mass
+                                   - state_minus.cv.species_mass)
         )
 
+        return flux_without_penalty + penalization
 
+
+# Although Fluid and Wall look identical, keep separated due to radiation
 # FIXME: Interior penalty should probably use an average of the lengthscales on
 # both sides of the interface
 class InterfaceWallBoundary(InterfaceFluidBoundary):
@@ -389,12 +430,11 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
     .. automethod:: viscous_divergence_flux
     """
 
-    def __init__(
-            self, state_plus, grad_cv_plus=None, grad_t_plus=None,
-            flux_penalty_amount=None, lengthscales_minus=None,
-            use_kappa_weighted_grad_flux=False):
-        r"""
-        Initialize InterfaceWallBoundary.
+    def __init__(self, state_plus, interface_noslip,
+                 grad_cv_plus=None, grad_t_plus=None,
+                 flux_penalty_amount=None, lengthscales_minus=None,
+                 use_kappa_weighted_grad_flux=False):
+        r"""Initialize InterfaceWallBoundary.
 
         Arguments *grad_cv_plus*, *grad_t_plus*, *flux_penalty_amount*, and
         *lengthscales_minus* are only required if the boundary will be used to
@@ -404,6 +444,10 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         ----------
         state_plus: :class:`~mirgecom.gas_model.FluidState`
             Fluid state from the fluid side.
+
+        interface_noslip: bool
+            If `True`, interface boundaries on the fluid side will be treated
+            as no-slip walls. If `False` they will be treated as slip walls.
 
         grad_cv_plus: :class:`meshmode.dof_array.DOFArray` or None
             CV gradient from the fluid side.
@@ -428,43 +472,38 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
 
         self._coupled = _MultiphysicsCoupledHarmonicMeanBoundaryComponent(
             state_plus=state_plus,
+            no_slip=interface_noslip,
             grad_cv_plus=grad_cv_plus,
             grad_t_plus=grad_t_plus,
             use_kappa_weighted_bc=use_kappa_weighted_grad_flux)
 
-    def state_plus(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """State to enforce inviscid BC at the interface."""
         # Don't bother replacing anything since this is just for inviscid
-        projected_state = _project_from_base(dcoll, dd_bdry, self._state_plus)
-        return ViscousFluidState(cv=projected_state.cv, dv=projected_state.dv,
-                                 tv=projected_state.tv)
+        return self._coupled.state_plus(dcoll, dd_bdry, state_minus, **kwargs)
 
-    def state_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """State to enforce viscous BC at the interface."""
         dd_bdry = as_dofdesc(dd_bdry)
         return self._coupled.state_bc(dcoll, dd_bdry, gas_model, state_minus)
 
-    def grad_cv_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, normal,
-            **kwargs):  # noqa: D102
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """Interface temperature to enforce viscous BC."""
+        return self._coupled.temperature_bc(dcoll, dd_bdry, state_minus)
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
+        """Gradient of CV to enforce viscous BC."""
         return self._coupled.grad_cv_bc(dcoll, dd_bdry, grad_cv_minus)
 
-    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
-        return self._coupled.temperature_bc(
-            dcoll, dd_bdry, kappa_minus, state_minus.temperature)
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Gradient of temperature to enforce viscous BC."""
+        return self._coupled.grad_temperature_bc(dcoll, dd_bdry, grad_t_minus)
 
-    def grad_temperature_bc(
-            self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):  # noqa: D102
-        return self._coupled.grad_temperature_bc(
-            dcoll, dd_bdry, grad_t_minus)
-
-    def viscous_divergence_flux(
-            self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-            grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
-            **kwargs):
+    def viscous_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                                grad_cv_minus, grad_t_minus,
+                                numerical_flux_func=viscous_facial_flux_harmonic,
+                                **kwargs):
         """Return the viscous flux at the interface boundaries.
 
         It is defined by
@@ -476,9 +515,8 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus,
                                      **kwargs)
 
-        state_bc = self.state_bc(
-            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-            state_minus=state_minus, **kwargs)
+        state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
+            gas_model=gas_model, state_minus=state_minus, **kwargs)
 
         flux_without_penalty = super().viscous_divergence_flux(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
@@ -495,17 +533,18 @@ class InterfaceWallBoundary(InterfaceFluidBoundary):
         tau_diff = self._flux_penalty_amount * (
             state_bc.tv.species_diffusivity / lengthscales_minus)
 
-        return make_conserved(dim=dcoll.dim,
-            mass=flux_without_penalty.mass,
-            momentum=flux_without_penalty.momentum + tau_mu*(
-                state_plus.cv.momentum - state_minus.cv.momentum),
-            energy=flux_without_penalty.energy + tau_kappa*(
-                state_plus.temperature - state_minus.temperature),
-            species_mass=flux_without_penalty.species_mass + tau_diff*(
-                state_plus.cv.species_mass - state_minus.cv.species_mass)
+        penalization = make_conserved(dim=dcoll.dim, mass=0.0,
+            momentum=tau_mu*(state_plus.cv.momentum - state_minus.cv.momentum),
+            energy=tau_kappa*(state_plus.temperature - state_minus.temperature),
+            species_mass=tau_diff*(state_plus.cv.species_mass
+                                   - state_minus.cv.species_mass)
         )
 
+        return flux_without_penalty + penalization
 
+
+# FIXME try to modify this so we dont have to create a PorousFluidState for
+# the pure-fluid part during the coupling
 def _state_inter_volume_trace_pairs(
         dcoll, fluid_dd, wall_dd, fluid_state, wall_state):
     """Exchange state across the fluid-wall interface."""
@@ -516,7 +555,7 @@ def _state_inter_volume_trace_pairs(
 
 def _grad_cv_inter_volume_trace_pairs(
         dcoll, fluid_dd, wall_dd, fluid_grad_cv, wall_grad_cv):
-    """Exchange gradients across the fluid-wall interface."""
+    """Exchange CV gradients across the fluid-wall interface."""
     pairwise_grad_cv = {(fluid_dd, wall_dd): (fluid_grad_cv, wall_grad_cv)}
     return inter_volume_trace_pairs(
         dcoll, pairwise_grad_cv, comm_tag=_GradCVInterVolTag)
@@ -539,10 +578,10 @@ def get_interface_boundaries(
         fluid_dd, wall_dd,
         fluid_state, wall_state,
         _state_inter_vol_tpairs,
+        interface_noslip,
         fluid_grad_cv=None, wall_grad_cv=None,
         fluid_grad_temperature=None, wall_grad_temperature=None,
         *,
-        interface_noslip=True,
         use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None,
         _grad_cv_inter_vol_tpairs=None,
@@ -576,29 +615,28 @@ def get_interface_boundaries(
         Fluid state object with the conserved state and dependent
         quantities for the fluid volume.
 
-    wall_kappa: float or :class:`meshmode.dof_array.DOFArray`
-        Thermal conductivity for the wall volume.
+    wall_state: :class:`~mirgecom.gas_model.FluidState`
+        Fluid state object with the conserved state and dependent
+        quantities for the wall volume.
 
-    wall_temperature: :class:`meshmode.dof_array.DOFArray`
-        Temperature for the wall volume.
-
-    fluid_grad_temperature: numpy.ndarray or None
-        Temperature gradient for the fluid volume. Only needed if boundaries will
-        be used to compute viscous fluxes.
-
-    wall_grad_temperature: numpy.ndarray or None
-        Temperature gradient for the wall volume. Only needed if boundaries will
-        be used to compute diffusion fluxes.
+    _state_inter_vol_tpairs
 
     interface_noslip: bool
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
+    fluid_grad_temperature: numpy.ndarray or None
+        Temperature gradient for the fluid volume. Only needed if boundaries
+        are used to compute viscous fluxes.
+
+    wall_grad_temperature: numpy.ndarray or None
+        Temperature gradient for the wall volume. Only needed if boundaries
+        are used to compute diffusion fluxes.
+
     use_kappa_weighted_grad_flux_in_fluid: bool
-        Indicates whether the temperature gradient flux on the fluid side of the
-        interface should be computed using a simple average of temperatures or by
-        weighting the temperature from each side by its respective thermal
-        conductivity.
+        Indicates whether the gradient fluxes on the fluid side of the
+        interface should be computed using a simple or weighted average of
+        quantities from each side by its respective transport coefficient.
 
     wall_penalty_amount: float
         Coefficient $c$ for the interior penalty on the heat flux. See
@@ -606,18 +644,13 @@ def get_interface_boundaries(
         for details.
 
     quadrature_tag
-        An identifier denoting a particular quadrature discretization to use during
-        operator evaluations.
+        An identifier denoting a particular quadrature discretization to use
+        during operator evaluations.
 
     Returns
     -------
         The tuple `(fluid_interface_boundaries, wall_interface_boundaries)`.
     """
-    # TODO for now, interface_noslip is a dummy argument.
-    # when using the wall model, it wont be anymore. However, there are still
-    # some things that I have to think about regarding the overall coupling
-    # procedure before working on this.
-
     assert (
         (fluid_grad_cv is None) == (wall_grad_cv is None)), (
         "Expected both fluid_grad_cv and wall_grad_cv or neither")
@@ -684,6 +717,7 @@ def get_interface_boundaries(
         fluid_interface_boundaries = {
             state_tpair.dd.domain_tag: InterfaceFluidBoundary(
                 state_tpair.ext,
+                interface_noslip,
                 grad_cv_tpair.ext,
                 grad_temperature_tpair.ext,
                 wall_penalty_amount,
@@ -698,6 +732,7 @@ def get_interface_boundaries(
         wall_interface_boundaries = {
             state_tpair.dd.domain_tag: InterfaceWallBoundary(
                 state_tpair.ext,
+                interface_noslip,
                 grad_cv_tpair.ext,
                 grad_temperature_tpair.ext,
                 wall_penalty_amount,
@@ -715,12 +750,14 @@ def get_interface_boundaries(
         fluid_interface_boundaries = {
             state_tpair.dd.domain_tag: InterfaceFluidBoundary(
                 state_tpair.ext,
+                interface_noslip,
                 use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
             for state_tpair in state_inter_vol_tpairs[wall_dd, fluid_dd]}
 
         wall_interface_boundaries = {
             state_tpair.dd.domain_tag: InterfaceWallBoundary(
                 state_tpair.ext,
+                interface_noslip,
                 use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
             for state_tpair in state_inter_vol_tpairs[fluid_dd, wall_dd]}
 
@@ -739,9 +776,9 @@ def coupled_grad_operator(
         _wall_operator_states_quad,
         _fluid_interface_boundaries_no_grad,
         _wall_interface_boundaries_no_grad,
+        interface_noslip,
         *,
         time=0.,
-        interface_noslip=True,
         use_kappa_weighted_grad_flux_in_fluid=False,
         fluid_numerical_flux_func=num_flux_central):
     r"""
@@ -798,12 +835,12 @@ def coupled_grad_operator(
 
     _wall_interface_boundaries_no_grad
 
-    time:
-        Time
-
     interface_noslip: bool
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
+
+    time:
+        Time
 
     use_kappa_weighted_grad_flux_in_fluid: bool
         Indicates whether the gradient fluxes on the fluid side of the
@@ -904,13 +941,13 @@ def coupled_ns_operator(
         fluid_dd, wall_dd,
         fluid_boundaries, wall_boundaries,
         fluid_state, wall_state,
+        interface_noslip,
         *,
         time=0.,
-        interface_noslip=True,
         use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        limiter_func=None,
+        fluid_limiter_func=None, wall_limiter_func=None,
         fluid_gradient_numerical_flux_func=num_flux_central,
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
@@ -957,12 +994,12 @@ def coupled_ns_operator(
     wall_temperature: :class:`meshmode.dof_array.DOFArray`
         Temperature for the wall volume.
 
-    time:
-        Time
-
     interface_noslip: bool
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
+
+    time:
+        Time
 
     use_kappa_weighted_grad_flux_in_fluid: bool
         Indicates whether the gradient fluxes on the fluid side of the
@@ -1009,7 +1046,8 @@ def coupled_ns_operator(
 
     Returns
     -------
-        The tuple `(fluid_rhs, wall_rhs)`.
+        The tuple `(fluid_rhs, wall_rhs)` and, if desired, the gradients
+        fluid_grad_cv, fluid_grad_t, wall_grad_cv, wall_grad_t.
     """
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -1054,12 +1092,12 @@ def coupled_ns_operator(
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model_fluid, fluid_all_boundaries_no_grad,
         quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag,
-        limiter_func=limiter_func)
+        limiter_func=fluid_limiter_func)
 
     wall_operator_states_quad = make_operator_fluid_states(
         dcoll, wall_state, gas_model_wall, wall_all_boundaries_no_grad,
         quadrature_tag, dd=wall_dd, comm_tag=_WallOpStatesTag,
-        limiter_func=limiter_func)
+        limiter_func=wall_limiter_func)
 
     # Compute the gradients of CV and T for both subdomains
 
@@ -1076,8 +1114,8 @@ def coupled_ns_operator(
             _wall_operator_states_quad=wall_operator_states_quad,
             _fluid_interface_boundaries_no_grad=fluid_interface_boundaries_no_grad,
             _wall_interface_boundaries_no_grad=wall_interface_boundaries_no_grad,
-            time=time,
             interface_noslip=interface_noslip,
+            time=time,
             use_kappa_weighted_grad_flux_in_fluid=(
                 use_kappa_weighted_grad_flux_in_fluid),
             fluid_numerical_flux_func=fluid_gradient_numerical_flux_func)
@@ -1123,8 +1161,6 @@ def coupled_ns_operator(
         grad_t=fluid_grad_t, comm_tag=_FluidOperatorTag,
         inviscid_terms_on=inviscid_fluid_terms_on)
 
-    # diffusion only, but all equations are considered now
-    # velocity should be zero
     wall_result = ns_operator(
         dcoll, gas_model_wall, wall_state, wall_all_boundaries, time=time,
         quadrature_tag=quadrature_tag, dd=wall_dd,
