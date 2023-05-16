@@ -690,51 +690,21 @@ def _get_interface_trace_pairs(
         fluid_temperature, wall_temperature,
         fluid_grad_temperature, wall_grad_temperature,
         *,
-        comm_tag=None,
-        # Added to avoid repeated computation
-        # FIXME: See if there's a better way to do this
-        interface_tpairs_no_grad=None):
-    if interface_tpairs_no_grad is None:
-        pairwise_thermal_data = {
-            (fluid_dd, wall_dd): (
-                _make_thermal_data(
-                    fluid_kappa,
-                    fluid_temperature,
-                    fluid_grad_temperature),
-                _make_thermal_data(
-                    wall_kappa,
-                    wall_temperature,
-                    wall_grad_temperature))}
-        interface_tpairs = inter_volume_trace_pairs(
-            dcoll, pairwise_thermal_data,
-            comm_tag=(_ThermalDataInterVolTag, comm_tag))
-    else:
-        pairwise_grad_temperature = {
-            (fluid_dd, wall_dd): (
-                fluid_grad_temperature,
-                wall_grad_temperature)}
-        grad_temperature_tpairs = inter_volume_trace_pairs(
-            dcoll, pairwise_grad_temperature,
-            comm_tag=(_GradTemperatureInterVolTag, comm_tag))
+        comm_tag=None):
+    pairwise_thermal_data = {
+        (fluid_dd, wall_dd): (
+            _make_thermal_data(
+                fluid_kappa,
+                fluid_temperature,
+                fluid_grad_temperature),
+            _make_thermal_data(
+                wall_kappa,
+                wall_temperature,
+                wall_grad_temperature))}
 
-        interface_tpairs = {}
-        for dd_pair in grad_temperature_tpairs.keys():
-            for tpair_no_grad, grad_temperature_tpair in zip(
-                    interface_tpairs_no_grad[dd_pair],
-                    grad_temperature_tpairs[dd_pair]):
-                interface_tpairs.setdefault(dd_pair, []).append(
-                    TracePair(
-                        tpair_no_grad.dd,
-                        interior=_make_thermal_data(
-                            tpair_no_grad.int.kappa,
-                            tpair_no_grad.int.temperature,
-                            grad_temperature_tpair.int),
-                        exterior=_make_thermal_data(
-                            tpair_no_grad.ext.kappa,
-                            tpair_no_grad.ext.temperature,
-                            grad_temperature_tpair.ext)))
-
-    return interface_tpairs
+    return inter_volume_trace_pairs(
+        dcoll, pairwise_thermal_data,
+        comm_tag=(_ThermalDataInterVolTag, comm_tag))
 
 
 def _get_interface_boundaries_no_grad(
@@ -746,19 +716,13 @@ def _get_interface_boundaries_no_grad(
         interface_noslip=True,
         use_kappa_weighted_grad_flux_in_fluid=False,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # Added to avoid repeated computation
-        # FIXME: See if there's a better way to do this
-        interface_tpairs_no_grad=None):
-    if interface_tpairs_no_grad is None:
-        interface_tpairs = _get_interface_trace_pairs_no_grad(
-            dcoll,
-            fluid_dd, wall_dd,
-            fluid_kappa, wall_kappa,
-            fluid_temperature, wall_temperature,
-            comm_tag=comm_tag)
-    else:
-        interface_tpairs = interface_tpairs_no_grad
+        comm_tag=None):
+    interface_tpairs = _get_interface_trace_pairs_no_grad(
+        dcoll,
+        fluid_dd, wall_dd,
+        fluid_kappa, wall_kappa,
+        fluid_temperature, wall_temperature,
+        comm_tag=comm_tag)
 
     if interface_noslip:
         fluid_bc_class = InterfaceFluidNoslipBoundary
@@ -800,10 +764,7 @@ def _get_interface_boundaries(
         use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # Added to avoid repeated computation
-        # FIXME: See if there's a better way to do this
-        interface_tpairs_no_grad=None):
+        comm_tag=None):
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
         # makes sense to use as a default here
@@ -815,8 +776,7 @@ def _get_interface_boundaries(
         fluid_kappa, wall_kappa,
         fluid_temperature, wall_temperature,
         fluid_grad_temperature, wall_grad_temperature,
-        comm_tag=comm_tag,
-        interface_tpairs_no_grad=interface_tpairs_no_grad)
+        comm_tag=comm_tag)
 
     if interface_noslip:
         fluid_bc_class = InterfaceFluidNoslipBoundary
@@ -872,10 +832,7 @@ def add_interface_boundaries_no_grad(
         use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # Added to avoid repeated computation
-        # FIXME: See if there's a better way to do this
-        interface_tpairs_no_grad=None):
+        comm_tag=None):
     """
     Include the fluid-wall interface boundaries (without temperature gradient).
 
@@ -964,8 +921,7 @@ def add_interface_boundaries_no_grad(
             use_kappa_weighted_grad_flux_in_fluid=(
                 use_kappa_weighted_grad_flux_in_fluid),
             quadrature_tag=quadrature_tag,
-            comm_tag=comm_tag,
-            interface_tpairs_no_grad=interface_tpairs_no_grad)
+            comm_tag=comm_tag)
 
     fluid_all_boundaries_no_grad = {}
     fluid_all_boundaries_no_grad.update(fluid_boundaries)
@@ -990,10 +946,7 @@ def add_interface_boundaries(
         use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # Added to avoid repeated computation
-        # FIXME: See if there's a better way to do this
-        interface_tpairs_no_grad=None):
+        comm_tag=None):
     """
     Include the fluid-wall interface boundaries.
 
@@ -1092,8 +1045,7 @@ def add_interface_boundaries(
                 use_kappa_weighted_grad_flux_in_fluid),
             wall_penalty_amount=wall_penalty_amount,
             quadrature_tag=quadrature_tag,
-            comm_tag=comm_tag,
-            interface_tpairs_no_grad=interface_tpairs_no_grad)
+            comm_tag=comm_tag)
 
     fluid_all_boundaries = {}
     fluid_all_boundaries.update(fluid_boundaries)
@@ -1120,7 +1072,6 @@ def coupled_grad_t_operator(
         fluid_numerical_flux_func=num_flux_central,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        _interface_tpairs_no_grad=None,
         _fluid_operator_states_quad=None,
         _fluid_all_boundaries_no_grad=None,
         _wall_all_boundaries_no_grad=None):
@@ -1243,8 +1194,7 @@ def coupled_grad_t_operator(
                 fluid_boundaries, wall_boundaries,
                 interface_noslip=interface_noslip,
                 use_kappa_weighted_grad_flux_in_fluid=(
-                    use_kappa_weighted_grad_flux_in_fluid),
-                interface_tpairs_no_grad=_interface_tpairs_no_grad)
+                    use_kappa_weighted_grad_flux_in_fluid))
     else:
         fluid_all_boundaries_no_grad = _fluid_all_boundaries_no_grad
         wall_all_boundaries_no_grad = _wall_all_boundaries_no_grad
@@ -1412,13 +1362,6 @@ def coupled_ns_heat_operator(
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in wall_boundaries.items()}
 
-    # Pre-exchange kappa and temperature since we will need them in multiple steps
-    interface_tpairs_no_grad = _get_interface_trace_pairs_no_grad(
-        dcoll,
-        fluid_dd, wall_dd,
-        fluid_state.tv.thermal_conductivity, wall_kappa,
-        fluid_state.temperature, wall_temperature)
-
     # Include boundaries for the fluid-wall interface; no temperature gradient
     # yet because we need to compute it
     fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
@@ -1430,8 +1373,7 @@ def coupled_ns_heat_operator(
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
             use_kappa_weighted_grad_flux_in_fluid=(
-                use_kappa_weighted_grad_flux_in_fluid),
-            interface_tpairs_no_grad=interface_tpairs_no_grad)
+                use_kappa_weighted_grad_flux_in_fluid))
 
     # Get the operator fluid states
     fluid_operator_states_quad = make_operator_fluid_states(
@@ -1452,7 +1394,6 @@ def coupled_ns_heat_operator(
             use_kappa_weighted_grad_flux_in_fluid),
         quadrature_tag=quadrature_tag,
         fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
-        _interface_tpairs_no_grad=interface_tpairs_no_grad,
         _fluid_operator_states_quad=fluid_operator_states_quad,
         _fluid_all_boundaries_no_grad=fluid_all_boundaries_no_grad,
         _wall_all_boundaries_no_grad=wall_all_boundaries_no_grad)
@@ -1470,8 +1411,7 @@ def coupled_ns_heat_operator(
             interface_noslip=interface_noslip,
             use_kappa_weighted_grad_flux_in_fluid=(
                 use_kappa_weighted_grad_flux_in_fluid),
-            wall_penalty_amount=wall_penalty_amount,
-            interface_tpairs_no_grad=interface_tpairs_no_grad)
+            wall_penalty_amount=wall_penalty_amount)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
     ns_result = ns_operator(
