@@ -223,8 +223,8 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
                                             state_plus.tv.viscosity)
             kappa_sum = kappa_minus + kappa_plus
             return (u_minus * kappa_minus + u_plus * kappa_plus)/kappa_sum
-        else:
-            return (u_minus + u_plus)/2
+
+        return (u_minus + u_plus)/2
 
     def species_mass_fractions_bc(self, dcoll, dd_bdry, state_minus):
         """Speciess mass fractions at the interface."""
@@ -239,8 +239,8 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
                                             state_plus.tv.species_diffusivity)
             kappa_sum = kappa_minus + kappa_plus
             return (y_minus * kappa_minus + y_plus * kappa_plus)/kappa_sum
-        else:
-            return (y_minus + y_plus)/2
+
+        return (y_minus + y_plus)/2
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus):
         """Temperature at the interface."""
@@ -255,8 +255,8 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
                                             state_plus.tv.thermal_conductivity)
             kappa_sum = kappa_minus + kappa_plus
             return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
-        else:
-            return (t_minus + t_plus)/2
+
+        return (t_minus + t_plus)/2
 
     def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
         """Gradient averaging for viscous flux."""
@@ -661,6 +661,8 @@ def get_interface_boundaries(
 
     include_gradient = fluid_grad_temperature is not None
     if include_gradient:
+        # FIXME this shouldn't happen, but I am keeping this now just in case.
+        # remove in the next iteration over this file.
         if wall_penalty_amount is None:
             from warnings import warn
             warn("Error in wall_penalty_amount = None")
@@ -669,6 +671,8 @@ def get_interface_boundaries(
 
     state_inter_vol_tpairs = _state_inter_vol_tpairs
     if state_inter_vol_tpairs is None:
+        # FIXME this shouldn't happen, but I am keeping this now just in case.
+        # remove in the next iteration over this file.
         from warnings import warn
         warn("Error in state_inter_vol_tpairs = None")
 
@@ -1153,6 +1157,7 @@ def coupled_ns_operator(
     fluid_result = ns_operator(
         dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries, time=time,
         quadrature_tag=quadrature_tag, dd=fluid_dd,
+        inviscid_numerical_flux_func=inviscid_numerical_flux_func,
         viscous_numerical_flux_func=viscous_numerical_flux_func,
         # TODO do we really need the return gradients or
         # can we use the already-evaluated gradient?
@@ -1164,6 +1169,7 @@ def coupled_ns_operator(
     wall_result = ns_operator(
         dcoll, gas_model_wall, wall_state, wall_all_boundaries, time=time,
         quadrature_tag=quadrature_tag, dd=wall_dd,
+        inviscid_numerical_flux_func=inviscid_numerical_flux_func,
         viscous_numerical_flux_func=viscous_numerical_flux_func,
         # TODO do we really need the return gradients or
         # can we use the already-evaluated gradient?

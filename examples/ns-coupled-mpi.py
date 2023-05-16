@@ -372,7 +372,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def _get_solid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model_solid,
-            temperature_seed=temp_seed, limiter_func=_limit_fluid_cv,
+            temperature_seed=temp_seed, limiter_func=_limit_solid_cv,
             limiter_dd=dd_vol_solid)
 
     get_solid_state = actx.compile(_get_solid_state)
@@ -716,8 +716,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         fluid_rhs, solid_rhs = coupled_ns_operator(
             dcoll, gas_model_fluid, gas_model_solid, dd_vol_fluid, dd_vol_solid,
-            fluid_boundaries, solid_boundaries, fluid_state, wall_state,
-            time=t, limiter_func=_limit_fluid_cv,
+            fluid_boundaries, solid_boundaries, fluid_state, wall_state, time=t,
+            interface_noslip=False,
+            fluid_limiter_func=_limit_fluid_cv, wall_limiter_func=_limit_solid_cv,
             inviscid_fluid_terms_on=False, inviscid_wall_terms_on=False,
             quadrature_tag=quadrature_tag)
 
