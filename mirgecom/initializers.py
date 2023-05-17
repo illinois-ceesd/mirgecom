@@ -853,7 +853,7 @@ class MulticomponentTrig:
         if center.shape != (dim,) or velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional vector inputs.")
         if spec_y0s is None:
-            spec_y0s = np.ones(shape=(nspecies,))
+            spec_y0s = 2.0*np.ones(shape=(nspecies,))
         if spec_centers is None:
             spec_centers = make_obj_array([np.zeros(shape=dim,)
                                            for i in range(nspecies)])

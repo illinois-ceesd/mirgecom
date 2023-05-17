@@ -337,7 +337,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                 gradient_numerical_flux_func=num_flux_central,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
-                dd=DD_VOLUME_ALL, comm_tag=None,
+                dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None, use_esdg=False,
@@ -451,7 +451,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     if operator_states_quad is None:
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            limiter_func=limiter_func, dd=dd_vol, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad

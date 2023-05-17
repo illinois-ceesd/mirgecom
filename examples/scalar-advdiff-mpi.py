@@ -41,6 +41,8 @@ from mirgecom.simutil import (
     generate_and_distribute_mesh,
     compare_fluid_solutions
 )
+from mirgecom.limiter import bound_preserving_limiter
+from mirgecom.fluid import make_conserved
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
@@ -112,16 +114,16 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-5
+    t_final = 1.0
     current_cfl = 0.1
-    current_dt = 1e-6
+    current_dt = 1e-5
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
     nstatus = 100
     nrestart = 100
-    nviz = 100
+    nviz = 1
     nhealth = 100
 
     dim = 2
@@ -161,6 +163,39 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         quadrature_tag = None
 
+    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
+        # if True:
+        #    return cv
+        actx = cv.array_context
+        # limit species
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0,
+                                     dd=dd)
+            for i in range(nspecies)
+        ])
+        spec_lim = actx.np.where(actx.np.greater(spec_lim, 0.0), spec_lim, 0.0)
+
+        # normalize to ensure sum_Yi = 1.0
+        # aux = cv.mass*0.0
+        # for i in range(0, nspecies):
+        #     aux = aux + spec_lim[i]
+        # spec_lim = spec_lim/aux
+
+        # recompute density
+        # mass_lim = eos.get_density(pressure=pressure,
+        #    temperature=temperature, species_mass_fractions=spec_lim)
+
+        # recompute energy
+        # energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
+        #    temperature, species_mass_fractions=spec_lim)
+        #    + 0.5*np.dot(cv.velocity, cv.velocity)
+        # )
+
+        # make a new CV with the limited variables
+        return make_conserved(dim=dim, mass=cv.mass, energy=cv.energy,
+                              momentum=cv.momentum,
+                              species_mass=cv.mass*spec_lim)
+
     def vol_min(x):
         from grudge.op import nodal_min
         return actx.to_numpy(nodal_min(dcoll, "vol", x))[()]
@@ -198,18 +233,18 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nspecies = 4
     centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 1.
+    velocity[0] = 300.
     wave_vector = np.zeros(shape=(dim,))
     wave_vector[0] = 1.
     wave_vector = wave_vector / np.sqrt(np.dot(wave_vector, wave_vector))
 
-    spec_y0s = np.ones(shape=(nspecies,))
+    spec_y0s = 2.0*np.ones(shape=(nspecies,))
     spec_amplitudes = np.ones(shape=(nspecies,))
     spec_omegas = 2. * np.pi * np.ones(shape=(nspecies,))
 
-    kappa = 1e-5
+    kappa = 0.0
     mu = 1e-5
-    spec_diff = mu
+    spec_diff = 1e-1
     spec_diffusivities = np.array([spec_diff * 1./float(j+1)
                                    for j in range(nspecies)])
     transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
@@ -221,6 +256,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     from mirgecom.initializers import MulticomponentTrig
     initializer = MulticomponentTrig(dim=dim, nspecies=nspecies,
+                                     p0=101325, rho0=1.3,
                                      spec_centers=centers, velocity=velocity,
                                      spec_y0s=spec_y0s,
                                      spec_amplitudes=spec_amplitudes,
@@ -233,7 +269,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
-                                            **kwargs), gas_model)
+                                            **kwargs), gas_model,
+                                limiter_func=_limit_fluid_cv,
+                                limiter_dd=dd_bdry)
 
     boundaries = {}
 
@@ -248,7 +286,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         # Set the current state from time 0
         current_cv = initializer(nodes)
 
-    current_state = make_fluid_state(current_cv, gas_model)
+    current_state = make_fluid_state(current_cv, gas_model,
+                                     limiter_func=_limit_fluid_cv)
     convective_speed = np.sqrt(np.dot(velocity, velocity))
     c = current_state.speed_of_sound
     mach = vol_max(convective_speed / c)
@@ -305,8 +344,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_health_check(pressure, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .99999999, 1.00000001):
+        if check_naninf_local(dcoll, "vol", pressure):
+            # or check_range_local(dcoll, "vol", pressure, .99999999, 1.00000001):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
@@ -377,10 +416,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        fluid_state = make_fluid_state(state, gas_model)
+        fluid_state = make_fluid_state(state, gas_model,
+                                       limiter_func=_limit_fluid_cv)
         return ns_operator(dcoll, state=fluid_state, time=t,
                            boundaries=boundaries, gas_model=gas_model,
-                           quadrature_tag=quadrature_tag, use_esdg=use_esdg)
+                           quadrature_tag=quadrature_tag, use_esdg=use_esdg,
+                           limiter_func=_limit_fluid_cv)
 
     # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
     #                              current_cfl, t_final, constant_cfl)

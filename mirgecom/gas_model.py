@@ -807,6 +807,7 @@ def conservative_to_entropy_vars(gamma, state):
     u = state.velocity
     p = state.pressure
     rho_species = state.species_mass_density
+    rho_species = actx.np.where(actx.np.greater(rho_species, 0.), rho_species, 0.0)
 
     u_square = np.dot(u, u)
     s = actx.np.log(p) - gamma*actx.np.log(rho)
@@ -859,11 +860,13 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
     iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
     rho_iota = iota * actx.np.exp(-s * inv_gamma_minus_one)
     rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
+    spec_mod = -rho_iota_species * v5
+    spec_mod = actx.np.where(actx.np.greater(spec_mod, 0.), spec_mod, 0.0)
 
     return make_conserved(
         dim,
         mass=-rho_iota * v5,
         energy=rho_iota * (1 - v_square/(2*v5)),
         momentum=rho_iota * v234,
-        species_mass=-rho_iota_species * v5
+        species_mass=spec_mod
     )
