@@ -30,16 +30,13 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
-from mirgecom.multiphysics.wall_model import WallConservedVars
 
 
 class Oxidation:
-    """Evaluate the source terms for the oxidation of carbon fibers.
+    """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
     .. automethod:: puma_effective_surface_area
-    .. automethod:: _get_wall_effective_surface_area_fiber
     .. automethod:: get_source_terms
-
     """
 
     def puma_effective_surface_area(self, progress) -> DOFArray:
@@ -96,15 +93,14 @@ class SolidProperties:
 
     .. automethod:: intrinsic_density
     .. automethod:: void_fraction
-    .. automethod:: solid_density
-    .. automethod:: solid_decomposition_progress
-    .. automethod:: solid_heat_capacity
-    .. automethod:: solid_enthalpy
-    .. automethod:: solid_thermal_conductivity
-    .. automethod:: solid_volume_fraction
-    .. automethod:: solid_permeability
-    .. automethod:: solid_emissivity
-    .. automethod:: solid_tortuosity
+    .. automethod:: decomposition_progress
+    .. automethod:: heat_capacity
+    .. automethod:: enthalpy
+    .. automethod:: thermal_conductivity
+    .. automethod:: volume_fraction
+    .. automethod:: permeability
+    .. automethod:: emissivity
+    .. automethod:: tortuosity
     """
 
     def intrinsic_density(self):
@@ -120,29 +116,20 @@ class SolidProperties:
         """
         return 1.0 - self.solid_volume_fraction(tau)
 
-    def solid_density(self, wv: WallConservedVars) -> DOFArray:
-        r"""Return the solid density $\epsilon_s \rho_s$.
-
-        The material density is relative to the entire control volume, and
-        is not to be confused with the intrinsic density, hence the $\epsilon$
-        dependence. For carbon fiber, it has a single constituent.
-        """
-        return wv.mass
-
-    def solid_decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the oxidation."""
+    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation."""
         virgin_mass = (self.intrinsic_density()
                   * self.solid_volume_fraction(tau=1.0))
         return 1.0 - (virgin_mass - mass)/virgin_mass
 
-    def solid_enthalpy(self, temperature: DOFArray) -> DOFArray:
+    def enthalpy(self, temperature: DOFArray) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
         return (
             - 1.279887694729e-11*temperature**5 + 1.491175465285e-07*temperature**4
             - 6.994595296860e-04*temperature**3 + 1.691564018108e+00*temperature**2
             - 3.441837408320e+01*temperature - 1.235438104496e+05)
 
-    def solid_heat_capacity(self, temperature: DOFArray) -> DOFArray:
+    def heat_capacity(self, temperature: DOFArray) -> DOFArray:
         r"""Evaluate the heat capacity $C_{p_s}$ of the fibers."""
         return (
             + 1.461303669323e-14*temperature**5 - 1.862489701581e-10*temperature**4
@@ -160,9 +147,11 @@ class SolidProperties:
 
     def puma_kappa(self, progress: DOFArray) -> DOFArray:
         """Numerical data of thermal conductivity evaluated by PUMA."""
+        # FIXME the fully decomposed conductivity is given by the air, which
+        # is already accounted for in our model.
         return 0.0988*progress**2 - 0.2751*progress + 0.201
 
-    def solid_thermal_conductivity(self, temperature: DOFArray,
+    def thermal_conductivity(self, temperature: DOFArray,
                                    tau: DOFArray) -> DOFArray:
         r"""Evaluate the thermal conductivity $\kappa$ of the fibers.
 
@@ -176,20 +165,20 @@ class SolidProperties:
         )
 
     # ~~~~~~~~ other properties
-    def solid_permeability(self, tau: DOFArray) -> DOFArray:
+    def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the composite material."""
         return 6.0e-11 + tau*0.0
 
-    def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
+    def volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ filled by gas around the fibers."""
-        # FIXME maybe use the PUMA function?
+        # FIXME Should this be a quadratic function?
         return 0.10*tau
 
-    def solid_emissivity(self, tau: DOFArray) -> DOFArray:
+    def emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
         return 0.9 + tau*0.0
 
-    def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
+    def tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
         # FIXME find a relation to make it change as a function of "tau"
         return 1.1 + tau*0.0

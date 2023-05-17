@@ -46,9 +46,8 @@ from scipy.interpolate import CubicSpline  # type: ignore[import]
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import ConservedVars
-from mirgecom.multiphysics.wall_model import (
-    WallConservedVars, WallEOS
-)
+from mirgecom.wall_model import WallDependentVars, WallEOS
+from mirgecom.eos import GasEOS
 
 
 class BprimeTable():
@@ -293,15 +292,6 @@ class GasProperties:
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def pressure(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas pressure.
-
-        .. math::
-            P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
-        """
-        gas_const = 8314.46261815324/self.gas_molar_mass(temperature)
-        return cv.mass*gas_const*temperature
-
     def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas thermal conductivity $\kappa_g$.
 
@@ -315,6 +305,15 @@ class GasProperties:
         mu = self.gas_viscosity(temperature)
         return mu*cp/self._prandtl
 
+    def pressure(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
+        r"""Return the gas pressure.
+
+        .. math::
+            P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
+        """
+        gas_const = 8314.46261815324/self.gas_molar_mass(temperature)
+        return cv.mass*gas_const*temperature
+
 
 class SolidProperties:
     """Evaluate the properties of the solid state containing resin and fibers.
@@ -323,13 +322,14 @@ class SolidProperties:
     yield the material properties. Polynomials were generated offline to avoid
     interpolation and they are not valid for temperatures above 3200K.
 
-    .. automethod:: solid_enthalpy
-    .. automethod:: solid_heat_capacity
-    .. automethod:: solid_thermal_conductivity
-    .. automethod:: solid_permeability
-    .. automethod:: solid_tortuosity
-    .. automethod:: solid_volume_fraction
-    .. automethod:: solid_emissivity
+    .. automethod:: void_fraction
+    .. automethod:: enthalpy
+    .. automethod:: heat_capacity
+    .. automethod:: thermal_conductivity
+    .. automethod:: permeability
+    .. automethod:: tortuosity
+    .. automethod:: volume_fraction
+    .. automethod:: emissivity
     """
 
     def __init__(self):
@@ -344,21 +344,9 @@ class SolidProperties:
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
         progress ratio $\tau$.
         """
-        return 1.0 - self.solid_volume_fraction(tau)
+        return 1.0 - self.volume_fraction(tau)
 
-    def solid_density(self, wv: WallConservedVars) -> DOFArray:
-        r"""Return the solid density $\epsilon_s \rho_s$.
-
-        The material density is relative to the entire control volume, and
-        is not to be confused with the intrinsic density, hence the $\epsilon$
-        dependence. It is computed as the sum of all N solid phases:
-
-        .. math::
-            \epsilon_s \rho_s = \sum_i^N \epsilon_i \rho_i
-        """
-        return sum(wv.mass)
-
-    def solid_decomposition_progress(self, mass: DOFArray) -> DOFArray:
+    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
@@ -373,7 +361,7 @@ class SolidProperties:
         virgin_mass = self._virgin_mass
         return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/mass)
 
-    def solid_enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Solid enthalpy as a function of pyrolysis progress."""
         virgin = (
             - 1.360688853105e-11*temperature**5 + 1.521029626150e-07*temperature**4
@@ -387,7 +375,7 @@ class SolidProperties:
 
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_heat_capacity(self, temperature: DOFArray,
+    def heat_capacity(self, temperature: DOFArray,
                             tau: DOFArray) -> DOFArray:
         r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
@@ -405,7 +393,7 @@ class SolidProperties:
 
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_thermal_conductivity(self, temperature: DOFArray,
+    def thermal_conductivity(self, temperature: DOFArray,
                                    tau: DOFArray) -> DOFArray:
         """Solid thermal conductivity as a function of pyrolysis progress."""
         virgin = (
@@ -420,26 +408,26 @@ class SolidProperties:
 
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_permeability(self, tau: DOFArray) -> DOFArray:
+    def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the composite material."""
         virgin = 1.6e-11
         char = 2.0e-11
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_tortuosity(self, tau: DOFArray) -> DOFArray:
+    def tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
         virgin = 1.2
         char = 1.1
         return virgin*tau + char*(1.0 - tau)
 
-    def solid_volume_fraction(self, tau: DOFArray) -> DOFArray:
-        r"""Void fraction $\epsilon$ filled by gas around the fibers."""
+    def volume_fraction(self, tau: DOFArray) -> DOFArray:
+        r"""Fraction $\phi$ occupied by the solid."""
         fiber = 0.10
         virgin = 0.10
         char = 0.05
         return virgin*tau + char*(1.0 - tau) + fiber
 
-    def solid_emissivity(self, tau: DOFArray) -> DOFArray:
+    def emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
         virgin = 0.8
         char = 0.9
@@ -453,7 +441,9 @@ class WallTabulatedEOS(WallEOS):
     for TACOT-tabulated data.
     """
 
-    def get_temperature(self, cv, wv, tseed, tau, eos, niter=3) -> DOFArray:
+    def get_temperature(self, cv: ConservedVars,
+                        wall_density: [DOFArray or np.ndarray], tseed: DOFArray,
+                        tau: DOFArray, eos: GasEOS, niter=3) -> DOFArray:
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -469,24 +459,14 @@ class WallTabulatedEOS(WallEOS):
                 \right)
                 + \epsilon_s \rho_s C_{p_s}
                 }
-
-        Parameters
-        ----------
-        wv: :class:`WallConservedVars`
-        tseed: float or :class:`~meshmode.dof_array.DOFArray`
-            Optional data from which to seed temperature calculation.
-        tau: :class:`~meshmode.dof_array.DOFArray`
-            the progress ratio
-        niter:
-            Optional argument with the number of iterations
         """
         if isinstance(tseed, DOFArray) is False:
-            temp = tseed + wv.energy*0.0
+            temp = tseed + cv.mass*0.0
         else:
             temp = tseed*1.0
 
         rho_gas = cv.mass
-        rho_solid = self.solid_density(wv)
+        rho_solid = self.solid_density(wall_density)
         rhoe = cv.energy
         for _ in range(0, niter):
 
@@ -506,3 +486,18 @@ class WallTabulatedEOS(WallEOS):
             temp = temp - (eps_rho_e - rhoe)/bulk_cp
 
         return temp
+
+    def pressure_diffusivity(self, cv: ConservedVars, wdv: WallDependentVars,
+                             viscosity: DOFArray) -> DOFArray:
+        r"""Return the pressure diffusivity for Darcy flow.
+
+        .. math::
+            d_{P} = \epsilon_g \rho_g \frac{\mathbf{K}}{\mu \epsilon_g}
+
+        where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
+        and $\mathbf{K}$ is the permeability matrix.
+        """
+        return (
+            cv.mass*wdv.permeability/(viscosity*wdv.void_fraction)
+            * self._sample_mask
+        )

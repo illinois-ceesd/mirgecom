@@ -349,7 +349,14 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
         u^+ = u^-
 
     when computing the boundary fluxes for $\nabla u$, and applies directly
-    the prescribed flux $g$ when computing $\nabla \cdot (\kappa \nabla u)$.
+    the prescribed flux $g$ when computing $\nabla \cdot (\kappa \nabla u)$:
+
+    .. math::
+
+        f_{presc} \cdot \hat{n}
+
+    Note that positive values of flux are going out of the cell since the
+    normal is positive outwards.
 
     .. automethod:: __init__
     .. automethod:: get_grad_flux
@@ -386,9 +393,7 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         external_flux = u_minus*0.0 + self.value
 
-        # flip the sign of the normal to indicate that positive values of
-        # flux are going in the cell
-        return np.dot(external_flux, -normal)
+        return np.dot(external_flux, normal)
 
 
 class _DiffusionKappaTag:

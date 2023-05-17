@@ -25,10 +25,9 @@ THE SOFTWARE.
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import ConservedVars
-from mirgecom.multiphysics.wall_model import WallConservedVars
 
 
-def initializer(dcoll, gas_model, solid_species_mass, temperature,
+def initializer(dcoll, gas_model, wall_density, temperature,
                 gas_density=None, pressure=None):
     """Initialize state of composite material.
 
@@ -37,7 +36,7 @@ def initializer(dcoll, gas_model, solid_species_mass, temperature,
     gas_model
         :class:`mirgecom.gas_model.GasModel`
 
-    solid_species_mass: numpy.ndarray
+    wall_density: numpy.ndarray
         The initial bulk density of each one of the resin constituents.
         It has shape ``(nphase,)``
 
@@ -56,8 +55,6 @@ def initializer(dcoll, gas_model, solid_species_mass, temperature,
     -------
     cv: :class:`mirgecom.fluid.ConservedVars`
         The conserved variables of the fluid permeating the porous wall.
-    wv: :class:`mirgecom.multiphysics.wall_model.WallConservedVars`
-        The wall conserved variables
     """
     if gas_density is None and pressure is None:
         raise ValueError("Must specify one of 'gas_density' or 'pressure'")
@@ -65,9 +62,7 @@ def initializer(dcoll, gas_model, solid_species_mass, temperature,
     if isinstance(temperature, DOFArray) is False:
         raise ValueError("Temperature does not have the proper shape")
 
-    wv = WallConservedVars(mass=solid_species_mass)
-
-    tau = gas_model.wall.decomposition_progress(wv)
+    tau = gas_model.wall.decomposition_progress(wall_density)
 
     # gas constant
     gas_const = 8314.46261815324/gas_model.eos.gas_molar_mass(temperature)
@@ -76,7 +71,8 @@ def initializer(dcoll, gas_model, solid_species_mass, temperature,
         eps_gas = gas_model.wall.void_fraction(tau)
         eps_rho_gas = eps_gas*pressure/(gas_const*temperature)
 
-    eps_rho_solid = sum(solid_species_mass)
+    # internal energy (kinetic energy is neglected)
+    eps_rho_solid = sum(wall_density)
     bulk_energy = (
         eps_rho_solid*gas_model.wall.enthalpy(temperature, tau)
         + eps_rho_gas*(gas_model.eos.gas_enthalpy(temperature)
@@ -85,6 +81,4 @@ def initializer(dcoll, gas_model, solid_species_mass, temperature,
 
     momentum = make_obj_array([tau*0.0 for i in range(dcoll.dim)])
 
-    cv = ConservedVars(mass=eps_rho_gas, energy=bulk_energy, momentum=momentum)
-
-    return cv, wv
+    return ConservedVars(mass=eps_rho_gas, energy=bulk_energy, momentum=momentum)

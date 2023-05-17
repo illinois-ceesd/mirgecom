@@ -3,17 +3,17 @@ Wall Degradation Modeling
 
 Conserved Quantities
 ^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: mirgecom.multiphysics.wall_model.WallConservedVars
+.. autoclass:: mirgecom.wall_model.PorousFlowDependentVars
 
 Equations of State
 ^^^^^^^^^^^^^^^^^^
-.. autoclass:: mirgecom.multiphysics.wall_model.WallEOS
-.. autoclass:: mirgecom.multiphysics.wall_model.WallDependentVars
+.. autoclass:: mirgecom.wall_model.WallEOS
+.. autoclass:: mirgecom.wall_model.WallDependentVars
 
 Model-specific properties
 ^^^^^^^^^^^^^^^^^^^^^^^^^
     The properties of the materials are defined in specific files. These files
-    are required by :class:`~mirgecom.multiphysics.wall_model.WallEOS`.
+    are required by :class:`~mirgecom.wall_model.WallEOS`.
 
 Carbon fiber
 ------------
@@ -33,8 +33,7 @@ Carbon Fiber Oxidation
     limited to the surface but also as a volumetric process. For now, convection
     inside the wall will be neglected and the species are only allowed to diffuse.
 
-    The temporal evolution of
-    :class:`~mirgecom.multiphysics.wall_model.WallConservedVars` is solved in
+    The temporal evolution of mass density is solved in
     order to predict the material degradation. As the
     :class:`~mirgecom.materials.carbon_fiber.Oxidation` progresses,
     the temporal evolution of the fibers mass is given by
@@ -78,7 +77,7 @@ Carbon Fiber Oxidation
 
     From the conserved variables, it is possible to compute the oxidation
     progress, denoted by
-    :attr:`~mirgecom.multiphysics.wall_model.WallDependentVars.tau`.
+    :attr:`~mirgecom.wall_model.WallDependentVars.tau`.
     As a consequence, the instantaneous material properties will change due to
     the mass loss.
 
@@ -86,10 +85,10 @@ Carbon Fiber Oxidation
     :attr:`~mirgecom.eos.GasDependentVars.temperature`
     is evaluated using Newton iteration based on both
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
-    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.enthalpy`,
+    :attr:`~mirgecom.wall_model.WallEOS.enthalpy`,
     as well as their respective derivatives, namely
     :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
-    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.heat_capacity`.
+    :attr:`~mirgecom.wall_model.WallEOS.heat_capacity`.
     Note that :mod:`pyrometheus` is used to handle the species properties.
 
 Composite Materials
@@ -103,12 +102,11 @@ Composite Materials
     fibers. As the material is heated up by the flow, the resin pyrolysis, i.e.,
     it degrades and produces gaseous species.
 
-    The temporal evolution of
-    :class:`~mirgecom.multiphysics.wall_model.WallConservedVars` is solved in
+    The temporal evolution of wall density is solved in
     order to predict the material degradation. As the
     :class:`~mirgecom.materials.tacot.Pyrolysis` progresses, the mass of each 
     $i$ constituents of the resin, denoted by
-    :attr:`~mirgecom.multiphysics.wall_model.WallConservedVars.mass`,
+    :attr:`~mirgecom.wall_model.PorousFlowDependentVars.wall_density`,
     is calculated as
 
     .. math ::
@@ -158,7 +156,7 @@ Composite Materials
 
     From the conserved variables, it is possible to compute the decomposition
     status, denoted by
-    :attr:`~mirgecom.multiphysics.wall_model.WallDependentVars.tau`.
+    :attr:`~mirgecom.wall_model.WallDependentVars.tau`.
     This yields the proportion of virgin (unpyrolyzed material) to char (fully
     pyrolyzed) and, consequently, the different thermophysicochemical
     properties of the solid phase. Thus, the instantaneous material properties
@@ -169,10 +167,10 @@ Composite Materials
     data) or 
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` (Pyrometheus)
     and
-    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.enthalpy`,
+    :attr:`~mirgecom.wall_model.WallEOS.enthalpy`,
     as well as their respective derivatives, namely
     :attr:`~mirgecom.materials.tacot.GasProperties.gas_heat_capacity` and
-    :attr:`~mirgecom.multiphysics.wall_model.WallEOS.heat_capacity`.
+    :attr:`~mirgecom.wall_model.WallEOS.heat_capacity`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials
     to tabulated data for easy evaluation of the properties based on the
