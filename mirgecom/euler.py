@@ -339,14 +339,14 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag)
 
-    if use_esdg:
-        if inviscid_numerical_flux_func is None:
-            inviscid_numerical_flux_func = entropy_stable_inviscid_flux_rusanov
-        return entropy_stable_euler_operator(
-            dcoll, gas_model=gas_model, state=state, boundaries=boundaries,
-            time=time, operator_states_quad=operator_states_quad, dd=dd,
-            inviscid_numerical_flux_func=inviscid_numerical_flux_func,
-            quadrature_tag=quadrature_tag, comm_tag=comm_tag)
+    # if use_esdg:
+    #     if inviscid_numerical_flux_func is None:
+    #         inviscid_numerical_flux_func = entropy_stable_inviscid_flux_rusanov
+    #     return entropy_stable_euler_operator(
+    #         dcoll, gas_model=gas_model, state=state, boundaries=boundaries,
+    #         time=time, operator_states_quad=operator_states_quad, dd=dd,
+    #         inviscid_numerical_flux_func=inviscid_numerical_flux_func,
+    #         quadrature_tag=quadrature_tag, comm_tag=comm_tag)
 
     if inviscid_numerical_flux_func is None:
         inviscid_numerical_flux_func = inviscid_facial_flux_rusanov

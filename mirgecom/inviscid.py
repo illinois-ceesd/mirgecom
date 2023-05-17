@@ -419,6 +419,10 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     gamma_ll = gas_model.eos.gamma(state_ll.cv, state_ll.temperature)
     gamma_rr = gas_model.eos.gamma(state_rr.cv, state_rr.temperature)
 
+    def is_pyopencl_eager_actx() -> bool:
+        from arraycontext import PyOpenCLArrayContext
+        return isinstance(actx, PyOpenCLArrayContext)
+
     def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
         f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
         return actx.np.where(
@@ -443,18 +447,30 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     specific_kin_ll = 0.5 * np.dot(u_ll, u_ll)
     specific_kin_rr = 0.5 * np.dot(u_rr, u_rr)
 
-    rho_avg = 0.5 * (rho_ll + rho_rr)
-    rho_mean = ln_mean(rho_ll,  rho_rr)
+    if is_pyopencl_eager_actx():
+        rho_avg = 0.5 * (rho_ll + np.broadcast_to(rho_rr, rho_ll.shape))
+        rho_mean = ln_mean(rho_ll, np.broadcast_to(rho_rr, rho_ll.shape))
+    else:
+        rho_avg = 0.5 * (rho_ll + rho_rr)
+        rho_mean = ln_mean(rho_ll,  rho_rr)
+
     rho_species_mean = make_obj_array(
         [ln_mean(y_ll_i, y_rr_i)
          for y_ll_i, y_rr_i in zip(rho_species_ll, rho_species_rr)])
 
-    beta_mean = ln_mean(beta_ll, beta_rr)
-    beta_avg = 0.5 * (beta_ll + beta_rr)
+    if is_pyopencl_eager_actx():
+        beta_mean = ln_mean(beta_ll, np.broadcast_to(beta_rr, beta_ll.shape))
+        beta_avg = 0.5 * (beta_ll + np.broadcast_to(beta_rr, beta_ll.shape))
+        u_avg = 0.5 * (u_ll + np.broadcast_to(u_rr, u_ll.shape))
+        velocity_square_avg = specific_kin_ll + \
+            np.broadcast_to(specific_kin_rr, specific_kin_ll.shape)
+    else:
+        beta_mean = ln_mean(beta_ll, beta_rr)
+        beta_avg = 0.5 * (beta_ll + beta_rr)
+        u_avg = 0.5 * (u_ll + u_rr)
+        velocity_square_avg = specific_kin_ll + specific_kin_rr
 
-    u_avg = 0.5 * (u_ll + u_rr)
     p_mean = 0.5 * rho_avg / beta_avg
-    velocity_square_avg = specific_kin_ll + specific_kin_rr
 
     mass_flux = rho_mean * u_avg
     momentum_flux = outer(mass_flux, u_avg) + np.eye(dim) * p_mean
