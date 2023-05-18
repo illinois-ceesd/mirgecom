@@ -398,9 +398,6 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
-        # TODO double check which one is the plus state...
-        #state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus,
-        #                             **kwargs)
         state_plus = _project_from_base(dcoll, dd_bdry, self._state_plus)
 
         state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
@@ -536,9 +533,6 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
-        # TODO double check which one is the plus state...
-        #state_plus = self.state_plus(dcoll, dd_bdry, gas_model, state_minus,
-        #                             **kwargs)
         state_plus = _project_from_base(dcoll, dd_bdry, self._state_plus)
 
         state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
