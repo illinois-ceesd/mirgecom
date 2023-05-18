@@ -111,15 +111,14 @@ class SolidProperties:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
 
         The fractions of gas and solid phases must sum to one,
-        $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
+        $\epsilon_g + \epsilon_s = 1$. Both depend only on the oxidation
         progress ratio $\tau$.
         """
-        return 1.0 - self.solid_volume_fraction(tau)
+        return 1.0 - self.volume_fraction(tau)
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation."""
-        virgin_mass = (self.intrinsic_density()
-                  * self.solid_volume_fraction(tau=1.0))
+        virgin_mass = self.intrinsic_density()*self.volume_fraction(tau=1.0)
         return 1.0 - (virgin_mass - mass)/virgin_mass
 
     def enthalpy(self, temperature: DOFArray) -> DOFArray:
@@ -167,6 +166,7 @@ class SolidProperties:
     # ~~~~~~~~ other properties
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the composite material."""
+        # FIXME find a relation to make it change as a function of "tau"
         return 6.0e-11 + tau*0.0
 
     def volume_fraction(self, tau: DOFArray) -> DOFArray:

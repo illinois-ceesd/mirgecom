@@ -47,14 +47,13 @@ from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import ConservedVars
 from mirgecom.wall_model import WallDependentVars, WallEOS
-from mirgecom.eos import GasEOS
 
 
 class BprimeTable():
     """Class containing the table for energy balance at the surface.
 
-    This class is only required for uncoupled cases, where only the wall portion
-    is evaluated. This is NOT used for fully-coupled cases.
+    This class is only required for uncoupled cases, where only the wall
+    portion is evaluated. This is NOT used for fully-coupled cases.
     """
 
     # FIXME read from the "materials" folder to not get explictly the table
@@ -376,7 +375,7 @@ class SolidProperties:
         return virgin*tau + char*(1.0 - tau)
 
     def heat_capacity(self, temperature: DOFArray,
-                            tau: DOFArray) -> DOFArray:
+                      tau: DOFArray) -> DOFArray:
         r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
 
@@ -394,7 +393,7 @@ class SolidProperties:
         return virgin*tau + char*(1.0 - tau)
 
     def thermal_conductivity(self, temperature: DOFArray,
-                                   tau: DOFArray) -> DOFArray:
+                             tau: DOFArray) -> DOFArray:
         """Solid thermal conductivity as a function of pyrolysis progress."""
         virgin = (
             + 2.31290019732353e-17*temperature**5 - 2.167785032562e-13*temperature**4
@@ -441,9 +440,9 @@ class WallTabulatedEOS(WallEOS):
     for TACOT-tabulated data.
     """
 
-    def get_temperature(self, cv: ConservedVars,
-                        wall_density: [DOFArray or np.ndarray], tseed: DOFArray,
-                        tau: DOFArray, eos: GasEOS, niter=3) -> DOFArray:
+    def get_temperature(
+        self, cv: ConservedVars, wall_density: np.ndarray, tseed: DOFArray,
+        tau: DOFArray, eos: GasProperties, niter=3) -> DOFArray:
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
