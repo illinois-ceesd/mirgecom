@@ -440,9 +440,7 @@ class WallTabulatedEOS(WallEOS):
     for TACOT-tabulated data.
     """
 
-    def get_temperature(
-        self, cv: ConservedVars, wall_density: np.ndarray, tseed: DOFArray,
-        tau: DOFArray, eos: GasProperties, niter=3) -> DOFArray:
+    def get_temperature(self, cv, wall_density, tseed, tau, eos, niter=3):
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -458,6 +456,35 @@ class WallTabulatedEOS(WallEOS):
                 \right)
                 + \epsilon_s \rho_s C_{p_s}
                 }
+
+        Parameters
+        ----------
+        cv: ConservedVars
+
+            The fluid conserved variables
+
+        wall_density: np.ndarray
+
+            The density of the different wall constituents
+
+        tseed:
+
+            Temperature to use as a seed for Netwon iteration
+
+        tau: meshmode.dof_array.DOFArray
+
+            Progress ratio of the phenolics decomposition
+
+        eos: GasProperties
+
+            The class containing the tabulated data for TACOT
+
+        Returns
+        -------
+        temperature: meshmode.dof_array.DOFArray
+
+            The temperature of the gas+solid
+
         """
         if isinstance(tseed, DOFArray) is False:
             temp = tseed + cv.mass*0.0
