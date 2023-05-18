@@ -48,11 +48,11 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticSlipBoundary,
-    PrescribedFluidBoundary,
+    # PrescribedFluidBoundary,
     IsothermalWallBoundary
 )
 from mirgecom.fluid import make_conserved
-from mirgecom.transport import SimpleTransport, PowerLawTransport
+from mirgecom.transport import SimpleTransport
 import cantera
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel, make_fluid_state
@@ -194,7 +194,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # default timestepping control
     integrator = "ssprk43"
     current_dt = 0.002
-    t_final = 100.0
+    t_final = 0.020
 
     local_dt = False
     constant_cfl = False
@@ -202,7 +202,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # discretization and model control
     order = 2
-    use_overintegration = False
+    use_overintegration = True
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -268,8 +268,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     y_left = cantera_soln.Y
 
     x_right = np.zeros(nspecies)
-    x_right[cantera_soln.species_index("Ar")] = 1.0
-    x_right[cantera_soln.species_index("N2")] = 0.0
+    x_right[cantera_soln.species_index("Ar")] = 0.0
+    x_right[cantera_soln.species_index("N2")] = 1.0
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_right
     y_right = cantera_soln.Y
@@ -292,14 +292,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
-#    # change the transport coefficients
-#    fluid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
-#       beta=4.093e-7*0.2)
-
-#    # keep the original transport coefficients
-#    solid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
-#       beta=4.093e-7)
-
     fluid_transport_model = SimpleTransport(viscosity=0.0001,
         thermal_conductivity=0.1, species_diffusivity=np.ones(nspecies,)*1e-3)
 
@@ -314,34 +306,33 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.limiter import bound_preserving_limiter
 
     def _limit_fluid_cv(cv, pressure, temperature, dd):
-        return cv
 
-#        # limit species
-#        spec_lim = make_obj_array([
-#            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
-#                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
-#            for i in range(nspecies)
-#        ])
+        # limit species
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
+                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
+            for i in range(nspecies)
+        ])
 
-#        # normalize to ensure sum_Yi = 1.0
-#        aux = cv.mass*0.0
-#        for i in range(0, nspecies):
-#            aux = aux + spec_lim[i]
-#        spec_lim = spec_lim/aux
+        # normalize to ensure sum_Yi = 1.0
+        aux = cv.mass*0.0
+        for i in range(0, nspecies):
+            aux = aux + spec_lim[i]
+        spec_lim = spec_lim/aux
 
-#        # recompute density
-#        mass_lim = eos.get_density(pressure=pressure,
-#            temperature=temperature, species_mass_fractions=spec_lim)
+        # recompute density
+        mass_lim = eos.get_density(pressure=pressure,
+            temperature=temperature, species_mass_fractions=spec_lim)
 
-#        # recompute energy
-#        energy_lim = mass_lim*(gas_model_fluid.eos.get_internal_energy(
-#            temperature, species_mass_fractions=spec_lim)
-#            + 0.5*np.dot(cv.velocity, cv.velocity)
-#        )
+        # recompute energy
+        energy_lim = mass_lim*(gas_model_fluid.eos.get_internal_energy(
+            temperature, species_mass_fractions=spec_lim)
+            + 0.5*np.dot(cv.velocity, cv.velocity)
+        )
 
-#        # make a new CV with the limited variables
-#        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
-#            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
+        # make a new CV with the limited variables
+        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
 
     def _get_fluid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model_fluid,
@@ -353,34 +344,33 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # ~~~~~~~~~~~~~~~~~~~~
 
     def _limit_solid_cv(cv, pressure, temperature, dd):
-        return cv
 
-#        # limit species
-#        spec_lim = make_obj_array([
-#            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
-#                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
-#            for i in range(nspecies)
-#        ])
+        # limit species
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
+                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
+            for i in range(nspecies)
+        ])
 
-#        # normalize to ensure sum_Yi = 1.0
-#        aux = cv.mass*0.0
-#        for i in range(0, nspecies):
-#            aux = aux + spec_lim[i]
-#        spec_lim = spec_lim/aux
+        # normalize to ensure sum_Yi = 1.0
+        aux = cv.mass*0.0
+        for i in range(0, nspecies):
+            aux = aux + spec_lim[i]
+        spec_lim = spec_lim/aux
 
-#        # recompute density
-#        mass_lim = eos.get_density(pressure=pressure,
-#            temperature=temperature, species_mass_fractions=spec_lim)
+        # recompute density
+        mass_lim = eos.get_density(pressure=pressure,
+            temperature=temperature, species_mass_fractions=spec_lim)
 
-#        # recompute energy
-#        energy_lim = mass_lim*(gas_model_solid.eos.get_internal_energy(
-#            temperature, species_mass_fractions=spec_lim)
-#            + 0.5*np.dot(cv.velocity, cv.velocity)
-#        )
+        # recompute energy
+        energy_lim = mass_lim*(gas_model_solid.eos.get_internal_energy(
+            temperature, species_mass_fractions=spec_lim)
+            + 0.5*np.dot(cv.velocity, cv.velocity)
+        )
 
-#        # make a new CV with the limited variables
-#        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
-#            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
+        # make a new CV with the limited variables
+        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
 
     def _get_solid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model_solid,
@@ -548,7 +538,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     fluid_boundaries = {
         dd_vol_fluid.trace("Fluid Presc").domain_tag:
-#        PrescribedFluidBoundary(boundary_state_func=fluid_boundary_solution),
+        # PrescribedFluidBoundary(boundary_state_func=fluid_boundary_solution),
         IsothermalWallBoundary(wall_temperature=1500.0),
         dd_vol_fluid.trace("Fluid Sides").domain_tag:
         AdiabaticSlipBoundary(),
@@ -556,7 +546,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     solid_boundaries = {
         dd_vol_solid.trace("Solid Presc").domain_tag:
-#        PrescribedFluidBoundary(boundary_state_func=solid_boundary_solution),
+        # PrescribedFluidBoundary(boundary_state_func=solid_boundary_solution),
         IsothermalWallBoundary(wall_temperature=300.0),
         dd_vol_solid.trace("Solid Sides").domain_tag:
         AdiabaticSlipBoundary()
