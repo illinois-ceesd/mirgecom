@@ -10,11 +10,10 @@ r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
-.. autoclass:: PrescribedFluxDiffusionBoundary
 """
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -24,10 +23,8 @@ in the Software without restriction, including without limitation the rights
 to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
-
 The above copyright notice and this permission notice shall be included in
 all copies or substantial portions of the Software.
-
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -40,10 +37,8 @@ THE SOFTWARE.
 import abc
 from functools import partial
 import numpy as np
-import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     VolumeDomainTag,
@@ -65,7 +60,6 @@ def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
     Uses a simple average of the two sides' values:
 
     .. math::
-
         F = -\frac{u^- + u^+}{2} \hat{n}.
     """
     return -u_tpair.avg * normal
@@ -77,7 +71,6 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     Weights each side's value by the corresponding thermal conductivity $\kappa$:
 
     .. math::
-
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}.
     """
     actx = u_tpair.int.array_context
@@ -92,23 +85,18 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
 
 
 def diffusion_flux(kappa, grad_u):
-    r"""
-    Compute the diffusive flux $-\kappa \nabla u$.
+    r"""Compute the diffusive flux $-\kappa \nabla u$.
 
     Parameters
     ----------
     kappa: float or :class:`meshmode.dof_array.DOFArray`
-
         The thermal conductivity.
-
     grad_u: numpy.ndarray
-
         Gradient of the state variable *u*.
 
     Returns
     -------
     meshmode.dof_array.DOFArray
-
         The diffusive flux.
     """
     return -kappa * grad_u
@@ -122,7 +110,6 @@ def diffusion_facial_flux_central(
     Uses a simple average of the two sides' values:
 
     .. math::
-
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n}.
     """
     if penalty_amount is None:
@@ -151,7 +138,6 @@ def diffusion_facial_flux_harmonic(
     and $\kappa^+$ with their harmonic mean:
 
     .. math::
-
         F = -\frac{2 \kappa^- \kappa^+}{\kappa^- + \kappa^+}\frac{u^- + u^+}{2}
                 \cdot \hat{n}.
     """
@@ -175,8 +161,7 @@ def diffusion_facial_flux_harmonic(
 
 
 class DiffusionBoundary(metaclass=abc.ABCMeta):
-    """
-    Diffusion boundary base class.
+    """Diffusion boundary base class.
 
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
@@ -199,13 +184,11 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
 
 class DirichletDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Dirichlet boundary condition for the diffusion operator.
+    r"""Dirichlet boundary condition for the diffusion operator.
 
     For the boundary condition $u|_\Gamma = f$, uses external data
 
     .. math::
-
                  u^+ &= 2 f - u^-
 
         (\nabla u)^+ &= (\nabla u)^-
@@ -218,8 +201,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """
-        Initialize the boundary condition.
+        """Initialize the boundary condition.
 
         Parameters
         ----------
@@ -264,20 +246,17 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Neumann boundary condition for the diffusion operator.
+    r"""Neumann boundary condition for the diffusion operator.
 
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma = g$, uses
     external data
 
     .. math::
-
         u^+ = u^-
 
     when computing the boundary fluxes for $\nabla u$, and uses
 
     .. math::
-
         (-\kappa \nabla u\cdot\mathbf{\hat{n}})|_\Gamma &=
             -\kappa^- (\nabla u\cdot\mathbf{\hat{n}})|_\Gamma
 
@@ -291,8 +270,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """
-        Initialize the boundary condition.
+        """Initialize the boundary condition.
 
         Parameters
         ----------
@@ -338,64 +316,6 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
             penalty_amount=penalty_amount)
 
 
-class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
-    r"""Prescribed flux boundary condition for the diffusion operator.
-
-    For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
-    external data
-
-    .. math::
-
-        u^+ = u^-
-
-    when computing the boundary fluxes for $\nabla u$, and applies directly
-    the prescribed flux $g$ when computing $\nabla \cdot (\kappa \nabla u)$:
-
-    .. math::
-
-        f_{presc} \cdot \hat{n}
-
-    Note that positive values of flux are going out of the cell since the
-    normal is positive outwards.
-
-    .. automethod:: __init__
-    .. automethod:: get_grad_flux
-    .. automethod:: get_diffusion_flux
-    """
-
-    def __init__(self, value):
-        """
-        Initialize the boundary condition.
-
-        Parameters
-        ----------
-        value: float or meshmode.dof_array.DOFArray
-            the value(s) of $g$ along the boundary
-        """
-        self.value = value
-
-    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
-        actx = u_minus.array_context
-        kappa_tpair = TracePair(
-            dd_bdry, interior=kappa_minus, exterior=kappa_minus)
-        u_tpair = TracePair(
-            dd_bdry, interior=u_minus, exterior=u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        return numerical_flux_func(kappa_tpair, u_tpair, normal)
-
-    def get_diffusion_flux(
-            self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
-            lengthscales_minus, *, penalty_amount=None,
-            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
-        actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-
-        external_flux = u_minus*0.0 + self.value
-
-        return np.dot(external_flux, normal)
-
-
 class _DiffusionKappaTag:
     pass
 
@@ -420,8 +340,7 @@ def grad_operator(
         # FIXME: See if there's a better way to do this
         kappa_tpairs=None,
         u_tpairs=None):
-    r"""
-    Compute the gradient of *u*.
+    r"""Compute the gradient of *u*.
 
     Parameters
     ----------
@@ -533,8 +452,7 @@ def diffusion_operator(
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         grad_u=None):
-    r"""
-    Compute the diffusion operator.
+    r"""Compute the diffusion operator.
 
     The diffusion operator is defined as
     $\nabla\cdot(\kappa\nabla u)$, where $\kappa$ is the conductivity and
@@ -544,7 +462,7 @@ def diffusion_operator(
     ----------
     dcoll: grudge.discretization.DiscretizationCollection
         the discretization collection to use
-    kappa: numbers.Number or meshmode.dof_array.DOFArray
+    kappa: numbers.Number or meshmode.dof_array.DOFArray or numpy.ndarray
         the conductivity value(s)
     boundaries:
         dictionary (or list of dictionaries) mapping boundary domain tags to
@@ -582,14 +500,19 @@ def diffusion_operator(
             raise TypeError("boundaries must be a list if u is an object array")
         if len(boundaries) != len(u):
             raise TypeError("boundaries must be the same length as u")
+        if isinstance(kappa, np.ndarray):
+            if len(kappa) != len(u):
+                raise TypeError("kappa must be the same length as u")
+        else:
+            kappa = make_obj_array([kappa for _ in range(len(u))])
         return obj_array_vectorize_n_args(
-            lambda boundaries_i, u_i: diffusion_operator(
-                dcoll, kappa, boundaries_i, u_i, return_grad_u=return_grad_u,
+            lambda kappa_i, boundaries_i, u_i: diffusion_operator(
+                dcoll, kappa_i, boundaries_i, u_i, return_grad_u=return_grad_u,
                 penalty_amount=penalty_amount,
                 gradient_numerical_flux_func=gradient_numerical_flux_func,
                 diffusion_numerical_flux_func=diffusion_numerical_flux_func,
                 quadrature_tag=quadrature_tag, dd=dd),
-            make_obj_array(boundaries), u)
+            kappa, make_obj_array(boundaries), u)
 
     actx = u.array_context
 

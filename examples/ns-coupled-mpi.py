@@ -48,10 +48,11 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticSlipBoundary,
-    PrescribedFluidBoundary
+    PrescribedFluidBoundary,
+    IsothermalWallBoundary
 )
 from mirgecom.fluid import make_conserved
-from mirgecom.transport import PowerLawTransport
+from mirgecom.transport import SimpleTransport, PowerLawTransport
 import cantera
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel, make_fluid_state
@@ -74,7 +75,7 @@ class Initializer:
 
     def __init__(
             self, nspecies, velocity, species_mass_right, species_mass_left, *,
-            dim=2, sigma=1.0, discontinuity_location=1.0):
+            dim=2, sigma=1.0, discontinuity_location=0.0):
 
         self._dim = dim
         self._nspecies = nspecies
@@ -90,7 +91,7 @@ class Initializer:
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
-        x = x_vec[1]
+        x = x_vec[0]
         actx = x.array_context
 
         u_x = x*0.0 + self._vel[0]
@@ -103,8 +104,11 @@ class Initializer:
 
         y = y1+y2
 
-        aux = 0.5*(1.0 - actx.np.tanh(1.0/(self._sigma)*(x - self._disc)))
-        temperature = 300.0 + 300.0*aux
+        aux = 0.5*(1.0 + actx.np.tanh(1.0/(self._sigma)*(x - self._disc)))
+        temperature = 300.0 + 1200.0*aux
+#        temperature = actx.np.where(actx.np.greater(x,0.0),
+#            (1500.0 - 400.4685405683)*x/0.1 + 400.4685405683,
+#            (300.0 - 400.4685405683)*x/(-0.2) + 400.4685405683)
 
         pressure = 101325.0 + x*0.0
 
@@ -183,14 +187,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # default i/o frequencies
     nviz = 100
     nrestart = 1000
-    nhealth = 10
+    nhealth = 1
     nstatus = 100
     ngarbage = 50
 
     # default timestepping control
-    integrator = "euler"
-    current_dt = 1.0
-    t_final = 10.0
+    integrator = "ssprk43"
+    current_dt = 0.002
+    t_final = 100.0
 
     local_dt = False
     constant_cfl = False
@@ -198,7 +202,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # discretization and model control
     order = 2
-    use_overintegration = True
+    use_overintegration = False
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -264,8 +268,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     y_left = cantera_soln.Y
 
     x_right = np.zeros(nspecies)
-    x_right[cantera_soln.species_index("Ar")] = 0.0
-    x_right[cantera_soln.species_index("N2")] = 1.0
+    x_right[cantera_soln.species_index("Ar")] = 1.0
+    x_right[cantera_soln.species_index("N2")] = 0.0
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_right
     y_right = cantera_soln.Y
@@ -288,13 +292,19 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # }}}
 
-    # change the transport coefficients
-    fluid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
-       beta=4.093e-7*0.2)
+#    # change the transport coefficients
+#    fluid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
+#       beta=4.093e-7*0.2)
 
-    # keep the original transport coefficients
-    solid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
-       beta=4.093e-7)
+#    # keep the original transport coefficients
+#    solid_transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),
+#       beta=4.093e-7)
+
+    fluid_transport_model = SimpleTransport(viscosity=0.0001,
+        thermal_conductivity=0.1, species_diffusivity=np.ones(nspecies,)*1e-3)
+
+    solid_transport_model = SimpleTransport(viscosity=0.0001,
+        thermal_conductivity=0.2, species_diffusivity=np.ones(nspecies,)*2e-3)
 
     gas_model_fluid = GasModel(eos=eos, transport=fluid_transport_model)
     gas_model_solid = GasModel(eos=eos, transport=solid_transport_model)
@@ -304,33 +314,34 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.limiter import bound_preserving_limiter
 
     def _limit_fluid_cv(cv, pressure, temperature, dd):
+        return cv
 
-        # limit species
-        spec_lim = make_obj_array([
-            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
-                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
-            for i in range(nspecies)
-        ])
+#        # limit species
+#        spec_lim = make_obj_array([
+#            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
+#                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
+#            for i in range(nspecies)
+#        ])
 
-        # normalize to ensure sum_Yi = 1.0
-        aux = cv.mass*0.0
-        for i in range(0, nspecies):
-            aux = aux + spec_lim[i]
-        spec_lim = spec_lim/aux
+#        # normalize to ensure sum_Yi = 1.0
+#        aux = cv.mass*0.0
+#        for i in range(0, nspecies):
+#            aux = aux + spec_lim[i]
+#        spec_lim = spec_lim/aux
 
-        # recompute density
-        mass_lim = eos.get_density(pressure=pressure,
-            temperature=temperature, species_mass_fractions=spec_lim)
+#        # recompute density
+#        mass_lim = eos.get_density(pressure=pressure,
+#            temperature=temperature, species_mass_fractions=spec_lim)
 
-        # recompute energy
-        energy_lim = mass_lim*(gas_model_fluid.eos.get_internal_energy(
-            temperature, species_mass_fractions=spec_lim)
-            + 0.5*np.dot(cv.velocity, cv.velocity)
-        )
+#        # recompute energy
+#        energy_lim = mass_lim*(gas_model_fluid.eos.get_internal_energy(
+#            temperature, species_mass_fractions=spec_lim)
+#            + 0.5*np.dot(cv.velocity, cv.velocity)
+#        )
 
-        # make a new CV with the limited variables
-        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
-            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
+#        # make a new CV with the limited variables
+#        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+#            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
 
     def _get_fluid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model_fluid,
@@ -342,33 +353,34 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # ~~~~~~~~~~~~~~~~~~~~
 
     def _limit_solid_cv(cv, pressure, temperature, dd):
+        return cv
 
-        # limit species
-        spec_lim = make_obj_array([
-            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
-                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
-            for i in range(nspecies)
-        ])
+#        # limit species
+#        spec_lim = make_obj_array([
+#            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
+#                mmin=0.0, mmax=1.0, modify_average=True, dd=dd)
+#            for i in range(nspecies)
+#        ])
 
-        # normalize to ensure sum_Yi = 1.0
-        aux = cv.mass*0.0
-        for i in range(0, nspecies):
-            aux = aux + spec_lim[i]
-        spec_lim = spec_lim/aux
+#        # normalize to ensure sum_Yi = 1.0
+#        aux = cv.mass*0.0
+#        for i in range(0, nspecies):
+#            aux = aux + spec_lim[i]
+#        spec_lim = spec_lim/aux
 
-        # recompute density
-        mass_lim = eos.get_density(pressure=pressure,
-            temperature=temperature, species_mass_fractions=spec_lim)
+#        # recompute density
+#        mass_lim = eos.get_density(pressure=pressure,
+#            temperature=temperature, species_mass_fractions=spec_lim)
 
-        # recompute energy
-        energy_lim = mass_lim*(gas_model_solid.eos.get_internal_energy(
-            temperature, species_mass_fractions=spec_lim)
-            + 0.5*np.dot(cv.velocity, cv.velocity)
-        )
+#        # recompute energy
+#        energy_lim = mass_lim*(gas_model_solid.eos.get_internal_energy(
+#            temperature, species_mass_fractions=spec_lim)
+#            + 0.5*np.dot(cv.velocity, cv.velocity)
+#        )
 
-        # make a new CV with the limited variables
-        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
-            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
+#        # make a new CV with the limited variables
+#        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+#            momentum=mass_lim*cv.velocity, species_mass=mass_lim*spec_lim)
 
     def _get_solid_state(cv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model_solid,
@@ -381,7 +393,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     velocity = np.zeros(shape=(dim,))
 
-    flow_init = Initializer(dim=dim, sigma=0.2, nspecies=nspecies,
+    flow_init = Initializer(dim=dim, sigma=0.025, nspecies=nspecies,
         velocity=velocity, species_mass_right=y_right, species_mass_left=y_left)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -409,8 +421,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 "ns-coupled-v2.msh", force_ambient_dim=2,
                 return_tag_to_elements_map=True)
             volume_to_tags = {
-                "Fluid": ["Upper"],
-                "Solid": ["Lower"]}
+                "Fluid": ["Fluid"],
+                "Solid": ["Solid"]}
             return mesh, tag_to_elements, volume_to_tags
 
         def partition_generator_func(mesh, tag_to_elements, num_ranks):
@@ -520,35 +532,33 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def fluid_boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(dd_bdry)
-        nodes = actx.thaw(bnd_discr.nodes())
-        cv = flow_init(nodes, gas_model.eos)
-        return make_fluid_state(cv=cv,
-                                gas_model=gas_model,
-                                temperature_seed=nodes[0]*0.0+300.0)
+#    def solid_boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+#        actx = state_minus.array_context
+#        bnd_discr = dcoll.discr_from_dd(dd_bdry)
+#        nodes = actx.thaw(bnd_discr.nodes())
+#        return make_fluid_state(cv=flow_init(nodes, gas_model.eos),
+#            gas_model=gas_model, temperature_seed=nodes[0]*0.0+300.0)
 
-    def solid_boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(dd_bdry)
-        nodes = actx.thaw(bnd_discr.nodes())
-        cv = flow_init(nodes, gas_model.eos)
-        return make_fluid_state(cv=cv,
-                                gas_model=gas_model,
-                                temperature_seed=nodes[0]*0.0+600.0)
+#    def fluid_boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+#        actx = state_minus.array_context
+#        bnd_discr = dcoll.discr_from_dd(dd_bdry)
+#        nodes = actx.thaw(bnd_discr.nodes())
+#        return make_fluid_state(cv=flow_init(nodes, gas_model.eos),
+#            gas_model=gas_model, temperature_seed=nodes[0]*0.0+1500.0)
 
     fluid_boundaries = {
-        dd_vol_fluid.trace("Upper Top").domain_tag:
-        PrescribedFluidBoundary(boundary_state_func=fluid_boundary_solution),
-        dd_vol_fluid.trace("Upper Sides").domain_tag:
+        dd_vol_fluid.trace("Fluid Presc").domain_tag:
+#        PrescribedFluidBoundary(boundary_state_func=fluid_boundary_solution),
+        IsothermalWallBoundary(wall_temperature=1500.0),
+        dd_vol_fluid.trace("Fluid Sides").domain_tag:
         AdiabaticSlipBoundary(),
     }
 
     solid_boundaries = {
-        dd_vol_solid.trace("Lower Bottom").domain_tag:
-        PrescribedFluidBoundary(boundary_state_func=solid_boundary_solution),
-        dd_vol_solid.trace("Lower Sides").domain_tag:
+        dd_vol_solid.trace("Solid Presc").domain_tag:
+#        PrescribedFluidBoundary(boundary_state_func=solid_boundary_solution),
+        IsothermalWallBoundary(wall_temperature=300.0),
+        dd_vol_solid.trace("Solid Sides").domain_tag:
         AdiabaticSlipBoundary()
     }
 
@@ -572,12 +582,22 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_viz(step, t, dt, fluid_state, wall_state):
 
+        fluid_rhs, solid_rhs = coupled_ns_operator(
+            dcoll, gas_model_fluid, gas_model_solid, dd_vol_fluid, dd_vol_solid,
+            fluid_boundaries, solid_boundaries, fluid_state, wall_state, time=t,
+            interface_noslip=False, interface_radiation=True,
+            emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
+            fluid_limiter_func=_limit_fluid_cv, wall_limiter_func=_limit_solid_cv,
+            inviscid_fluid_terms_on=False, inviscid_wall_terms_on=False,
+            quadrature_tag=quadrature_tag)
+
         fluid_viz_fields = [
             ("CV_rho", fluid_state.cv.mass),
             ("CV_rhoU", fluid_state.cv.momentum),
             ("CV_rhoE", fluid_state.cv.energy),
             ("DV_P", fluid_state.pressure),
-            ("DV_T", fluid_state.temperature)]
+            ("DV_T", fluid_state.temperature),
+            ("RHS_rhoE", fluid_rhs.energy),]
 
         # species mass fractions
         fluid_viz_fields.extend(
@@ -589,7 +609,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             ("CV_rhoU", wall_state.cv.momentum),
             ("CV_rhoE", wall_state.cv.energy),
             ("DV_P", wall_state.pressure),
-            ("DV_T", wall_state.temperature)]
+            ("DV_T", wall_state.temperature),
+            ("RHS_rhoE", solid_rhs.energy),]
 
         # species mass fractions
         solid_viz_fields.extend(
@@ -663,7 +684,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_state = get_fluid_state(cv, tseed)
         cv = fluid_state.cv
 
-        # construct species-limited fluid state
+        # construct species-limited solid state
         solid_state = get_solid_state(wv, wv_tseed)
         wv = solid_state.cv
 
@@ -711,13 +732,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             limiter_dd=dd_vol_fluid)
 
         wall_state = make_fluid_state(cv=wv, gas_model=gas_model_solid,
-            temperature_seed=wv_tseed, limiter_func=_limit_fluid_cv,
+            temperature_seed=wv_tseed, limiter_func=_limit_solid_cv,
             limiter_dd=dd_vol_solid)
 
         fluid_rhs, solid_rhs = coupled_ns_operator(
             dcoll, gas_model_fluid, gas_model_solid, dd_vol_fluid, dd_vol_solid,
             fluid_boundaries, solid_boundaries, fluid_state, wall_state, time=t,
-            interface_noslip=False,
+            interface_noslip=False, interface_radiation=True,
+            emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
             fluid_limiter_func=_limit_fluid_cv, wall_limiter_func=_limit_solid_cv,
             inviscid_fluid_terms_on=False, inviscid_wall_terms_on=False,
             quadrature_tag=quadrature_tag)
