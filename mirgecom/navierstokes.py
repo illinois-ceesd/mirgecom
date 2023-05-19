@@ -58,6 +58,7 @@ THE SOFTWARE.
 """
 
 from functools import partial
+from warnings import warn
 
 from meshmode.discretization.connection import FACE_RESTR_ALL
 
@@ -187,6 +188,11 @@ def grad_cv_operator(
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
+        if state.is_mixture:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag)
@@ -288,6 +294,11 @@ def grad_t_operator(
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
+        if state.is_mixture:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag)
@@ -449,6 +460,11 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     # Note: these states will live on the quadrature domain if one is given,
     # otherwise they stay on the interpolatory/base domain.
     if operator_states_quad is None:
+        if state.is_mixture:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             limiter_func=limiter_func, dd=dd_vol, comm_tag=comm_tag)
