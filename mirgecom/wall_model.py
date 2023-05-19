@@ -238,7 +238,8 @@ class WallEOS:
 
         return temp
 
-    def enthalpy(self, temperature: DOFArray, tau: DOFArray, wall_sample_mask):
+    def enthalpy(self, temperature: DOFArray, tau: DOFArray,
+                 wall_sample_mask: np.ndarray):
         """Return the enthalpy of the wall as a function of temperature.
 
         Returns
@@ -318,7 +319,8 @@ class WallEOS:
         return self._material.permeability(tau) * wall_sample_mask
 
     def dependent_vars(self, wall_density: Union[DOFArray, np.ndarray],
-                       wall_sample_mask, temperature: DOFArray) -> WallDependentVars:
+                       wall_sample_mask: np.ndarray,
+                       temperature: DOFArray) -> WallDependentVars:
         """Get the state-dependent variables."""
         tau = self.decomposition_progress(wall_density, wall_sample_mask)
         return WallDependentVars(
