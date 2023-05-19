@@ -579,7 +579,7 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
             # radiation sink term
             emissivity = _project_from_base(dcoll, dd_bdry, self._emissivity)
             radiation = - emissivity * self._sigma * (
-                state_bc.temperature**4 - self._u_ambient**4)
+                state_minus.temperature**4 - self._u_ambient**4)
 
             penalization = make_conserved(dim=dcoll.dim,
                 mass=state_minus.cv.mass*0.0,
