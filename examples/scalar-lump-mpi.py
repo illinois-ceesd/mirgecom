@@ -110,17 +110,18 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.005
+
+    t_final = 2e-2
     current_cfl = 1.0
-    current_dt = .001
+    current_dt = 1e-3
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 5
-    nviz = 1
-    nhealth = 1
+    nstatus = 100
+    nrestart = 10000
+    nviz = 10
+    nhealth = 100
 
     dim = 2
     rst_path = "restart_data/"

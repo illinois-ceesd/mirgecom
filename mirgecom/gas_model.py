@@ -806,21 +806,21 @@ def conservative_to_entropy_vars(gamma, state):
     rho = state.mass_density
     u = state.velocity
     p = state.pressure
-    rho_species = state.species_mass_density
-    rho_species = actx.np.where(actx.np.greater(rho_species, 0.), rho_species, 0.0)
+    y_species = state.species_mass_fractions
+    # y_species = actx.np.where(actx.np.greater(y_species, 0.), y_species, 0.0)
+    # spec_mass_test = state.species_mass_fractions
 
     u_square = np.dot(u, u)
     s = actx.np.log(p) - gamma*actx.np.log(rho)
     rho_p = rho / p
-    rho_species_p = rho_species / p
-
-    return make_conserved(
-        dim,
-        mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_p * u_square,
-        energy=-rho_p,
-        momentum=rho_p * u,
-        species_mass=((gamma - s)/(gamma - 1)) - 0.5 * rho_species_p * u_square
-    )
+    # rho_species_p = rho_species / p / (gamma - 1)
+    ev_mass = ((gamma - s) / (gamma - 1)) - 0.5 * rho_p * u_square
+    # ev_spec = -s/(gamma - 1) + y_species*ev_mass
+    ev_spec = y_species / (gamma - 1)
+    # return make_conserved(dim, mass=ev_mass, energy=-rho_p, momentum=rho_p * u,
+    #                      species_mass=ev_mass*y_species/(gamma-1))
+    return make_conserved(dim, mass=ev_mass, energy=-rho_p, momentum=rho_p * u,
+                          species_mass=ev_spec)
 
 
 def entropy_to_conservative_vars(gamma, ev: ConservedVars):
@@ -853,20 +853,22 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
     v234 = ev_state.momentum
     v5 = ev_state.energy
     v6ns = ev_state.species_mass
+    # spec_mod = actx.np.where(actx.np.greater(v6ns, 0.), v6ns, 0.0)
 
     v_square = np.dot(v234, v234)
     s = gamma - v1 + v_square/(2*v5)
-    s_species = gamma - v6ns + v_square/(2*v5)
+    # s_species = gamma - v6ns + v_square/(2*v5)
     iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
     rho_iota = iota * actx.np.exp(-s * inv_gamma_minus_one)
-    rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
-    spec_mod = -rho_iota_species * v5
-    spec_mod = actx.np.where(actx.np.greater(spec_mod, 0.), spec_mod, 0.0)
+    # rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
+    # spec_mod = -rho_iota_species * v5 * v6ns
+    mass = -rho_iota * v5
+    spec_mass = mass * v6ns
 
     return make_conserved(
         dim,
-        mass=-rho_iota * v5,
+        mass=mass,
         energy=rho_iota * (1 - v_square/(2*v5)),
         momentum=rho_iota * v234,
-        species_mass=spec_mod
+        species_mass=spec_mass
     )

@@ -57,7 +57,7 @@ from mirgecom.utils import normalize_boundaries
 
 from arraycontext import outer
 from meshmode.dof_array import DOFArray
-from pytools.obj_array import make_obj_array
+# from pytools.obj_array import make_obj_array
 
 
 def inviscid_flux(state):
@@ -431,12 +431,14 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     rho_ll = state_ll.mass_density
     u_ll = state_ll.velocity
     p_ll = state_ll.pressure
-    rho_species_ll = state_ll.species_mass_density
+    # rho_species_ll = state_ll.species_mass_density
+    y_ll = state_ll.species_mass_fractions
 
     rho_rr = state_rr.mass_density
     u_rr = state_rr.velocity
     p_rr = state_rr.pressure
-    rho_species_rr = state_rr.species_mass_density
+    # rho_species_rr = state_rr.species_mass_density
+    y_rr = state_rr.species_mass_fractions
 
     beta_ll = 0.5 * rho_ll / p_ll
     beta_rr = 0.5 * rho_rr / p_rr
@@ -445,9 +447,11 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
 
     rho_avg = 0.5 * (rho_ll + rho_rr)
     rho_mean = ln_mean(rho_ll,  rho_rr)
-    rho_species_mean = make_obj_array(
-        [ln_mean(y_ll_i, y_rr_i)
-         for y_ll_i, y_rr_i in zip(rho_species_ll, rho_species_rr)])
+    y_mean = 0.5 * (y_ll + y_rr)
+    rho_species_mean = rho_mean * y_mean
+    # rho_species_mean = make_obj_array(
+    #    [ln_mean(y_ll_i, y_rr_i)
+    #     for y_ll_i, y_rr_i in zip(rho_species_ll, rho_species_rr)])
 
     beta_mean = ln_mean(beta_ll, beta_rr)
     beta_avg = 0.5 * (beta_ll + beta_rr)

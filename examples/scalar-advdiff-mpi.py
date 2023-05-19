@@ -114,7 +114,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1.0
+
+    t_final = 2e-4
     current_cfl = 0.1
     current_dt = 1e-5
     current_t = 0
@@ -123,7 +124,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # some i/o frequencies
     nstatus = 100
     nrestart = 100
-    nviz = 1
+    nviz = 10
     nhealth = 100
 
     dim = 2
@@ -195,6 +196,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_conserved(dim=dim, mass=cv.mass, energy=cv.energy,
                               momentum=cv.momentum,
                               species_mass=cv.mass*spec_lim)
+    use_limiter = False
+    limiter_function = _limit_fluid_cv if use_limiter else None
 
     def vol_min(x):
         from grudge.op import nodal_min
@@ -238,7 +241,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     wave_vector[0] = 1.
     wave_vector = wave_vector / np.sqrt(np.dot(wave_vector, wave_vector))
 
-    spec_y0s = 2.0*np.ones(shape=(nspecies,))
+    spec_y0s = np.zeros(shape=(nspecies,))
     spec_amplitudes = np.ones(shape=(nspecies,))
     spec_omegas = 2. * np.pi * np.ones(shape=(nspecies,))
 
@@ -262,7 +265,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                                      spec_amplitudes=spec_amplitudes,
                                      spec_omegas=spec_omegas,
                                      spec_diffusivities=spec_diffusivities,
-                                     wave_vector=wave_vector)
+                                     wave_vector=wave_vector,
+                                     trig_function=actx.np.sin)
 
     def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
@@ -270,7 +274,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         nodes = actx.thaw(bnd_discr.nodes())
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model,
-                                limiter_func=_limit_fluid_cv,
+                                limiter_func=limiter_function,
                                 limiter_dd=dd_bdry)
 
     boundaries = {}
@@ -287,7 +291,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         current_cv = initializer(nodes)
 
     current_state = make_fluid_state(current_cv, gas_model,
-                                     limiter_func=_limit_fluid_cv)
+                                     limiter_func=limiter_function)
     convective_speed = np.sqrt(np.dot(velocity, velocity))
     c = current_state.speed_of_sound
     mach = vol_max(convective_speed / c)
@@ -343,7 +347,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(pressure, component_errors):
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
+        from mirgecom.simutil import check_naninf_local  # , check_range_local
         if check_naninf_local(dcoll, "vol", pressure):
             # or check_range_local(dcoll, "vol", pressure, .99999999, 1.00000001):
             health_error = True
@@ -417,11 +421,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model,
-                                       limiter_func=_limit_fluid_cv)
+                                       limiter_func=limiter_function)
         return ns_operator(dcoll, state=fluid_state, time=t,
                            boundaries=boundaries, gas_model=gas_model,
                            quadrature_tag=quadrature_tag, use_esdg=use_esdg,
-                           limiter_func=_limit_fluid_cv)
+                           limiter_func=limiter_function)
 
     # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
     #                              current_cfl, t_final, constant_cfl)

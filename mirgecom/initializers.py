@@ -828,7 +828,8 @@ class MulticomponentTrig:
             spec_centers=None,
             spec_omegas=None,
             spec_diffusivities=None,
-            wave_vector=None
+            wave_vector=None,
+            trig_function=None
     ):
         r"""Initialize MulticomponentLump parameters.
 
@@ -845,6 +846,10 @@ class MulticomponentTrig:
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(dim,)``
+        wave_vector: numpy.ndarray
+            optional fixed vector indicating normal direction of wave
+        trig_function
+            callable trig function
         """
         if center is None:
             center = np.zeros(shape=(dim,))
@@ -862,12 +867,17 @@ class MulticomponentTrig:
 
         if spec_amplitudes is None:
             spec_amplitudes = np.ones(shape=(nspecies,))
+
         if spec_diffusivities is None:
             spec_diffusivities = np.ones(shape=(nspecies,))
 
         if wave_vector is None:
             wave_vector = np.zeros(shape=(dim,))
             wave_vector[0] = 1
+
+        import mirgecom.math as mm
+        if trig_function is None:
+            trig_function = mm.sin
 
         if len(spec_y0s) != nspecies or\
            len(spec_amplitudes) != nspecies or\
@@ -891,6 +901,7 @@ class MulticomponentTrig:
         self._spec_omegas = spec_omegas
         self._d = spec_diffusivities
         self._wave_vector = wave_vector
+        self._trig_func = trig_function
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
@@ -920,15 +931,15 @@ class MulticomponentTrig:
         energy = ((self._p0 / (self._gamma - 1.0))
                   + 0.5*mass*np.dot(self._velocity, self._velocity))
 
-        import mirgecom.math as mm
         vel_t = t * self._velocity
+        import mirgecom.math as mm
         spec_mass = np.empty((self._nspecies,), dtype=object)
         for i in range(self._nspecies):
             spec_x = x_vec - self._spec_centers[i]
             wave_r = spec_x - vel_t
             wave_x = np.dot(wave_r, self._wave_vector)
             expterm = mm.exp(-t*self._d[i]*self._spec_omegas[i]**2)
-            trigterm = mm.sin(self._spec_omegas[i]*wave_x)
+            trigterm = self._trig_func(self._spec_omegas[i]*wave_x)
             spec_y = self._spec_y0s[i] + self._spec_amps[i]*expterm*trigterm
             spec_mass[i] = mass * spec_y
 
