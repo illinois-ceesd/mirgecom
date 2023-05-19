@@ -322,13 +322,14 @@ class SolidProperties:
     interpolation and they are not valid for temperatures above 3200K.
 
     .. automethod:: void_fraction
+    .. automethod:: decomposition_progress
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: thermal_conductivity
-    .. automethod:: permeability
-    .. automethod:: tortuosity
     .. automethod:: volume_fraction
+    .. automethod:: permeability
     .. automethod:: emissivity
+    .. automethod:: tortuosity
     """
 
     def __init__(self):
@@ -407,18 +408,6 @@ class SolidProperties:
 
         return virgin*tau + char*(1.0 - tau)
 
-    def permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Permeability $K$ of the composite material."""
-        virgin = 1.6e-11
-        char = 2.0e-11
-        return virgin*tau + char*(1.0 - tau)
-
-    def tortuosity(self, tau: DOFArray) -> DOFArray:
-        r"""Tortuosity $\eta$ affects the species diffusivity."""
-        virgin = 1.2
-        char = 1.1
-        return virgin*tau + char*(1.0 - tau)
-
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Fraction $\phi$ occupied by the solid."""
         fiber = 0.10
@@ -426,10 +415,22 @@ class SolidProperties:
         char = 0.05
         return virgin*tau + char*(1.0 - tau) + fiber
 
+    def permeability(self, tau: DOFArray) -> DOFArray:
+        r"""Permeability $K$ of the composite material."""
+        virgin = 1.6e-11
+        char = 2.0e-11
+        return virgin*tau + char*(1.0 - tau)
+
     def emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
         virgin = 0.8
         char = 0.9
+        return virgin*tau + char*(1.0 - tau)
+
+    def tortuosity(self, tau: DOFArray) -> DOFArray:
+        r"""Tortuosity $\eta$ affects the species diffusivity."""
+        virgin = 1.2
+        char = 1.1
         return virgin*tau + char*(1.0 - tau)
 
 
