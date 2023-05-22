@@ -20,7 +20,7 @@ from arraycontext import (
     # get_container_context_recursively
 )
 from mirgecom.fluid import ConservedVars
-from mirgecom.eos import GasEOS, MixtureDependentVars
+from mirgecom.eos import MixtureDependentVars
 from mirgecom.transport import GasTransportVars
 
 
@@ -32,13 +32,14 @@ class PorousFlowDependentVars(MixtureDependentVars):
     .. attribute:: wall_density
     """
 
-    wall_density: DOFArray or np.ndarray
+    wall_density: Union[DOFArray, np.ndarray]
+    wall_sample_mask: Union[DOFArray, np.ndarray]
 
 
 @dataclass_array_container
 @dataclass(frozen=True)
 class WallDependentVars:
-    """Dependent variables for the Y3 oxidation model.
+    """Dependent variables for the wall degradation model.
 
     .. attribute:: tau
     .. attribute:: void_fraction
@@ -77,7 +78,7 @@ class WallDegradationModel:
 
     @abstractmethod
     def enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
-        r"""Evaluate the solid enthalpy $h_s$ of the solid."""
+        r"""Evaluate the enthalpy $h_s$ of the solid."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -119,8 +120,8 @@ class WallEOS:
     .. automethod:: dependent_vars
     """
 
-    def __init__(self, wall_material, wall_sample_mask,
-                 enthalpy_func, heat_capacity_func, thermal_conductivity_func):
+    def __init__(self, wall_material, enthalpy_func, heat_capacity_func,
+                 thermal_conductivity_func):
         """
         Initialize the model.
 
@@ -144,7 +145,6 @@ class WallEOS:
             Must include the non-reactive part of the wall, if existing.
         """
         self._material = wall_material
-        self._sample_mask = wall_sample_mask
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
         self._thermal_conductivity_func = thermal_conductivity_func
@@ -163,7 +163,7 @@ class WallEOS:
             return wall_density
         return sum(wall_density)
 
-    def decomposition_progress(self, wall_density) -> DOFArray:
+    def decomposition_progress(self, wall_density, wall_sample_mask) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the oxidation.
 
         Where $\tau=1$, the material is locally virgin. On the other hand, if
@@ -172,17 +172,20 @@ class WallEOS:
         mass = self.solid_density(wall_density)
         tau_sample = self._material.decomposition_progress(mass)
         return (
-            tau_sample * self._sample_mask  # reactive material
-            + 1.0*(1.0 - self._sample_mask)  # inert material
+            tau_sample * wall_sample_mask[0]  # reactive material
+            - 1.0*(1.0 - wall_sample_mask[0])  # inert material
         )
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ of the sample filled with gas."""
-        return self._material.void_fraction(tau) * self._sample_mask
+        actx = tau.array_context
+        wall_sample_mask = actx.np.where(actx.np.greater(tau, 0.0), 1.0, 0.0)
+        return self._material.void_fraction(tau) * wall_sample_mask
 
     def get_temperature(self, cv: ConservedVars,
                         wall_density: Union[DOFArray, np.ndarray],
-                        tseed: DOFArray, tau: DOFArray, eos: GasEOS,
+                        wall_sample_mask,
+                        tseed: DOFArray, tau: DOFArray, gas_model,
                         niter=3) -> DOFArray:
         r"""Evaluate the temperature based on solid+gas properties.
 
@@ -198,30 +201,45 @@ class WallEOS:
 
         """
         if isinstance(tseed, DOFArray) is False:
-            temp = tseed + wall_density*0.0
+            temp = tseed + tau*0.0
         else:
             temp = tseed*1.0
 
+        actx = tau.array_context
+        eos = gas_model.eos
+
         rho_gas = cv.mass
         rho_solid = self.solid_density(wall_density)
-        rhoe = cv.energy - 0.5/cv.mass*np.dot(cv.momentum, cv.momentum)
+
+        rhoe = actx.np.where(
+            actx.np.greater(wall_sample_mask[0], 0.1),
+            cv.energy - 0.5/cv.mass*np.dot(cv.momentum, cv.momentum),
+            cv.energy)
+
         for _ in range(0, niter):
 
-            gas_internal_energy = \
-                eos.get_internal_energy(temp, cv.species_mass_fractions)
+            gas_internal_energy = actx.np.where(
+                actx.np.greater(wall_sample_mask[0], 0.1),
+                eos.get_internal_energy(temp, cv.species_mass_fractions),
+                0.0)
+
+            gas_heat_capacity_cv = actx.np.where(
+                actx.np.greater(wall_sample_mask[0], 0.1),
+                eos.heat_capacity_cv(cv, temp),
+                0.0)
 
             eps_rho_e = rho_gas*gas_internal_energy \
-                      + rho_solid*self.enthalpy(temp, tau)
+                      + rho_solid*self.enthalpy(temp, tau, wall_sample_mask)
 
-            gas_heat_capacity_cv = eos.heat_capacity_cv(cv, temp)
             bulk_cp = rho_gas*gas_heat_capacity_cv \
-                      + rho_solid*self.heat_capacity(temp, tau)
+                      + rho_solid*self.heat_capacity(temp, tau, wall_sample_mask)
 
             temp = temp - (eps_rho_e - rhoe)/bulk_cp
 
         return temp
 
-    def enthalpy(self, temperature: DOFArray, tau: DOFArray):
+    def enthalpy(self, temperature: DOFArray, tau: DOFArray,
+                 wall_sample_mask: np.ndarray):
         """Return the enthalpy of the wall as a function of temperature.
 
         Returns
@@ -229,9 +247,10 @@ class WallEOS:
         enthalpy: meshmode.dof_array.DOFArray
             the wall enthalpy, including all parts of the solid
         """
-        return self._enthalpy_func(temperature=temperature, tau=tau)
+        return self._enthalpy_func(temperature=temperature, tau=tau,
+                                   wall_sample_mask=wall_sample_mask)
 
-    def heat_capacity(self, temperature: DOFArray, tau: DOFArray):
+    def heat_capacity(self, temperature: DOFArray, tau: DOFArray, wall_sample_mask):
         """Return the heat capacity of the wall.
 
         Returns
@@ -239,16 +258,20 @@ class WallEOS:
         heat capacity: meshmode.dof_array.DOFArray
             the wall heat capacity, including all parts of the solid
         """
-        return self._heat_capacity_func(temperature=temperature, tau=tau)
+        return self._heat_capacity_func(temperature=temperature, tau=tau,
+                                        wall_sample_mask=wall_sample_mask)
 
     def viscosity(self, temperature: DOFArray, tau: DOFArray,
                   gas_tv: GasTransportVars) -> DOFArray:
         """Viscosity of the gas through the (porous) wall."""
+        actx = tau.array_context
         epsilon = self._material.void_fraction(tau)
-        return gas_tv.viscosity/epsilon * self._sample_mask
+        wall_sample_mask = actx.np.where(actx.np.greater(tau, 0.0), 1.0, 0.0)
+        return gas_tv.viscosity/epsilon * wall_sample_mask
 
     def thermal_conductivity(self, cv: ConservedVars,
                              wall_density: Union[DOFArray, np.ndarray],
+                             wall_sample_mask: np.ndarray,
                              temperature: DOFArray, tau: DOFArray,
                              gas_tv: GasTransportVars):
         r"""Return the effective thermal conductivity of the gas+solid.
@@ -269,7 +292,8 @@ class WallEOS:
         """
         y_g = cv.mass/(cv.mass + self.solid_density(wall_density))
         y_s = 1.0 - y_g
-        kappa_s = self._thermal_conductivity_func(temperature=temperature, tau=tau)
+        kappa_s = self._thermal_conductivity_func(temperature=temperature, tau=tau,
+                                                  wall_sample_mask=wall_sample_mask)
         kappa_g = gas_tv.thermal_conductivity
 
         return y_s*kappa_s + y_g*kappa_g
@@ -283,17 +307,22 @@ class WallEOS:
         species_diffusivity: meshmode.dof_array.DOFArray
             the species mass diffusivity inside the wall
         """
+        actx = tau.array_context
         tortuosity = self._material.tortuosity(tau)
-        return gas_tv.species_diffusivity/tortuosity * self._sample_mask
+        wall_sample_mask = actx.np.where(actx.np.greater(tau, 0.0), 1.0, 0.0)
+        return gas_tv.species_diffusivity/tortuosity * wall_sample_mask
 
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the porous material."""
-        return self._material.permeability(tau) * self._sample_mask
+        actx = tau.array_context
+        wall_sample_mask = actx.np.where(actx.np.greater(tau, 0.0), 1.0, 0.0)
+        return self._material.permeability(tau) * wall_sample_mask
 
     def dependent_vars(self, wall_density: Union[DOFArray, np.ndarray],
+                       wall_sample_mask: np.ndarray,
                        temperature: DOFArray) -> WallDependentVars:
         """Get the state-dependent variables."""
-        tau = self.decomposition_progress(wall_density)
+        tau = self.decomposition_progress(wall_density, wall_sample_mask)
         return WallDependentVars(
             tau=tau,
             void_fraction=self.void_fraction(tau),

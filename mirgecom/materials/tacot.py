@@ -322,13 +322,14 @@ class SolidProperties:
     interpolation and they are not valid for temperatures above 3200K.
 
     .. automethod:: void_fraction
+    .. automethod:: decomposition_progress
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: thermal_conductivity
-    .. automethod:: permeability
-    .. automethod:: tortuosity
     .. automethod:: volume_fraction
+    .. automethod:: permeability
     .. automethod:: emissivity
+    .. automethod:: tortuosity
     """
 
     def __init__(self):
@@ -407,18 +408,6 @@ class SolidProperties:
 
         return virgin*tau + char*(1.0 - tau)
 
-    def permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Permeability $K$ of the composite material."""
-        virgin = 1.6e-11
-        char = 2.0e-11
-        return virgin*tau + char*(1.0 - tau)
-
-    def tortuosity(self, tau: DOFArray) -> DOFArray:
-        r"""Tortuosity $\eta$ affects the species diffusivity."""
-        virgin = 1.2
-        char = 1.1
-        return virgin*tau + char*(1.0 - tau)
-
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Fraction $\phi$ occupied by the solid."""
         fiber = 0.10
@@ -426,10 +415,22 @@ class SolidProperties:
         char = 0.05
         return virgin*tau + char*(1.0 - tau) + fiber
 
+    def permeability(self, tau: DOFArray) -> DOFArray:
+        r"""Permeability $K$ of the composite material."""
+        virgin = 1.6e-11
+        char = 2.0e-11
+        return virgin*tau + char*(1.0 - tau)
+
     def emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
         virgin = 0.8
         char = 0.9
+        return virgin*tau + char*(1.0 - tau)
+
+    def tortuosity(self, tau: DOFArray) -> DOFArray:
+        r"""Tortuosity $\eta$ affects the species diffusivity."""
+        virgin = 1.2
+        char = 1.1
         return virgin*tau + char*(1.0 - tau)
 
 
@@ -440,7 +441,8 @@ class WallTabulatedEOS(WallEOS):
     for TACOT-tabulated data.
     """
 
-    def get_temperature(self, cv, wall_density, tseed, tau, eos, niter=3):
+    def get_temperature(self, cv, wall_density, wall_sample_mask, tseed,
+                        tau, eos, niter=3):
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -502,18 +504,19 @@ class WallTabulatedEOS(WallEOS):
 
             eps_rho_e = (
                 rho_gas*(eos.gas_enthalpy(temp) - gas_const*temp)
-                + rho_solid*self.enthalpy(temp, tau))
+                + rho_solid*self.enthalpy(temp, tau, wall_sample_mask))
 
             bulk_cp = (
                 rho_gas*(eos.gas_heat_capacity(temp)
                          - gas_const*(1.0 - temp/molar_mass*eos.gas_dMdT(temp)))
-                + rho_solid*self.heat_capacity(temp, tau))
+                + rho_solid*self.heat_capacity(temp, tau, wall_sample_mask))
 
             temp = temp - (eps_rho_e - rhoe)/bulk_cp
 
         return temp
 
     def pressure_diffusivity(self, cv: ConservedVars, wdv: WallDependentVars,
+                             wall_sample_mask: np.ndarray,
                              viscosity: DOFArray) -> DOFArray:
         r"""Return the pressure diffusivity for Darcy flow.
 
@@ -525,5 +528,5 @@ class WallTabulatedEOS(WallEOS):
         """
         return (
             cv.mass*wdv.permeability/(viscosity*wdv.void_fraction)
-            * self._sample_mask
+            * wall_sample_mask[0]
         )
