@@ -119,8 +119,7 @@ class SolidProperties:
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation."""
-        virgin_mass = self.intrinsic_density()*self.volume_fraction(tau=1.0)
-        return 1.0 - (virgin_mass - mass)/virgin_mass
+        return 1.0 - (self._virgin_mass - mass)/self._virgin_mass
 
     def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
