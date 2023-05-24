@@ -290,7 +290,7 @@ def make_fluid_state(cv, gas_model,
                      smoothness_mu=None,
                      smoothness_kappa=None,
                      smoothness_beta=None,
-                     wall_density=None, wall_sample_mask=None,
+                     wall_density=None,
                      limiter_func=None, limiter_dd=None):
     """Create a fluid state from the conserved vars and physical gas model.
 
@@ -387,19 +387,18 @@ def make_fluid_state(cv, gas_model,
 
     else:
 
-        tau = gas_model.wall.decomposition_progress(wall_density, wall_sample_mask)
+        tau = gas_model.wall.decomposition_progress(wall_density)
         epsilon = gas_model.wall.void_fraction(tau)
         temperature = gas_model.wall.get_temperature(cv=cv,
-            wall_density=wall_density, wall_sample_mask=wall_sample_mask,
+            wall_density=wall_density,
             tseed=temperature_seed, tau=tau, gas_model=gas_model)
 
-        pressure = actx.np.where(actx.np.greater(wall_sample_mask[0], 0.1),
-            1.0/epsilon*gas_model.eos.pressure(cv=cv, temperature=temperature),
-            0.0)
+        pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv, temperature=temperature)
 
         if limiter_func:
             # FIXME this is something that may give trouble in the future. Lets see.
-            cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
+            cv = limiter_func(cv=cv, wv=wall_density, 
+                              pressure=pressure, temperature=temperature,
                               epsilon=epsilon, dd=limiter_dd)
 
         dv = PorousFlowDependentVars(
@@ -410,8 +409,7 @@ def make_fluid_state(cv, gas_model,
             smoothness_kappa=smoothness_kappa,
             smoothness_beta=smoothness_beta,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
-            wall_density=wall_density,
-            wall_sample_mask=wall_sample_mask
+            wall_density=wall_density
         )
 
         # ~~~ Modify transport vars to include solid effects
@@ -423,7 +421,7 @@ def make_fluid_state(cv, gas_model,
             viscosity=gas_model.wall.viscosity(
                 temperature, tau, gas_tv),
             thermal_conductivity=gas_model.wall.thermal_conductivity(
-                cv, wall_density, wall_sample_mask, temperature, tau, gas_tv),
+                cv, wall_density, temperature, tau, gas_tv),
             species_diffusivity=gas_model.wall.species_diffusivity(
                 temperature, tau, gas_tv),
         )
@@ -493,10 +491,8 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
         smoothness_beta = op.project(dcoll, src, tgt, state.dv.smoothness_beta)
 
     wall_density = None
-    wall_sample_mask = None
     if gas_model.wall is not None:
         wall_density = op.project(dcoll, src, tgt, state.dv.wall_density)
-        wall_sample_mask = op.project(dcoll, src, tgt, state.dv.wall_sample_mask)
 
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed,
@@ -504,7 +500,6 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
                             smoothness_kappa=smoothness_kappa,
                             smoothness_beta=smoothness_beta,
                             wall_density=wall_density,
-                            wall_sample_mask=wall_sample_mask,
                             limiter_func=limiter_func, limiter_dd=tgt)
 
 
@@ -521,7 +516,6 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
                                  smoothness_kappa_pairs=None,
                                  smoothness_beta_pairs=None,
                                  wall_density_pairs=None,
-                                 wall_mask_pairs=None,
                                  limiter_func=None):
     """Create a fluid state from the conserved vars and equation of state.
 
@@ -568,8 +562,6 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
         smoothness_beta_pairs = [None] * len(cv_pairs)
     if wall_density_pairs is None:
         wall_density_pairs = [None] * len(cv_pairs)
-    if wall_mask_pairs is None:
-        wall_mask_pairs = [None] * len(cv_pairs)
     return [TracePair(
         cv_pair.dd,
         interior=make_fluid_state(
@@ -579,7 +571,6 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             smoothness_kappa=_getattr_ish(smoothness_kappa_pair, "int"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "int"),
             wall_density=_getattr_ish(wall_density_pair, "int"),
-            wall_sample_mask=_getattr_ish(wall_mask_pair, "int"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd),
         exterior=make_fluid_state(
             cv_pair.ext, gas_model,
@@ -588,18 +579,15 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             smoothness_kappa=_getattr_ish(smoothness_kappa_pair, "ext"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "ext"),
             wall_density=_getattr_ish(wall_density_pair, "ext"),
-            wall_sample_mask=_getattr_ish(wall_mask_pair, "ext"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd))
         for cv_pair,
             tseed_pair,
             smoothness_mu_pair,
             smoothness_kappa_pair,
             smoothness_beta_pair,
-            wall_density_pair,
-            wall_mask_pair in zip(cv_pairs, temperature_seed_pairs,
-                                  smoothness_mu_pairs, smoothness_kappa_pairs,
-                                  smoothness_beta_pairs, wall_density_pairs,
-                                  wall_mask_pairs)]
+            wall_density_pair in zip(cv_pairs, temperature_seed_pairs,
+                                     smoothness_mu_pairs, smoothness_kappa_pairs,
+                                     smoothness_beta_pairs, wall_density_pairs)]
 
 
 class _FluidCVTag:
@@ -763,14 +751,6 @@ def make_operator_fluid_states(
                 dcoll, volume_state.dv.wall_density, volume_dd=dd_vol,
                 tag=(_WallDensityTag, comm_tag))]
 
-    wall_mask_interior_pairs = None
-    if gas_model.wall is not None:
-        wall_mask_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.dv.wall_sample_mask, volume_dd=dd_vol,
-                tag=(_WallDensityTag, comm_tag))]
-
     interior_boundary_states_quad = make_fluid_state_trace_pairs(
         cv_pairs=cv_interior_pairs,
         gas_model=gas_model,
@@ -779,7 +759,6 @@ def make_operator_fluid_states(
         smoothness_kappa_pairs=smoothness_kappa_interior_pairs,
         smoothness_beta_pairs=smoothness_beta_interior_pairs,
         wall_density_pairs=wall_density_interior_pairs,
-        wall_mask_pairs=wall_mask_interior_pairs,
         limiter_func=limiter_func)
 
     # Interpolate the fluid state to the volume quadrature grid
@@ -864,10 +843,8 @@ def replace_fluid_state(
 
     if gas_model.wall is None:
         wall_density = None
-        wall_sample_mask = None
     else:
         wall_density = state.dv.wall_density
-        wall_sample_mask = state.dv.wall_sample_mask
 
     return make_fluid_state(
         cv=new_cv,
@@ -877,6 +854,5 @@ def replace_fluid_state(
         smoothness_kappa=state.smoothness_kappa,
         smoothness_beta=state.smoothness_beta,
         wall_density=wall_density,
-        wall_sample_mask=wall_sample_mask,
         limiter_func=limiter_func,
         limiter_dd=limiter_dd)

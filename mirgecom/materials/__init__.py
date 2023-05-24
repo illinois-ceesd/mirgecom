@@ -27,5 +27,4 @@ THE SOFTWARE.
 __doc__ = """
 .. automodule:: mirgecom.materials.carbon_fiber
 .. automodule:: mirgecom.materials.tacot
-.. automodule:: mirgecom.materials.harlem
 """
