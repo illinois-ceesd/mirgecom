@@ -171,7 +171,6 @@ class WallEOS:
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ of the sample filled with gas."""
-        actx = tau.array_context
         return self._material.void_fraction(tau)
 
     def get_temperature(self, cv: ConservedVars,
@@ -196,7 +195,6 @@ class WallEOS:
         else:
             temp = tseed*1.0
 
-        actx = tau.array_context
         eos = gas_model.eos
 
         rho_gas = cv.mass
@@ -206,7 +204,8 @@ class WallEOS:
 
         for _ in range(0, niter):
 
-            gas_internal_energy = eos.get_internal_energy(temp, cv.species_mass_fractions)
+            gas_internal_energy = \
+                eos.get_internal_energy(temp, cv.species_mass_fractions)
 
             gas_heat_capacity_cv = eos.heat_capacity_cv(cv, temp)
 
@@ -243,7 +242,6 @@ class WallEOS:
     def viscosity(self, temperature: DOFArray, tau: DOFArray,
                   gas_tv: GasTransportVars) -> DOFArray:
         """Viscosity of the gas through the (porous) wall."""
-        actx = tau.array_context
         epsilon = self._material.void_fraction(tau)
         return gas_tv.viscosity/epsilon
 
@@ -283,13 +281,11 @@ class WallEOS:
         species_diffusivity: meshmode.dof_array.DOFArray
             the species mass diffusivity inside the wall
         """
-        actx = tau.array_context
         tortuosity = self._material.tortuosity(tau)
         return gas_tv.species_diffusivity/tortuosity
 
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the porous material."""
-        actx = tau.array_context
         return self._material.permeability(tau)
 
     def dependent_vars(self, wall_density: Union[DOFArray, np.ndarray],

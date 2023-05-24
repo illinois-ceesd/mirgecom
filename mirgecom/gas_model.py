@@ -397,7 +397,7 @@ def make_fluid_state(cv, gas_model,
 
         if limiter_func:
             # FIXME this is something that may give trouble in the future. Lets see.
-            cv = limiter_func(cv=cv, wv=wall_density, 
+            cv = limiter_func(cv=cv, wv=wall_density,
                               pressure=pressure, temperature=temperature,
                               epsilon=epsilon, dd=limiter_dd)
 
