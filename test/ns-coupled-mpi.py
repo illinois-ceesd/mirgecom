@@ -55,20 +55,58 @@ from mirgecom.fluid import make_conserved
 from mirgecom.transport import SimpleTransport
 import cantera
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state,
+    make_operator_fluid_states
+)
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info,
     logmgr_set_time,
     logmgr_add_device_memory_usage,
 )
-from mirgecom.multiphysics.multiphysics_coupled_fluid_wall import (
-    coupled_ns_operator
+from mirgecom.navierstokes import (
+    grad_t_operator,
+    grad_cv_operator,
+    ns_operator
 )
 
 from logpyle import IntervalTimer, set_dt
 
 from pytools.obj_array import make_obj_array
+
+
+class _FluidGradCVTag:
+    pass
+
+
+class _FluidGradTempTag:
+    pass
+
+
+class _WallGradCVTag:
+    pass
+
+
+class _WallGradTempTag:
+    pass
+
+
+class _WallOperatorTag:
+    pass
+
+
+class _FluidOperatorTag:
+    pass
+
+
+class _FluidOpStatesTag:
+    pass
+
+
+class _WallOpStatesTag:
+    pass
 
 
 class Initializer:
@@ -179,8 +217,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # ~~~~~~~~~~~~~~~~~~
 
-    rst_path = "./"
-    viz_path = "./"
+    rst_path = "./rst_data/"
+    viz_path = "./viz_data/"
     vizname = viz_path+casename
     rst_pattern = rst_path+"{cname}-{step:06d}-{rank:04d}.pkl"
 
@@ -259,8 +297,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     temp_cantera = 300.0
 
     x_left = np.zeros(nspecies)
-    x_left[cantera_soln.species_index("Ar")] = 1.0
-    x_left[cantera_soln.species_index("N2")] = 0.0
+    x_left[cantera_soln.species_index("Ar")] = 0.0
+    x_left[cantera_soln.species_index("N2")] = 1.0
 
     pres_cantera = cantera.one_atm  # pylint: disable=no-member
 
@@ -268,8 +306,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     y_left = cantera_soln.Y
 
     x_right = np.zeros(nspecies)
-    x_right[cantera_soln.species_index("Ar")] = 0.0
-    x_right[cantera_soln.species_index("N2")] = 1.0
+    x_right[cantera_soln.species_index("Ar")] = 1.0
+    x_right[cantera_soln.species_index("N2")] = 0.0
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_right
     y_right = cantera_soln.Y
@@ -572,14 +610,81 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_write_viz(step, t, dt, fluid_state, wall_state):
 
-        fluid_rhs, solid_rhs = coupled_ns_operator(
-            dcoll, gas_model_fluid, gas_model_solid, dd_vol_fluid, dd_vol_solid,
-            fluid_boundaries, solid_boundaries, fluid_state, wall_state, time=t,
-            interface_noslip=False, interface_radiation=True,
-            emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
-            fluid_limiter_func=_limit_fluid_cv, wall_limiter_func=_limit_solid_cv,
-            inviscid_fluid_terms_on=False, inviscid_wall_terms_on=False,
-            quadrature_tag=quadrature_tag)
+        time = t*1.0
+
+        fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
+            add_interface_boundaries_no_grad(
+                dcoll, dd_vol_fluid, dd_vol_solid,
+                fluid_state, wall_state,
+                fluid_boundaries, solid_boundaries,
+                interface_noslip=False, interface_radiation=True,
+                #emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
+                use_kappa_weighted_grad_flux_in_fluid=False,
+                wall_penalty_amount=None)
+
+        fluid_operator_states_quad = make_operator_fluid_states(
+            dcoll, fluid_state, gas_model_fluid, fluid_all_boundaries_no_grad,
+            quadrature_tag, dd=dd_vol_fluid, comm_tag=_FluidOpStatesTag,
+            limiter_func=_limit_fluid_cv)
+
+        wall_operator_states_quad = make_operator_fluid_states(
+            dcoll, wall_state, gas_model_solid, wall_all_boundaries_no_grad,
+            quadrature_tag, dd=dd_vol_solid, comm_tag=_WallOpStatesTag,
+            limiter_func=_limit_solid_cv)
+
+        # fluid grad CV
+        fluid_grad_cv = grad_cv_operator(
+            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            operator_states_quad=fluid_operator_states_quad,
+            comm_tag=_FluidGradCVTag)
+
+        # fluid grad T
+        fluid_grad_temperature = grad_t_operator(
+            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            operator_states_quad=fluid_operator_states_quad,
+            comm_tag=_FluidGradTempTag)
+
+        # wall grad CV
+        wall_grad_cv = grad_cv_operator(
+            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+            operator_states_quad=wall_operator_states_quad,
+            comm_tag=_WallGradCVTag)
+
+        # wall grad T
+        wall_grad_temperature = grad_t_operator(
+            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+            operator_states_quad=wall_operator_states_quad,
+            comm_tag=_WallGradTempTag)
+
+        fluid_all_boundaries, wall_all_boundaries = \
+            add_interface_boundaries(
+                dcoll, dd_vol_fluid, dd_vol_solid,
+                fluid_state, wall_state,
+                fluid_grad_cv, wall_grad_cv,
+                fluid_grad_temperature, wall_grad_temperature,
+                fluid_boundaries, solid_boundaries,
+                interface_noslip=False, interface_radiation=True,
+                emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
+                use_kappa_weighted_grad_flux_in_fluid=False,
+                wall_penalty_amount=None)
+
+        fluid_rhs = ns_operator(
+            dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            operator_states_quad=fluid_operator_states_quad,
+            grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
+            comm_tag=_FluidOperatorTag, inviscid_terms_on=False)
+
+        solid_rhs = ns_operator(
+            dcoll, gas_model_solid, wall_state, wall_all_boundaries,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+            operator_states_quad=wall_operator_states_quad,
+            grad_cv=wall_grad_cv, grad_t=wall_grad_temperature,
+            comm_tag=_WallOperatorTag, inviscid_terms_on=False)
 
         fluid_viz_fields = [
             ("CV_rho", fluid_state.cv.mass),
@@ -587,7 +692,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             ("CV_rhoE", fluid_state.cv.energy),
             ("DV_P", fluid_state.pressure),
             ("DV_T", fluid_state.temperature),
-            ("RHS_rhoE", fluid_rhs.energy),]
+            ("RHS_rhoE", fluid_rhs.energy),
+            ("grad_t", fluid_grad_temperature),
+            ("grad_rhoE", fluid_grad_cv.energy)]
 
         # species mass fractions
         fluid_viz_fields.extend(
@@ -600,7 +707,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             ("CV_rhoE", wall_state.cv.energy),
             ("DV_P", wall_state.pressure),
             ("DV_T", wall_state.temperature),
-            ("RHS_rhoE", solid_rhs.energy),]
+            ("RHS_rhoE", solid_rhs.energy),
+            ("grad_t", wall_grad_temperature),
+            ("grad_rhoE", wall_grad_cv.energy)]
 
         # species mass fractions
         solid_viz_fields.extend(
@@ -608,8 +717,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             for i in range(nspecies))
 
         write_visfile(dcoll, fluid_viz_fields, fluid_visualizer,
-            vizname=vizname+"-fluid", step=step, t=t,
-            overwrite=True, comm=comm)
+            vizname=vizname+"-fluid", step=step, t=t, overwrite=True, comm=comm)
         write_visfile(dcoll, solid_viz_fields, solid_visualizer,
             vizname=vizname+"-wall", step=step, t=t, overwrite=True, comm=comm)
 
@@ -714,7 +822,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
-    def my_rhs(t, state):
+    from mirgecom.multiphysics.multiphysics_coupled_fluid_wall import (
+        add_interface_boundaries_no_grad, add_interface_boundaries
+    )
+    def my_rhs(time, state):
         cv, tseed, wv, wv_tseed = state
 
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model_fluid,
@@ -725,14 +836,79 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             temperature_seed=wv_tseed, limiter_func=_limit_solid_cv,
             limiter_dd=dd_vol_solid)
 
-        fluid_rhs, solid_rhs = coupled_ns_operator(
-            dcoll, gas_model_fluid, gas_model_solid, dd_vol_fluid, dd_vol_solid,
-            fluid_boundaries, solid_boundaries, fluid_state, wall_state, time=t,
-            interface_noslip=False, interface_radiation=True,
-            emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
-            fluid_limiter_func=_limit_fluid_cv, wall_limiter_func=_limit_solid_cv,
-            inviscid_fluid_terms_on=False, inviscid_wall_terms_on=False,
-            quadrature_tag=quadrature_tag)
+        fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
+            add_interface_boundaries_no_grad(
+                dcoll, dd_vol_fluid, dd_vol_solid,
+                fluid_state, wall_state,
+                fluid_boundaries, solid_boundaries,
+                interface_noslip=False, interface_radiation=True,
+                #emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
+                use_kappa_weighted_grad_flux_in_fluid=False,
+                wall_penalty_amount=None)
+
+        fluid_operator_states_quad = make_operator_fluid_states(
+            dcoll, fluid_state, gas_model_fluid, fluid_all_boundaries_no_grad,
+            quadrature_tag, dd=dd_vol_fluid, comm_tag=_FluidOpStatesTag,
+            limiter_func=_limit_fluid_cv)
+
+        wall_operator_states_quad = make_operator_fluid_states(
+            dcoll, wall_state, gas_model_solid, wall_all_boundaries_no_grad,
+            quadrature_tag, dd=dd_vol_solid, comm_tag=_WallOpStatesTag,
+            limiter_func=_limit_solid_cv)
+
+        # fluid grad CV
+        fluid_grad_cv = grad_cv_operator(
+            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            operator_states_quad=fluid_operator_states_quad,
+            comm_tag=_FluidGradCVTag)
+
+        # fluid grad T
+        fluid_grad_temperature = grad_t_operator(
+            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            operator_states_quad=fluid_operator_states_quad,
+            comm_tag=_FluidGradTempTag)
+
+        # wall grad CV
+        wall_grad_cv = grad_cv_operator(
+            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+            operator_states_quad=wall_operator_states_quad,
+            comm_tag=_WallGradCVTag)
+
+        # wall grad T
+        wall_grad_temperature = grad_t_operator(
+            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+            operator_states_quad=wall_operator_states_quad,
+            comm_tag=_WallGradTempTag)
+
+        fluid_all_boundaries, wall_all_boundaries = \
+            add_interface_boundaries(
+                dcoll, dd_vol_fluid, dd_vol_solid,
+                fluid_state, wall_state,
+                fluid_grad_cv, wall_grad_cv,
+                fluid_grad_temperature, wall_grad_temperature,
+                fluid_boundaries, solid_boundaries,
+                interface_noslip=False, interface_radiation=True,
+                emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0,
+                use_kappa_weighted_grad_flux_in_fluid=False,
+                wall_penalty_amount=None)
+
+        fluid_rhs = ns_operator(
+            dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            operator_states_quad=fluid_operator_states_quad,
+            grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
+            comm_tag=_FluidOperatorTag, inviscid_terms_on=False)
+
+        solid_rhs = ns_operator(
+            dcoll, gas_model_solid, wall_state, wall_all_boundaries,
+            time=time, quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+            operator_states_quad=wall_operator_states_quad,
+            grad_cv=wall_grad_cv, grad_t=wall_grad_temperature,
+            comm_tag=_WallOperatorTag, inviscid_terms_on=False)
 
         return make_obj_array([fluid_rhs, fluid_zeros, solid_rhs, solid_zeros])
 
