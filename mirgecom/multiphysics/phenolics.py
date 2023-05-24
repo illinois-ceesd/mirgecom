@@ -27,7 +27,7 @@ from pytools.obj_array import make_obj_array
 from mirgecom.fluid import ConservedVars
 
 
-def initializer(dcoll, gas_model, wall_density, wall_sample_mask, temperature,
+def initializer(dcoll, gas_model, wall_density, temperature,
                 gas_density=None, pressure=None):
     """Initialize state of composite material.
 
@@ -62,7 +62,7 @@ def initializer(dcoll, gas_model, wall_density, wall_sample_mask, temperature,
     if isinstance(temperature, DOFArray) is False:
         raise ValueError("Temperature does not have the proper shape")
 
-    tau = gas_model.wall.decomposition_progress(wall_density, wall_sample_mask)
+    tau = gas_model.wall.decomposition_progress(wall_density)
 
     # gas constant
     gas_const = 8314.46261815324/gas_model.eos.gas_molar_mass(temperature)
@@ -74,7 +74,7 @@ def initializer(dcoll, gas_model, wall_density, wall_sample_mask, temperature,
     # internal energy (kinetic energy is neglected)
     eps_rho_solid = sum(wall_density)
     bulk_energy = (
-        eps_rho_solid*gas_model.wall.enthalpy(temperature, tau, wall_sample_mask)
+        eps_rho_solid*gas_model.wall.enthalpy(temperature, tau)
         + eps_rho_gas*(gas_model.eos.gas_enthalpy(temperature)
                        - gas_const*temperature)
     )
