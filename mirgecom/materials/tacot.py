@@ -441,8 +441,7 @@ class WallTabulatedEOS(WallEOS):
     for TACOT-tabulated data.
     """
 
-    def get_temperature(self, cv, wall_density, wall_sample_mask, tseed,
-                        tau, eos, niter=3):
+    def get_temperature(self, cv, wall_density, tseed, tau, eos, niter=3):
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -504,19 +503,18 @@ class WallTabulatedEOS(WallEOS):
 
             eps_rho_e = (
                 rho_gas*(eos.gas_enthalpy(temp) - gas_const*temp)
-                + rho_solid*self.enthalpy(temp, tau, wall_sample_mask))
+                + rho_solid*self.enthalpy(temp, tau))
 
             bulk_cp = (
                 rho_gas*(eos.gas_heat_capacity(temp)
                          - gas_const*(1.0 - temp/molar_mass*eos.gas_dMdT(temp)))
-                + rho_solid*self.heat_capacity(temp, tau, wall_sample_mask))
+                + rho_solid*self.heat_capacity(temp, tau))
 
             temp = temp - (eps_rho_e - rhoe)/bulk_cp
 
         return temp
 
     def pressure_diffusivity(self, cv: ConservedVars, wdv: WallDependentVars,
-                             wall_sample_mask: np.ndarray,
                              viscosity: DOFArray) -> DOFArray:
         r"""Return the pressure diffusivity for Darcy flow.
 
@@ -526,7 +524,4 @@ class WallTabulatedEOS(WallEOS):
         where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
         and $\mathbf{K}$ is the permeability matrix.
         """
-        return (
-            cv.mass*wdv.permeability/(viscosity*wdv.void_fraction)
-            * wall_sample_mask[0]
-        )
+        return cv.mass*wdv.permeability/(viscosity*wdv.void_fraction)
