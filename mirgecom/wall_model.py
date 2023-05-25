@@ -1,24 +1,17 @@
 """:mod:`mirgecom.multiphysics.wall_model` handles the EOS for wall model.
 
+.. autoclass:: PorousFlowDependentVars
 .. autoclass:: WallEOS
 .. autoclass:: WallDependentVars
 .. autoclass:: WallDegradationModel
 """
 
 from dataclasses import dataclass
-
 from abc import abstractmethod
-import numpy as np
-
 from typing import Union
-
+import numpy as np
 from meshmode.dof_array import DOFArray
-
-from arraycontext import (
-    dataclass_array_container,
-    # with_container_arithmetic,
-    # get_container_context_recursively
-)
+from arraycontext import dataclass_array_container
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import MixtureDependentVars
 from mirgecom.transport import GasTransportVars
@@ -54,11 +47,6 @@ class WallDependentVars:
 
 class WallDegradationModel:
     """Abstract interface for wall degradation model."""
-
-    @abstractmethod
-    def intrinsic_density(self):
-        r"""Return the intrinsic density $\rho$ of the solid."""
-        raise NotImplementedError()
 
     @abstractmethod
     def void_fraction(self, tau: DOFArray):
@@ -97,7 +85,7 @@ class WallDegradationModel:
 
 
 class WallEOS:
-    """Interface for the wall model used for the Y3 prediction.
+    """Interface for porous material degradation models.
 
     This class evaluates the variables dependent on the wall decomposition state
     and its different parts. For that, the user must supply external functions
@@ -119,8 +107,7 @@ class WallEOS:
     .. automethod:: dependent_vars
     """
 
-    def __init__(self, wall_material, enthalpy_func, heat_capacity_func,
-                 thermal_conductivity_func):
+    def __init__(self, wall_material):
         """
         Initialize the model.
 
@@ -128,23 +115,8 @@ class WallEOS:
         ----------
         wall_material:
             The class with the solid properties of the desired material.
-        enthalpy_func:
-            function that computes the enthalpy of the entire wall.
-            Must include the non-reactive part of the wall, if existing.
-        heat_capacity_func:
-            function that computes the heat capacity of the entire wall
-            Must include the non-reactive part of the wall, if existing.
-        thermal_conductivity_func:
-            function that computes the thermal conductivity of the entire wall.
-            Must include the non-reactive part of the wall, if existing.
-        species_diffusivity_func:
-            function that computes the species mass diffusivity inside the wall.
-            Must include the non-reactive part of the wall, if existing.
         """
         self._material = wall_material
-        self._enthalpy_func = enthalpy_func
-        self._heat_capacity_func = heat_capacity_func
-        self._thermal_conductivity_func = thermal_conductivity_func
 
     def solid_density(self, wall_density) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
@@ -240,7 +212,7 @@ class WallEOS:
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the fibers
-        are oxidized, they reduce their cross area and, consequenctly, their
+        are oxidized, they reduce their cross area and, consequently, their
         hability to conduct heat.
 
         It is evaluated using a mass-weighted average given by
@@ -276,8 +248,8 @@ class WallEOS:
         r"""Permeability $K$ of the porous material."""
         return self._material.permeability(tau)
 
-    def dependent_vars(self, wall_density: Union[DOFArray, np.ndarray],
-                       temperature: DOFArray) -> WallDependentVars:
+    def dependent_vars(
+            self, wall_density: Union[DOFArray, np.ndarray]) -> WallDependentVars:
         """Get the state-dependent variables."""
         tau = self.decomposition_progress(wall_density)
         return WallDependentVars(
