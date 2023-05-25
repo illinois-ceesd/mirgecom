@@ -196,12 +196,17 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
             NeumannDiffusionBoundary(0.0)
     }
 
-    # FIXME this is just a dummy work around. Make this the right way...
+    def my_presc_bdry(u_minus):
+        return +u_minus
+
+    def my_wall_bdry(u_minus):
+        return -u_minus
+
     velocity_boundaries = {
         BoundaryDomainTag("prescribed"):
-            DirichletDiffusionBoundary(-1234567.0),
+            my_presc_bdry,
         BoundaryDomainTag("neumann"):
-            DirichletDiffusionBoundary(-1234567.0)
+            my_wall_bdry
     }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -366,58 +371,68 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     def compute_div(actx, dcoll, quadrature_tag, field, velocity,
                     boundaries, dd_vol):
-        """Return divergence for inviscid term."""
+        r"""Return divergence for the inviscid term in energy equation.
+
+        .. math::
+            \frac{\partial \rho u_i h}{\partial x_i}
+        """
         dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
         dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-        itp_f = interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
-                                     comm_tag=_MyGradTag_f)
+        f_quad = op.project(dcoll, dd_vol, dd_vol_quad, field)
+        u_quad = op.project(dcoll, dd_vol, dd_vol_quad, velocity)
+        flux_quad = f_quad*u_quad
 
-        itp_u = interior_trace_pairs(dcoll, velocity, volume_dd=dd_vol,
-                                     comm_tag=_MyGradTag_u)
+        itp_f_quad = op.project(dcoll, dd_vol, dd_vol_quad,
+                                interior_trace_pairs(dcoll, field, volume_dd=dd_vol,
+                                                     comm_tag=_MyGradTag_f))
+
+        itp_u_quad = op.project(dcoll, dd_vol, dd_vol_quad,
+                                interior_trace_pairs(dcoll, velocity,
+                                                     volume_dd=dd_vol,
+                                                     comm_tag=_MyGradTag_u))
 
         def interior_flux(f_tpair, u_tpair):
             dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
             normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
-            bnd_u_tpair_quad = tracepair_with_discr_tag(dcoll, quadrature_tag,
-                                                        u_tpair)
-            bnd_f_tpair_quad = tracepair_with_discr_tag(dcoll, quadrature_tag,
-                                                        f_tpair)
 
-            wavespeed_int = actx.np.sqrt(np.dot(bnd_u_tpair_quad.int,
-                                                bnd_u_tpair_quad.int))
-            wavespeed_ext = actx.np.sqrt(np.dot(bnd_u_tpair_quad.ext,
-                                                bnd_u_tpair_quad.ext))
-            lam = actx.np.maximum(wavespeed_int, wavespeed_ext)
+            bnd_u_tpair_quad = \
+                tracepair_with_discr_tag(dcoll, quadrature_tag, u_tpair)
+            bnd_f_tpair_quad = \
+                tracepair_with_discr_tag(dcoll, quadrature_tag, f_tpair)
+
+            wavespeed_int = \
+                actx.np.sqrt(np.dot(bnd_u_tpair_quad.int, bnd_u_tpair_quad.int))
+            wavespeed_ext = \
+                actx.np.sqrt(np.dot(bnd_u_tpair_quad.ext, bnd_u_tpair_quad.ext))
+
+            lmbda = actx.np.maximum(wavespeed_int, wavespeed_ext)
             jump = bnd_f_tpair_quad.int - bnd_f_tpair_quad.ext
-            numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg + 0.5*lam*jump
+            numerical_flux = (bnd_f_tpair_quad*bnd_u_tpair_quad).avg + 0.5*lmbda*jump
 
             return op.project(dcoll, dd_trace_quad, dd_allfaces_quad,
                               numerical_flux@normal_quad)
 
-        def boundary_flux(bdtag, bdry):
+        def boundary_flux(bdtag, bdry_cond_function):
             dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
             normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
-            int_soln_quad = op.project(dcoll, dd_vol, dd_bdry_quad, field*velocity)
 
-            if bdtag.tag == "prescribed":
-                ext_soln_quad = +1.0*int_soln_quad
-            if bdtag.tag == "neumann":
-                ext_soln_quad = -1.0*int_soln_quad
+            int_flux_quad = op.project(dcoll, dd_vol_quad, dd_bdry_quad, flux_quad)
+            ext_flux_quad = bdry_cond_function(int_flux_quad)
 
             bnd_tpair = TracePair(dd_bdry_quad,
-                interior=int_soln_quad, exterior=ext_soln_quad)
+                interior=int_flux_quad, exterior=ext_flux_quad)
 
             return op.project(dcoll, dd_bdry_quad, dd_allfaces_quad,
                               bnd_tpair.avg@normal_quad)
 
         # pylint: disable=invalid-unary-operand-type
         return -op.inverse_mass(
-            dcoll, dd_vol,
-            op.weak_local_div(dcoll, dd_vol, field*velocity)
+            dcoll, dd_vol_quad,
+            op.weak_local_div(dcoll, dd_vol_quad, flux_quad)
             - op.face_mass(dcoll, dd_allfaces_quad,
                 (sum(interior_flux(f_tpair, u_tpair) for f_tpair, u_tpair in
-                    zip(itp_f, itp_u))
+                    zip(itp_f_quad, itp_u_quad))
                 + sum(boundary_flux(bdtag, bdry) for bdtag, bdry in
                     boundaries.items()))
             )
