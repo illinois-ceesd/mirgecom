@@ -213,7 +213,7 @@ class IsothermalWallAV(IsothermalWallBoundary):
         """Initialize the PrescribedFluidBoundaryAV and methods."""
         self._bnd_grad_av_func = boundary_grad_av_func
         self._av_num_flux_func = av_num_flux_func
-        AdiabaticNoslipWallBoundary.__init__(self, **kwargs)
+        IsothermalWallBoundary.__init__(self, **kwargs)
 
     def _boundary_quantity(self, dcoll, dd_bdry, quantity, local=False, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
