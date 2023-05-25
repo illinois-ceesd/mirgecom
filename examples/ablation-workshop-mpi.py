@@ -225,20 +225,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         (np.genfromtxt("aw_Bprime.dat", skip_header=1)[:, 2:6]).reshape((25, 151, 4))
     bprime_class = my_composite.BprimeTable(table=bprime_table)
 
-    def _get_wall_enthalpy(temperature, tau):
-        return my_material.enthalpy(temperature, tau)
-
-    def _get_wall_heat_capacity(temperature, tau):
-        return my_material.heat_capacity(temperature, tau)
-
-    def _get_wall_thermal_conductivity(temperature, tau):
-        return my_material.thermal_conductivity(temperature, tau)
-
-    wall_model = WallTabulatedEOS(
-        wall_material=my_material,
-        enthalpy_func=_get_wall_enthalpy,
-        heat_capacity_func=_get_wall_heat_capacity,
-        thermal_conductivity_func=_get_wall_thermal_conductivity)
+    wall_model = WallTabulatedEOS(wall_material=my_material)
 
     # }}}
 
@@ -448,7 +435,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         cv = state.cv
         dv = state.dv
 
-        wdv = gas_model.wall.dependent_vars(dv.wall_density, dv.temperature)
+        wdv = gas_model.wall.dependent_vars(dv.wall_density)
 
         actx = cv.mass.array_context
 
@@ -526,7 +513,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         dv = fluid_state.dv
         tv = fluid_state.tv
 
-        wdv = gas_model.wall.dependent_vars(dv.wall_density, dv.temperature)
+        wdv = gas_model.wall.dependent_vars(dv.wall_density)
 
         zeros = wdv.tau*0.0
         actx = zeros.array_context
@@ -627,7 +614,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         cv = state.cv
         dv = state.dv
-        wdv = gas_model.wall.dependent_vars(dv.wall_density, dv.temperature)
+        wdv = gas_model.wall.dependent_vars(dv.wall_density)
 
         viz_fields = [("CV_density", cv.mass),
                       ("CV_energy", cv.energy),
