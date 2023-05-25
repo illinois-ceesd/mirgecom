@@ -47,10 +47,7 @@ THE SOFTWARE.
 import numpy as np
 
 from grudge.trace_pair import inter_volume_trace_pairs
-from grudge.dof_desc import (
-    DISCR_TAG_BASE,
-    as_dofdesc,
-)
+from grudge.dof_desc import as_dofdesc
 import grudge.op as op
 from grudge.dt_utils import characteristic_lengthscales
 
@@ -58,8 +55,6 @@ from mirgecom.fluid import make_conserved
 from mirgecom.math import harmonic_mean
 from mirgecom.transport import GasTransportVars
 from mirgecom.boundary import MengaldoBoundaryCondition
-from mirgecom.flux import num_flux_central
-from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from mirgecom.viscous import (
     viscous_facial_flux_harmonic,
     viscous_stress_tensor,
@@ -68,7 +63,6 @@ from mirgecom.viscous import (
 )
 from mirgecom.gas_model import (
     make_fluid_state,
-    make_operator_fluid_states,
     ViscousFluidState
 )
 from mirgecom.diffusion import diffusion_flux
@@ -201,7 +195,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         return (u_minus + u_plus)/2
 
     def species_mass_fractions_bc(self, dcoll, dd_bdry, state_minus):
-        """Speciess mass fractions at the interface."""
+        """Species mass fractions at the interface."""
         kappa_minus = state_minus.tv.species_diffusivity
         y_minus = state_minus.species_mass_fractions
 
@@ -541,7 +535,7 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
 
             # radiation sink term
             emissivity = project_from_base(dcoll, dd_bdry, self._emissivity)
-            radiation = - emissivity * self._sigma * (
+            radiation = emissivity * self._sigma * (
                 state_minus.temperature**4 - self._u_ambient**4)
 
             penalization = make_conserved(dim=dcoll.dim,
@@ -553,7 +547,7 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
                     state_plus.cv.species_mass - state_minus.cv.species_mass)
             )
 
-            return (base_viscous_flux.replace(energy=heat_flux+radiation)
+            return (base_viscous_flux.replace(energy=heat_flux - radiation)
                     + penalization)
 
         else:
@@ -602,10 +596,9 @@ def add_interface_boundaries_no_grad(
         fluid_boundaries, wall_boundaries,
         interface_noslip, interface_radiation,
         *,
-        #emissivity=None, sigma=None, ambient_temperature=None,
         use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None):
-    r"""Setup the interface of the subdomains for gradient calculation.
+    r"""Return the interface of the subdomains for gradient calculation.
 
     Parameters
     ----------
@@ -639,6 +632,10 @@ def add_interface_boundaries_no_grad(
     interface_noslip: bool
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
+
+    interface_radiation: bool
+        If `True`, interface includes a radiation sink term in the heat flux
+        on the wall side and prescribes the temperature on the fluid side.
 
     use_kappa_weighted_grad_flux_in_fluid: bool
         Indicates whether the gradient fluxes on the fluid side of the
@@ -709,10 +706,10 @@ def add_interface_boundaries(
         fluid_boundaries, wall_boundaries,
         interface_noslip, interface_radiation,
         *,
-        emissivity=None, sigma=None, ambient_temperature=None,
+        wall_emissivity=None, sigma=None, ambient_temperature=None,
         use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None):
-    r"""Setup the interface of the subdomains for viscous fluxes.
+    r"""Return the interface of the subdomains for viscous fluxes.
 
     Parameters
     ----------
@@ -747,6 +744,13 @@ def add_interface_boundaries(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
+    interface_radiation: bool
+        If `True`, interface includes a radiation sink term in the heat flux
+        on the wall side and prescribes the temperature on the fluid side. See
+        :class:`InterfaceWallBoundary`
+        for details. Additional arguments *wall_emissivity*, *sigma*, and
+        *ambient_temperature* are required if enabled.
+
     use_kappa_weighted_grad_flux_in_fluid: bool
         Indicates whether the gradient fluxes on the fluid side of the
         interface should be computed using either a simple or weighted average
@@ -779,10 +783,10 @@ def add_interface_boundaries(
         dcoll, fluid_dd, wall_dd, fluid_state, wall_state)
 
     grad_cv_inter_vol_tpairs = _grad_cv_inter_volume_trace_pairs(
-            dcoll, fluid_dd, wall_dd, fluid_grad_cv, wall_grad_cv)
+        dcoll, fluid_dd, wall_dd, fluid_grad_cv, wall_grad_cv)
 
     grad_temperature_inter_vol_tpairs = _grad_temperature_inter_volume_trace_pairs(
-            dcoll, fluid_dd, wall_dd, fluid_grad_temperature, wall_grad_temperature)
+        dcoll, fluid_dd, wall_dd, fluid_grad_temperature, wall_grad_temperature)
 
     # Set up the interface boundaries
 
@@ -808,8 +812,8 @@ def add_interface_boundaries(
             grad_cv_tpair.ext,
             grad_temperature_tpair.ext,
             wall_penalty_amount,
-            lengthscales_minus=\
-                op.project(dcoll, fluid_dd, state_tpair.dd, fluid_lengthscales),
+            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
+                                          fluid_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[wall_dd, fluid_dd],
@@ -821,12 +825,12 @@ def add_interface_boundaries(
             state_tpair.ext,
             interface_noslip,
             interface_radiation,
-            emissivity, sigma, ambient_temperature,
+            wall_emissivity, sigma, ambient_temperature,
             grad_cv_tpair.ext,
             grad_temperature_tpair.ext,
             wall_penalty_amount,
-            lengthscales_minus=\
-                op.project(dcoll, wall_dd, state_tpair.dd, wall_lengthscales),
+            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
+                                          wall_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[fluid_dd, wall_dd],

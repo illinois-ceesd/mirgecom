@@ -66,8 +66,8 @@ THE SOFTWARE.
 """
 
 from dataclasses import replace
-import numpy as np
 from abc import abstractmethod
+import numpy as np
 
 from grudge.trace_pair import (
     TracePair,
@@ -144,8 +144,7 @@ class _WallOperatorTag:
 # FIXME: Interior penalty should probably use an average of the lengthscales on
 # both sides of the interface
 class InterfaceFluidBoundary(MengaldoBoundaryCondition):
-    r"""
-    Abstract interface for the fluid side of the fluid-wall interface.
+    r"""Abstract interface for the fluid side of the fluid-wall interface.
 
     Extends :class:`~mirgecom.boundary.MengaldoBoundaryCondition` to include
     an interior penalty on the heat flux:
@@ -166,6 +165,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     ------------------
     .. automethod:: temperature_plus
     """
+
     def __init__(self, heat_flux_penalty_amount, lengthscales_minus):
         r"""
         Initialize InterfaceFluidBoundary.
@@ -212,8 +212,9 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
             grad_t_minus, numerical_flux_func=viscous_facial_flux_harmonic,
             **kwargs):
-        """
-        Return the viscous flux as defined by
+        """Return the viscous flux.
+
+        It is defined in 
         :meth:`mirgecom.boundary.MengaldoBoundaryCondition.viscous_divergence_flux`
         with the additional heat flux interior penalty term.
         """
@@ -256,16 +257,20 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._use_kappa_weighted_t_bc = use_kappa_weighted_t_bc
 
     def kappa_plus(self, dcoll, dd_bdry):
+        """Conductivity on the external side for gradient calculation."""
         return project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
+        """Conductivity at the interface for viscous flux."""
         kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
         return harmonic_mean(kappa_minus, kappa_plus)
 
     def temperature_plus(self, dcoll, dd_bdry):
+        """Temperature on the external side for gradient calculation."""
         return project_from_base(dcoll, dd_bdry, self._t_plus)
 
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
+        """Temperature at the interface for viscous flux."""
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
         if self._use_kappa_weighted_t_bc:
             actx = t_minus.array_context
@@ -279,6 +284,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
             return (t_minus + t_plus)/2
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
+        """Gradient averaging for viscous flux."""
         if self._grad_t_plus is None:
             raise ValueError(
                 "Boundary does not have external temperature gradient data.")
@@ -676,12 +682,12 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
     """
 
     def __init__(
-            self, kappa_plus, grad_u_plus=None, epsilon=None, sigma=None,
+            self, kappa_plus, grad_u_plus=None, emissivity=None, sigma=None,
             u_ambient=None):
         r"""
         Initialize InterfaceWallRadiationBoundary.
 
-        Arguments *grad_u_plus*, *epsilon*, *sigma*, and *u_ambient* are only
+        Arguments *grad_u_plus*, *emissivity*, *sigma*, and *u_ambient* are only
         required if the boundary will be used to compute the heat flux.
 
         Parameters
@@ -694,7 +700,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
 
             Temperature gradient from the fluid side.
 
-        epsilon: float or :class:`meshmode.dof_array.DOFArray` or None
+        emissivity: float or :class:`meshmode.dof_array.DOFArray` or None
 
             Emissivity of the wall material.
 
@@ -707,7 +713,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             Ambient temperature of the environment.
         """
         self.kappa_plus = kappa_plus
-        self.epsilon = epsilon
+        self.emissivity = emissivity
         self.sigma = sigma
         self.u_ambient = u_ambient
         self.grad_u_plus = grad_u_plus
@@ -730,7 +736,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
         if self.grad_u_plus is None:
             raise ValueError("External temperature gradient is not specified.")
-        if self.epsilon is None:
+        if self.emissivity is None:
             raise ValueError("Wall emissivity is not specified.")
         if self.sigma is None:
             raise ValueError("Stefan-Boltzmann constant value is not specified.")
@@ -742,13 +748,13 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
         grad_u_plus = project_from_base(dcoll, dd_bdry, self.grad_u_plus)
-        epsilon = project_from_base(dcoll, dd_bdry, self.epsilon)
+        emissivity = project_from_base(dcoll, dd_bdry, self.emissivity)
         u_ambient = project_from_base(dcoll, dd_bdry, self.u_ambient)
 
         # Note: numerical_flux_func is ignored
         return (
             np.dot(diffusion_flux(kappa_plus, grad_u_plus), normal)
-            + epsilon * self.sigma * (u_minus**4 - u_ambient**4))
+            + emissivity * self.sigma * (u_minus**4 - u_ambient**4))
 
 
 def _kappa_inter_volume_trace_pairs(
@@ -776,8 +782,8 @@ def _temperature_inter_volume_trace_pairs(
     pairwise_temperature = {
         (fluid_dd, wall_dd):
             (fluid_state.temperature, wall_temperature)}
-    return inter_volume_trace_pairs(
-        dcoll, pairwise_temperature, comm_tag=(_TemperatureInterVolTag, comm_tag))
+    return inter_volume_trace_pairs(dcoll, pairwise_temperature,
+                                    comm_tag=(_TemperatureInterVolTag, comm_tag))
 
 
 def _grad_temperature_inter_volume_trace_pairs(
@@ -787,8 +793,8 @@ def _grad_temperature_inter_volume_trace_pairs(
     pairwise_grad_temperature = {
         (fluid_dd, wall_dd):
             (fluid_grad_temperature, wall_grad_temperature)}
-    return inter_volume_trace_pairs(
-        dcoll, pairwise_grad_temperature, comm_tag=(_GradTemperatureInterVolTag, comm_tag))
+    return inter_volume_trace_pairs(dcoll, pairwise_grad_temperature,
+                                    comm_tag=(_GradTemperatureInterVolTag, comm_tag))
 
 
 def add_interface_boundaries_no_grad(
@@ -801,12 +807,10 @@ def add_interface_boundaries_no_grad(
         interface_radiation=False,
         use_kappa_weighted_grad_flux_in_fluid=False,
         comm_tag=None):
-    r"""
-    Compute $\nabla T$ on the fluid and wall subdomains.
+    r"""Compute $\nabla T$ on the fluid and wall subdomains.
 
     Parameters
     ----------
-
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
@@ -851,11 +855,8 @@ def add_interface_boundaries_no_grad(
 
     interface_radiation: bool
 
-        If `True`, interface includes a radiation sink term in the heat flux. See
-        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
-        for details. Additional arguments *wall_epsilon*, *sigma*, and
-        *ambient_temperature* are required if enabled and *wall_grad_temperature*
-        is not `None`.
+        If `True`, interface includes a radiation sink term in the heat flux
+        on the wall side and prescribes the temperature on the fluid side.
 
     use_kappa_weighted_grad_flux_in_fluid: bool
 
@@ -866,6 +867,7 @@ def add_interface_boundaries_no_grad(
 
     Returns
     -------
+        The tuple `(fluid_interface_boundaries, wall_interface_boundaries)`.
     """
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
@@ -948,11 +950,10 @@ def add_interface_boundaries(
         interface_noslip=True,
         interface_radiation=False,
         use_kappa_weighted_grad_flux_in_fluid=False,
-        wall_epsilon=None, sigma=None, ambient_temperature=None,
+        wall_emissivity=None, sigma=None, ambient_temperature=None,
         wall_penalty_amount=None,
         comm_tag=None):
-    r"""
-    Compute the RHS of the fluid and wall subdomains.
+    r"""Compute the RHS of the fluid and wall subdomains.
 
     Augments *fluid_boundaries* and *wall_boundaries* with the boundaries for the
     fluid-wall interface that are needed to enforce continuity of temperature and
@@ -960,7 +961,6 @@ def add_interface_boundaries(
 
     Parameters
     ----------
-
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
@@ -998,6 +998,14 @@ def add_interface_boundaries(
 
         Temperature for the wall volume.
 
+    fluid_grad_temperature: numpy.ndarray
+
+        Temperature gradient for the fluid volume.
+
+    wall_grad_temperature: numpy.ndarray
+
+        Temperature gradient for the wall volume.
+
     interface_noslip: bool
 
         If `True`, interface boundaries on the fluid side will be treated as
@@ -1007,7 +1015,7 @@ def add_interface_boundaries(
 
         If `True`, interface includes a radiation sink term in the heat flux. See
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
-        for details. Additional arguments *wall_epsilon*, *sigma*, and
+        for details. Additional arguments *wall_emissivity*, *sigma*, and
         *ambient_temperature* are required if enabled.
 
     use_kappa_weighted_grad_flux_in_fluid: bool
@@ -1017,7 +1025,7 @@ def add_interface_boundaries(
         weighting the temperature from each side by its respective thermal
         conductivity. Not used if *interface_radiation* is `True`.
 
-    wall_epsilon: float or :class:`meshmode.dof_array.DOFArray`
+    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
 
         Emissivity of the wall material.
 
@@ -1037,11 +1045,12 @@ def add_interface_boundaries(
 
     Returns
     -------
+        The tuple `(fluid_interface_boundaries, wall_interface_boundaries)`.
     """
     if interface_radiation:
-        if wall_epsilon is None:
+        if wall_emissivity is None:
             raise TypeError(
-                "Argument 'wall_epsilon' is required if using radiation at the "
+                "Argument 'wall_emissivity' is required if using radiation at the "
                 "interface.")
         if sigma is None:
             raise TypeError(
@@ -1075,9 +1084,9 @@ def add_interface_boundaries(
             return fluid_bc_class(t_plus)
 
         def make_wall_bc(dd_bdry, kappa_plus, t_plus, grad_t_plus):
-            epsilon_minus = op.project(dcoll, wall_dd, dd_bdry, wall_epsilon)
+            emissivity_minus = op.project(dcoll, wall_dd, dd_bdry, wall_emissivity)
             return InterfaceWallRadiationBoundary(
-                kappa_plus, grad_t_plus, epsilon_minus, sigma,
+                kappa_plus, grad_t_plus, emissivity_minus, sigma,
                 ambient_temperature)
 
     else:
@@ -1179,12 +1188,10 @@ def coupled_grad_t_operator(
         _fluid_operator_states_quad=None,
         _fluid_all_boundaries_no_grad=None,
         _wall_all_boundaries_no_grad=None):
-    r"""
-    Compute $\nabla T$ on the fluid and wall subdomains.
+    r"""Compute $\nabla T$ on the fluid and wall subdomains.
 
     Parameters
     ----------
-
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
@@ -1240,7 +1247,7 @@ def coupled_grad_t_operator(
 
         If `True`, interface includes a radiation sink term in the heat flux. See
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
-        for details. Additional arguments *wall_epsilon*, *sigma*, and
+        for details. Additional arguments *wall_emissivity*, *sigma*, and
         *ambient_temperature* are required if enabled and *wall_grad_temperature*
         is not `None`.
 
@@ -1264,7 +1271,6 @@ def coupled_grad_t_operator(
 
     Returns
     -------
-
         The tuple `(fluid_grad_temperature, wall_grad_temperature)`.
     """
     from warnings import warn
@@ -1280,7 +1286,6 @@ def coupled_grad_t_operator(
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries)
-
 
     # Compute the subdomain gradient operators using the augmented boundaries
 
@@ -1308,7 +1313,7 @@ def coupled_ns_heat_operator(
         inviscid_terms_on=True,
         interface_radiation=False,
         use_kappa_weighted_grad_flux_in_fluid=False,
-        wall_epsilon=None,
+        wall_emissivity=None,
         sigma=None,
         ambient_temperature=None,
         wall_penalty_amount=None,
@@ -1318,8 +1323,7 @@ def coupled_ns_heat_operator(
         inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         return_gradients=False):
-    r"""
-    Compute the RHS of the fluid and wall subdomains.
+    r"""Compute the RHS of the fluid and wall subdomains.
 
     Augments *fluid_boundaries* and *wall_boundaries* with the boundaries for the
     fluid-wall interface that are needed to enforce continuity of temperature and
@@ -1331,7 +1335,6 @@ def coupled_ns_heat_operator(
 
     Parameters
     ----------
-
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
@@ -1428,7 +1431,6 @@ def coupled_ns_heat_operator(
 
     Returns
     -------
-
         The tuple `(fluid_rhs, wall_rhs)`.
     """
     from warnings import warn
@@ -1498,7 +1500,8 @@ def coupled_ns_heat_operator(
             interface_radiation=interface_radiation,
             use_kappa_weighted_grad_flux_in_fluid=(
                 use_kappa_weighted_grad_flux_in_fluid),
-            wall_epsilon=wall_epsilon, sigma=sigma, ambient_temperature=ambient_temperature,
+            wall_emissivity=wall_emissivity, sigma=sigma,
+            ambient_temperature=ambient_temperature,
             wall_penalty_amount=wall_penalty_amount)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
