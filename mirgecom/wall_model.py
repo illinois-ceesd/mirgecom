@@ -220,24 +220,12 @@ class WallEOS:
         return temp
 
     def enthalpy(self, temperature: DOFArray, tau: DOFArray):
-        """Return the enthalpy of the wall as a function of temperature.
+        """Return the enthalpy of the test material as a function of temperature."""
+        return self._material.enthalpy(temperature, tau)
 
-        Returns
-        -------
-        enthalpy: meshmode.dof_array.DOFArray
-            the wall enthalpy, including all parts of the solid
-        """
-        return self._enthalpy_func(temperature=temperature, tau=tau)
-
-    def heat_capacity(self, temperature: DOFArray, tau: DOFArray):
-        """Return the heat capacity of the wall.
-
-        Returns
-        -------
-        heat capacity: meshmode.dof_array.DOFArray
-            the wall heat capacity, including all parts of the solid
-        """
-        return self._heat_capacity_func(temperature=temperature, tau=tau)
+    def heat_capacity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+        """Return the heat capacity of the test material."""
+        return self._material.heat_capacity(temperature, tau)
 
     def viscosity(self, temperature: DOFArray, tau: DOFArray,
                   gas_tv: GasTransportVars) -> DOFArray:
@@ -267,7 +255,7 @@ class WallEOS:
         """
         y_g = cv.mass/(cv.mass + self.solid_density(wall_density))
         y_s = 1.0 - y_g
-        kappa_s = self._thermal_conductivity_func(temperature=temperature, tau=tau)
+        kappa_s = self._material.thermal_conductivity(temperature, tau)
         kappa_g = gas_tv.thermal_conductivity
 
         return y_s*kappa_s + y_g*kappa_g
