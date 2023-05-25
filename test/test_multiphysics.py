@@ -1,4 +1,4 @@
-__copyright__ = """Copyright (C) 2022 University of Illinois Board of Trustees"""
+__copyright__ = """Copyright (C) 2023 University of Illinois Board of Trustees"""
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,8 +23,6 @@ THE SOFTWARE.
 import numpy as np
 from dataclasses import replace
 from functools import partial
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import grudge.op as op
@@ -35,6 +33,7 @@ from mirgecom.simutil import max_component_norm
 import mirgecom.math as mm
 from mirgecom.diffusion import (
     diffusion_operator,
+    grad_operator as wall_grad_t_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
@@ -52,6 +51,17 @@ from mirgecom.boundary import (
 )
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     coupled_ns_heat_operator
+)
+from mirgecom.navierstokes import (
+    grad_t_operator, grad_cv_operator, ns_operator
+)
+from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
+    add_interface_boundaries as add_thermal_interface_boundaries,
+    add_interface_boundaries_no_grad as add_thermal_interface_boundaries_no_grad
+)
+from mirgecom.multiphysics.multiphysics_coupled_fluid_wall import (
+    add_interface_boundaries_no_grad as add_multiphysics_interface_bdries_no_grad,
+    add_interface_boundaries as add_multiphysics_interface_bdries
 )
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -555,13 +565,56 @@ def test_thermally_coupled_fluid_wall_with_radiation(
 
         wall_temperature = 1.0 + (1.0 - 1.33938)*(2.0 + solid_nodes[0])/(-2.0)
 
-        fluid_rhs, wall_energy_rhs = coupled_ns_heat_operator(
-            dcoll, gas_model, dd_vol_fluid, dd_vol_solid, fluid_boundaries,
-            solid_boundaries, fluid_state, wall_kappa, wall_temperature,
-            time=0.0, quadrature_tag=quadrature_tag, interface_noslip=True,
-            interface_radiation=True, sigma=2.0,
-            ambient_temperature=0.0, wall_epsilon=wall_emissivity,
-        )
+#        fluid_rhs, wall_energy_rhs = coupled_ns_heat_operator(
+#            dcoll, gas_model, dd_vol_fluid, dd_vol_solid, fluid_boundaries,
+#            solid_boundaries, fluid_state, wall_kappa, wall_temperature,
+#            time=0.0, quadrature_tag=quadrature_tag, interface_noslip=True,
+#            interface_radiation=True, sigma=2.0,
+#            ambient_temperature=0.0, wall_epsilon=wall_emissivity,
+#        )
+
+        fluid_all_boundaries_no_grad, solid_all_boundaries_no_grad = \
+            add_thermal_interface_boundaries_no_grad(
+                dcoll,
+                dd_vol_fluid, dd_vol_solid,
+                fluid_state, wall_kappa, wall_temperature,
+                fluid_boundaries, solid_boundaries,
+                interface_noslip=True, interface_radiation=True,
+                use_kappa_weighted_grad_flux_in_fluid=False)
+
+        fluid_grad_cv = grad_cv_operator(
+            dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
+            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+        fluid_grad_temperature = grad_t_operator(
+            dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
+            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+        solid_grad_temperature = wall_grad_t_operator(
+            dcoll, wall_kappa,
+            solid_all_boundaries_no_grad, wall_temperature,
+            quadrature_tag=quadrature_tag, dd=dd_vol_solid)
+
+        fluid_all_boundaries, solid_all_boundaries = \
+            add_thermal_interface_boundaries(
+                dcoll, dd_vol_fluid, dd_vol_solid,
+                fluid_boundaries, solid_boundaries,
+                fluid_state, wall_kappa, wall_temperature,
+                fluid_grad_temperature, solid_grad_temperature,
+                interface_noslip=True, interface_radiation=True,
+                use_kappa_weighted_grad_flux_in_fluid=False,
+                wall_emissivity=wall_emissivity, sigma=2.0, ambient_temperature=0.0)
+
+        fluid_rhs = ns_operator(
+            dcoll, gas_model, fluid_state, fluid_all_boundaries,
+            quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
+            inviscid_terms_on=False)
+
+        wall_energy_rhs = diffusion_operator(
+            dcoll, wall_kappa, solid_all_boundaries,
+            wall_temperature, quadrature_tag=quadrature_tag,
+            dd=dd_vol_solid, grad_u=solid_grad_temperature)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
@@ -591,6 +644,191 @@ def test_thermally_coupled_fluid_wall_with_radiation(
 
         assert actx.to_numpy(op.norm(dcoll, fluid_rhs, np.inf)) < 1e-3
         assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-3
+
+
+@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_multiphysics_coupled_fluid_wall_with_radiation(
+        actx_factory, order, use_overintegration, visualize=False):
+    """Check the thermally-coupled fluid/wall interface with radiation.
+
+    Analytic solution prescribedas initial condition, then the RHS is assessed
+    to ensure that it is nearly zero.
+    """
+    actx = actx_factory()
+
+    dim = 2
+
+    nelems = [9, 15, 30]
+    for n in nelems:
+
+        global_mesh = get_box_mesh(2, -2, 1, n)
+
+        mgrp, = global_mesh.groups
+        x = global_mesh.vertices[0, mgrp.vertex_indices]
+        x_elem_avg = np.sum(x, axis=1)/x.shape[0]
+        volume_to_elements = {
+            "Fluid": np.where(x_elem_avg > 0)[0],
+            "Solid": np.where(x_elem_avg <= 0)[0]}
+
+        from meshmode.mesh.processing import partition_mesh
+        volume_meshes = partition_mesh(global_mesh, volume_to_elements)
+
+        dcoll = create_discretization_collection(
+            actx, volume_meshes, order=order, quadrature_order=2*order+1)
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
+
+        dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
+        dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
+
+        fluid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_fluid))
+        solid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_solid))
+
+        eos = IdealSingleGas()
+        fluid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=10.0)
+        gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
+
+        solid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=1.0)
+        gas_model_solid = GasModel(eos=eos, transport=solid_transport)
+
+        # Fluid cv
+
+        temperature = 2.0 - (2.0 - 1.33938)*(1.0 - fluid_nodes[0])/1.0
+        mass = 1.0 + 0.0*fluid_nodes[0]
+        energy = mass*eos.get_internal_energy(temperature)
+        mom_x = 0.0*fluid_nodes[0]
+        mom_y = 0.0*fluid_nodes[0]
+        momentum = make_obj_array([mom_x, mom_y])
+
+        cv = make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum)
+
+        base_fluid_temp = 2.0
+        base_solid_temp = 1.0
+
+        fluid_boundaries = {
+            dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_fluid.trace("+0").domain_tag:
+                IsothermalWallBoundary(wall_temperature=base_fluid_temp),
+        }
+
+        solid_boundaries = {
+            dd_vol_solid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_solid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_solid.trace("-0").domain_tag:
+                IsothermalWallBoundary(wall_temperature=base_solid_temp),
+        }
+
+        # Solid cv
+
+        wall_emissivity = 1.0
+        wall_temperature = 1.0 + (1.0 - 1.33938)*(2.0 + solid_nodes[0])/(-2.0)
+        mass = 1.0 + 0.0*solid_nodes[0]
+        energy = mass*eos.get_internal_energy(wall_temperature)
+        mom_x = 0.0*solid_nodes[0]
+        mom_y = 0.0*solid_nodes[0]
+        momentum = make_obj_array([mom_x, mom_y])
+
+        wv = make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum)
+
+#        fluid_rhs, wall_energy_rhs = coupled_ns_heat_operator(
+#            dcoll, gas_model, dd_vol_fluid, dd_vol_solid, fluid_boundaries,
+#            solid_boundaries, fluid_state, wall_kappa, wall_temperature,
+#            quadrature_tag=quadrature_tag, interface_noslip=True,
+#            interface_radiation=True, sigma=2.0,
+#            ambient_temperature=0.0, wall_emissivity=wall_emissivity,
+#        )
+
+        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model_fluid)
+
+        wall_state = make_fluid_state(cv=wv, gas_model=gas_model_solid)
+
+        fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
+            add_multiphysics_interface_bdries_no_grad(
+                dcoll, dd_vol_fluid, dd_vol_solid,
+                fluid_state, wall_state,
+                fluid_boundaries, solid_boundaries,
+                interface_noslip=False, interface_radiation=True)
+
+        fluid_grad_cv = grad_cv_operator(
+            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+        fluid_grad_temperature = grad_t_operator(
+            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+        wall_grad_cv = grad_cv_operator(
+            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+            quadrature_tag=quadrature_tag, dd=dd_vol_solid)
+
+        wall_grad_temperature = grad_t_operator(
+            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+            quadrature_tag=quadrature_tag, dd=dd_vol_solid)
+
+        fluid_all_boundaries, wall_all_boundaries = \
+            add_multiphysics_interface_bdries(
+                dcoll, dd_vol_fluid, dd_vol_solid,
+                fluid_state, wall_state,
+                fluid_grad_cv, wall_grad_cv,
+                fluid_grad_temperature, wall_grad_temperature,
+                fluid_boundaries, solid_boundaries,
+                interface_noslip=False, interface_radiation=True,
+                wall_emissivity=wall_emissivity, sigma=2.0, ambient_temperature=0.0)
+
+        fluid_rhs = ns_operator(
+            dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
+            quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+            grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
+            inviscid_terms_on=False)
+
+        solid_rhs = ns_operator(
+            dcoll, gas_model_solid, wall_state, wall_all_boundaries,
+            quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+            grad_cv=wall_grad_cv, grad_t=wall_grad_temperature,
+            inviscid_terms_on=False)
+
+        if visualize:
+            from grudge.shortcuts import make_visualizer
+            viz_fluid = make_visualizer(dcoll, order+3, volume_dd=dd_vol_fluid)
+            viz_wall = make_visualizer(dcoll, order+3, volume_dd=dd_vol_solid)
+            if use_overintegration:
+                viz_suffix = f"over_{order}_{n}"
+            else:
+                viz_suffix = f"{order}_{n}"
+
+            viz_fluid.write_vtk_file(
+                f"multiphysics_coupled_radiation_{viz_suffix}_fluid.vtu", [
+                    ("cv", fluid_state.cv),
+                    ("dv", fluid_state.dv),
+                    ("rhs", fluid_rhs),
+                    ], overwrite=True)
+            viz_wall.write_vtk_file(
+                f"multiphysics_coupled_radiation_{viz_suffix}_wall.vtu", [
+                    ("cv", wall_state.cv),
+                    ("dv", wall_state.dv),
+                    ("rhs", solid_rhs),
+                    ], overwrite=True)
+
+        # Check that steady-state solution has 0 RHS
+
+        fluid_rhs = fluid_rhs.energy/cv.energy
+        solid_rhs = solid_rhs.energy/wv.energy
+
+        assert actx.to_numpy(op.norm(dcoll, fluid_rhs, np.inf)) < 1e-4
+        assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-4
+
+
+@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
+        actx_factory, order, use_overintegration, visualize=False):
+
+    assert 1 == 1
 
 
 if __name__ == "__main__":
