@@ -934,7 +934,7 @@ def get_interface_boundaries(
         if include_gradient:
             radiation_spec = [wall_emissivity is None, sigma is None,
                               ambient_temperature is None]
-            if sum(radiation_spec) != 1:
+            if sum(radiation_spec) != 0:
                 raise TypeError(
                     "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
                     "are required if using surface radiation.")
@@ -1380,7 +1380,7 @@ def coupled_ns_heat_operator(
     if interface_radiation:
         radiation_spec = [wall_emissivity is None, sigma is None,
                           ambient_temperature is None]
-        if sum(radiation_spec) != 1:
+        if sum(radiation_spec) != 0:
             raise TypeError(
                 "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
                 "are required if using surface radiation.")
