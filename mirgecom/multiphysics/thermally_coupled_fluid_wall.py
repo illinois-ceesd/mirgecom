@@ -932,18 +932,12 @@ def get_interface_boundaries(
             return fluid_bc_class(t_plus)
 
         if include_gradient:
-            if wall_emissivity is None:
+            radiation_spec = [wall_emissivity is None, sigma is None,
+                              ambient_temperature is None]
+            if sum(radiation_spec) != 1:
                 raise TypeError(
-                    "Argument 'wall_emissivity' is required if using radiation at the "
-                    "interface.")
-            if sigma is None:
-                raise TypeError(
-                    "Argument 'sigma' is required if using radiation at the "
-                    "interface.")
-            if ambient_temperature is None:
-                raise TypeError(
-                    "Argument 'ambient_temperature' is required if using radiation "
-                    "at the interface.")
+                    "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
+                    "are required if using surface radiation.")
 
             def make_wall_bc(dd_bdry, kappa_plus, t_plus, grad_t_plus=None):
                 emissivity_minus = op.project(dcoll, wall_dd, dd_bdry,
@@ -1384,17 +1378,12 @@ def coupled_ns_heat_operator(
         The tuple `(fluid_rhs, wall_rhs)`.
     """
     if interface_radiation:
-        if wall_emissivity is None:
+        radiation_spec = [wall_emissivity is None, sigma is None,
+                          ambient_temperature is None]
+        if sum(radiation_spec) != 1:
             raise TypeError(
-                "Argument 'wall_emissivity' is required if using radiation at the "
-                "interface.")
-        if sigma is None:
-            raise TypeError(
-                "Argument 'sigma' is required if using radiation at the interface.")
-        if ambient_temperature is None:
-            raise TypeError(
-                "Argument 'ambient_temperature' is required if using radiation at "
-                "the interface.")
+                "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
+                "are required if using surface radiation.")
 
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
