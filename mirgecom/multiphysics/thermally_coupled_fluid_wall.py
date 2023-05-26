@@ -22,12 +22,11 @@ additional radiation sink term in the heat flux
 
 Helper Functions
 ^^^^^^^^^^^^^^^^
-
-.. autofunction:: get_interface_boundaries
+.. autofunction:: add_interface_boundaries_no_grad
+.. autofunction:: add_interface_boundaries
 
 RHS Evaluation
 ^^^^^^^^^^^^^^
-
 .. autofunction:: coupled_grad_t_operator
 .. autofunction:: coupled_ns_heat_operator
 
@@ -42,7 +41,7 @@ Boundary Conditions
 """
 
 __copyright__ = """
-Copyright (C) 2022 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -214,7 +213,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
             **kwargs):
         """Return the viscous flux.
 
-        It is defined in 
+        It is defined in
         :meth:`mirgecom.boundary.MengaldoBoundaryCondition.viscous_divergence_flux`
         with the additional heat flux interior penalty term.
         """

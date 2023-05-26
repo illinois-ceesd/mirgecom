@@ -12,10 +12,8 @@ by enforcing continuity of quantities and their respective fluxes
 
 at the interface.
 
-.. autofunction:: get_interface_boundaries
-.. autofunction:: coupled_grad_operator
-.. autofunction:: coupled_ns_operator
-
+.. autofunction:: add_interface_boundaries_no_grad
+.. autofunction:: add_interface_boundaries
 .. autoclass:: InterfaceFluidBoundary
 .. autoclass:: InterfaceWallBoundary
 """

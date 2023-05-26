@@ -474,7 +474,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     # {{{  Set up initial state using Cantera
 
     # Use Cantera for initialization
-    mechanism_file = "uiuc"
+    mechanism_file = "inert"
 
     from mirgecom.mechanisms import get_mechanism_input
     mech_input = get_mechanism_input(mechanism_file)
@@ -487,14 +487,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # Set Cantera internal gas temperature, pressure, and mole fractios
     x_left = np.zeros(nspecies)
-    x_left[cantera_soln.species_index("O2")] = 0.0
+    x_left[cantera_soln.species_index("Ar")] = 0.0
     x_left[cantera_soln.species_index("N2")] = 1.0
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_left
     y_left = cantera_soln.Y
 
     x_right = np.zeros(nspecies)
-    x_right[cantera_soln.species_index("O2")] = 1.0
+    x_right[cantera_soln.species_index("Ar")] = 1.0
     x_right[cantera_soln.species_index("N2")] = 0.0
 
     cantera_soln.TPX = temp_cantera, pres_cantera, x_right
