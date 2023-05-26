@@ -53,6 +53,7 @@ THE SOFTWARE.
 """
 
 import numpy as np  # noqa
+from warnings import warn
 
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
@@ -137,6 +138,11 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
+        if state.is_mixture:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag)
