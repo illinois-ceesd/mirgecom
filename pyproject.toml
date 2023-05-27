@@ -1,0 +1,56 @@
+# While this is a valid pyproject.toml for use with poetry, we are using
+# conda-lock. To update the lock file (conda-lock.yml), run
+#
+# conda-lock -f pyproject.toml
+#
+# To install the locked versions:
+# conda lock install -n ENVIRONMENT_NAME
+
+# See https://github.com/conda/conda-lock for more.
+
+[build-system]
+requires = [
+    "setuptools!=50",
+    "poetry>=0.12",
+]
+build-backend = "poetry.masonry.api"
+
+[tool.conda-lock]
+platforms = [
+    'osx-64', 'osx-arm64', 'linux-64', 'linux-ppc64le'
+]
+channels = [
+    'conda-forge', 'nodefaults'
+]
+
+[tool.poetry.dependencies]
+python = "3.11"
+pip = "^23.1.2"
+numpy = "^1.15"
+islpy = "^2023.1"
+pyopencl = "^2023.1"
+pymetis = "^2023.1"
+cantera = "^2.6.0"
+
+# FIXME Needs revisions added for other packages
+# NOTE: These will be re-downloaded and re-installed every time
+# 'conda-lock install' is run.
+pymbolic = {url = "https://github.com/inducer/pymbolic/archive/6e9c0a491c9aa7e1bdb9a2f0637db180a408f288.zip#sha256=abc967bae94cb5c11a737a18e76cc8f0408e6f31e979c366c88cb0f305174af9"}
+
+# FIXME: Needs versions added
+# [tool.poetry.dev-dependencies]
+# git
+# gh
+# mypy
+# clinfo
+# pudb
+# oct2py
+# pytest
+# pylint
+# pydocstyle
+# gmsh
+# vtk
+
+[tool.conda-lock.dependencies]
+h5py = "* nompi_*"
+pocl = ">=3.0"
