@@ -202,7 +202,7 @@ class AdiabaticNoSlipWallAV(AdiabaticNoslipWallBoundary):
 
 
 class IsothermalWallAV(IsothermalWallBoundary):
-    r"""Interface to a prescribed adiabatic noslip fluid boundary with AV.
+    r"""Interface to a prescribed isothermal noslip wall boundary with AV.
 
     .. automethod:: __init__
     .. automethod:: av_flux
