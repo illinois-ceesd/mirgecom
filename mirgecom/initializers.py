@@ -16,6 +16,7 @@ Solution Initializers
 .. autoclass:: PlanarDiscontinuity
 .. autoclass:: MulticomponentTrig
 .. autoclass:: InviscidTaylorGreenVortex
+.. autoclass:: IsotropicTurbulence
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
@@ -51,9 +52,11 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from tqdm import tqdm
 from pytools.obj_array import make_obj_array
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
+from meshmode.dof_array import DOFArray
 
 
 def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None,
@@ -1644,3 +1647,96 @@ class InviscidTaylorGreenVortex:
 
         return make_conserved(dim=self._dim, mass=rho,
                               energy=energy, momentum=momentum)
+
+
+class IsotropicTurbulence:
+    """Initilize the Istropic Turbulence case from file"""
+    def __init__(self, coordinate_path="coordinate.txt",
+                 velocity_path="velocity.txt"):
+        self.structuremesh = np.loadtxt(coordinate_path).astype(float)
+        self.sourceVelocity = np.loadtxt(velocity_path).astype(float)
+        self.Npts = int(self.structuremesh.shape[0])
+        self.injectionMap = {}
+        for i in tqdm(range(self.Npts)):
+            self.injectionMap.update(
+                {
+                    ((self.structuremesh[i, :]).round(7)).tobytes():
+                    self.sourceVelocity[i, :]
+                })
+        r"""
+    The nodes is stored like a 2D array as following
+    n: :The amount of qudrature nodes
+    k: :The amount of elements
+     ___                    ___
+    |   __                __   |
+    |  |  x11 x21.....xn1   |  |
+    |  |   :   :       :    |  |
+    |  |__x1k x2k.....xnk __|  |
+    |   __               ___   |
+    |  |  y11 y21.....yn1   |  |
+    |  |   :   :       :    |  |
+    |  |__y1k y2k.....ynk___|  |
+    |   ___              ___   |
+    |  |  z11 z21.....zn1   |  |
+    |  |   :   :       :    |  |
+    |  |__z1k z2k.....znk___|  |
+    |___                    ___|
+
+    """
+    def __call__(self, x_vec, eos, time=0):
+        """
+        Create the 3D Isoptropic Turbulence initial profile at locations *x_vec*.
+        This case must be run in 3D.
+        The spectra function can refer to Pope(2000).
+
+        Parameters
+        ----------
+        x_vec:
+            numpy.ndarray
+            Array of :class:`~meshmode.dof_array.DOFArray` representing the 3D
+            coordinates of the points at which the Initial field is desired
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+        """
+        if eos is None:
+            eos = IdealSingleGas()
+        gamma = eos.gamma()
+        actx = (x_vec[0]).array_context
+        data_x = actx.to_numpy(x_vec[0][0])
+        data_y = actx.to_numpy(x_vec[1][0])
+        data_z = actx.to_numpy(x_vec[2][0])
+
+        u_velocity = data_x*0.0
+        v_velocity = data_y*0.0
+        w_velocity = data_z*0.0
+        shape = data_x.shape
+        for i in tqdm(range(shape[0])):
+            for j in range(shape[1]):
+                xcord = data_x[i, j]
+                ycord = data_y[i, j]
+                zcord = data_z[i, j]
+                xcord = 0 if abs(data_x[i, j] < 1e-7) else data_x[i, j]
+                ycord = 0 if abs(data_y[i, j] < 1e-7) else data_y[i, j]
+                zcord = 0 if abs(data_z[i, j] < 1e-7) else data_z[i, j]
+                cord = (np.array([xcord, ycord, zcord]).round(7)).tobytes()
+                u_velocity[i, j], v_velocity[i, j], w_velocity[i, j] = \
+                    self.injectionMap[cord][0], self.injectionMap[cord][1],
+                self.injectionMap[cord][2]
+
+        u_x = DOFArray(actx, data=(actx.from_numpy(np.array(u_velocity)), ))
+        u_y = DOFArray(actx, data=(actx.from_numpy(np.array(v_velocity)), ))
+        u_z = DOFArray(actx, data=(actx.from_numpy(np.array(w_velocity)), ))
+        print("u_velocity has shape=  ", u_velocity.shape)
+        print("u_x has shape=  ", u_x.shape)
+        velocity = make_obj_array([u_x, u_y, u_z])
+
+        mass = data_x*0.0 + 1.0
+        mass = DOFArray(actx, data=(actx.from_numpy(np.array(mass)), ))
+
+        momentum = mass*velocity
+
+        p = 15**2/gamma
+
+        energy = p / (gamma-1) + mass / 2 * (u_x**2 + u_y**2 + u_z**2)
+
+        return make_conserved(dim=3, mass=mass, energy=energy, momentum=momentum)
