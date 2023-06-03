@@ -1443,7 +1443,7 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
-        ones = actx.np.ones_like(nhat[0])
+        ones = actx.np.zeros_like(state_minus.temperature) + 1.
 
         free_stream_state = self.free_stream_state_func(
             dcoll, dd_bdry, gas_model, state_minus, **kwargs)
@@ -1542,8 +1542,7 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
         """
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-
-        ones = actx.np.ones_like(nhat[0])
+        ones = actx.zeros_like(state_minus.temperature) + 1.
 
         free_stream_state = self.free_stream_state_func(
             dcoll, dd_bdry, gas_model, state_minus, **kwargs)
@@ -1640,6 +1639,7 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
         actx = state_minus.array_context
+        # why this?   self._wall_temp should be a single scalar right?
         wall_temp = project_from_base(dcoll, dd_bdry, self._wall_temp)
         return actx.np.zeros_like(state_minus.temperature) + wall_temp
 
