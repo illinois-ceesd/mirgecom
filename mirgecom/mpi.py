@@ -156,6 +156,31 @@ def _check_gpu_oversubscription() -> None:
                      f"Duplicate PCIe IDs: {dup}.")
 
 
+def _check_isl_version() -> None:
+    """
+    Check that we run with a non-GMP ISL version.
+
+    In general, ISL can be built with 3 options, imath-32, GMP, and imath,
+    in descending order of speed.
+    Since https://github.com/conda-forge/isl-feedstock only offers imath-32
+    or GMP, we can check for the presence of GMP-only symbols in the loaded
+    library to determine if we are running with imath-32.
+    """
+    import ctypes
+    import islpy  # type: ignore[import]
+
+    try:
+        ctypes.cdll.LoadLibrary(islpy._isl.__file__).isl_val_get_num_gmp
+    except AttributeError:
+        # We are running with imath or imath-32.
+        pass
+    else:
+        from warnings import warn
+        warn("Running with the GMP version of ISL, which is considerably "
+             "slower than imath-32. Please install a faster ISL version with "
+             "a command such as 'conda install \"isl * imath32_*\"' .")
+
+
 def mpi_entry_point(func) -> Callable:
     """
     Return a decorator that designates a function as the "main" function for MPI.
@@ -196,6 +221,7 @@ def mpi_entry_point(func) -> Callable:
 
         _check_gpu_oversubscription()
         _check_cache_dirs()
+        _check_isl_version()
 
         func(*args, **kwargs)
 
