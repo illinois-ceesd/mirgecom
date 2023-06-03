@@ -35,7 +35,6 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
-    generate_and_distribute_mesh,
     check_step
 )
 from mirgecom.io import make_init_message
@@ -43,7 +42,7 @@ from mirgecom.mpi import mpi_entry_point
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import PrescribedFluidBoundary
+# from mirgecom.boundary import PrescribedFluidBoundary
 from mirgecom.initializers import IsotropicTurbulence
 from mirgecom.eos import IdealSingleGas
 from mirgecom.gas_model import GasModel, make_fluid_state
@@ -143,7 +142,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     dim = 3
     if dim != 3:
         raise ValueError("This example must be run with dim = 3.")
-    
+
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -157,7 +156,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:
-        left_boundary_location  = tuple([0. for _ in range(dim)])
+        left_boundary_location = tuple([0. for _ in range(dim)])
         right_boundary_location = tuple([2*np.pi for _ in range(dim)])
         periodic = (True,)*dim
 
@@ -167,8 +166,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         # npts_axis = (npts_x, npts_y)
         box_ll = left_boundary_location
         box_ur = right_boundary_location
-        generate_mesh = partial(_get_box_mesh, dim=dim, a=box_ll, b=box_ur, n=npts_axis,
-                                periodic=periodic)
+        generate_mesh = partial(_get_box_mesh, dim=dim, a=box_ll, b=box_ur,
+                                n=npts_axis, periodic=periodic)
         print(f"{left_boundary_location=}")
         print(f"{right_boundary_location=}")
         print(f"{npts_axis=}")
@@ -182,6 +181,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
     dcoll = \
             create_discretization_collection(actx, local_mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -193,7 +193,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     eos = IdealSingleGas()
 
-    initializer = IsotropicTurbulence(cooridinatePath="coordinate.txt", velocityPath="velocity.txt")
+    initializer = IsotropicTurbulence(coordinate_path="coordinate.txt",
+                                      velocity_path="velocity.txt")
     gas_model = GasModel(eos=eos)
 
     boundaries = {}
@@ -212,8 +213,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                  order=init_order)
         init_nodes = actx.thaw(init_dcoll.nodes())
         # Set the current state from time 0
-        low_order_cv = initializer(init_nodes,eos=eos)
-        
+        low_order_cv = initializer(init_nodes, eos=eos)
         from meshmode.discretization.connection import make_same_mesh_connection
         connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                 init_dcoll.discr_from_dd("vol"))
@@ -330,9 +330,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 logmgr.tick_before()
 
             do_viz = check_step(step=step, interval=nviz)
-            do_restart = False
-            do_health = False
-            do_status = False
+            do_restart = check_step(step=step, interval=nrestart)
+            do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
@@ -410,9 +410,6 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     finish_tol = 1e-16
     assert np.abs(current_t - t_final) < finish_tol
-
-
-
 
 
 if __name__ == "__main__":
