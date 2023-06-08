@@ -1196,7 +1196,8 @@ class FarfieldBoundary(PrescribedFluidBoundary):
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Return farfield temperature for use in grad(temperature)."""
-        return 0*state_minus.temperature + self._temperature
+        actx = state_minus.array_context
+        return actx.np.zeros_like(state_minus.temperature) + self._temperature
 
 
 class PressureOutflowBoundary(PrescribedFluidBoundary):
@@ -1332,7 +1333,7 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
         gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
 
         # evaluate internal energy based on prescribed pressure
-        pressure_plus = self._pressure + 0.0*state_minus.pressure
+        pressure_plus = self._pressure + actx.np.zeros_like(state_minus.pressure)
         if state_minus.is_mixture:
             gas_const = gas_model.eos.gas_const(state_minus.cv)
             temp_plus = (
@@ -1442,7 +1443,7 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
-        ones = 0.0*nhat[0] + 1.0
+        ones = actx.np.zeros_like(state_minus.temperature) + 1.
 
         free_stream_state = self.free_stream_state_func(
             dcoll, dd_bdry, gas_model, state_minus, **kwargs)
@@ -1541,8 +1542,7 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
         """
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-
-        ones = 0.0*nhat[0] + 1.0
+        ones = actx.zeros_like(state_minus.temperature) + 1.
 
         free_stream_state = self.free_stream_state_func(
             dcoll, dd_bdry, gas_model, state_minus, **kwargs)
@@ -1638,8 +1638,10 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
+        actx = state_minus.array_context
+        # why this?   self._wall_temp should be a single scalar right?
         wall_temp = project_from_base(dcoll, dd_bdry, self._wall_temp)
-        return 0*state_minus.temperature + wall_temp
+        return actx.np.zeros_like(state_minus.temperature) + wall_temp
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -1734,8 +1736,9 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
+        actx = state_minus.array_context
         wall_temp = project_from_base(dcoll, dd_bdry, self._wall_temp)
-        return 0*state_minus.temperature + wall_temp
+        return actx.np.zeros_like(state_minus.temperature) + wall_temp
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
