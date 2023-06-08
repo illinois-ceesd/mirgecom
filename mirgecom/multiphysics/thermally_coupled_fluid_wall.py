@@ -1251,7 +1251,7 @@ def update_coupled_boundary_conditions(
         interface_noslip=True,
         interface_radiation=False,
         use_kappa_weighted_grad_flux_in_fluid=False,
-        wall_epsilon=None,
+        wall_emissivity=None,
         sigma=None,
         ambient_temperature=None,
         wall_penalty_amount=None,
@@ -1325,7 +1325,7 @@ def update_coupled_boundary_conditions(
 
         If `True`, interface includes a radiation sink term in the heat flux. See
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
-        for details. Additional arguments *wall_epsilon*, *sigma*, and
+        for details. Additional arguments *wall_emissivity*, *sigma*, and
         *ambient_temperature* are required if enabled.
 
     use_kappa_weighted_grad_flux_in_fluid: bool
@@ -1335,7 +1335,7 @@ def update_coupled_boundary_conditions(
         weighting the temperature from each side by its respective thermal
         conductivity. Not used if *interface_radiation* is `True`.
 
-    wall_epsilon: float or :class:`meshmode.dof_array.DOFArray`
+    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
 
         Emissivity of the wall material.
 
@@ -1392,9 +1392,9 @@ def update_coupled_boundary_conditions(
         The tuple `(fluid_rhs, wall_rhs)`.
     """
     if interface_radiation:
-        if wall_epsilon is None:
+        if wall_emissivity is None:
             raise TypeError(
-                "Argument 'wall_epsilon' is required if using radiation at the "
+                "Argument 'wall_emissivity' is required if using radiation at the "
                 "interface.")
         if sigma is None:
             raise TypeError(
@@ -1501,7 +1501,7 @@ def update_coupled_boundary_conditions(
             interface_radiation=interface_radiation,
             use_kappa_weighted_grad_flux_in_fluid=(
                 use_kappa_weighted_grad_flux_in_fluid),
-            wall_epsilon=wall_epsilon,
+            wall_emissivity=wall_emissivity,
             sigma=sigma,
             ambient_temperature=ambient_temperature,
             wall_penalty_amount=wall_penalty_amount,
