@@ -146,6 +146,22 @@ class _GetInterfaceTag:
     pass
 
 
+class _FirstTag:
+    pass
+
+
+class _SecondTag:
+    pass
+
+
+class _ThirdTag:
+    pass
+
+
+class _FourthTag:
+    pass
+
+
 # FIXME: Interior penalty should probably use an average of the lengthscales on
 # both sides of the interface
 class InterfaceFluidBoundary(MengaldoBoundaryCondition):
@@ -1429,7 +1445,8 @@ def update_coupled_boundary_conditions(
         dcoll,
         gas_model,
         fluid_dd, wall_dd,
-        fluid_state, wall_temperature, comm_tag)
+        #fluid_state, wall_temperature, comm_tag)
+        fluid_state, wall_temperature, comm_tag=(_FirstTag, comm_tag))
 
     # Construct boundaries for the fluid-wall interface; no temperature gradient
     # yet because we need to compute it
@@ -1483,7 +1500,7 @@ def update_coupled_boundary_conditions(
         _fluid_operator_states_quad=fluid_operator_states_quad,
         _fluid_interface_boundaries_no_grad=fluid_interface_boundaries_no_grad,
         _wall_interface_boundaries_no_grad=wall_interface_boundaries_no_grad,
-        comm_tag=comm_tag)
+        comm_tag=(_SecondTag, comm_tag))
 
     # Construct boundaries for the fluid-wall interface, now with the temperature
     # gradient
@@ -1507,7 +1524,7 @@ def update_coupled_boundary_conditions(
             wall_penalty_amount=wall_penalty_amount,
             _kappa_inter_vol_tpairs=kappa_inter_vol_tpairs,
             _temperature_inter_vol_tpairs=temperature_inter_vol_tpairs,
-            comm_tag=comm_tag)
+            comm_tag=(_ThirdTag, comm_tag))
 
     # Augment the domain boundaries with the interface boundaries
 
@@ -1524,7 +1541,7 @@ def update_coupled_boundary_conditions(
         fluid_grad_cv = fluid_grad_cv_operator(
             dcoll, gas_model, fluid_all_boundaries, fluid_state,
             dd=fluid_dd, time=time, quadrature_tag=quadrature_tag,
-            comm_tag=comm_tag)
+            comm_tag=(_FourthTag, comm_tag))
 
         return (fluid_all_boundaries, wall_all_boundaries,
                 fluid_operator_states_quad,
