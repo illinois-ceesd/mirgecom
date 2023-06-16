@@ -611,3 +611,39 @@ def entropy_stable_inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs
     dissipation = -0.5*lam*outer(state_pair.ext.cv - state_pair.int.cv, normal)
 
     return (flux + dissipation) @ normal
+
+
+def entropy_stable_inviscid_flux_renac(state_pair, gas_model, normal, **kwargs):
+    r"""Return the entropy stable inviscid numerical flux.
+
+    This facial flux routine is "entropy stable" in the sense that
+    it computes the flux average component of the interface fluxes
+    using an entropy conservative two-point flux
+    (e.g. :func:`entropy_conserving_flux_chandrashekar`). Additional
+    dissipation is imposed by penalizing the "jump" of the state across
+    interfaces.
+
+    Parameters
+    ----------
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+        A CV object containing the scalar numerical fluxes at the input faces.
+    """
+    from mirgecom.inviscid import entropy_conserving_flux_renac
+
+    actx = state_pair.int.array_context
+    flux = entropy_conserving_flux_renac(gas_model,
+                                         state_pair.int,
+                                         state_pair.ext)
+
+    # This calculates the local maximum eigenvalue of the flux Jacobian
+    # for a single component gas, i.e. the element-local max wavespeed |v| + c.
+    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
+    dissipation = -0.5*lam*outer(state_pair.ext.cv - state_pair.int.cv, normal)
+
+    return (flux + dissipation) @ normal

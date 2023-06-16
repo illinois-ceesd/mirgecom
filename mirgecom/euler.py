@@ -68,7 +68,9 @@ from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
     inviscid_flux_on_element_boundary,
     entropy_conserving_flux_chandrashekar,
-    entropy_stable_inviscid_flux_rusanov
+    entropy_conserving_flux_renac,
+    entropy_stable_inviscid_flux_rusanov,
+    entropy_stable_inviscid_flux_renac
 )
 
 from mirgecom.operators import div_operator
@@ -107,7 +109,7 @@ class _ESFluidTemperatureTag():
 
 def entropy_stable_euler_operator(
         dcoll, gas_model, state, boundaries, time=0.0,
-        inviscid_numerical_flux_func=entropy_stable_inviscid_flux_rusanov,
+        inviscid_numerical_flux_func=entropy_stable_inviscid_flux_renac,
         operator_states_quad=None,
         dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None):
     """Compute RHS of the Euler flow equations using flux-differencing.
@@ -183,7 +185,7 @@ def entropy_stable_euler_operator(
             # Just need group for determining the number of elements
             for grp, subary in zip(dcoll.discr_from_dd(dd_vol).groups, ary)))
 
-    flux_matrices = entropy_conserving_flux_chandrashekar(
+    flux_matrices = entropy_conserving_flux_renac(
         gas_model,
         _reshape((1, -1), modified_conserved_fluid_state),
         _reshape((-1, 1), modified_conserved_fluid_state))
