@@ -2,12 +2,6 @@
 Mathematical Model of Fluid Flow
 ================================
 
-.. important::
-
-   |mirgecom| main repo branch currently provides fluid simulation operators and
-   utilities for inviscid flow (i.e. the :ref:`Euler equations<euler-eqns>`).
-   Viscous flow simulation capabilities are forthcoming.
-
 .. raw:: latex
 
     \let\b=\mathbf
