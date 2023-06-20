@@ -165,6 +165,11 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 def test_thermally_coupled_fluid_wall(
         actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     from pytools.convergence import EOCRecorder
