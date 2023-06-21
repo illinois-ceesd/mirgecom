@@ -65,7 +65,7 @@ class MixtureEOSNeededError(Exception):
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class GasDependentVars:
     """State-dependent quantities for :class:`GasEOS`.
 
@@ -89,7 +89,7 @@ class GasDependentVars:
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class MixtureDependentVars(GasDependentVars):
     """Mixture state-dependent quantities for :class:`MixtureEOS`.
 
