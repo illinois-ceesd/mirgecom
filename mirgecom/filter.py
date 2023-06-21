@@ -87,9 +87,9 @@ def get_element_spectrum_from_modal_representation(actx, vol_discr, modal_fields
         Array with the element modes accumulated into the corresponding
         "modes" for the polynomial basis functions for each field.
     """
-    modal_spectra = np.stack(
+    modal_spectra = np.stack([
         actx.to_numpy(ary)[0]
-        for ary in modal_fields)
+        for ary in modal_fields])
 
     numfields, numelem, nummodes = modal_spectra.shape
 
