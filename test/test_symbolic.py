@@ -131,16 +131,23 @@ def _array_container_deriv_pair():
     _obj_array_deriv_pair(),
     _array_container_deriv_pair(),
 ])
-def test_symbolic_diff(sym_f, expected_sym_df):
+def test_symbolic_diff(actx_factory, sym_f, expected_sym_df):
     """
     Compute the symbolic derivative of an expression and compare it to an
     expected result.
     """
+    actx = actx_factory()
+
     sym_df = sym.diff(pmbl.var("x"))(sym_f)
-    if isinstance(sym_f, np.ndarray):
+
+    from pymbolic.primitives import Expression
+    if isinstance(sym_f, Expression):
+        assert sym_df == expected_sym_df
+    elif isinstance(sym_f, np.ndarray):
         assert (sym_df == expected_sym_df).all()
     else:
-        assert sym_df == expected_sym_df
+        # Array container
+        assert actx.np.equal(sym_df, expected_sym_df)
 
 
 def test_symbolic_div():
