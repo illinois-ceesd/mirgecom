@@ -318,11 +318,11 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
                           dd=limiter_dd)
 
     # FIXME work-around for now
-    smoothness_mu = (actx.zeros_like(pressure) if smoothness_mu
+    smoothness_mu = (actx.np.zeros_like(pressure) if smoothness_mu
                      is None else smoothness_mu)
-    smoothness_kappa = (actx.zeros_like(pressure) if smoothness_kappa
+    smoothness_kappa = (actx.np.zeros_like(pressure) if smoothness_kappa
                         is None else smoothness_kappa)
-    smoothness_beta = (actx.zeros_like(pressure) if smoothness_beta
+    smoothness_beta = (actx.np.zeros_like(pressure) if smoothness_beta
                        is None else smoothness_beta)
 
     dv = GasDependentVars(
