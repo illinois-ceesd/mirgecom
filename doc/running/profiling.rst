@@ -20,7 +20,7 @@ https://docs.python.org/3/library/profile.html
 Py-Spy
 ^^^^^^
 
-``sudo py-spy record -- python -m mpi4py``
+``sudo py-spy record -- python -m mpi4py [...]``
 
 
 Pyinstrument
@@ -31,6 +31,9 @@ Pyinstrument
 
 Vmprof
 ^^^^^^
+
+
+``python -m mpi4py -m vmprof [...]``
 
 + native support
 - <= Python 3.10
