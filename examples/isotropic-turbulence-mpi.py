@@ -277,10 +277,27 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 f"------ {cfl=}\n"
                 "------- errors="
                 + ", ".join("%.3g" % en for en in component_errors))
+    def my_write_low_order_data(t,state):
+        connection = make_same_mesh_connection(actx, init_dcoll.discr_from_dd("vol"),
+                                                dcoll.discr_from_dd("vol"))
+        currstate = connection(state)
+        mass = actx.to_numpy(currstate.mass)[0]
+        energy = actx.to_numpy(currstate.energy)[0]
+        momx = actx.to_numpy(currstate.momentum)[0][0]
+        momy = actx.to_numpy(currstate.momentum)[1][0]
+        momz = actx.to_numpy(currstate.momentum)[2][0]
+        path = "TurbulenceWritingDemo/"
+
+        np.savetxt(path+"/mass/t={}".format(t),mass)
+        np.savetxt(path+"/energy/t={}".format(t),energy)
+        np.savetxt(path+"/momx/t={}".format(t),momx)
+        np.savetxt(path+"/momy/t={}".format(t),momy)
+        np.savetxt(path+"/momz/t={}".format(t),momz)
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         viz_fields = [("cv", state),
                       ("dv", dv)]
+        my_write_low_order_data(t,state)
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -330,9 +347,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 logmgr.tick_before()
 
             do_viz = check_step(step=step, interval=nviz)
-            do_restart = check_step(step=step, interval=nrestart)
-            do_health = check_step(step=step, interval=nhealth)
-            do_status = check_step(step=step, interval=nstatus)
+            do_restart = False
+            do_health = False
+            do_status = False
 
             if do_health:
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
