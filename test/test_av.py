@@ -454,10 +454,10 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
 
     bnd_flux_resid = (prescribed_boundary_av_flux - exp_av_flux)
     print(f"{bnd_flux_resid=}")
-    assert bnd_flux_resid == 0
+    assert actx.np.equal(bnd_flux_resid, 0)
 
     # Solid wall boundaries are expected to have 0 AV flux
     wall_bnd_flux = \
         adiabatic_noslip.av_flux(dcoll, BTAG_ALL, av_diffusion)
     print(f"adiabatic_noslip: {wall_bnd_flux=}")
-    assert wall_bnd_flux == 0
+    assert actx.np.equal(wall_bnd_flux, 0)
