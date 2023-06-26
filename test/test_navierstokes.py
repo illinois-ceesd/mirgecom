@@ -615,7 +615,7 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     tol = 1e-15
 
     if mu == 0:
-        assert sym_ns_source == sym_euler_source
+        assert actx.np.equal(sym_ns_source, sym_euler_source)
         sym_source = sym_euler_source
     else:
         sym_source = sym_ns_source
