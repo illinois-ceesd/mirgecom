@@ -1639,7 +1639,6 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
         actx = state_minus.array_context
-        # why this?   self._wall_temp should be a single scalar right?
         wall_temp = project_from_base(dcoll, dd_bdry, self._wall_temp)
         return actx.np.zeros_like(state_minus.temperature) + wall_temp
 

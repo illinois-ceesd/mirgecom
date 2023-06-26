@@ -44,6 +44,8 @@ from grudge.dof_desc import (
 )
 from mirgecom.diffusion import (
     NeumannDiffusionBoundary,
+    grad_operator as wall_grad_t_operator,
+    diffusion_operator,
 )
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import (
@@ -61,10 +63,15 @@ from mirgecom.transport import SimpleTransport
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import (
     GasModel,
-    make_fluid_state
+    make_fluid_state,
+    make_operator_fluid_states,
 )
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging
+from mirgecom.navierstokes import (
+    grad_t_operator as fluid_grad_t_operator,
+    ns_operator,
+)
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
@@ -74,7 +81,8 @@ from mirgecom.logging_quantities import (
 )
 
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_ns_heat_operator,
+    add_interface_boundaries_no_grad,
+    add_interface_boundaries,
 )
 
 logger = logging.getLogger(__name__)
@@ -84,6 +92,73 @@ class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
 
     pass
+
+
+def coupled_ns_heat_operator(
+        dcoll,
+        gas_model,
+        fluid_dd, wall_dd,
+        fluid_boundaries, wall_boundaries,
+        fluid_state, wall_kappa, wall_temperature,
+        *,
+        time=0.,
+        return_gradients=False,
+        quadrature_tag=DISCR_TAG_BASE):
+
+    # Insert the interface boundaries for computing the gradient
+    fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
+        add_interface_boundaries_no_grad(
+            dcoll,
+            gas_model,
+            fluid_dd, wall_dd,
+            fluid_state, wall_kappa, wall_temperature,
+            fluid_boundaries, wall_boundaries)
+
+    # Get the operator fluid states
+    fluid_operator_states_quad = make_operator_fluid_states(
+        dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
+        quadrature_tag, dd=fluid_dd)
+
+    # Compute the temperature gradient for both subdomains
+    fluid_grad_temperature = fluid_grad_t_operator(
+        dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
+        time=time, quadrature_tag=quadrature_tag,
+        dd=fluid_dd, operator_states_quad=fluid_operator_states_quad)
+    wall_grad_temperature = wall_grad_t_operator(
+        dcoll, wall_kappa, wall_all_boundaries_no_grad, wall_temperature,
+        quadrature_tag=quadrature_tag, dd=wall_dd)
+
+    # Insert boundaries for the fluid-wall interface, now with the temperature
+    # gradient
+    fluid_all_boundaries, wall_all_boundaries = \
+        add_interface_boundaries(
+            dcoll,
+            gas_model,
+            fluid_dd, wall_dd,
+            fluid_state, wall_kappa, wall_temperature,
+            fluid_grad_temperature, wall_grad_temperature,
+            fluid_boundaries, wall_boundaries)
+
+    # Compute the subdomain NS/diffusion operators using the augmented boundaries
+    ns_result = ns_operator(
+        dcoll, gas_model, fluid_state, fluid_all_boundaries,
+        time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
+        return_gradients=return_gradients,
+        operator_states_quad=fluid_operator_states_quad,
+        grad_t=fluid_grad_temperature)
+    diffusion_result = diffusion_operator(
+        dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
+        quadrature_tag=quadrature_tag, return_grad_u=return_gradients, dd=wall_dd,
+        grad_u=wall_grad_temperature)
+
+    if return_gradients:
+        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
+        wall_rhs, wall_grad_temperature = diffusion_result
+        return (
+            fluid_rhs, wall_rhs, fluid_grad_cv, fluid_grad_temperature,
+            wall_grad_temperature)
+    else:
+        return ns_result, diffusion_result
 
 
 @mpi_entry_point
@@ -511,13 +586,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state, return_gradients=False):
         fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
         wall_temperature = state[1]
+
         ns_heat_result = coupled_ns_heat_operator(
             dcoll,
             gas_model,
             dd_vol_fluid, dd_vol_wall,
             fluid_boundaries, wall_boundaries,
-            fluid_state,
-            wall_kappa, wall_temperature,
+            fluid_state, wall_kappa, wall_temperature,
             time=t,
             return_gradients=return_gradients,
             quadrature_tag=quadrature_tag)
