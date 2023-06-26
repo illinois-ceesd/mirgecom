@@ -23,29 +23,24 @@ THE SOFTWARE.
 """
 import logging
 
+import grudge.op as op
 import numpy as np
 import numpy.linalg as la  # noqa
 import pyopencl as cl
-
+from grudge.shortcuts import make_visualizer
+from logpyle import IntervalTimer, set_dt
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from pytools.obj_array import flat_obj_array
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
-from grudge.shortcuts import make_visualizer
-import grudge.op as op
-
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
-from mirgecom.wave import wave_operator
-from mirgecom.utils import force_evaluation
-
-from logpyle import IntervalTimer, set_dt
-
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage,
-                                         logmgr_add_mempool_usage,)
+                                         logmgr_add_mempool_usage)
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.utils import force_evaluation
+from mirgecom.wave import wave_operator
 
 
 def bump(actx, nodes, t=0):
@@ -69,7 +64,7 @@ def bump(actx, nodes, t=0):
 
 @mpi_entry_point
 def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
-         restart_step=None, use_profiling=False, use_logmgr=False, lazy=False):
+         restart_step=None, use_logmgr: bool = False) -> None:
     """Drive the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -81,23 +76,15 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
-    if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
 
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.simutil import initialize_actx, actx_class_is_profiling
+    actx, cl_ctx, queue, alloc = initialize_actx(actx_class)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     if restart_step is None:
 
-        from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
+        from meshmode.distributed import (MPIMeshDistributor,
+                                          get_partition_by_pymetis)
         mesh_dist = MPIMeshDistributor(comm)
 
         dim = 2
@@ -161,7 +148,8 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         if old_order != order:
             old_dcoll = create_discretization_collection(
                 actx, local_mesh, order=old_order)
-            from meshmode.discretization.connection import make_same_mesh_connection
+            from meshmode.discretization.connection import \
+                make_same_mesh_connection
             connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_dcoll.discr_from_dd("vol"))
             fields = connection(restart_fields)
@@ -264,9 +252,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
     lazy = args.lazy
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.simutil import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(lazy=lazy,
+                                                    distributed=True,
+                                                    profiling=args.profiling)
 
-    main(actx_class, use_profiling=args.profiling, use_logmgr=args.log, lazy=lazy)
+    main(actx_class, use_logmgr=args.log)
 
 # vim: foldmethod=marker

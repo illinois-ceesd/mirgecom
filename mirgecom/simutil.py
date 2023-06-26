@@ -30,6 +30,11 @@ Simulation support utilities
 ----------------------------
 
 .. autofunction:: configurate
+.. autofunction:: get_reasonable_actx_class
+.. autofunction:: actx_class_is_lazy
+.. autofunction:: actx_class_is_eager
+.. autofunction:: actx_class_is_profiling
+.. autofunction:: initialize_actx
 
 File comparison utilities
 -------------------------
@@ -72,7 +77,7 @@ from arraycontext import map_array_container, flatten
 from meshmode.dof_array import DOFArray
 from mirgecom.viscous import get_viscous_timestep
 
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple, Any
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
@@ -103,7 +108,7 @@ def check_step(step, interval):
     - Zero means 'always visualize'.
 
     Useful for checking whether the current step is an output step,
-    or anyting else that occurs on fixed intervals.
+    or anything else that occurs on fixed intervals.
     """
     if interval == 0:
         return True
@@ -1127,6 +1132,62 @@ def configurate(config_key, config_object=None, default_value=None):
                 return type(default_value)(value)
             return value
     return default_value
+
+
+def get_reasonable_actx_class(lazy: bool = False, distributed: bool = True,
+                              profiling: bool = False):
+    if lazy and profiling:
+        raise ValueError("Can't specify both lazy and profiling")
+
+    if profiling:
+        from mirgecom.profiling import PyOpenCLProfilingArrayContext
+        return PyOpenCLProfilingArrayContext
+
+    from grudge.array_context import (get_reasonable_actx_class as
+                                      grudge_get_reasonable_actx_class)
+
+    return grudge_get_reasonable_actx_class(lazy=lazy, distributed=distributed)
+
+
+def actx_class_is_lazy(actx_class) -> bool:
+    from arraycontext import PytatoPyOpenCLArrayContext
+    return issubclass(actx_class, PytatoPyOpenCLArrayContext)
+
+
+def actx_class_is_eager(actx_class) -> bool:
+    from arraycontext import PyOpenCLArrayContext
+    return issubclass(actx_class, PyOpenCLArrayContext)
+
+
+def actx_class_is_profiling(actx_class) -> bool:
+    from mirgecom.profiling import PyOpenCLProfilingArrayContext
+    return issubclass(actx_class, PyOpenCLProfilingArrayContext)
+
+
+def initialize_actx(actx_class, comm) -> Tuple[Any]:
+    cl_ctx = cl.create_some_context()
+    if actx_class_is_profiling(actx_class):
+        queue = cl.CommandQueue(cl_ctx,
+            properties=cl.command_queue_properties.PROFILING_ENABLE)
+    else:
+        queue = cl.CommandQueue(cl_ctx)
+
+    alloc = get_reasonable_memory_pool(cl_ctx, queue)
+
+    if actx_class_is_lazy(actx_class):
+        if comm:
+            actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
+        else:
+            actx = actx_class(queue, allocator=alloc)
+    else:
+        assert actx_class_is_eager(actx_class)
+        if comm:
+            actx = actx_class(comm, queue, allocator=alloc,
+                            force_device_scalars=True)
+        else:
+            actx = actx_class(queue, allocator=alloc, force_device_scalars=True)
+
+    return actx, cl_ctx, queue, alloc
 
 
 def compare_files_vtu(
