@@ -911,7 +911,7 @@ def add_interface_boundaries_no_grad(
     comm_tag: Hashable
         Tag for distributed communication
     """
-    fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad  = \
+    fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
         _get_interface_boundaries_no_grad(
             dcoll,
             fluid_dd, wall_dd,
