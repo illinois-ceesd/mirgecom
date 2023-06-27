@@ -85,7 +85,7 @@ def main(actx_class, use_logmgr: bool = False) -> None:
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
     dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol",
-                                                  nodal_dt))[()]
+                                                  nodal_dt))[()]  # type: ignore[index]
 
     print("%d elements" % mesh.nelements)
 
@@ -130,6 +130,8 @@ def main(actx_class, use_logmgr: bool = False) -> None:
 
         if istep % 10 == 0:
             if use_profiling:
+                from mirgecom.profiling import PyOpenCLProfilingArrayContext
+                assert isinstance(actx, PyOpenCLProfilingArrayContext)
                 print(actx.tabulate_profiling_data())
             print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
             vis.write_vtk_file("fld-wave-%04d.vtu" % istep,

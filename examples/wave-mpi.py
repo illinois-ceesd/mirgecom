@@ -78,7 +78,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class)
+    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, comm)
     use_profiling = actx_class_is_profiling(actx_class)
 
     if restart_step is None:
@@ -126,7 +126,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
 
-    dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol", nodal_dt))[()]
+    dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol", nodal_dt))[()]  # type: ignore[index]
 
     t_final = 1
 
@@ -235,7 +235,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         logmgr.close()
 
     final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
-    assert np.abs(final_soln - 0.04409852463947439) < 1e-14
+    assert np.abs(final_soln - 0.04409852463947439) < 1e-14  # type: ignore[operator]
 
 
 if __name__ == "__main__":
