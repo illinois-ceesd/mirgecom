@@ -83,7 +83,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_overintegration=False, lazy=False, use_leap=False, use_profiling=False,
+         use_overintegration=False,use_leap=False,
          casename=None, rst_filename=None):
     """Drive the example."""
     cl_ctx = ctx_factory()
@@ -102,19 +102,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.simutil import initialize_actx, actx_class_is_profiling
+    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, comm)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     current_step = 0
@@ -419,7 +409,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(actx_class, use_logmgr=args.log, use_overintegration=args.overintegration,
-         use_leap=args.leap, use_profiling=args.profiling, lazy=lazy,
+         use_leap=args.leap,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

@@ -76,8 +76,8 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_overintegration=False, use_profiling=False,
-         casename=None, lazy=False, rst_filename=None, log_dependent=True,
+         use_leap=False, use_overintegration=False,
+         casename=None, rst_filename=None, log_dependent=True,
          viscous_terms_on=False):
     """Drive example."""
     cl_ctx = ctx_factory()
@@ -96,19 +96,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.simutil import initialize_actx, actx_class_is_profiling
+    actx, cl_ctx, queue, alloc = initialize_actx(actx_class)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # Some discretization parameters
     dim = 2
