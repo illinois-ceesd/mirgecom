@@ -63,7 +63,7 @@ from grudge.dof_desc import (
 )
 
 from mirgecom.gas_model import make_operator_fluid_states
-from mirgecom.inviscid import (
+from mirgecom.inviscid import (  # noqa
     inviscid_flux,
     inviscid_facial_flux_rusanov,
     inviscid_flux_on_element_boundary,

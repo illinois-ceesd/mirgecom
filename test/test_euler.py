@@ -296,7 +296,7 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
         #                            for i in range(num_equations)])
         # )
 
-        expected_rhs = make_conserved(
+        expected_rhs = make_conserved(  # noqa
             dim, q=make_obj_array([dcoll.zeros(actx)
                                    for i in range(num_equations)])
         )
