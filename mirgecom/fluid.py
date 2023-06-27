@@ -50,9 +50,10 @@ from arraycontext import (
                            bcast_container_types=(DOFArray, np.ndarray),
                            matmul=True,
                            _cls_has_array_context_attr=True,
-                           rel_comparison=True)
+                           eq_comparison=False,
+                           rel_comparison=False)
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ConservedVars:
     r"""Store and resolve quantities according to the fluid conservation equations.
 
