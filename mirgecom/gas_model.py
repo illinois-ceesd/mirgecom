@@ -103,7 +103,7 @@ class GasModel:
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class FluidState:
     r"""Gas model-consistent fluid state.
 

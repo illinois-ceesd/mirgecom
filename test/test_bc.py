@@ -291,7 +291,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                                                       grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
 
-            assert ff_bndry_state.cv == exp_ff_cv
+            assert actx.np.equal(ff_bndry_state.cv, exp_ff_cv)
             assert actx.np.all(temperature_bc == ff_temp)
             for idim in range(dim):
                 assert actx.np.all(ff_bndry_state.momentum_density[idim]
@@ -387,7 +387,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
 
             print(f"{exp_flowbnd_cv=}")
 
-            assert flowbnd_bndry_state.cv == exp_flowbnd_cv
+            assert actx.np.equal(flowbnd_bndry_state.cv, exp_flowbnd_cv)
             assert actx.np.all(flowbnd_bndry_temperature == flowbnd_press_bc)
             assert actx.np.all(flowbnd_bndry_pressure == flowbnd_press_bc)
 
@@ -421,7 +421,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             exp_flowbnd_cv = make_conserved(dim=dim, mass=bnd_dens,
                                               momentum=bnd_mom, energy=bnd_ener)
 
-            assert flowbnd_bndry_state.cv == exp_flowbnd_cv
+            assert actx.np.equal(flowbnd_bndry_state.cv, exp_flowbnd_cv)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -585,7 +585,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
                                                      grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
 
-            assert wall_state.cv == expected_noslip_cv
+            assert actx.np.equal(wall_state.cv, expected_noslip_cv)
             assert actx.np.all(temperature_bc == expected_wall_temperature)
             for idim in range(dim):
                 assert actx.np.all(wall_state.momentum_density[idim]
@@ -762,8 +762,8 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
                                                      grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
 
-            assert adv_wall_state.cv == expected_adv_wall_cv
-            assert diff_wall_state.cv == expected_diff_wall_cv
+            assert actx.np.equal(adv_wall_state.cv, expected_adv_wall_cv)
+            assert actx.np.equal(diff_wall_state.cv, expected_diff_wall_cv)
             assert actx.np.all(temperature_bc == expected_wall_temperature)
             for idim in range(dim):
                 assert actx.np.all(adv_wall_state.momentum_density[idim]
@@ -956,8 +956,8 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             temperature_bc = wall.temperature_bc(
                 dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
 
-            assert adv_wall_state.cv == expected_adv_wall_cv
-            assert diff_wall_state.cv == expected_diff_wall_cv
+            assert actx.np.equal(adv_wall_state.cv, expected_adv_wall_cv)
+            assert actx.np.equal(diff_wall_state.cv, expected_diff_wall_cv)
             assert actx.np.all(temperature_bc == expected_temp_boundary)
 
             for idim in range(dim):
@@ -1342,4 +1342,4 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             bc_soln = \
                 domain_boundary._boundary_state_pair(dcoll, BTAG_ALL, gas_model,
                                                      state_minus=state_minus).ext.cv
-            assert bc_soln == expected_boundary_solution
+            assert actx.np.equal(bc_soln, expected_boundary_solution)
