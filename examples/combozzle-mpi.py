@@ -27,7 +27,6 @@ import logging
 import time
 import yaml
 import numpy as np
-import pyopencl as cl
 from functools import partial
 
 from meshmode.array_context import PyOpenCLArrayContext
@@ -160,14 +159,12 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+def main(use_logmgr=True,
          use_overintegration=False, casename=None,
          rst_filename=None, actx_class=PyOpenCLArrayContext,
          log_dependent=False, input_file=None,
          force_eval=True):
     """Drive example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -600,7 +597,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     comm.Barrier()
 
     from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class)
+    actx = initialize_actx(actx_class)
+    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     rst_path = "restart_data/"

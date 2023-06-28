@@ -29,7 +29,6 @@ from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 from pytools.obj_array import make_obj_array
-import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
@@ -87,13 +86,11 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+def main(use_logmgr=True,
          use_overintegration=False,
          use_leap=False, casename=None,
          rst_filename=None, actx_class=None):
     """Drive the example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -109,7 +106,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control

@@ -25,7 +25,6 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import pyopencl as cl
 from functools import partial
 from pytools.obj_array import make_obj_array
 
@@ -67,12 +66,10 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+def main(actx_class, use_logmgr=True,
          use_leap=False, casename=None,
          rst_filename=None):
     """Drive example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -88,7 +85,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control

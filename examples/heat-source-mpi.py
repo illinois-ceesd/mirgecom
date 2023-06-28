@@ -25,7 +25,6 @@ import logging
 
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
@@ -48,12 +47,9 @@ from logpyle import IntervalTimer, set_dt
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
+def main(actx_class, use_logmgr=True,
          use_leap=False, casename=None, rst_filename=None):
     """Run the example."""
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     num_parts = comm.Get_size()
@@ -62,7 +58,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis

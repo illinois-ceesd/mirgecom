@@ -77,7 +77,7 @@ from arraycontext import map_array_container, flatten, ArrayContext
 from meshmode.dof_array import DOFArray
 from mirgecom.viscous import get_viscous_timestep
 
-from typing import List, Dict, Optional, Tuple, Any, TYPE_CHECKING, Type
+from typing import List, Dict, Optional, TYPE_CHECKING, Type
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
@@ -1167,9 +1167,12 @@ def actx_class_is_profiling(actx_class) -> bool:
     return issubclass(actx_class, PyOpenCLProfilingArrayContext)
 
 
-def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) -> Tuple[ArrayContext, cl.Context, cl.CommandQueue, cl.tools.AllocatorBase]:
+def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
+        -> ArrayContext:
+    """Initialize a new :class:`ArrayContext` based on *actx_class*."""
     from arraycontext import PytatoPyOpenCLArrayContext, PyOpenCLArrayContext
-    from grudge.array_context import MPIPyOpenCLArrayContext, MPIPytatoPyOpenCLArrayContext
+    from grudge.array_context import (MPIPyOpenCLArrayContext,
+                                      MPIPytatoPyOpenCLArrayContext)
 
     cl_ctx = cl.create_some_context()
     if actx_class_is_profiling(actx_class):
@@ -1184,7 +1187,9 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) -> T
         assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
         if comm:
             assert issubclass(actx_class, MPIPytatoPyOpenCLArrayContext)
-            actx: ArrayContext = actx_class(mpi_communicator=comm, queue=queue, mpi_base_tag=12000, allocator=alloc)  # type: ignore[call-arg]
+            actx: ArrayContext = actx_class(mpi_communicator=comm, queue=queue,
+                                        mpi_base_tag=12000,
+                                        allocator=alloc)  # type: ignore[call-arg]
         else:
             assert not issubclass(actx_class, MPIPytatoPyOpenCLArrayContext)
             actx = actx_class(queue, allocator=alloc)
@@ -1198,7 +1203,7 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) -> T
             assert not issubclass(actx_class, MPIPyOpenCLArrayContext)
             actx = actx_class(queue, allocator=alloc, force_device_scalars=True)
 
-    return actx, cl_ctx, queue, alloc
+    return actx
 
 
 def compare_files_vtu(

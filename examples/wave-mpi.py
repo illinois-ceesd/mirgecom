@@ -26,7 +26,6 @@ import logging
 import grudge.op as op
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
 from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -66,9 +65,6 @@ def bump(actx, nodes, t=0):
 def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
          restart_step=None, use_logmgr: bool = False) -> None:
     """Drive the example."""
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -78,7 +74,9 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
         filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    alloc = getattr(actx, "allocator", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     if restart_step is None:
@@ -126,7 +124,9 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
 
-    dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol", nodal_dt))[()]  # type: ignore[index]
+    dt = actx.to_numpy(current_cfl
+                       * op.nodal_min(dcoll,
+                                      "vol", nodal_dt))[()]  # type: ignore[index]
 
     t_final = 1
 

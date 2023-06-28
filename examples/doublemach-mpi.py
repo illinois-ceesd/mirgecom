@@ -26,7 +26,6 @@ THE SOFTWARE.
 
 import logging
 import numpy as np
-import pyopencl as cl
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -116,14 +115,12 @@ def get_doublemach_mesh():
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+def main(use_logmgr=True,
          use_leap=False, use_overintegration=False,
          casename=None, rst_filename=None, actx_class=None):
     """Drive the example."""
     if actx_class is None:
         raise RuntimeError("Array context class missing.")
-
-    cl_ctx = ctx_factory()
 
     if casename is None:
         casename = "mirgecom"
@@ -137,7 +134,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # Timestepping control

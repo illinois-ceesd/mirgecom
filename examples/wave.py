@@ -63,7 +63,9 @@ def main(actx_class, use_logmgr: bool = False) -> None:
         filename="wave.sqlite", mode="wu")
 
     from mirgecom.simutil import actx_class_is_profiling, initialize_actx
-    actx, cl_ctx, queue, alloc = initialize_actx(actx_class, None)
+    actx = initialize_actx(actx_class, None)
+    queue = getattr(actx, "queue", None)
+    alloc = getattr(actx, "allocator", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     dim = 2
@@ -84,8 +86,9 @@ def main(actx_class, use_logmgr: bool = False) -> None:
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
-    dt = actx.to_numpy(current_cfl * op.nodal_min(dcoll, "vol",
-                                                  nodal_dt))[()]  # type: ignore[index]
+    dt = actx.to_numpy(current_cfl
+                       * op.nodal_min(dcoll, "vol",
+                                    nodal_dt))[()]  # type: ignore[index]
 
     print("%d elements" % mesh.nelements)
 
