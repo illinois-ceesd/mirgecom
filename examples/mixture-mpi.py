@@ -74,7 +74,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, rst_filename=None,
-         log_dependent=False, lazy=False):
+         log_dependent=False, lazy=False, use_esdg=False, use_overintegration=False):
     """Drive example."""
     cl_ctx = ctx_factory()
 
@@ -154,7 +154,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
-    use_overintegration = False
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
@@ -404,7 +403,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         return make_obj_array(
             [euler_operator(dcoll, state=fluid_state, time=t,
                             boundaries=boundaries, gas_model=gas_model,
-                            quadrature_tag=quadrature_tag),
+                            quadrature_tag=quadrature_tag, use_esdg=use_esdg),
              0*tseed])
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
@@ -451,6 +450,10 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations"),
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -459,7 +462,14 @@ if __name__ == "__main__":
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
-    lazy = args.lazy
+
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -471,11 +481,13 @@ if __name__ == "__main__":
     if args.casename:
         casename = args.casename
     rst_filename = None
+
     if args.restart_file:
         rst_filename = args.restart_file
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
          use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
-         log_dependent=log_dependent)
+         log_dependent=log_dependent, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg)
 
 # vim: foldmethod=marker
