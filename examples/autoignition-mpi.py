@@ -689,8 +689,8 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration, use_profiling=args.profiling,
-         lazy=lazy, casename=casename, rst_filename=rst_filename,
+         use_overintegration=args.overintegration,
+         casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
 
 # vim: foldmethod=marker

@@ -1275,7 +1275,8 @@ if __name__ == "__main__":
             raise ValueError("Can't use lazy and profiling together.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -1293,7 +1294,7 @@ if __name__ == "__main__":
 
     print(f"Calling main: {time.ctime(time.time())}")
 
-    main(use_logmgr=args.log, use_leap=args.leap, input_file=input_file,
+    main(use_logmgr=args.log, input_file=input_file,
          use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
          log_dependent=log_dependent, force_eval=force_eval)

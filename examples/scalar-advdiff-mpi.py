@@ -412,7 +412,8 @@ if __name__ == "__main__":
             raise ValueError("Can't use lazy and profiling together.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True,
+                                                    profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -421,7 +422,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
-         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
