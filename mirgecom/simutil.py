@@ -1138,7 +1138,8 @@ def configurate(config_key, config_object=None, default_value=None):
 
 
 def get_reasonable_array_context_class(lazy: bool = False, distributed: bool = True,
-                              profiling: bool = False):
+                              profiling: bool = False) -> Type[ArrayContext]:
+    """Return a :class:`ArrayContext` that satisfies the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
 
@@ -1152,17 +1153,20 @@ def get_reasonable_array_context_class(lazy: bool = False, distributed: bool = T
     return grudge_get_reasonable_actx_class(lazy=lazy, distributed=distributed)
 
 
-def actx_class_is_lazy(actx_class) -> bool:
+def actx_class_is_lazy(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is lazy."""
     from arraycontext import PytatoPyOpenCLArrayContext
     return issubclass(actx_class, PytatoPyOpenCLArrayContext)
 
 
-def actx_class_is_eager(actx_class) -> bool:
+def actx_class_is_eager(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is eager."""
     from arraycontext import PyOpenCLArrayContext
     return issubclass(actx_class, PyOpenCLArrayContext)
 
 
-def actx_class_is_profiling(actx_class) -> bool:
+def actx_class_is_profiling(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* has profiling enabled."""
     from mirgecom.profiling import PyOpenCLProfilingArrayContext
     return issubclass(actx_class, PyOpenCLProfilingArrayContext)
 
