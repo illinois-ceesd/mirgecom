@@ -1176,7 +1176,7 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
     """Initialize a new :class:`ArrayContext` based on *actx_class*."""
     from arraycontext import PytatoPyOpenCLArrayContext, PyOpenCLArrayContext
     from grudge.array_context import (MPIPyOpenCLArrayContext,
-                                      MPIPytatoPyOpenCLArrayContext)
+                                      MPIPytatoArrayContext)
 
     cl_ctx = cl.create_some_context()
     if actx_class_is_profiling(actx_class):
@@ -1190,12 +1190,12 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
     if actx_class_is_lazy(actx_class):
         assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
         if comm:
-            assert issubclass(actx_class, MPIPytatoPyOpenCLArrayContext)
+            assert issubclass(actx_class, MPIPytatoArrayContext)
             actx: ArrayContext = actx_class(mpi_communicator=comm, queue=queue,
                                         mpi_base_tag=12000,
                                         allocator=alloc)  # type: ignore[call-arg]
         else:
-            assert not issubclass(actx_class, MPIPytatoPyOpenCLArrayContext)
+            assert not issubclass(actx_class, MPIPytatoArrayContext)
             actx = actx_class(queue, allocator=alloc)
     else:
         assert issubclass(actx_class, PyOpenCLArrayContext)
