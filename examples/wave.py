@@ -62,7 +62,7 @@ def main(actx_class, use_logmgr: bool = False) -> None:
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave.sqlite", mode="wu")
 
-    from mirgecom.simutil import actx_class_is_profiling, initialize_actx
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, None)
     queue = getattr(actx, "queue", None)
     alloc = getattr(actx, "allocator", None)
@@ -165,7 +165,7 @@ if __name__ == "__main__":
         help="enable lazy evaluation")
     args = parser.parse_args()
 
-    from grudge.array_context import get_reasonable_array_context_class
+    from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=False,
                                                     profiling=args.profiling)

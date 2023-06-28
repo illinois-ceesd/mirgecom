@@ -73,7 +73,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.simutil import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     alloc = getattr(actx, "allocator", None)
@@ -252,7 +252,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     lazy = args.lazy
 
-    from mirgecom.simutil import get_reasonable_array_context_class
+    from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy,
                                                     distributed=True,
                                                     profiling=args.profiling)

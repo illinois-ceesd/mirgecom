@@ -596,8 +596,8 @@ def main(use_logmgr=True,
         print(f"ACTX setup start: {time.ctime(time.time())}")
     comm.Barrier()
 
-    from mirgecom.simutil import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -1274,7 +1274,7 @@ if __name__ == "__main__":
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
+    from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)

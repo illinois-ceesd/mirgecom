@@ -30,11 +30,6 @@ Simulation support utilities
 ----------------------------
 
 .. autofunction:: configurate
-.. autofunction:: get_reasonable_array_context_class
-.. autofunction:: actx_class_is_lazy
-.. autofunction:: actx_class_is_eager
-.. autofunction:: actx_class_is_profiling
-.. autofunction:: initialize_actx
 
 File comparison utilities
 -------------------------
@@ -73,11 +68,11 @@ from functools import partial
 
 import grudge.op as op
 
-from arraycontext import map_array_container, flatten, ArrayContext
+from arraycontext import map_array_container, flatten
 from meshmode.dof_array import DOFArray
 from mirgecom.viscous import get_viscous_timestep
 
-from typing import List, Dict, Optional, TYPE_CHECKING, Type
+from typing import List, Dict, Optional, TYPE_CHECKING
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from mirgecom.utils import normalize_boundaries
@@ -1135,79 +1130,6 @@ def configurate(config_key, config_object=None, default_value=None):
                 return type(default_value)(value)
             return value
     return default_value
-
-
-def get_reasonable_array_context_class(lazy: bool = False, distributed: bool = True,
-                              profiling: bool = False) -> Type[ArrayContext]:
-    """Return a :class:`ArrayContext` that satisfies the given constraints."""
-    if lazy and profiling:
-        raise ValueError("Can't specify both lazy and profiling")
-
-    if profiling:
-        from mirgecom.profiling import PyOpenCLProfilingArrayContext
-        return PyOpenCLProfilingArrayContext
-
-    from grudge.array_context import (get_reasonable_actx_class as
-                                      grudge_get_reasonable_actx_class)
-
-    return grudge_get_reasonable_actx_class(lazy=lazy, distributed=distributed)
-
-
-def actx_class_is_lazy(actx_class: Type[ArrayContext]) -> bool:
-    """Return True if *actx_class* is lazy."""
-    from arraycontext import PytatoPyOpenCLArrayContext
-    return issubclass(actx_class, PytatoPyOpenCLArrayContext)
-
-
-def actx_class_is_eager(actx_class: Type[ArrayContext]) -> bool:
-    """Return True if *actx_class* is eager."""
-    from arraycontext import PyOpenCLArrayContext
-    return issubclass(actx_class, PyOpenCLArrayContext)
-
-
-def actx_class_is_profiling(actx_class: Type[ArrayContext]) -> bool:
-    """Return True if *actx_class* has profiling enabled."""
-    from mirgecom.profiling import PyOpenCLProfilingArrayContext
-    return issubclass(actx_class, PyOpenCLProfilingArrayContext)
-
-
-def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
-        -> ArrayContext:
-    """Initialize a new :class:`ArrayContext` based on *actx_class*."""
-    from arraycontext import PytatoPyOpenCLArrayContext, PyOpenCLArrayContext
-    from grudge.array_context import (MPIPyOpenCLArrayContext,
-                                      MPIPytatoArrayContext)
-
-    cl_ctx = cl.create_some_context()
-    if actx_class_is_profiling(actx_class):
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if actx_class_is_lazy(actx_class):
-        assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
-        if comm:
-            assert issubclass(actx_class, MPIPytatoArrayContext)
-            actx: ArrayContext = actx_class(mpi_communicator=comm, queue=queue,
-                                        mpi_base_tag=12000,
-                                        allocator=alloc)  # type: ignore[call-arg]
-        else:
-            assert not issubclass(actx_class, MPIPytatoArrayContext)
-            actx = actx_class(queue, allocator=alloc)
-    else:
-        assert issubclass(actx_class, PyOpenCLArrayContext)
-        if comm:
-            assert issubclass(actx_class, MPIPyOpenCLArrayContext)
-            actx = actx_class(mpi_communicator=comm, queue=queue, allocator=alloc,
-                              force_device_scalars=True)  # type: ignore[call-arg]
-        else:
-            assert not issubclass(actx_class, MPIPyOpenCLArrayContext)
-            actx = actx_class(queue, allocator=alloc, force_device_scalars=True)
-
-    return actx
 
 
 def compare_files_vtu(
