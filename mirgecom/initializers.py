@@ -1720,8 +1720,7 @@ class IsotropicTurbulence:
                 zcord = 0 if abs(data_z[i, j] < 1e-7) else data_z[i, j]
                 cord = (np.array([xcord, ycord, zcord]).round(7)).tobytes()
                 u_velocity[i, j], v_velocity[i, j], w_velocity[i, j] = \
-                    self.injectionMap[cord][0], self.injectionMap[cord][1],
-                self.injectionMap[cord][2]
+                    self.injectionMap[cord][0], self.injectionMap[cord][1], self.injectionMap[cord][2]
 
         u_x = DOFArray(actx, data=(actx.from_numpy(np.array(u_velocity)), ))
         u_y = DOFArray(actx, data=(actx.from_numpy(np.array(v_velocity)), ))

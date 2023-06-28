@@ -126,16 +126,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1
+    t_final = 5
     current_cfl = 1.0
     current_dt = .0001
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nrestart = 10
+    nrestart = -1
     nstatus = 1
-    nviz = 10
+    nviz = 50
     nhealth = -1
 
     # some geometry setup
@@ -161,7 +161,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         periodic = (True,)*dim
 
         n_refine = 1
-        pts_per_axis = 16
+        pts_per_axis = 8
         npts_axis = tuple([n_refine * pts_per_axis for _ in range(dim)])
         # npts_axis = (npts_x, npts_y)
         box_ll = left_boundary_location
@@ -192,9 +192,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     eos = IdealSingleGas()
-
-    initializer = IsotropicTurbulence(coordinate_path="coordinate.txt",
-                                      velocity_path="velocity.txt")
+    pathi = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_JHU_nonvis"
+    initializer = IsotropicTurbulence(coordinate_path=pathi+"/coordinate.txt",
+                                      velocity_path=pathi+"/velocity.txt")
     gas_model = GasModel(eos=eos)
 
     boundaries = {}
@@ -286,7 +286,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         momx = actx.to_numpy(currstate.momentum)[0][0]
         momy = actx.to_numpy(currstate.momentum)[1][0]
         momz = actx.to_numpy(currstate.momentum)[2][0]
-        path = "TurbulenceWritingDemo/"
+        path = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_JHU_nonvis/ESDG"
 
         np.savetxt(path+"/mass/t={}".format(t),mass)
         np.savetxt(path+"/energy/t={}".format(t),energy)
