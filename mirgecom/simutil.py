@@ -31,11 +31,6 @@ Simulation support utilities
 
 .. autofunction:: configurate
 
-Lazy eval utilities
--------------------
-
-.. autofunction:: force_evaluation
-
 File comparison utilities
 -------------------------
 
@@ -841,8 +836,6 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     global_nelements: :class:`int`
         The number of elements in the global mesh
     """
-    from meshmode.distributed import mpi_distribute
-
     num_ranks = comm.Get_size()
 
     if partition_generator_func is None:
@@ -872,7 +865,11 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                 rank: np.where(rank_per_element == rank)[0]
                 for rank in range(num_ranks)}
 
-            rank_to_mesh_data = partition_mesh(mesh, rank_to_elements)
+            rank_to_mesh_data_dict = partition_mesh(mesh, rank_to_elements)
+
+            rank_to_mesh_data = [
+                rank_to_mesh_data_dict[rank]
+                for rank in range(num_ranks)]
 
         else:
             tag_to_volume = {
@@ -923,21 +920,20 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
 
             part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
 
-            rank_to_mesh_data = {
-                rank: {
+            rank_to_mesh_data = [
+                {
                     vol: (
                         part_id_to_mesh[PartID(vol, rank)],
                         part_id_to_tag_to_elements[PartID(vol, rank)])
                     for vol in volumes}
-                for rank in range(num_ranks)}
+                for rank in range(num_ranks)]
 
-        local_mesh_data = mpi_distribute(
-            comm, source_rank=0, source_data=rank_to_mesh_data)
+        local_mesh_data = comm.scatter(rank_to_mesh_data, root=0)
 
         global_nelements = comm.bcast(mesh.nelements, root=0)
 
     else:
-        local_mesh_data = mpi_distribute(comm, source_rank=0)
+        local_mesh_data = comm.scatter(None, root=0)
 
         global_nelements = comm.bcast(None, root=0)
 
@@ -1069,7 +1065,13 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
 
 
 def force_evaluation(actx, expn):
-    """Wrap freeze/thaw forcing evaluation of expressions."""
+    """Wrap freeze/thaw forcing evaluation of expressions.
+
+    Deprecated; use :func:`mirgecom.utils.force_evaluation` instead.
+    """
+    from warnings import warn
+    warn("simutil.force_evaluation is deprecated and will disappear in Q3 2023. "
+         "Use utils.force_evaluation instead.", DeprecationWarning, stacklevel=2)
     return actx.thaw(actx.freeze(expn))
 
 
