@@ -83,7 +83,8 @@ def _get_box_mesh(dim, a, b, n, t=None):
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None, lazy=False):
+         rst_filename=None, actx_class=None, lazy=False,
+         use_esdg=False, use_overintegration=False):
     """Drive the example."""
     if actx_class is None:
         raise RuntimeError("Array context class missing.")
@@ -170,6 +171,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -410,7 +417,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
-                           time=t, gas_model=gas_model)
+                           time=t, gas_model=gas_model, use_esdg=use_esdg,
+                           quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -455,12 +463,24 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true", default=True,
         help="turn on logging")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -477,6 +497,7 @@ if __name__ == "__main__":
 
     main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         lazy=lazy)
+         lazy=lazy, use_overintegration=args.overintegration or args.esdg,
+         use_esdg=args.esdg)
 
 # vim: foldmethod=marker

@@ -80,7 +80,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_overintegration=False, lazy=False, use_leap=False, use_profiling=False,
-         casename=None, rst_filename=None):
+         casename=None, rst_filename=None, use_esdg=False):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -341,7 +341,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
         return euler_operator(dcoll, state=fluid_state, time=t,
                               boundaries=boundaries,
-                              gas_model=gas_model,
+                              gas_model=gas_model, use_esdg=use_esdg,
                               quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
@@ -385,10 +385,20 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable dg for inviscid terms.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -403,8 +413,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_overintegration=args.overintegration,
+    main(actx_class, use_logmgr=args.log,
+         use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, use_profiling=args.profiling, lazy=lazy,
-         casename=casename, rst_filename=rst_filename)
+         casename=casename, rst_filename=rst_filename, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

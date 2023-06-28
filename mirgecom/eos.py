@@ -531,6 +531,95 @@ class IdealSingleGas(GasEOS):
         """
         return self._gas_const * temperature / (self._gamma - 1)
 
+    def conservative_to_entropy_vars(self, cv, temperature):
+        """Compute the entropy variables from conserved variables.
+
+        Converts from conserved variables (density, momentum, total energy)
+        into entropy variables.
+
+        Parameters
+        ----------
+        state: :class:`~mirgecom.gas_model.FluidState`
+            The full fluid conserved and thermal state
+
+        Returns
+        -------
+        ConservedVars
+            The entropy variables
+        """
+        dim = cv.dim
+        actx = cv.array_context
+
+        rho = cv.mass
+        v = cv.velocity
+        v2 = np.dot(v, v)
+        p = self.pressure(cv=cv, temperature=temperature)
+        gamma = self.gamma(cv=cv, temperature=temperature)
+        rho_y = cv.species_mass
+
+        # Hrm?  How about let the EOS return the entropy vars?
+        s = actx.np.log(p) - gamma*actx.np.log(rho)
+        s_gam = (gamma - s) / (gamma - 1)
+
+        ev_mass = s_gam - 0.5 * rho * v2 / p
+        ev_energy = -rho / p
+        ev_mom = cv.momentum / p
+        ev_spec = s_gam - 0.5 * rho_y * v2 / p
+
+        return make_conserved(
+            dim=dim, mass=ev_mass, energy=ev_energy, momentum=ev_mom,
+            species_mass=ev_spec)
+
+    def entropy_to_conservative_vars(self, cv: ConservedVars, ev: ConservedVars,
+                                     temperature):
+        """Compute the conserved variables from entropy variables *ev*.
+
+        Converts from entropy variables into conserved variables
+        (density, momentum, total energy).
+
+        Parameters
+        ----------
+        ev: ConservedVars
+            The entropy variables
+
+        Returns
+        -------
+        ConservedVars
+            The fluid conserved variables
+        """
+        from mirgecom.fluid import make_conserved
+
+        dim = ev.dim
+        actx = ev.array_context
+        gamma = self.gamma(cv=cv, temperature=temperature)
+
+        # See Hughes, Franca, Mallet (1986) A new finite element
+        # formulation for CFD: (DOI: 10.1016/0045-7825(86)90127-1)
+        inv_gamma_minus_one = 1/(gamma - 1)
+
+        # Convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
+        ev_state = ev * (gamma - 1)
+
+        v1 = ev_state.mass
+        v234 = ev_state.momentum
+        v5 = ev_state.energy
+        v6ns = ev_state.species_mass
+
+        v_square = np.dot(v234, v234)
+        s = gamma - v1 + v_square/(2*v5)
+        s_species = gamma - v6ns + v_square/(2*v5)
+        iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+        rho_iota = iota * actx.np.exp(-s * inv_gamma_minus_one)
+        rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
+
+        return make_conserved(
+            dim,
+            mass=-rho_iota * v5,
+            energy=rho_iota * (1 - v_square/(2*v5)),
+            momentum=rho_iota * v234,
+            species_mass=-rho_iota_species * v5
+        )
+
 
 class PyrometheusMixture(MixtureEOS):
     r"""Ideal gas mixture ($p = \rho{R}_\mathtt{mix}{T}$).
@@ -938,3 +1027,92 @@ class PyrometheusMixture(MixtureEOS):
 
         return make_conserved(dim, rho_source, energy_source, mom_source,
                               species_sources)
+
+    def conservative_to_entropy_vars(self, cv, temperature):
+        """Compute the entropy variables from conserved variables.
+
+        Converts from conserved variables (density, momentum, total energy)
+        into entropy variables.
+
+        Parameters
+        ----------
+        state: :class:`~mirgecom.gas_model.FluidState`
+            The full fluid conserved and thermal state
+
+        Returns
+        -------
+        ConservedVars
+            The entropy variables
+        """
+        dim = cv.dim
+        actx = cv.array_context
+
+        rho = cv.mass
+        v = cv.velocity
+        v2 = np.dot(v, v)
+        p = self.pressure(cv=cv, temperature=temperature)
+        gamma = self.gamma(cv=cv, temperature=temperature)
+        rho_y = cv.species_mass
+
+        # Hrm?  How about let the EOS return the entropy vars?
+        s = actx.np.log(p) - gamma*actx.np.log(rho)
+        s_gam = (gamma - s) / (gamma - 1)
+
+        ev_mass = s_gam - 0.5 * rho * v2 / p
+        ev_energy = -rho / p
+        ev_mom = cv.momentum / p
+        ev_spec = s_gam - 0.5 * rho_y * v2 / p
+
+        return make_conserved(
+            dim=dim, mass=ev_mass, energy=ev_energy, momentum=ev_mom,
+            species_mass=ev_spec)
+
+    def entropy_to_conservative_vars(self, cv: ConservedVars, ev: ConservedVars,
+                                     temperature):
+        """Compute the conserved variables from entropy variables *ev*.
+
+        Converts from entropy variables into conserved variables
+        (density, momentum, total energy).
+
+        Parameters
+        ----------
+        ev: ConservedVars
+            The entropy variables
+
+        Returns
+        -------
+        ConservedVars
+            The fluid conserved variables
+        """
+        from mirgecom.fluid import make_conserved
+
+        dim = ev.dim
+        actx = ev.array_context
+        gamma = self.gamma(cv=cv, temperature=temperature)
+
+        # See Hughes, Franca, Mallet (1986) A new finite element
+        # formulation for CFD: (DOI: 10.1016/0045-7825(86)90127-1)
+        inv_gamma_minus_one = 1/(gamma - 1)
+
+        # Convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
+        ev_state = ev * (gamma - 1)
+
+        v1 = ev_state.mass
+        v234 = ev_state.momentum
+        v5 = ev_state.energy
+        v6ns = ev_state.species_mass
+
+        v_square = np.dot(v234, v234)
+        s = gamma - v1 + v_square/(2*v5)
+        s_species = gamma - v6ns + v_square/(2*v5)
+        iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+        rho_iota = iota * actx.np.exp(-s * inv_gamma_minus_one)
+        rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
+
+        return make_conserved(
+            dim,
+            mass=-rho_iota * v5,
+            energy=rho_iota * (1 - v_square/(2*v5)),
+            momentum=rho_iota * v234,
+            species_mass=-rho_iota_species * v5
+        )

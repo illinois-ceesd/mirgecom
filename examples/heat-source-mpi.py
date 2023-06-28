@@ -50,7 +50,7 @@ from logpyle import IntervalTimer, set_dt
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, lazy=False,
-         rst_filename=None):
+         rst_filename=None, use_overintegration=False):
     """Run the example."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -113,6 +113,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
 
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None  # noqa
+
     if dim == 2:
         # no deep meaning here, just a fudge factor
         dt = 0.0025/(nel_1d*order**2)
@@ -151,7 +157,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def rhs(t, u):
         return (
-            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u)
+            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u,
+                               quadrature_tag=quadrature_tag)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     compiled_rhs = actx.compile(rhs)
