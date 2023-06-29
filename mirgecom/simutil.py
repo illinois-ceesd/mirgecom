@@ -81,6 +81,7 @@ from mirgecom.viscous import get_viscous_timestep
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
+    # pylint: disable=no-name-in-module
     from mpi4py.MPI import Comm
 
 
