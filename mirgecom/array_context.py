@@ -35,14 +35,15 @@ from typing import Type, Optional, TYPE_CHECKING
 
 import pyopencl as cl
 from arraycontext import ArrayContext
+import sys
 
-if TYPE_CHECKING:
+if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     from mpi4py.MPI import Comm
 
 
 def get_reasonable_array_context_class(lazy: bool = False, distributed: bool = True,
                               profiling: bool = False) -> Type[ArrayContext]:
-    """Return a :class:`ArrayContext` that satisfies the given constraints."""
+    """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
 
@@ -76,7 +77,7 @@ def actx_class_is_profiling(actx_class: Type[ArrayContext]) -> bool:
 
 def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
         -> ArrayContext:
-    """Initialize a new :class:`ArrayContext` based on *actx_class*."""
+    """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
     from grudge.array_context import (MPIPyOpenCLArrayContext,
                                       MPIPytatoArrayContext)

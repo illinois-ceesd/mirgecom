@@ -97,3 +97,6 @@ rst_prolog = """
 nitpick_ignore_regex = [
     ("py:class", r".*BoundaryDomainTag.*")
 ]
+
+import sys
+sys._BUILDING_SPHINX_DOCS = True
