@@ -352,9 +352,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if check_range_local(dcoll, "vol", pressure, .99999999, 1.00000001):
+        if check_range_local(dcoll, "vol", pressure, 101324.99, 101325.01):
             health_error = True
-            logger.info(f"{rank=}: Solution diverged from exact.")
+            logger.info(f"{rank=}: Pressure out of expected range.")
 
         exittol = .09
         if max(component_errors) > exittol:
