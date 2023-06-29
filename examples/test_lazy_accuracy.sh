@@ -4,6 +4,8 @@ set -x
 set -e
 set -o pipefail
 
+export POCL_DEBUG=cuda
+
 test_list="vortex-mpi.py pulse-mpi.py"
 for file in ${test_list}
 do
