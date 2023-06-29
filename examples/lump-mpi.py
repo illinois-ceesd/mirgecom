@@ -44,7 +44,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedFluidBoundary
-from mirgecom.initializers import Lump
+from mirgecom.initializers import Lump, Uniform  # noqa
 from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer, set_dt
@@ -182,6 +182,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     vel[:dim] = 1.0
     initializer = Lump(dim=dim, center=orig, velocity=vel)
     # initializer = Uniform(dim=dim, velocity=vel)
+
     from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos)
 

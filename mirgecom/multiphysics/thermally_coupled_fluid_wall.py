@@ -95,7 +95,7 @@ from mirgecom.gas_model import (
 )
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
-    ns_operator,
+    ns_operator
 )
 from mirgecom.diffusion import (
     grad_facial_flux_weighted,
@@ -1481,8 +1481,6 @@ def coupled_ns_heat_operator(
     wall_all_boundaries = {}
     wall_all_boundaries.update(wall_boundaries)
     wall_all_boundaries.update(wall_interface_boundaries)
-
-    # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
     ns_result = ns_operator(
