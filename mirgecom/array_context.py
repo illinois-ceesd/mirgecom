@@ -41,8 +41,8 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     from mpi4py.MPI import Comm  # pylint: disable=no-name-in-module
 
 
-def get_reasonable_array_context_class(lazy: bool = False, distributed: bool = True,
-                              profiling: bool = False) -> Type[ArrayContext]:
+def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
+                              profiling: bool) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
