@@ -70,7 +70,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, lazy=False,
-         rst_filename=None):
+         rst_filename=None, use_overintegration=False, use_esdg=False):
     """Drive the example."""
     cl_ctx = ctx_factory()
 
@@ -102,7 +102,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     else:
         actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
 
-    # timestepping control
     current_step = 0
     if use_leap:
         from leap.rk import RK4MethodBuilder
@@ -151,6 +150,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     order = 3
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     vis_timer = None
 
@@ -357,7 +362,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return euler_operator(dcoll, state=fluid_state, time=t,
-                              boundaries=boundaries, gas_model=gas_model)
+                              boundaries=boundaries, gas_model=gas_model,
+                              quadrature_tag=quadrature_tag, use_esdg=use_esdg)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -401,10 +407,22 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations"),
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -420,6 +438,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
-         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
+         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename,
+         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

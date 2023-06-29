@@ -75,10 +75,14 @@ from grudge.dof_desc import (
 
 import grudge.op as op
 
+from mirgecom.euler import (
+    euler_operator,
+    entropy_stable_euler_operator
+)
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux_rusanov,
-    inviscid_flux_on_element_boundary
+    inviscid_flux_on_element_boundary,
 )
 from mirgecom.viscous import (
     viscous_flux,
@@ -99,6 +103,14 @@ class _NSGradCVTag:
 
 
 class _NSGradTemperatureTag:
+    pass
+
+
+class _ESFluidCVTag():
+    pass
+
+
+class _ESFluidTemperatureTag():
     pass
 
 
@@ -331,14 +343,15 @@ def grad_t_operator(
 
 
 def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
+                inviscid_fluid_operator=euler_operator,
                 inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                 gradient_numerical_flux_func=num_flux_central,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
-                dd=DD_VOLUME_ALL, comm_tag=None,
+                dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
-                operator_states_quad=None,
+                operator_states_quad=None, use_esdg=False,
                 grad_cv=None, grad_t=None, inviscid_terms_on=True):
     r"""Compute RHS of the Navier-Stokes equations.
 
@@ -432,6 +445,9 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     if dd.discretization_tag != DISCR_TAG_BASE:
         raise ValueError("dd must belong to the base discretization")
 
+    if use_esdg:
+        inviscid_fluid_operator = entropy_stable_euler_operator
+
     dd_vol = dd
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
@@ -451,7 +467,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                  "limited states.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            limiter_func=limiter_func, dd=dd_vol, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -521,7 +537,10 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         dd=dd_vol)
 
     # Add corresponding inviscid parts if enabled
-    if inviscid_terms_on:
+    # Note that the caller must explicitly set inviscid_fluid_operator=None
+    # to get this path.  It forces the caller to _choose_ native inviscid
+    # terms if desired.
+    if inviscid_terms_on and inviscid_fluid_operator is None:
         vol_term = vol_term - inviscid_flux(state=vol_state_quad)
         bnd_term = bnd_term - inviscid_flux_on_element_boundary(
             dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
@@ -530,6 +549,13 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dd=dd_vol)
 
     ns_rhs = div_operator(dcoll, dd_vol_quad, dd_allfaces_quad, vol_term, bnd_term)
+
+    # Call an external operator for the invsicid terms (Euler by default)
+    if inviscid_terms_on and inviscid_fluid_operator is not None:
+        ns_rhs = ns_rhs + inviscid_fluid_operator(
+            dcoll, state=state, gas_model=gas_model, boundaries=boundaries,
+            time=time, dd=dd, comm_tag=comm_tag, quadrature_tag=quadrature_tag,
+            operator_states_quad=operator_states_quad)
 
     if return_gradients:
         return ns_rhs, grad_cv, grad_t
