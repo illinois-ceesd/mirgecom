@@ -1,4 +1,5 @@
 # -- Project information -----------------------------------------------------
+import sys
 
 project = "mirgecom"
 copyright = ("2020, University of Illinois Board of Trustees")
@@ -98,5 +99,4 @@ nitpick_ignore_regex = [
     ("py:class", r".*BoundaryDomainTag.*")
 ]
 
-import sys
 sys._BUILDING_SPHINX_DOCS = True
