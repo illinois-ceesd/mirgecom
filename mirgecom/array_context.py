@@ -38,7 +38,7 @@ from arraycontext import ArrayContext
 import sys
 
 if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
-    from mpi4py.MPI import Comm
+    from mpi4py.MPI import Comm  # pylint: disable=no-member
 
 
 def get_reasonable_array_context_class(lazy: bool = False, distributed: bool = True,
