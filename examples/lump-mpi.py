@@ -268,7 +268,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         component_errors = compare_fluid_solutions(dcoll, state, exact)
         exittol = .09
         if max(component_errors) > exittol:
-            # health_error = True
+            health_error = True
             if rank == 0:
                 logger.info("Solution diverged from exact soln.")
 

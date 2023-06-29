@@ -258,10 +258,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     grid_only = 0
     discr_only = 0
     inviscid_only = 0
-    inert_only = 1
+    inert_only = 0
     init_only = 0
-    single_gas_only = 1
-    nspecies = 0
+    single_gas_only = 0
+    nspecies = 7
     use_cantera = 0
 
     # }}}
