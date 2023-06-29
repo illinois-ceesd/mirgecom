@@ -323,7 +323,8 @@ def test_thermally_coupled_fluid_wall(
                 fluid_boundaries, wall_boundaries,
                 fluid_state, wall_kappa, wall_temperature,
                 time=t,
-                quadrature_tag=quadrature_tag)
+                quadrature_tag=quadrature_tag,
+                use_kappa_weighted_grad_flux_in_fluid=True)
             fluid_rhs = replace(
                 fluid_rhs,
                 momentum=fluid_rhs.momentum + momentum_source_func(fluid_nodes, t))
