@@ -347,11 +347,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(pressure, component_errors):
         health_error = False
-        from mirgecom.simutil import check_naninf_local  # , check_range_local
+        from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure):
-            # or check_range_local(dcoll, "vol", pressure, .99999999, 1.00000001):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
+
+        if check_range_local(dcoll, "vol", pressure, .99999999, 1.00000001):
+            health_error = True
+            logger.info(f"{rank=}: Solution diverged from exact.")
 
         exittol = .09
         if max(component_errors) > exittol:

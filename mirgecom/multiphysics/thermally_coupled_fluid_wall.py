@@ -1247,7 +1247,8 @@ def coupled_ns_heat_operator(
         return_gradients=False,
         wall_penalty_amount=None,
         ns_operator=ns_operator):
-    r"""Compute the RHS of the fluid and wall subdomains.
+    r"""
+    Compute the RHS of the fluid and wall subdomains.
 
     Augments *fluid_boundaries* and *wall_boundaries* with the boundaries for the
     fluid-wall interface that are needed to enforce continuity of temperature and
@@ -1349,18 +1350,6 @@ def coupled_ns_heat_operator(
         Callable function to return the numerical flux to be used when computing
         the temperature gradient in the fluid subdomain. Defaults to
         :class:`~mirgecom.flux.num_flux_central`.
-
-    inviscid_numerical_flux_func:
-
-        Callable function providing the face-normal flux to be used
-        for the divergence of the inviscid transport flux.  This defaults to
-        :func:`~mirgecom.inviscid.inviscid_facial_flux_rusanov`.
-
-    viscous_numerical_flux_func:
-
-        Callable function providing the face-normal flux to be used
-        for the divergence of the viscous transport flux.  This defaults to
-        :func:`~mirgecom.viscous.viscous_facial_flux_harmonic`.
 
     limiter_func:
 
@@ -1494,7 +1483,7 @@ def coupled_ns_heat_operator(
     wall_all_boundaries.update(wall_interface_boundaries)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
-    ns_op_result = ns_operator(
+    ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         return_gradients=return_gradients,
@@ -1502,9 +1491,9 @@ def coupled_ns_heat_operator(
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
 
     if return_gradients:
-        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_op_result
+        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
     else:
-        fluid_rhs = ns_op_result
+        fluid_rhs = ns_result
 
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,

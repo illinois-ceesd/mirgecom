@@ -131,10 +131,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
 
     # some i/o frequencies
-    nstatus = 10000
-    nviz = 100
-    nrestart = 100
-    nhealth = 100
+    nstatus = 1
+    nviz = 1
+    nrestart = 10
+    nhealth = 1
 
     # some geometry setup
     dim = 2
@@ -346,33 +346,32 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(state, dv, component_errors):
         health_error = False
-        # from mirgecom.simutil import check_naninf_local, check_range_local
-        from mirgecom.simutil import check_naninf_local
+        from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        # if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
-        #                                   1.00101e5), op="lor"):
-        #    health_error = True
-        #    from grudge.op import nodal_max, nodal_min
-        #    p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
-        #    p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
-        #    logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
+        if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
+                                          1.00101e5), op="lor"):
+            health_error = True
+            from grudge.op import nodal_max, nodal_min
+            p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
+            logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(dcoll, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        # if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
-        #                 op="lor"):
-        #    health_error = True
-        #    from grudge.op import nodal_max, nodal_min
-        #    t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
-        #    t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
-        #    logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
+        if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
+                        op="lor"):
+            health_error = True
+            from grudge.op import nodal_max, nodal_min
+            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
+            logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
-        exittol = 100.00
+        exittol = 0.1
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:

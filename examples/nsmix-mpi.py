@@ -648,7 +648,6 @@ if __name__ == "__main__":
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
 
-    lazy = args.lazy
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
