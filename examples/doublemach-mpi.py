@@ -466,6 +466,6 @@ if __name__ == "__main__":
 
     main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
