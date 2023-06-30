@@ -1,6 +1,6 @@
 def get_box_mesh(dim,a,b,n, t=None, periodic=None):
     if periodic is None:
-        periodic = (False)*dim
+        periodic = (False,)*dim
         
     dim_names = ["x","y","z"]
     bttf = {}
