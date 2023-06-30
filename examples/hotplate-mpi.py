@@ -80,14 +80,9 @@ def _get_box_mesh(dim, a, b, n, t=None):
 
 
 @mpi_entry_point
-def main(use_logmgr=True, use_esdg=False,
-         use_leap=False, casename=None,
-         use_overintegration=False,
-         rst_filename=None, actx_class=None):
+def main(actx_class, use_esdg=False, use_leap=False, casename=None,
+         use_overintegration=False, rst_filename=None):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
     if casename is None:
         casename = "mirgecom"
 
@@ -99,7 +94,7 @@ def main(use_logmgr=True, use_esdg=False,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -484,9 +479,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         use_overintegration=args.overintegration or args.esdg,
-         use_esdg=args.esdg)
+    main(actx_class, use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg)
 
 # vim: foldmethod=marker
