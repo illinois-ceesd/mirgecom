@@ -158,7 +158,7 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True, rst_filename=None,
+def main(actx_class, rst_filename=None,
          use_overintegration=False, casename=None,
          log_dependent=False, input_file=None,
          force_eval=True, use_esdg=False):
@@ -686,7 +686,7 @@ def main(actx_class, use_logmgr=True, rst_filename=None,
 
     casename = f"{casename}-d{dim}p{order}e{global_nelements}n{nparts}"
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     if logmgr:
@@ -1254,8 +1254,6 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--esdg", action="store_true",
         help="use entropy-stable for inviscid terms")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -1299,7 +1297,7 @@ if __name__ == "__main__":
 
     print(f"Calling main: {time.ctime(time.time())}")
 
-    main(actx_class, use_logmgr=args.log, input_file=input_file,
+    main(actx_class, input_file=input_file,
          use_overintegration=args.overintegration or args.esdg,
          casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
