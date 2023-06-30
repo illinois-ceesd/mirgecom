@@ -47,7 +47,7 @@ from logpyle import IntervalTimer, set_dt
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True, use_esdg=False,
+def main(actx_class, use_esdg=False,
          use_overintegration=False,
          use_leap=False, casename=None, rst_filename=None):
     """Run the example."""
@@ -55,7 +55,7 @@ def main(actx_class, use_logmgr=True, use_esdg=False,
     comm = MPI.COMM_WORLD
     num_parts = comm.Get_size()
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -192,8 +192,6 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--overintegration", action="store_true",
         help="turn on overintegration.")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -215,7 +213,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
+    main(actx_class, use_leap=args.leap,
          use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename)
 
