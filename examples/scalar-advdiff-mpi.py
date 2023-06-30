@@ -71,10 +71,8 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True,
-         use_overintegration=False, use_esdg=False,
-         use_leap=False, casename=None,
-         rst_filename=None):
+def main(actx_class, use_overintegration=False, use_esdg=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive example."""
     if casename is None:
         casename = "mirgecom"
@@ -87,7 +85,7 @@ def main(actx_class, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -457,8 +455,6 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--esdg", action="store_true",
@@ -492,8 +488,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg,
+    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

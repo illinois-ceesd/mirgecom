@@ -86,10 +86,8 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(use_logmgr=True, use_esdg=False,
-         use_overintegration=False,
-         use_leap=False, casename=None,
-         rst_filename=None, actx_class=None):
+def main(actx_class, use_esdg=False, use_overintegration=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -102,7 +100,7 @@ def main(use_logmgr=True, use_esdg=False,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.inviscid import inviscid_facial_flux_rusanov
@@ -586,8 +584,6 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--esdg", action="store_true",
         help="use entropy-stable operator")
     parser.add_argument("--leap", action="store_true",
@@ -620,7 +616,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_esdg=args.esdg,
+    main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class)
