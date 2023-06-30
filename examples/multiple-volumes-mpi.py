@@ -417,7 +417,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_overintegration=args.overintegration,
+    main(actx_class, use_logmgr=args.log,
          use_leap=args.leap, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
          casename=casename, rst_filename=rst_filename)
