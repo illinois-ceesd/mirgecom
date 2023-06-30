@@ -90,20 +90,6 @@ class MyRuntimeError(RuntimeError):
 
 
 # Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n, t=None, periodic=None):
-    if periodic is None:
-        periodic = (False)*dim
-
-    dim_names = ["x", "y", "z"]
-    bttf = {}
-    for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t,
-               periodic=periodic)
-
-
 class InitSponge:
     r"""Solution initializer for flow in the ACT-II facility.
 
