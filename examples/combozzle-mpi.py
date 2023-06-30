@@ -70,6 +70,7 @@ from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
 )
+from mirgecom.simutil import get_box_mesh
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
