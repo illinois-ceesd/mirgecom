@@ -29,8 +29,6 @@ import yaml
 import numpy as np
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
@@ -160,9 +158,8 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(use_logmgr=True,
+def main(actx_class, use_logmgr=True, rst_filename=None,
          use_overintegration=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext,
          log_dependent=False, input_file=None,
          force_eval=True, use_esdg=False):
     """Drive example."""
@@ -1302,9 +1299,9 @@ if __name__ == "__main__":
 
     print(f"Calling main: {time.ctime(time.time())}")
 
-    main(use_logmgr=args.log, use_leap=args.leap, input_file=input_file,
+    main(actx_class, use_logmgr=args.log, input_file=input_file,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
 
 # vim: foldmethod=marker
