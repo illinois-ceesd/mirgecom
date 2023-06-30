@@ -25,7 +25,6 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import pyopencl as cl
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL
@@ -75,13 +74,11 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_overintegration=False, use_profiling=False,
-         casename=None, lazy=False, rst_filename=None, log_dependent=True,
+def main(actx_class, use_logmgr=True,
+         use_leap=False, use_overintegration=False,
+         casename=None, rst_filename=None, log_dependent=True,
          viscous_terms_on=False):
     """Drive example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -96,19 +93,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # Some discretization parameters
     dim = 2
@@ -690,8 +678,9 @@ if __name__ == "__main__":
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -701,8 +690,8 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(actx_class, use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration, use_profiling=args.profiling,
-         lazy=lazy, casename=casename, rst_filename=rst_filename,
+         use_overintegration=args.overintegration,
+         casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
 
 # vim: foldmethod=marker
