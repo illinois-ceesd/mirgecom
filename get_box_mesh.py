@@ -1,7 +1,13 @@
 def get_box_mesh(dim,a,b,n, t=None, periodic=None):
     if periodic is None:
         periodic = (False,)*dim
-        
+    if np.isscalar(a):
+        a = (a,)*dim
+    if np.isscalar(b):
+        b = (b,)*dim
+    if np.isscalar(n):
+        n = (n,)*dim
+
     dim_names = ["x","y","z"]
     bttf = {}
     for i in range(dim):
