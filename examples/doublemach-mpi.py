@@ -115,13 +115,10 @@ def get_doublemach_mesh():
 
 
 @mpi_entry_point
-def main(use_logmgr=True, use_esdg=False,
+def main(actx_class, use_esdg=False,
          use_leap=False, use_overintegration=False,
-         casename=None, rst_filename=None, actx_class=None):
+         casename=None, rst_filename=None):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
     if casename is None:
         casename = "mirgecom"
 
@@ -130,7 +127,7 @@ def main(use_logmgr=True, use_esdg=False,
     rank = comm.Get_rank()
     nparts = comm.Get_size()
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -438,8 +435,6 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--esdg", action="store_true",
         help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--leap", action="store_true",
@@ -469,8 +464,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_esdg=args.esdg,
+    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
