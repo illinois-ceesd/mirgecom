@@ -46,7 +46,8 @@ from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
     write_visfile,
-    force_evaluation
+    force_evaluation,
+    get_box_mesh
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -70,7 +71,6 @@ from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
     smoothness_indicator
 )
-from mirgecom.simutil import get_box_mesh
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
