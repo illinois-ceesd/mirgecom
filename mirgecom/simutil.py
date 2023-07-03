@@ -31,11 +31,6 @@ Simulation support utilities
 
 .. autofunction:: configurate
 
-Lazy eval utilities
--------------------
-
-.. autofunction:: force_evaluation
-
 File comparison utilities
 -------------------------
 
@@ -68,22 +63,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
+import sys
 from functools import partial
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import grudge.op as op
-# from grudge.op import nodal_min, elementwise_min
-from arraycontext import map_array_container, flatten
-from meshmode.dof_array import DOFArray
-from mirgecom.viscous import get_viscous_timestep
-
-from typing import List, Dict, Optional
+import numpy as np
+import pyopencl as cl
+from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
+from meshmode.dof_array import DOFArray
+
 from mirgecom.utils import normalize_boundaries
-import pyopencl as cl
+from mirgecom.viscous import get_viscous_timestep
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
+    # pylint: disable=no-name-in-module
+    from mpi4py.MPI import Comm
 
 
 def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
@@ -108,7 +107,7 @@ def check_step(step, interval):
     - Zero means 'always visualize'.
 
     Useful for checking whether the current step is an output step,
-    or anyting else that occurs on fixed intervals.
+    or anything else that occurs on fixed intervals.
     """
     if interval == 0:
         return True
@@ -211,7 +210,7 @@ def get_sim_timestep(
 
 def write_visfile(dcoll, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None,
-                  comm=None):
+                  comm: Optional["Comm"] = None):
     """Write parallel VTK output for the fields specified in *io_fields*.
 
     This routine writes a parallel-compatible unstructured VTK visualization
@@ -247,7 +246,8 @@ def write_visfile(dcoll, io_fields, visualizer, vizname,
         collection.  This will stop working in Fall 2022.)
     """
     from contextlib import nullcontext
-    from mirgecom.io import make_rank_fname, make_par_fname
+
+    from mirgecom.io import make_par_fname, make_rank_fname
 
     if comm is None:  # None is OK for serial writes!
         comm = dcoll.mpi_communicator
@@ -905,7 +905,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             part_id_to_part_index = {
                 part_id: part_index
                 for part_index, part_id in enumerate(part_id_to_elements.keys())}
-            from meshmode.mesh.processing import _compute_global_elem_to_part_elem
+            from meshmode.mesh.processing import \
+                _compute_global_elem_to_part_elem
             global_elem_to_part_elem = _compute_global_elem_to_part_elem(
                 mesh.nelements, part_id_to_elements, part_id_to_part_index,
                 mesh.element_id_dtype)
@@ -984,7 +985,7 @@ def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
     # partition_mesh creates a partition boundary for "_out"; replace with a
     # normal boundary
     new_facial_adjacency_groups = []
-    from meshmode.mesh import InterPartAdjacencyGroup, BoundaryAdjacencyGroup
+    from meshmode.mesh import BoundaryAdjacencyGroup, InterPartAdjacencyGroup
     for grp_list in in_mesh.facial_adjacency_groups:
         new_grp_list = []
         for fagrp in grp_list:
@@ -1043,8 +1044,8 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
         local_report.write(f"{bdtag}: {nnodes}\n")
 
-    from meshmode.mesh import BTAG_PARTITION
     from meshmode.distributed import get_connected_parts
+    from meshmode.mesh import BTAG_PARTITION
     connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
     local_report.write(f"num_nbr_parts: {len(connected_part_ids)}\n")
     local_report.write(f"connected_part_ids: {connected_part_ids}\n")
@@ -1070,7 +1071,13 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
 
 
 def force_evaluation(actx, expn):
-    """Wrap freeze/thaw forcing evaluation of expressions."""
+    """Wrap freeze/thaw forcing evaluation of expressions.
+
+    Deprecated; use :func:`mirgecom.utils.force_evaluation` instead.
+    """
+    from warnings import warn
+    warn("simutil.force_evaluation is deprecated and will disappear in Q3 2023. "
+         "Use utils.force_evaluation instead.", DeprecationWarning, stacklevel=2)
     return actx.thaw(actx.freeze(expn))
 
 
@@ -1082,8 +1089,8 @@ def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
     By default, it prefers SVM allocations over CL buffers, and memory
     pools over direct allocations.
     """
-    from pyopencl.characterize import has_coarse_grain_buffer_svm
     import pyopencl.tools as cl_tools
+    from pyopencl.characterize import has_coarse_grain_buffer_svm
 
     if force_buffer and force_non_pool:
         logger.info(f"Using non-pooled CL buffer allocations on {queue.device}.")
@@ -1157,8 +1164,9 @@ def compare_files_vtu(
     False:
         If it fails the files contain data outside the given tolerance.
     """
-    import vtk
     import xml.etree.ElementTree as Et
+
+    import vtk
 
     # read files:
     if file_type == "vtu":

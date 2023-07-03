@@ -62,7 +62,7 @@ class TransportModelError(Exception):
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class GasTransportVars:
     """State-dependent quantities for :class:`TransportModel`.
 
