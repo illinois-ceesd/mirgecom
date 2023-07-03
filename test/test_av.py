@@ -54,7 +54,7 @@ from mirgecom.discretization import create_discretization_collection
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-
+from mirgecom.simutil import get_box_mesh
 from pytools.obj_array import make_obj_array
 
 logger = logging.getLogger(__name__)
@@ -335,18 +335,6 @@ def test_trig(ctx_factory, dim, order):
         eoc_rec.order_estimate() >= expected_order - .5
         or eoc_rec.max_error() < 1e-9
     )
-
-
-# Box grid generator widget lifted from @majosm's diffusion tester
-def _get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
 
 
 class _VortexSoln:
