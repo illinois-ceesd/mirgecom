@@ -31,7 +31,10 @@ import grudge.op as op
 from mirgecom.symbolic import (
     grad as sym_grad,
     evaluate)
-from mirgecom.simutil import max_component_norm
+from mirgecom.simutil import (
+    max_component_norm,
+    get_box_mesh
+)
 import mirgecom.math as mm
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -60,17 +63,6 @@ import pytest
 
 import logging
 logger = logging.getLogger(__name__)
-
-
-def get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
-        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
