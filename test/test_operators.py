@@ -45,7 +45,7 @@ import grudge.op as op
 from grudge.trace_pair import interior_trace_pair
 from mirgecom.discretization import create_discretization_collection
 from functools import partial
-
+from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
 
 
@@ -54,17 +54,6 @@ def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,
     return (
         compute_interior_flux(int_tpair)
         + sum(compute_boundary_flux(as_dofdesc(bdtag)) for bdtag in boundaries))
-
-
-# Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n, t=None):
-    dim_names = ["x", "y", "z"]
-    bttf = {}
-    for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, npoints_per_axis=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
 def _coord_test_func(dim, order=1):
