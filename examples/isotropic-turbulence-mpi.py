@@ -128,14 +128,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = rk4_step
     t_final = 5
     current_cfl = 1.0
-    current_dt = .0001
+    current_dt = .001
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nrestart = -1
+    nrestart = 20
     nstatus = 1
-    nviz = 50
+    nviz = 20
     nhealth = -1
 
     # some geometry setup
@@ -192,7 +192,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     eos = IdealSingleGas()
-    pathi = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_JHU_nonvis"
+    pathi = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_Ma0.3_nonvis"
     initializer = IsotropicTurbulence(coordinate_path=pathi+"/coordinate.txt",
                                       velocity_path=pathi+"/velocity.txt")
     gas_model = GasModel(eos=eos)
@@ -203,6 +203,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
+        init_order = 1
+        init_dcoll = create_discretization_collection(actx, local_mesh,
+                                                 order=init_order)
         if logmgr:
             from mirgecom.logging_quantities import logmgr_set_time
             logmgr_set_time(logmgr, current_step, current_t)
@@ -278,15 +281,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 "------- errors="
                 + ", ".join("%.3g" % en for en in component_errors))
     def my_write_low_order_data(t,state):
-        connection = make_same_mesh_connection(actx, init_dcoll.discr_from_dd("vol"),
+        from meshmode.discretization.connection import make_same_mesh_connection
+        connection2 = make_same_mesh_connection(actx, init_dcoll.discr_from_dd("vol"),
                                                 dcoll.discr_from_dd("vol"))
-        currstate = connection(state)
+        currstate = connection2(state)
         mass = actx.to_numpy(currstate.mass)[0]
         energy = actx.to_numpy(currstate.energy)[0]
         momx = actx.to_numpy(currstate.momentum)[0][0]
         momy = actx.to_numpy(currstate.momentum)[1][0]
         momz = actx.to_numpy(currstate.momentum)[2][0]
-        path = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_JHU_nonvis/ESDG"
+        path = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_Ma0.3_nonvis/ESDG_time_data"
 
         np.savetxt(path+"/mass/t={}".format(t),mass)
         np.savetxt(path+"/energy/t={}".format(t),energy)
@@ -347,7 +351,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 logmgr.tick_before()
 
             do_viz = check_step(step=step, interval=nviz)
-            do_restart = False
+            do_restart = check_step(step=step, interval=nrestart)
             do_health = False
             do_status = False
 
