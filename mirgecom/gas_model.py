@@ -103,7 +103,7 @@ class GasModel:
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class FluidState:
     r"""Gas model-consistent fluid state.
 
@@ -342,11 +342,11 @@ def make_fluid_state(cv, gas_model,
     actx = cv.array_context
 
     # FIXME work-around for now
-    smoothness_mu = (actx.zeros_like(cv.mass) if smoothness_mu
+    smoothness_mu = (actx.np.zeros_like(cv.mass) if smoothness_mu
                      is None else smoothness_mu)
-    smoothness_kappa = (actx.zeros_like(cv.mass) if smoothness_kappa
+    smoothness_kappa = (actx.np.zeros_like(cv.mass) if smoothness_kappa
                         is None else smoothness_kappa)
-    smoothness_beta = (actx.zeros_like(cv.mass) if smoothness_beta
+    smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
 
     if wall_density is None:
