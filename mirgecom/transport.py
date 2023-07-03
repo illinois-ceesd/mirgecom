@@ -50,7 +50,6 @@ from typing import Optional
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
 import numpy as np
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS, GasDependentVars
@@ -76,9 +75,9 @@ class GasTransportVars:
     .. attribute:: species_diffusivity
     """
 
-    bulk_viscosity: np.ndarray
-    viscosity: np.ndarray
-    thermal_conductivity: np.ndarray
+    bulk_viscosity: DOFArray
+    viscosity: DOFArray
+    thermal_conductivity: DOFArray
     species_diffusivity: np.ndarray
 
 
@@ -198,7 +197,7 @@ class SimpleTransport(TransportModel):
                             dv: Optional[GasDependentVars] = None,
                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return self._d_alpha*(0*cv.mass + 1.0)
+        return self._d_alpha*(0*cv.species_mass + 1.0)
 
 
 class PowerLawTransport(TransportModel):
@@ -317,7 +316,7 @@ class PowerLawTransport(TransportModel):
             return (self._sigma * self.viscosity(cv, dv)/(
                 cv.mass*self._lewis*eos.gamma(cv, dv.temperature))
             )
-        return self._d_alpha*(0*cv.mass + 1.)
+        return self._d_alpha*(0*cv.species_mass + 1.)
 
 
 class MixtureAveragedTransport(TransportModel):
