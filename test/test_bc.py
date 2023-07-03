@@ -50,6 +50,7 @@ from mirgecom.gas_model import (
     make_fluid_state_trace_pairs
 )
 import grudge.op as op
+from mirgecom.simutil import get_box_mesh
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -1127,18 +1128,6 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < 1e-12
     )
-
-
-# Box grid generator widget lifted from @majosm's diffusion tester
-def _get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
 
 
 class _VortexSoln:
