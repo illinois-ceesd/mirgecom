@@ -44,7 +44,7 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 import pytest
-
+from mirgecom.simutil import get_box_mesh
 import logging
 logger = logging.getLogger(__name__)
 
@@ -92,17 +92,6 @@ class HeatProblem(metaclass=ABCMeta):
         time *t*.
         """
         pass
-
-
-def get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
-        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
 
 
 # 1D: u(x,t) = exp(-kappa*t)*cos(x)
