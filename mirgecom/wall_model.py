@@ -37,12 +37,14 @@ class WallDependentVars:
     .. attribute:: void_fraction
     .. attribute:: emissivity
     .. attribute:: permeability
+    .. attribute:: density
     """
 
     tau: DOFArray
     void_fraction: DOFArray
     emissivity: DOFArray
     permeability: DOFArray
+    density: DOFArray
 
 
 class WallDegradationModel:
@@ -256,5 +258,6 @@ class WallEOS:
             tau=tau,
             void_fraction=self.void_fraction(tau),
             emissivity=self._material.emissivity(tau),
-            permeability=self._material.permeability(tau)
+            permeability=self._material.permeability(tau),
+            density=self.solid_density(wall_density)
         )
