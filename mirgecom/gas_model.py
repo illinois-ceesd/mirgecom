@@ -72,7 +72,8 @@ from mirgecom.transport import (
     GasTransportVars
 )
 from mirgecom.wall_model import (
-    WallEOS, PorousFlowDependentVars
+    WallEOS,
+    PorousFlowDependentVars
 )
 from mirgecom.utils import normalize_boundaries
 
@@ -87,7 +88,7 @@ class GasModel:
 
     .. attribute:: transport
 
-        A gas transport model to provide transport properties.  None for inviscid
+        A gas transport model to provide transport properties. None for inviscid
         models.
 
     .. attribute:: wall
@@ -349,6 +350,8 @@ def make_fluid_state(cv, gas_model,
     smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
 
+    # the porous media is identified if the wall density is not None
+
     if wall_density is None:
         temperature = gas_model.eos.temperature(cv=cv,
                                                 temperature_seed=temperature_seed)
@@ -387,19 +390,21 @@ def make_fluid_state(cv, gas_model,
 
     else:
 
+        # ~~~ we need to squeeze wall_model in gas_model because this is easily
+        # accessible everywhere in the code
+
         tau = gas_model.wall.decomposition_progress(wall_density)
         epsilon = gas_model.wall.void_fraction(tau)
-        temperature = gas_model.wall.get_temperature(cv=cv,
-            wall_density=wall_density,
+        temperature = gas_model.wall.get_temperature(
+            cv=cv, wall_density=wall_density,
             tseed=temperature_seed, tau=tau, gas_model=gas_model)
 
         pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv, temperature=temperature)
 
         if limiter_func:
-            # FIXME this is something that may give trouble in the future. Lets see.
-            cv = limiter_func(cv=cv, wv=wall_density,
-                              pressure=pressure, temperature=temperature,
-                              epsilon=epsilon, dd=limiter_dd)
+            cv = limiter_func(cv=cv, wv=wall_density, pressure=pressure,
+                              temperature=temperature, epsilon=epsilon,
+                              dd=limiter_dd)
 
         dv = PorousFlowDependentVars(
             temperature=temperature,
@@ -841,10 +846,7 @@ def replace_fluid_state(
         if temperature_seed is not None
         else state.temperature)
 
-    if gas_model.wall is None:
-        wall_density = None
-    else:
-        wall_density = state.dv.wall_density
+    wall_density = None if gas_model.wall is None else state.dv.wall_density
 
     return make_fluid_state(
         cv=new_cv,
