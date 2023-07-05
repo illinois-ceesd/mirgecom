@@ -1351,7 +1351,8 @@ def coupled_grad_t_operator(
                 fluid_state, wall_kappa, wall_temperature,
                 fluid_boundaries, wall_boundaries,
                 interface_noslip=interface_noslip,
-                interface_radiation=interface_radiation)
+                interface_radiation=interface_radiation,
+                quadrature_tag=quadrature_tag)
     else:
         fluid_all_boundaries_no_grad = _fluid_all_boundaries_no_grad
         wall_all_boundaries_no_grad = _wall_all_boundaries_no_grad
@@ -1559,7 +1560,8 @@ def coupled_ns_heat_operator(
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
-            interface_radiation=interface_radiation)
+            interface_radiation=interface_radiation,
+            quadrature_tag=quadrature_tag)
 
     # Get the operator fluid states
     fluid_operator_states_quad = make_operator_fluid_states(
@@ -1597,7 +1599,8 @@ def coupled_ns_heat_operator(
             wall_emissivity=wall_emissivity,
             sigma=sigma,
             ambient_temperature=ambient_temperature,
-            wall_penalty_amount=wall_penalty_amount)
+            wall_penalty_amount=wall_penalty_amount,
+            quadrature_tag=quadrature_tag)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
     ns_result = ns_operator(

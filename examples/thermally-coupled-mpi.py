@@ -100,7 +100,8 @@ def coupled_ns_heat_operator(
             gas_model,
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
-            fluid_boundaries, wall_boundaries)
+            fluid_boundaries, wall_boundaries,
+            quadrature_tag=quadrature_tag)
 
     # Get the operator fluid states
     from mirgecom.gas_model import make_operator_fluid_states
@@ -130,7 +131,8 @@ def coupled_ns_heat_operator(
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
             fluid_grad_temperature, wall_grad_temperature,
-            fluid_boundaries, wall_boundaries)
+            fluid_boundaries, wall_boundaries,
+            quadrature_tag=quadrature_tag)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
