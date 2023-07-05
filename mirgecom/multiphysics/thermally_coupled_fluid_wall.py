@@ -235,13 +235,10 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
 
 class _ThermallyCoupledHarmonicMeanBoundaryComponent:
     def __init__(
-            self, kappa_plus, t_plus, grad_t_plus=None,
-            # FIXME: Remove in Q3 2023
-            use_kappa_weighted_t_bc=False):
+            self, kappa_plus, t_plus, grad_t_plus=None):
         self._kappa_plus = kappa_plus
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
-        self._use_kappa_weighted_t_bc = use_kappa_weighted_t_bc
 
     def kappa_plus(self, dcoll, dd_bdry):
         return project_from_base(dcoll, dd_bdry, self._kappa_plus)
@@ -255,16 +252,13 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
 
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
-        if self._use_kappa_weighted_t_bc:
-            actx = t_minus.array_context
-            kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
-            kappa_sum = actx.np.where(
-                actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
-                kappa_minus + kappa_plus,
-                0*kappa_minus + 1)
-            return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
-        else:
-            return (t_minus + t_plus)/2
+        actx = t_minus.array_context
+        kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
+        kappa_sum = actx.np.where(
+            actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
+            kappa_minus + kappa_plus,
+            0*kappa_minus + 1)
+        return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
         if self._grad_t_plus is None:
@@ -295,9 +289,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
 
     def __init__(
             self, kappa_plus, t_plus, grad_t_plus=None,
-            heat_flux_penalty_amount=None, lengthscales_minus=None,
-            # FIXME: Remove in Q3 2023
-            use_kappa_weighted_grad_t_flux=False):
+            heat_flux_penalty_amount=None, lengthscales_minus=None):
         r"""
         Initialize InterfaceFluidSlipBoundary.
 
@@ -335,8 +327,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
         self._thermally_coupled = _ThermallyCoupledHarmonicMeanBoundaryComponent(
             kappa_plus=kappa_plus,
             t_plus=t_plus,
-            grad_t_plus=grad_t_plus,
-            use_kappa_weighted_t_bc=use_kappa_weighted_grad_t_flux)
+            grad_t_plus=grad_t_plus)
         self._slip = _SlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
 
@@ -445,9 +436,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 
     def __init__(
             self, kappa_plus, t_plus, grad_t_plus=None,
-            heat_flux_penalty_amount=None, lengthscales_minus=None,
-            # FIXME: Remove in Q3 2023
-            use_kappa_weighted_grad_t_flux=False):
+            heat_flux_penalty_amount=None, lengthscales_minus=None):
         r"""
         Initialize InterfaceFluidNoslipBoundary.
 
@@ -485,8 +474,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
         self._thermally_coupled = _ThermallyCoupledHarmonicMeanBoundaryComponent(
             kappa_plus=kappa_plus,
             t_plus=t_plus,
-            grad_t_plus=grad_t_plus,
-            use_kappa_weighted_t_bc=use_kappa_weighted_grad_t_flux)
+            grad_t_plus=grad_t_plus)
         self._no_slip = _NoSlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
 
@@ -706,9 +694,7 @@ def _get_interface_boundaries_no_grad(
         *,
         interface_noslip=True,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # FIXME: Remove in Q3 2023
-        use_kappa_weighted_grad_flux_in_fluid=False):
+        comm_tag=None):
     interface_tpairs = _get_interface_trace_pairs_no_grad(
         dcoll,
         fluid_dd, wall_dd,
@@ -724,8 +710,7 @@ def _get_interface_boundaries_no_grad(
     def make_fluid_boundary(interface_tpair):
         return fluid_bc_class(
             interface_tpair.ext.kappa,
-            interface_tpair.ext.temperature,
-            use_kappa_weighted_grad_t_flux=use_kappa_weighted_grad_flux_in_fluid)
+            interface_tpair.ext.temperature)
 
     def make_wall_boundary(interface_tpair):
         return InterfaceWallBoundary(
@@ -755,9 +740,7 @@ def _get_interface_boundaries(
         interface_noslip=True,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # FIXME: Remove in Q3 2023
-        use_kappa_weighted_grad_flux_in_fluid=False):
+        comm_tag=None):
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
         # makes sense to use as a default here
@@ -792,8 +775,7 @@ def _get_interface_boundaries(
             interface_tpair.ext.grad_temperature,
             wall_penalty_amount,
             lengthscales_minus=op.project(dcoll,
-                fluid_dd, interface_tpair.dd, fluid_lengthscales),
-            use_kappa_weighted_grad_t_flux=use_kappa_weighted_grad_flux_in_fluid)
+                fluid_dd, interface_tpair.dd, fluid_lengthscales))
 
     def make_wall_boundary(interface_tpair):
         return InterfaceWallBoundary(
@@ -824,9 +806,7 @@ def add_interface_boundaries_no_grad(
         interface_noslip=True,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # FIXME: Remove in Q3 2023
-        _use_kappa_weighted_grad_flux_in_fluid=True):
+        comm_tag=None):
     """
     Include the fluid-wall interface boundaries (without temperature gradient).
 
@@ -905,8 +885,6 @@ def add_interface_boundaries_no_grad(
             fluid_state.tv.thermal_conductivity, wall_kappa,
             fluid_state.temperature, wall_temperature,
             interface_noslip=interface_noslip,
-            use_kappa_weighted_grad_flux_in_fluid=(
-                _use_kappa_weighted_grad_flux_in_fluid),
             quadrature_tag=quadrature_tag,
             comm_tag=comm_tag)
 
@@ -932,9 +910,7 @@ def add_interface_boundaries(
         interface_noslip=True,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
-        comm_tag=None,
-        # FIXME: Remove this in Q3 2023
-        _use_kappa_weighted_grad_flux_in_fluid=True):
+        comm_tag=None):
     """
     Include the fluid-wall interface boundaries.
 
@@ -1022,8 +998,6 @@ def add_interface_boundaries(
             fluid_state.temperature, wall_temperature,
             fluid_grad_temperature, wall_grad_temperature,
             interface_noslip=interface_noslip,
-            use_kappa_weighted_grad_flux_in_fluid=(
-                _use_kappa_weighted_grad_flux_in_fluid),
             wall_penalty_amount=wall_penalty_amount,
             quadrature_tag=quadrature_tag,
             comm_tag=comm_tag)
@@ -1048,7 +1022,7 @@ def coupled_grad_t_operator(
         *,
         time=0.,
         interface_noslip=True,
-        use_kappa_weighted_grad_flux_in_fluid=False,
+        use_kappa_weighted_grad_flux_in_fluid=None,
         quadrature_tag=DISCR_TAG_BASE,
         fluid_numerical_flux_func=num_flux_central,
         # Added to avoid repeated computation
@@ -1117,6 +1091,13 @@ def coupled_grad_t_operator(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
+    use_kappa_weighted_grad_flux_in_fluid: bool
+
+        Indicates whether the temperature gradient flux on the fluid side of the
+        interface should be computed using a simple average of temperatures or by
+        weighting the temperature from each side by its respective thermal
+        conductivity.
+
     quadrature_tag:
 
         An identifier denoting a particular quadrature discretization to use during
@@ -1140,11 +1121,17 @@ def coupled_grad_t_operator(
         ":func:`add_interface_boundaries_no_grad` and include them when calling the "
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
-    if not use_kappa_weighted_grad_flux_in_fluid:
+    if use_kappa_weighted_grad_flux_in_fluid is None:
         warn(
-            "Setting use_kappa_weighted_grad_flux_in_fluid to False is deprecated "
-            "and will become an error in Q3 2023.",
-            DeprecationWarning, stacklevel=2)
+            "Default value of use_kappa_weighted_grad_flux_in_fluid has changed "
+            "from False to True as False is no longer allowed. Explicitly set it "
+            "to True to suppress this warning.", UserWarning, stacklevel=2)
+        use_kappa_weighted_grad_flux_in_fluid = True
+    elif not use_kappa_weighted_grad_flux_in_fluid:
+        warn(
+            "Setting use_kappa_weighted_grad_flux_in_fluid to True; False is no "
+            "longer allowed. Explicitly set it to True to suppress this warning.",
+            UserWarning, stacklevel=2)
 
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
@@ -1172,9 +1159,7 @@ def coupled_grad_t_operator(
                 fluid_dd, wall_dd,
                 fluid_state, wall_kappa, wall_temperature,
                 fluid_boundaries, wall_boundaries,
-                interface_noslip=interface_noslip,
-                _use_kappa_weighted_grad_flux_in_fluid=(
-                    use_kappa_weighted_grad_flux_in_fluid))
+                interface_noslip=interface_noslip)
     else:
         fluid_all_boundaries_no_grad = _fluid_all_boundaries_no_grad
         wall_all_boundaries_no_grad = _wall_all_boundaries_no_grad
@@ -1202,7 +1187,7 @@ def coupled_ns_heat_operator(
         *,
         time=0.,
         interface_noslip=True,
-        use_kappa_weighted_grad_flux_in_fluid=False,
+        use_kappa_weighted_grad_flux_in_fluid=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
@@ -1281,6 +1266,13 @@ def coupled_ns_heat_operator(
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
         for details.
 
+    use_kappa_weighted_grad_flux_in_fluid: bool
+
+        Indicates whether the temperature gradient flux on the fluid side of the
+        interface should be computed using a simple average of temperatures or by
+        weighting the temperature from each side by its respective thermal
+        conductivity.
+
     quadrature_tag:
 
         An identifier denoting a particular quadrature discretization to use during
@@ -1323,11 +1315,17 @@ def coupled_ns_heat_operator(
         ":func:`add_interface_boundaries` and include them when calling the "
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
-    if not use_kappa_weighted_grad_flux_in_fluid:
+    if use_kappa_weighted_grad_flux_in_fluid is None:
         warn(
-            "Setting use_kappa_weighted_grad_flux_in_fluid to False is deprecated "
-            "and will become an error in Q3 2023.",
-            DeprecationWarning, stacklevel=2)
+            "Default value of use_kappa_weighted_grad_flux_in_fluid has changed "
+            "from False to True as False is no longer allowed. Explicitly set it "
+            "to True to suppress this warning.", UserWarning, stacklevel=2)
+        use_kappa_weighted_grad_flux_in_fluid = True
+    elif not use_kappa_weighted_grad_flux_in_fluid:
+        warn(
+            "Setting use_kappa_weighted_grad_flux_in_fluid to True; False is no "
+            "longer allowed. Explicitly set it to True to suppress this warning.",
+            UserWarning, stacklevel=2)
 
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -1350,9 +1348,7 @@ def coupled_ns_heat_operator(
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries,
-            interface_noslip=interface_noslip,
-            _use_kappa_weighted_grad_flux_in_fluid=(
-                use_kappa_weighted_grad_flux_in_fluid))
+            interface_noslip=interface_noslip)
 
     # Get the operator fluid states
     fluid_operator_states_quad = make_operator_fluid_states(
@@ -1369,8 +1365,6 @@ def coupled_ns_heat_operator(
         fluid_state, wall_kappa, wall_temperature,
         time=time,
         interface_noslip=interface_noslip,
-        use_kappa_weighted_grad_flux_in_fluid=(
-            use_kappa_weighted_grad_flux_in_fluid),
         quadrature_tag=quadrature_tag,
         fluid_numerical_flux_func=fluid_gradient_numerical_flux_func,
         _fluid_operator_states_quad=fluid_operator_states_quad,
@@ -1388,9 +1382,7 @@ def coupled_ns_heat_operator(
             fluid_grad_temperature, wall_grad_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
-            wall_penalty_amount=wall_penalty_amount,
-            _use_kappa_weighted_grad_flux_in_fluid=(
-                use_kappa_weighted_grad_flux_in_fluid))
+            wall_penalty_amount=wall_penalty_amount)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
     ns_result = ns_operator(
