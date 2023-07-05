@@ -78,6 +78,10 @@ def coupled_ns_heat_operator(
         fluid_state, wall_kappa, wall_temperature,
         *,
         time=0.,
+        interface_radiation=False,
+        sigma=None,
+        ambient_temperature=None,
+        wall_emissivity=None,
         quadrature_tag=DISCR_TAG_BASE):
 
     # Insert the interface boundaries for computing the gradient
@@ -89,7 +93,8 @@ def coupled_ns_heat_operator(
             gas_model,
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
-            fluid_boundaries, wall_boundaries)
+            fluid_boundaries, wall_boundaries,
+            interface_radiation=interface_radiation)
 
     # Get the operator fluid states
     from mirgecom.gas_model import make_operator_fluid_states
@@ -119,7 +124,11 @@ def coupled_ns_heat_operator(
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
             fluid_grad_temperature, wall_grad_temperature,
-            fluid_boundaries, wall_boundaries)
+            fluid_boundaries, wall_boundaries,
+            interface_radiation=interface_radiation,
+            sigma=sigma,
+            ambient_temperature=ambient_temperature,
+            wall_emissivity=wall_emissivity)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
     from mirgecom.navierstokes import ns_operator
@@ -622,7 +631,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
         fluid_rhs, wall_energy_rhs = coupled_ns_heat_operator(
             dcoll, gas_model, dd_vol_fluid, dd_vol_solid, fluid_boundaries,
             solid_boundaries, fluid_state, wall_kappa, wall_temperature,
-            time=0.0, quadrature_tag=quadrature_tag, interface_noslip=False,
+            time=0.0, quadrature_tag=quadrature_tag,
             interface_radiation=True, sigma=2.0,
             ambient_temperature=0.0, wall_emissivity=wall_emissivity,
         )
