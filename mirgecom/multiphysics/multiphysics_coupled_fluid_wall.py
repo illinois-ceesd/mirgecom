@@ -101,8 +101,11 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
             as no-slip walls. If `False` they will be treated as slip walls.
 
         interface_radiation: bool
+            If `True`, radiation is accounted for as a sink term in the coupling.
+            If `False` they will be treated as slip walls.
 
         boundary_velocity: float
+            If there is a prescribed velocity at the boundary.
 
         grad_cv_plus: :class:`meshmode.dof_array.DOFArray` or None
             CV gradient from the wall side.
@@ -132,7 +135,8 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
             normal = actx.thaw(dcoll.normal(dd_bdry))
             momentum_plus = (
                 2.0*state_minus.cv.mass*self._boundary_velocity*normal
-                - state_minus.cv.momentum)
+                - state_minus.cv.momentum
+            )
 
             cv_plus = make_conserved(dim=dcoll.dim,
                                      mass=state_minus.cv.mass,
@@ -224,6 +228,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         kappa_minus = state_minus.tv.viscosity
         u_minus = state_minus.cv.velocity
 
+        # if there is a prescribed velocity normal to the surface
         if self._boundary_velocity is not None:
             actx = state_minus.cv.mass.array_context
             normal = actx.thaw(dcoll.normal(dd_bdry))
@@ -233,12 +238,13 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         if self._no_slip:
             return u_minus*0.0
 
+        # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         u_plus = state_plus.velocity
         if self._use_kappa_weighted_bc:
             kappa_plus = project_from_base(dcoll, dd_bdry,
-                                            state_plus.tv.viscosity)
+                                           state_plus.tv.viscosity)
             kappa_sum = kappa_minus + kappa_plus
             return (u_minus * kappa_minus + u_plus * kappa_plus)/kappa_sum
 
@@ -249,6 +255,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         kappa_minus = state_minus.tv.species_diffusivity
         y_minus = state_minus.species_mass_fractions
 
+        # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         y_plus = state_plus.species_mass_fractions
@@ -265,6 +272,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         kappa_minus = state_minus.tv.thermal_conductivity
         t_minus = state_minus.temperature
 
+        # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         t_plus = state_plus.temperature
@@ -278,6 +286,10 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
     def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
         """Gradient averaging for viscous flux."""
+
+        # TODO ideally there is a continuity of shear stress, but depend on
+        # how the coupling is performed
+
         if self._grad_cv_plus is None:
             raise ValueError(
                 "Boundary does not have external CV gradient data.")
@@ -289,7 +301,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
             return make_conserved(dim=dcoll.dim,
                                   mass=grad_cv_bc.mass,
                                   momentum=grad_cv_minus.momentum,
-                                  energy=grad_cv_bc.energy, #FIXME is this right?
+                                  energy=grad_cv_bc.energy,  # FIXME is this right?
                                   species_mass=grad_cv_bc.species_mass)
 
         return (grad_cv_plus + grad_cv_minus)/2
@@ -412,36 +424,39 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
-        state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
-
-        state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
-            gas_model=gas_model, state_minus=state_minus, **kwargs)
-
         base_viscous_flux = super().viscous_divergence_flux(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
             state_minus=state_minus, numerical_flux_func=numerical_flux_func,
             grad_cv_minus=grad_cv_minus, grad_t_minus=grad_t_minus, **kwargs)
 
-        lengthscales_minus = project_from_base(
-            dcoll, dd_bdry, self._lengthscales_minus)
+#        state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
 
-        penalty = self._flux_penalty_amount/lengthscales_minus
-        # TODO double check momentum
-        tau_momentum = penalty * state_bc.tv.viscosity
-        # FIXME should we use penalization with radiation?
-        tau_energy = penalty * state_bc.tv.thermal_conductivity
-        # FIXME this gives non-zero RHS at the interface even with zero gradients
-        tau_species = 0.0 * penalty * state_bc.tv.species_diffusivity
+#        state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
+#            gas_model=gas_model, state_minus=state_minus, **kwargs)
 
-        penalization = make_conserved(dim=dcoll.dim,
-            mass=state_minus.cv.mass*0.0,
-            momentum=tau_momentum*(
-                state_plus.cv.momentum - state_minus.cv.momentum),
-            energy=tau_energy*(
-                state_plus.temperature - state_minus.temperature),
-            species_mass=tau_species*(
-                state_plus.cv.species_mass - state_minus.cv.species_mass)
-        )
+#        lengthscales_minus = project_from_base(
+#            dcoll, dd_bdry, self._lengthscales_minus)
+
+#        penalty = self._flux_penalty_amount/lengthscales_minus
+#        # TODO double check momentum
+#        tau_momentum = penalty * state_bc.tv.viscosity
+#        # FIXME should we use penalization with radiation?
+#        tau_energy = penalty * state_bc.tv.thermal_conductivity
+#        # FIXME this gives non-zero RHS at the interface even with zero gradients
+#        tau_species = 0.0 * penalty * state_bc.tv.species_diffusivity
+
+#        penalization = make_conserved(dim=dcoll.dim,
+#            mass=state_minus.cv.mass*0.0,
+#            momentum=tau_momentum*(
+#                state_plus.cv.momentum - state_minus.cv.momentum),
+#            energy=tau_energy*(
+#                state_plus.temperature - state_minus.temperature),
+#            species_mass=tau_species*(
+#                state_plus.cv.species_mass - state_minus.cv.species_mass)
+#        )
+
+        # TODO penalization seems to be making things weird...
+        penalization = 0.0
 
         return base_viscous_flux + penalization
 
@@ -531,7 +546,11 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
                    normal, **kwargs):
         """Gradient of CV to enforce viscous BC."""
-        return self._coupled.grad_cv_bc(dcoll, dd_bdry, grad_cv_minus)
+        grad_cv_bc = self._coupled.grad_cv_bc(dcoll, dd_bdry, grad_cv_minus)
+        # it should be zero already if momentum is neglected in a porous materials
+        return grad_cv_bc
+#        print((grad_cv_bc.replace(momentum=grad_cv_bc.momentum*0.0)).momentum)
+#        return grad_cv_bc.replace(momentum=grad_cv_bc.momentum*0.0)
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         """Gradient of temperature to enforce viscous BC."""
@@ -559,15 +578,18 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
             state_minus=state_minus, numerical_flux_func=numerical_flux_func,
             grad_cv_minus=grad_cv_minus, grad_t_minus=grad_t_minus, **kwargs)
 
-        lengthscales_minus = project_from_base(
-            dcoll, dd_bdry, self._lengthscales_minus)
+#        lengthscales_minus = project_from_base(
+#            dcoll, dd_bdry, self._lengthscales_minus)
 
-        penalty = self._flux_penalty_amount/lengthscales_minus
-        # TODO double check momentum
-        tau_momentum = penalty * state_bc.tv.viscosity
-        tau_energy = penalty * state_bc.tv.thermal_conductivity
-        # FIXME this gives non-zero RHS at the interface even with zero gradients
-        tau_species = 0.0 * penalty * state_bc.tv.species_diffusivity
+#        penalty = self._flux_penalty_amount/lengthscales_minus
+#        # TODO double check momentum
+#        tau_momentum = penalty * state_bc.tv.viscosity
+#        tau_energy = penalty * state_bc.tv.thermal_conductivity
+#        # FIXME this gives non-zero RHS at the interface even with zero gradients
+#        tau_species = 0.0 * penalty * state_bc.tv.species_diffusivity
+
+        # TODO penalization seems to be making things weird...
+        penalization = 0.0
 
         if self._radiation:
             radiation_spec = [self._emissivity is None,
@@ -599,30 +621,31 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
             radiation = wall_emissivity * self._sigma * (
                 state_minus.temperature**4 - self._u_ambient**4)
 
-            penalization = make_conserved(dim=dcoll.dim,
-                mass=state_minus.cv.mass*0.0,
-                energy=state_minus.cv.energy*0.0,  # XXX add penalization here?
-                momentum=tau_momentum*(
-                    state_plus.cv.momentum - state_minus.cv.momentum),
-                species_mass=tau_species*(
-                    state_plus.cv.species_mass - state_minus.cv.species_mass)
-            )
+#            penalization = make_conserved(dim=dcoll.dim,
+#                mass=state_minus.cv.mass*0.0,
+#                energy=state_minus.cv.energy*0.0,  # XXX add penalization here?
+#                momentum = state_minus.cv.momentum*0.0,
+# #                momentum=tau_momentum*(
+# #                    state_plus.cv.momentum - state_minus.cv.momentum),
+#                species_mass=tau_species*(
+#                    state_plus.cv.species_mass - state_minus.cv.species_mass)
+#            )
 
             return (base_viscous_flux.replace(energy=heat_flux - radiation)
                     + penalization)
 
-        else:
-            penalization = make_conserved(dim=dcoll.dim,
-                mass=state_minus.cv.mass*0.0,
-                energy=tau_energy*(
-                    state_plus.temperature - state_minus.temperature),
-                momentum=tau_momentum*(
-                    state_plus.cv.momentum - state_minus.cv.momentum),
-                species_mass=tau_species*(
-                    state_plus.cv.species_mass - state_minus.cv.species_mass)
-            )
+        # penalization = make_conserved(dim=dcoll.dim,
+        #     mass=state_minus.cv.mass*0.0,
+        #     energy=tau_energy*(
+        #         state_plus.temperature - state_minus.temperature),
+        #     momentum=state_minus.cv.momentum*0.0,
+        # #      momentum=tau_momentum*(
+        # #          state_plus.cv.momentum - state_minus.cv.momentum),
+        #     species_mass=tau_species*(
+        #         state_plus.cv.species_mass - state_minus.cv.species_mass)
+        # )
 
-            return base_viscous_flux + penalization
+        return base_viscous_flux + penalization
 
 
 def _state_inter_volume_trace_pairs(
