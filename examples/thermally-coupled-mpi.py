@@ -27,7 +27,7 @@ THE SOFTWARE.
 import logging
 from mirgecom.mpi import mpi_entry_point
 import numpy as np
-from functools import partial, update_wrapper
+from functools import partial
 from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
