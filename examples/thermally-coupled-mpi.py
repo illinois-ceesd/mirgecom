@@ -27,7 +27,7 @@ THE SOFTWARE.
 import logging
 from mirgecom.mpi import mpi_entry_point
 import numpy as np
-from functools import partial, update_wrapper
+from functools import partial
 from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -41,11 +41,7 @@ from grudge.dof_desc import (
     DISCR_TAG_QUAD,
     DOFDesc,
 )
-from mirgecom.diffusion import (
-    NeumannDiffusionBoundary,
-    grad_operator as wall_grad_t_operator,
-    diffusion_operator,
-)
+from mirgecom.diffusion import NeumannDiffusionBoundary
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -63,25 +59,15 @@ from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state,
-    make_operator_fluid_states,
 )
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging
-from mirgecom.navierstokes import (
-    grad_t_operator as fluid_grad_t_operator,
-    ns_operator,
-)
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
-)
-from mirgecom.navierstokes import ns_operator
-from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    add_interface_boundaries_no_grad,
-    add_interface_boundaries,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,23 +88,30 @@ def coupled_ns_heat_operator(
         *,
         time=0.,
         return_gradients=False,
-        quadrature_tag=DISCR_TAG_BASE):
+        quadrature_tag=DISCR_TAG_BASE,
+        use_esdg=False):
 
     # Insert the interface boundaries for computing the gradient
+    from mirgecom.multiphysics.thermally_coupled_fluid_wall import \
+        add_interface_boundaries_no_grad
     fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
         add_interface_boundaries_no_grad(
             dcoll,
             gas_model,
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
-            fluid_boundaries, wall_boundaries)
+            fluid_boundaries, wall_boundaries,
+            quadrature_tag=quadrature_tag)
 
     # Get the operator fluid states
+    from mirgecom.gas_model import make_operator_fluid_states
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
         quadrature_tag, dd=fluid_dd)
 
     # Compute the temperature gradient for both subdomains
+    from mirgecom.navierstokes import grad_t_operator as fluid_grad_t_operator
+    from mirgecom.diffusion import grad_operator as wall_grad_t_operator
     fluid_grad_temperature = fluid_grad_t_operator(
         dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
         time=time, quadrature_tag=quadrature_tag,
@@ -129,6 +122,8 @@ def coupled_ns_heat_operator(
 
     # Insert boundaries for the fluid-wall interface, now with the temperature
     # gradient
+    from mirgecom.multiphysics.thermally_coupled_fluid_wall import \
+        add_interface_boundaries
     fluid_all_boundaries, wall_all_boundaries = \
         add_interface_boundaries(
             dcoll,
@@ -136,15 +131,27 @@ def coupled_ns_heat_operator(
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
             fluid_grad_temperature, wall_grad_temperature,
-            fluid_boundaries, wall_boundaries)
+            fluid_boundaries, wall_boundaries,
+            quadrature_tag=quadrature_tag)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
+
+    from mirgecom.navierstokes import ns_operator as _ns_operator
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    from mirgecom.viscous import viscous_facial_flux_harmonic
+    inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
+    viscous_numerical_flux_func = viscous_facial_flux_harmonic
+    ns_operator = partial(_ns_operator, use_esdg=use_esdg,
+                    inviscid_numerical_flux_func=inviscid_numerical_flux_func,
+                    viscous_numerical_flux_func=viscous_numerical_flux_func)
     ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature)
+
+    from mirgecom.diffusion import diffusion_operator
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         quadrature_tag=quadrature_tag, return_grad_u=return_gradients, dd=wall_dd,
@@ -177,15 +184,6 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
-
-    from mirgecom.inviscid import inviscid_facial_flux_rusanov
-    from mirgecom.viscous import viscous_facial_flux_harmonic
-    inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
-    viscous_numerical_flux_func = viscous_facial_flux_harmonic
-    ns_op = partial(ns_operator, use_esdg=use_esdg,
-                    inviscid_numerical_flux_func=inviscid_numerical_flux_func,
-                    viscous_numerical_flux_func=viscous_numerical_flux_func)
-    update_wrapper(ns_op, ns_operator)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
@@ -591,8 +589,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
             fluid_state, wall_kappa, wall_temperature,
             time=t,
             return_gradients=return_gradients,
-            quadrature_tag=quadrature_tag,
-            ns_operator=ns_op)
+            quadrature_tag=quadrature_tag)
 
         if return_gradients:
             (
