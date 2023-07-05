@@ -1425,7 +1425,8 @@ def coupled_ns_heat_operator(
         fluid_gradient_numerical_flux_func=num_flux_central,
         return_gradients=False,
         ns_operator=ns_operator):
-    r"""Compute the RHS of the fluid and wall subdomains.
+    r"""
+    Compute the RHS of the fluid and wall subdomains.
 
     Augments *fluid_boundaries* and *wall_boundaries* with the boundaries for the
     fluid-wall interface that are needed to enforce continuity of temperature and
@@ -1531,18 +1532,6 @@ def coupled_ns_heat_operator(
         Callable function to return the numerical flux to be used when computing
         the temperature gradient in the fluid subdomain. Defaults to
         :class:`~mirgecom.flux.num_flux_central`.
-
-    inviscid_numerical_flux_func:
-
-        Callable function providing the face-normal flux to be used
-        for the divergence of the inviscid transport flux.  This defaults to
-        :func:`~mirgecom.inviscid.inviscid_facial_flux_rusanov`.
-
-    viscous_numerical_flux_func:
-
-        Callable function providing the face-normal flux to be used
-        for the divergence of the viscous transport flux.  This defaults to
-        :func:`~mirgecom.viscous.viscous_facial_flux_harmonic`.
 
     limiter_func:
 

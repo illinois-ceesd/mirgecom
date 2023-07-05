@@ -25,7 +25,6 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import pyopencl as cl
 from pytools.obj_array import make_obj_array
 from functools import partial
 
@@ -83,16 +82,9 @@ def _get_box_mesh(dim, a, b, n, t=None):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_overintegration=False, lazy=False,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None, use_esdg=False):
+def main(actx_class, use_esdg=False, use_overintegration=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -104,22 +96,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     timestepper = rk4_step
@@ -131,10 +114,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     current_step = 0
 
     # some i/o frequencies
-    nstatus = 10000
-    nviz = 100
-    nrestart = 100
-    nhealth = 100
+    nstatus = 1
+    nviz = 1
+    nrestart = 10
+    nhealth = 1
 
     # some geometry setup
     dim = 2
@@ -170,10 +153,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from meshmode.mesh.processing import rotate_mesh_around_axis
-    local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/4)
+    # from meshmode.mesh.processing import rotate_mesh_around_axis
+    # local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/4)
 
-    order = 4
+    order = 2
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              quadrature_order=order+2)
     nodes = actx.thaw(dcoll.nodes())
@@ -346,33 +329,32 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_health_check(state, dv, component_errors):
         health_error = False
-        # from mirgecom.simutil import check_naninf_local, check_range_local
-        from mirgecom.simutil import check_naninf_local
+        from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        # if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
-        #                                   1.00101e5), op="lor"):
-        #    health_error = True
-        #    from grudge.op import nodal_max, nodal_min
-        #    p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
-        #    p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
-        #    logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
+        if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
+                                          1.00101e5), op="lor"):
+            health_error = True
+            from grudge.op import nodal_max, nodal_min
+            p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+            p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
+            logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(dcoll, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        # if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
-        #                 op="lor"):
-        #    health_error = True
-        #    from grudge.op import nodal_max, nodal_min
-        #    t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
-        #    t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
-        #    logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
+        if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
+                        op="lor"):
+            health_error = True
+            from grudge.op import nodal_max, nodal_min
+            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
+            logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
-        exittol = 100.00
+        exittol = 0.1
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
@@ -498,8 +480,6 @@ if __name__ == "__main__":
         help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -518,8 +498,9 @@ if __name__ == "__main__":
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -528,9 +509,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration or args.esdg, lazy=lazy,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         use_esdg=args.esdg)
+    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg,
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

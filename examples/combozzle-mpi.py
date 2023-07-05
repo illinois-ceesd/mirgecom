@@ -27,10 +27,7 @@ import logging
 import time
 import yaml
 import numpy as np
-import pyopencl as cl
 from functools import partial
-
-from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
@@ -161,15 +158,11 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_overintegration=False,
-         use_profiling=False, casename=None, lazy=False,
-         rst_filename=None, actx_class=PyOpenCLArrayContext,
+def main(actx_class, rst_filename=None,
+         use_overintegration=False, casename=None,
          log_dependent=False, input_file=None,
          force_eval=True, use_esdg=False):
     """Drive example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -258,10 +251,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     grid_only = 0
     discr_only = 0
     inviscid_only = 0
-    inert_only = 1
+    inert_only = 0
     init_only = 0
-    single_gas_only = 1
-    nspecies = 0
+    single_gas_only = 0
+    nspecies = 7
     use_cantera = 0
 
     # }}}
@@ -601,19 +594,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         print(f"ACTX setup start: {time.ctime(time.time())}")
     comm.Barrier()
 
-    if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -702,7 +686,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     casename = f"{casename}-d{dim}p{order}e{global_nelements}n{nparts}"
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     if logmgr:
@@ -1270,8 +1254,6 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--esdg", action="store_true",
         help="use entropy-stable for inviscid terms")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -1295,8 +1277,9 @@ if __name__ == "__main__":
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -1314,10 +1297,9 @@ if __name__ == "__main__":
 
     print(f"Calling main: {time.ctime(time.time())}")
 
-    main(use_logmgr=args.log, use_leap=args.leap, input_file=input_file,
+    main(actx_class, input_file=input_file,
          use_overintegration=args.overintegration or args.esdg,
-         use_profiling=args.profiling, lazy=lazy,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
+         casename=casename, rst_filename=rst_filename,
          log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

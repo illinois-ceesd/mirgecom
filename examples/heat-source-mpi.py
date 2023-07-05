@@ -25,7 +25,6 @@ import logging
 
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
@@ -48,33 +47,21 @@ from logpyle import IntervalTimer, set_dt
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None, lazy=False,
-         rst_filename=None, use_overintegration=False):
+def main(actx_class, use_esdg=False,
+         use_overintegration=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Run the example."""
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
-
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     num_parts = comm.Get_size()
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
     mesh_dist = MPIMeshDistributor(comm)
@@ -203,8 +190,8 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
+    parser.add_argument("--overintegration", action="store_true",
+        help="turn on overintegration.")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -215,8 +202,9 @@ if __name__ == "__main__":
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -225,7 +213,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
-         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
+    main(actx_class, use_leap=args.leap,
+         use_overintegration=args.overintegration,
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

@@ -26,7 +26,6 @@ THE SOFTWARE.
 
 import logging
 import numpy as np
-import pyopencl as cl
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -120,16 +119,10 @@ def get_doublemach_mesh():
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, use_overintegration=False,
-         casename=None, rst_filename=None, actx_class=None, lazy=False,
-         use_esdg=False):
+def main(actx_class, use_esdg=False,
+         use_leap=False, use_overintegration=False,
+         casename=None, rst_filename=None):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -149,22 +142,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             os.makedirs(log_dir)
     comm.Barrier()
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=logname, mode="wo", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # Timestepping control
     current_step = 0
@@ -726,8 +710,6 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--esdg", action="store_true",
         help="use flux-differencing/entropy stable DG for inviscid computations.")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -746,9 +728,10 @@ if __name__ == "__main__":
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
+    from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=lazy,
-                                                    distributed=True)
+                                                    distributed=True,
+                                                    profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -757,9 +740,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
+    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         use_esdg=args.esdg, lazy=lazy,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
