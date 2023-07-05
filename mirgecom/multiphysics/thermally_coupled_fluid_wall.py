@@ -85,7 +85,6 @@ from mirgecom.boundary import (
     IsothermalSlipWallBoundary,
     IsothermalWallBoundary)
 from mirgecom.flux import num_flux_central
-from mirgecom.inviscid import inviscid_facial_flux_rusanov
 from mirgecom.viscous import viscous_facial_flux_harmonic
 from mirgecom.gas_model import (
     replace_fluid_state,
@@ -93,7 +92,7 @@ from mirgecom.gas_model import (
 )
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
-    ns_operator,
+    ns_operator
 )
 from mirgecom.diffusion import (
     grad_facial_flux_weighted,
@@ -1420,13 +1419,12 @@ def coupled_ns_heat_operator(
         wall_emissivity=None,
         sigma=None,
         ambient_temperature=None,
-        wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
         fluid_gradient_numerical_flux_func=num_flux_central,
-        inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
-        viscous_numerical_flux_func=viscous_facial_flux_harmonic,
-        return_gradients=False):
+        return_gradients=False,
+        wall_penalty_amount=None,
+        ns_operator=ns_operator):
     r"""
     Compute the RHS of the fluid and wall subdomains.
 
@@ -1535,18 +1533,6 @@ def coupled_ns_heat_operator(
         the temperature gradient in the fluid subdomain. Defaults to
         :class:`~mirgecom.flux.num_flux_central`.
 
-    inviscid_numerical_flux_func:
-
-        Callable function providing the face-normal flux to be used
-        for the divergence of the inviscid transport flux.  This defaults to
-        :func:`~mirgecom.inviscid.inviscid_facial_flux_rusanov`.
-
-    viscous_numerical_flux_func:
-
-        Callable function providing the face-normal flux to be used
-        for the divergence of the viscous transport flux.  This defaults to
-        :func:`~mirgecom.viscous.viscous_facial_flux_harmonic`.
-
     limiter_func:
 
         Callable function to be passed to
@@ -1646,8 +1632,6 @@ def coupled_ns_heat_operator(
     ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
-        inviscid_numerical_flux_func=inviscid_numerical_flux_func,
-        viscous_numerical_flux_func=viscous_numerical_flux_func,
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)

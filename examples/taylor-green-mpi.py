@@ -1,7 +1,7 @@
-"""Demonstrate acoustic pulse, and adiabatic slip wall."""
+"""Demonstratefl the inviscid Taylor-Green vortex problem."""
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2021 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -24,34 +24,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import logging
-from mirgecom.mpi import mpi_entry_point
 import numpy as np
+import logging
+
+from mirgecom.mpi import mpi_entry_point
+
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
 
-from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
-    get_sim_timestep,
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
-
-from mirgecom.integrators import rk4_step
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.integrators import lsrk54_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    LinearizedOutflowBoundary,
-    RiemannInflowBoundary,
-    PressureOutflowBoundary
-)
-from mirgecom.initializers import (
-    Uniform,
-    AcousticPulse
-)
+from mirgecom.initializers import InviscidTaylorGreenVortex
 from mirgecom.eos import IdealSingleGas
 from mirgecom.gas_model import (
     GasModel,
@@ -62,7 +52,7 @@ from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
-    logmgr_add_cl_device_info,
+    logmgr_add_device_name,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
@@ -77,8 +67,8 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_esdg=False,
-         use_overintegration=False, use_leap=False,
+def main(actx_class, order=1, t_final=1, resolution=4,
+         use_overintegration=False, use_esdg=False,
          casename=None, rst_filename=None):
     """Drive the example."""
     if casename is None:
@@ -102,24 +92,20 @@ def main(actx_class, use_esdg=False,
 
     # timestepping control
     current_step = 0
-    if use_leap:
-        from leap.rk import RK4MethodBuilder
-        timestepper = RK4MethodBuilder("state")
-    else:
-        timestepper = rk4_step
-    t_final = 0.1
+    timestepper = lsrk54_step
+    t_final = 5e-3
     current_cfl = 1.0
-    current_dt = .005
+    current_dt = 1e-3
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 5
-    nviz = 10
-    nhealth = 1
+    nstatus = 100000
+    nrestart = 100
+    nviz = 100
+    nhealth = 100
 
-    dim = 2
+    dim = 3
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -134,21 +120,19 @@ def main(actx_class, use_esdg=False,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        box_ll = -1
-        box_ur = 1
-        nel_1d = 16
+        box_ll = -np.pi
+        box_ur = np.pi
         generate_mesh = partial(generate_regular_rect_mesh,
-            a=(box_ll,)*dim, b=(box_ur,)*dim,
-            nelements_per_axis=(nel_1d,)*dim,
-            boundary_tag_to_face={
-                "outlet_L": ["+y"],
-                "outlet_R": ["-y", "+x"],
-                "inlet": ["-x"]})
+                                a=(box_ll,)*dim,
+                                b=(box_ur,) * dim,
+                                nelements_per_axis=(resolution,)*dim,
+                                periodic=(True,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
+    from grudge.dof_desc import DISCR_TAG_QUAD
+
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
@@ -160,7 +144,7 @@ def main(actx_class, use_esdg=False,
     vis_timer = None
 
     if logmgr:
-        logmgr_add_cl_device_info(logmgr, queue)
+        logmgr_add_device_name(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
         logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
@@ -177,45 +161,13 @@ def main(actx_class, use_esdg=False,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
+    eos = IdealSingleGas()
     gas_model = GasModel(eos=eos)
-    velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.1
-    orig = np.zeros(shape=(dim,))
-    initializer = Uniform(dim=dim, velocity=velocity)
-    uniform_state = initializer(nodes, eos=eos)
 
-    # Riemann inflow
-    from mirgecom.initializers import initialize_flow_solution
-    from mirgecom.utils import force_evaluation
+    # Periodic domain, no boundary conditions (yay!)
+    boundaries = {}
 
-    free_stream_cv = initialize_flow_solution(
-        actx, dcoll, gas_model, dd_bdry=BoundaryDomainTag("inlet"),
-        pressure=1.0, temperature=1.0, velocity=velocity)
-
-    inflow_freestream_state = make_fluid_state(cv=free_stream_cv,
-                                               gas_model=gas_model)
-    inflow_freestream_state = force_evaluation(actx, inflow_freestream_state)
-
-    def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
-        return inflow_freestream_state
-
-    riemann_inflow_bnd = RiemannInflowBoundary(
-        free_stream_state_func=_inflow_bnd_state_func)
-
-    # Linearized outflow
-    linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=1.0,
-        free_stream_velocity=velocity, free_stream_pressure=1.0)
-
-    # Pressure prescribed outflow boundary
-    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
-
-    # boundaries
-    boundaries = {BoundaryDomainTag("inlet"): riemann_inflow_bnd,
-                  BoundaryDomainTag("outlet_L"): linear_outflow_bnd,
-                  BoundaryDomainTag("outlet_R"): pressure_outflow_bnd}
-
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
+    initial_condition = InviscidTaylorGreenVortex()
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -226,13 +178,13 @@ def main(actx_class, use_esdg=False,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
-
-    current_state = make_fluid_state(current_cv, gas_model)
+        from mirgecom.simutil import force_evaluation
+        current_cv = force_evaluation(actx,
+                                      initial_condition(x_vec=nodes, eos=eos))
 
     visualizer = make_visualizer(dcoll)
 
-    initname = "pulse"
+    initname = "taylorgreen"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
@@ -244,6 +196,12 @@ def main(actx_class, use_esdg=False,
     if rank == 0:
         logger.info(init_message)
 
+    def _make_fluid_state(cv, tseed):
+        return make_fluid_state(cv=cv, gas_model=gas_model)
+
+    make_fluid_state_compiled = actx.compile(_make_fluid_state)
+    # current_state = make_fluid_state_compiled(current_cv, gas_model)
+
     def my_write_viz(step, t, state, dv=None):
         if dv is None:
             dv = eos.dependent_vars(state)
@@ -251,8 +209,7 @@ def main(actx_class, use_esdg=False,
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
-                      comm=comm)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
@@ -271,15 +228,14 @@ def main(actx_class, use_esdg=False,
 
     def my_health_check(pressure):
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
+        from mirgecom.simutil import check_naninf_local
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        fluid_state = make_fluid_state(state, gas_model)
+        fluid_state = make_fluid_state_compiled(state, gas_model)
         dv = fluid_state.dv
 
         try:
@@ -312,13 +268,11 @@ def main(actx_class, use_esdg=False,
             my_write_restart(step=step, t=t, state=state)
             raise
 
-        dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
-                              constant_cfl)
+        # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
+        #                      constant_cfl)
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
@@ -331,9 +285,6 @@ def main(actx_class, use_esdg=False,
                               boundaries=boundaries,
                               gas_model=gas_model, use_esdg=use_esdg,
                               quadrature_tag=quadrature_tag)
-
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-                                  current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -361,18 +312,24 @@ def main(actx_class, use_esdg=False,
 
 if __name__ == "__main__":
     import argparse
-    casename = "pulse"
+    casename = "taylor-green-vortex"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--order", default=3, type=int,
+        help="specify the polynomial order of the DG method")
+    parser.add_argument("--tfinal", default=20., type=float,
+        help="specify final time for the simulation")
+    parser.add_argument("--resolution", default=8, type=int,
+        help="resolution in each spatial direction")
     parser.add_argument("--overintegration", action="store_true",
-        help="use overintegration in the RHS computations")
+        help="use overintegration in the RHS computations"),
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--leap", action="store_true",
-        help="use leap timestepper")
-    parser.add_argument("--esdg", action="store_true",
-        help="use entropy-stable dg for inviscid terms.")
+    parser.add_argument("--log", action="store_true", default=True,
+        help="turn on logging")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
@@ -400,9 +357,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_esdg=args.esdg,
+    main(actx_class, order=args.order, t_final=args.tfinal,
+         resolution=args.resolution, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

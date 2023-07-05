@@ -27,9 +27,8 @@ THE SOFTWARE.
 import logging
 from mirgecom.mpi import mpi_entry_point
 import numpy as np
-from functools import partial
+from functools import partial, update_wrapper
 from pytools.obj_array import make_obj_array
-import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
@@ -79,7 +78,7 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-
+from mirgecom.navierstokes import ns_operator
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     add_interface_boundaries_no_grad,
     add_interface_boundaries,
@@ -162,13 +161,9 @@ def coupled_ns_heat_operator(
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_overintegration=False,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None, lazy=False):
+def main(actx_class, use_esdg=False, use_overintegration=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -180,22 +175,22 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    from mirgecom.viscous import viscous_facial_flux_harmonic
+    inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
+    viscous_numerical_flux_func = viscous_facial_flux_harmonic
+    ns_op = partial(ns_operator, use_esdg=use_esdg,
+                    inviscid_numerical_flux_func=inviscid_numerical_flux_func,
+                    viscous_numerical_flux_func=viscous_numerical_flux_func)
+    update_wrapper(ns_op, ns_operator)
 
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     current_step = 0
@@ -265,7 +260,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     order = 3
     dcoll = create_discretization_collection(
-        actx, volume_to_local_mesh, order=order)
+        actx, volume_to_local_mesh, order=order,
+        quadrature_order=order+2)
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -595,7 +591,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
             fluid_state, wall_kappa, wall_temperature,
             time=t,
             return_gradients=return_gradients,
-            quadrature_tag=quadrature_tag)
+            quadrature_tag=quadrature_tag,
+            ns_operator=ns_op)
 
         if return_gradients:
             (
@@ -662,20 +659,30 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable operator")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
+
     if args.profiling:
-        if args.lazy:
+        if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=args.lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=args.lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -684,9 +691,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_overintegration=args.overintegration,
-         use_leap=args.leap, use_profiling=args.profiling,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         lazy=args.lazy)
+    main(actx_class, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg,
+         use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

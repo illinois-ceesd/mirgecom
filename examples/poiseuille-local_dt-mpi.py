@@ -25,7 +25,6 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import pyopencl as cl
 from pytools.obj_array import make_obj_array
 from functools import partial
 
@@ -72,16 +71,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_overintegration=False, lazy=False,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None):
+def main(actx_class, use_esdg=False, use_overintegration=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -93,22 +85,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     timestepper = rk4_step
@@ -433,7 +416,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
-                           state=fluid_state, time=t,
+                           state=fluid_state, time=t, use_esdg=use_esdg,
                            quadrature_tag=quadrature_tag)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
@@ -490,17 +473,27 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+    lazy = args.lazy or args.esdg
 
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -509,8 +502,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap, use_profiling=args.profiling,
-         use_overintegration=args.overintegration, lazy=lazy,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg,
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

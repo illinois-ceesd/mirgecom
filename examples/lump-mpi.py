@@ -25,9 +25,9 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import pyopencl as cl
 from functools import partial
 
+from grudge.dof_desc import DISCR_TAG_QUAD
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 
@@ -43,7 +43,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedFluidBoundary
-from mirgecom.initializers import Lump
+from mirgecom.initializers import Lump, Uniform  # noqa
 from mirgecom.eos import IdealSingleGas
 
 from logpyle import IntervalTimer, set_dt
@@ -66,12 +66,10 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None, lazy=False,
-         rst_filename=None):
+def main(actx_class, use_esdg=False,
+         use_overintegration=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -83,22 +81,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     if use_leap:
@@ -106,7 +95,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.01
+    t_final = .005
     current_cfl = 1.0
     current_dt = .001
     current_t = 0
@@ -149,6 +138,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
+
     vis_timer = None
 
     if logmgr:
@@ -175,6 +169,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     orig = np.zeros(shape=(dim,))
     vel[:dim] = 1.0
     initializer = Lump(dim=dim, center=orig, velocity=vel)
+    # initializer = Uniform(dim=dim, velocity=vel)
+
     from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos)
 
@@ -248,10 +244,13 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_health_check(dv, state, exact):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", dv.pressure) \
-           or check_range_local(dcoll, "vol", dv.pressure, .9999999999, 1.00000001):
+        if check_naninf_local(dcoll, "vol", dv.pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
+
+        if check_range_local(dcoll, "vol", dv.pressure, .9999999999, 1.00000001):
+            health_error = True
+            logger.info(f"{rank=}: Pressure range violation.")
 
         from mirgecom.simutil import compare_fluid_solutions
         component_errors = compare_fluid_solutions(dcoll, state, exact)
@@ -331,7 +330,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return euler_operator(dcoll, state=fluid_state, time=t,
-                              boundaries=boundaries, gas_model=gas_model)
+                              boundaries=boundaries, gas_model=gas_model,
+                              quadrature_tag=quadrature_tag, use_esdg=use_esdg)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -373,20 +373,31 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable Euler operator")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use over-integration")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
+
+    from warnings import warn
+    if args.esdg:
+        if not args.lazy:
+            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    lazy = args.lazy or args.esdg
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -395,7 +406,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap, lazy=lazy,
-         use_profiling=args.profiling, casename=casename, rst_filename=rst_filename)
+    main(actx_class, use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename,
+         use_esdg=args.esdg, use_overintegration=args.esdg or args.overintegration)
 
 # vim: foldmethod=marker

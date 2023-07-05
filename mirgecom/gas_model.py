@@ -352,7 +352,8 @@ def make_fluid_state(cv, gas_model, temperature_seed=None,
     return FluidState(cv=cv, dv=dv)
 
 
-def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
+def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
+                        entropy_stable=False):
     """Project a fluid state onto a boundary consistent with the gas model.
 
     If required by the gas model, (e.g. gas is a mixture), this routine will
@@ -396,9 +397,20 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
         Thermally consistent fluid state
     """
     cv_sd = op.project(dcoll, src, tgt, state.cv)
+
     temperature_seed = None
     if state.is_mixture:
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
+
+    if entropy_stable:
+        temp_state = make_fluid_state(cv=cv_sd, gas_model=gas_model,
+                                      temperature_seed=temperature_seed,
+                                      limiter_func=limiter_func, limiter_dd=tgt)
+        gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
+        # if isinstance(gamma, DOFArray):
+        #    gamma = op.project(dcoll, src, tgt, gamma)
+        ev_sd = conservative_to_entropy_vars(gamma, temp_state)
+        cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
 
     smoothness_mu = None
     if state.dv.smoothness_mu is not None:
@@ -743,3 +755,120 @@ def replace_fluid_state(
         smoothness_beta=state.smoothness_beta,
         limiter_func=limiter_func,
         limiter_dd=limiter_dd)
+
+
+def make_entropy_projected_fluid_state(
+        discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model):
+    """Projects the entropy vars to target manifold, computes the CV from that."""
+    from grudge.interpolation import volume_and_surface_quadrature_interpolation
+
+    # Interpolate to the volume and surface (concatenated) quadrature
+    # discretizations: v = [v_vol, v_surf]
+    ev_quad = volume_and_surface_quadrature_interpolation(
+        discr, dd_vol, dd_faces, entropy_vars)
+
+    temperature_seed = None
+    if state.is_mixture:
+        temperature_seed = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, state.temperature)
+        gamma = volume_and_surface_quadrature_interpolation(
+            discr, dd_vol, dd_faces, gamma)
+
+    # Convert back to conserved varaibles and use to make the new fluid state
+    cv_modified = entropy_to_conservative_vars(gamma, ev_quad)
+
+    return make_fluid_state(cv=cv_modified,
+                            gas_model=gas_model,
+                            temperature_seed=temperature_seed)
+
+
+def conservative_to_entropy_vars(gamma, state):
+    """Compute the entropy variables from conserved variables.
+
+    Converts from conserved variables (density, momentum, total energy)
+    into entropy variables.
+
+    Parameters
+    ----------
+    state: :class:`~mirgecom.gas_model.FluidState`
+        The full fluid conserved and thermal state
+
+    Returns
+    -------
+    ConservedVars
+        The entropy variables
+    """
+    from mirgecom.fluid import make_conserved
+
+    dim = state.dim
+    actx = state.array_context
+
+    rho = state.mass_density
+    u = state.velocity
+    p = state.pressure
+    y_species = state.species_mass_fractions
+    # y_species = actx.np.where(actx.np.greater(y_species, 0.), y_species, 0.0)
+    # spec_mass_test = state.species_mass_fractions
+
+    u_square = np.dot(u, u)
+    s = actx.np.log(p) - gamma*actx.np.log(rho)
+    rho_p = rho / p
+    # rho_species_p = rho_species / p / (gamma - 1)
+    ev_mass = ((gamma - s) / (gamma - 1)) - 0.5 * rho_p * u_square
+    # ev_spec = -s/(gamma - 1) + y_species*ev_mass
+    ev_spec = y_species / (gamma - 1)
+    # return make_conserved(dim, mass=ev_mass, energy=-rho_p, momentum=rho_p * u,
+    #                      species_mass=ev_mass*y_species/(gamma-1))
+    return make_conserved(dim, mass=ev_mass, energy=-rho_p, momentum=rho_p * u,
+                          species_mass=ev_spec)
+
+
+def entropy_to_conservative_vars(gamma, ev: ConservedVars):
+    """Compute the conserved variables from entropy variables *ev*.
+
+    Converts from entropy variables into conserved variables
+    (density, momentum, total energy).
+
+    Parameters
+    ----------
+    ev: ConservedVars
+        The entropy variables
+
+    Returns
+    -------
+    ConservedVars
+        The fluid conserved variables
+    """
+    from mirgecom.fluid import make_conserved
+
+    dim = ev.dim
+    actx = ev.array_context
+    # See Hughes, Franca, Mallet (1986) A new finite element
+    # formulation for CFD: (DOI: 10.1016/0045-7825(86)90127-1)
+    inv_gamma_minus_one = 1/(gamma - 1)
+
+    # Convert to entropy `-rho * s` used by Hughes, France, Mallet (1986)
+    ev_state = ev * (gamma - 1)
+    v1 = ev_state.mass
+    v234 = ev_state.momentum
+    v5 = ev_state.energy
+    v6ns = ev_state.species_mass
+    # spec_mod = actx.np.where(actx.np.greater(v6ns, 0.), v6ns, 0.0)
+
+    v_square = np.dot(v234, v234)
+    s = gamma - v1 + v_square/(2*v5)
+    # s_species = gamma - v6ns + v_square/(2*v5)
+    iota = ((gamma - 1) / (-v5)**gamma)**(inv_gamma_minus_one)
+    rho_iota = iota * actx.np.exp(-s * inv_gamma_minus_one)
+    # rho_iota_species = iota * actx.np.exp(-s_species * inv_gamma_minus_one)
+    # spec_mod = -rho_iota_species * v5 * v6ns
+    mass = -rho_iota * v5
+    spec_mass = mass * v6ns
+
+    return make_conserved(
+        dim,
+        mass=mass,
+        energy=rho_iota * (1 - v_square/(2*v5)),
+        momentum=rho_iota * v234,
+        species_mass=spec_mass
+    )
