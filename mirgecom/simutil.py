@@ -93,6 +93,15 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     return nnodes
 
 def get_box_mesh(dim,a,b,n, t=None, periodic=None):
+    """
+    Creates a rectangular "box" like mesh using function generate_regular_rect_mesh
+
+    Ensures parameters needed for generate_regular_rect_mesh are satisfied
+    a,b,n,periodic are tuples of dimension = dim and are converted if not in this format
+
+    bttf is a list of all dimensions in the problem in both positive and negative directions (x,-x...)
+    depends on value of dim
+    """
     if periodic is None:
         periodic = (False,)*dim
     if np.isscalar(a):
