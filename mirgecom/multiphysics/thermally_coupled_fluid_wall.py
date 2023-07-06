@@ -1398,7 +1398,7 @@ def coupled_ns_heat_operator(
     my_ns_operator = partial(ns_operator,
         inviscid_numerical_flux_func=inviscid_numerical_flux_func,
         viscous_numerical_flux_func=viscous_numerical_flux_func)
-    ns_result = ns_operator(
+    ns_result = my_ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         return_gradients=return_gradients,
@@ -1576,7 +1576,7 @@ def basic_coupled_ns_heat_operator(
 
     my_ns_operator = partial(ns_operator,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic)
-    ns_result = ns_operator(
+    ns_result = my_ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         return_gradients=return_gradients,
