@@ -89,6 +89,7 @@ from mirgecom.gas_model import (
 )
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
+    ns_operator,
 )
 from mirgecom.diffusion import (
     grad_facial_flux_weighted,
@@ -1394,8 +1395,7 @@ def coupled_ns_heat_operator(
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
-    from mirgecom.navierstokes import ns_operator as general_ns_operator
-    ns_operator = partial(general_ns_operator,
+    my_ns_operator = partial(ns_operator,
         inviscid_numerical_flux_func=inviscid_numerical_flux_func,
         viscous_numerical_flux_func=viscous_numerical_flux_func)
     ns_result = ns_operator(
@@ -1574,8 +1574,7 @@ def basic_coupled_ns_heat_operator(
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
-    from mirgecom.navierstokes import ns_operator as general_ns_operator
-    ns_operator = partial(general_ns_operator,
+    my_ns_operator = partial(ns_operator,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic)
     ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
