@@ -20,11 +20,16 @@ additional radiation sink term in the heat flux
         -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n}
         + \epsilon \sigma (T^4 - T_\text{ambient}^4).
 
-Helper Functions
-^^^^^^^^^^^^^^^^
+Boundary Setup Functions
+^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: add_interface_boundaries_no_grad
 .. autofunction:: add_interface_boundaries
+
+Basic Coupled Operators
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: basic_coupled_ns_heat_operator
 
 Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^
@@ -63,6 +68,7 @@ THE SOFTWARE.
 from dataclasses import dataclass, replace
 import numpy as np
 from abc import abstractmethod
+from functools import partial
 
 from arraycontext import dataclass_array_container
 from meshmode.dof_array import DOFArray
@@ -92,7 +98,7 @@ from mirgecom.gas_model import (
 )
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
-    ns_operator
+    ns_operator,
 )
 from mirgecom.diffusion import (
     grad_facial_flux_weighted,
@@ -1308,7 +1314,7 @@ def coupled_grad_t_operator(
     from warnings import warn
     warn(
         "coupled_grad_t_operator is deprecated and will disappear in Q3 2023. "
-        "Set up interface boundaries explicitly via"
+        "Set up interface boundaries explicitly via "
         ":func:`add_interface_boundaries_no_grad` and include them when calling the "
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
@@ -1514,7 +1520,7 @@ def coupled_ns_heat_operator(
     from warnings import warn
     warn(
         "coupled_ns_heat_operator is deprecated and will disappear in Q3 2023. "
-        "Set up interface boundaries explicitly via"
+        "Set up interface boundaries explicitly via "
         ":func:`add_interface_boundaries` and include them when calling the "
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
@@ -1603,12 +1609,226 @@ def coupled_ns_heat_operator(
             quadrature_tag=quadrature_tag)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
+
     ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
+
+    diffusion_result = diffusion_operator(
+        dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
+        penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
+        return_grad_u=return_gradients, dd=wall_dd, grad_u=wall_grad_temperature,
+        comm_tag=_WallOperatorTag)
+
+    if return_gradients:
+        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
+        wall_rhs, wall_grad_temperature = diffusion_result
+        return (
+            fluid_rhs, wall_rhs, fluid_grad_cv, fluid_grad_temperature,
+            wall_grad_temperature)
+    else:
+        return ns_result, diffusion_result
+
+
+def basic_coupled_ns_heat_operator(
+        dcoll,
+        gas_model,
+        fluid_dd, wall_dd,
+        fluid_boundaries, wall_boundaries,
+        fluid_state, wall_kappa, wall_temperature,
+        *,
+        time=0.,
+        interface_noslip=True,
+        interface_radiation=False,
+        wall_emissivity=None,
+        sigma=None,
+        ambient_temperature=None,
+        wall_penalty_amount=None,
+        quadrature_tag=DISCR_TAG_BASE,
+        limiter_func=None,
+        return_gradients=False,
+        use_esdg=False):
+    r"""
+    Simple implementation of a thermally-coupled fluid/wall operator.
+
+    Computes the RHS for a two-volume domain coupled by temperature and heat flux,
+    by augmenting *fluid_boundaries* and *wall_boundaries* with the boundaries for
+    the fluid-wall interface and calling the respective NS/diffusion operators.
+
+    Parameters
+    ----------
+
+    dcoll: class:`~grudge.discretization.DiscretizationCollection`
+
+        A discretization collection encapsulating the DG elements
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    fluid_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the fluid volume.
+
+    wall_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the wall volume.
+
+    fluid_boundaries:
+
+        Dictionary of boundary objects for the fluid subdomain, one for each
+        :class:`~grudge.dof_desc.BoundaryDomainTag` that represents a domain
+        boundary.
+
+    wall_boundaries:
+
+        Dictionary of boundary objects for the wall subdomain, one for each
+        :class:`~grudge.dof_desc.BoundaryDomainTag` that represents a domain
+        boundary.
+
+    fluid_state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state and dependent
+        quantities for the fluid volume.
+
+    wall_kappa: float or :class:`meshmode.dof_array.DOFArray`
+
+        Thermal conductivity for the wall volume.
+
+    wall_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Temperature for the wall volume.
+
+    time:
+
+        Time
+
+    interface_noslip: bool
+
+        If `True`, interface boundaries on the fluid side will be treated as
+        no-slip walls. If `False` they will be treated as slip walls.
+
+    interface_radiation: bool
+
+        If `True`, interface includes a radiation sink term in the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
+        for details. Additional arguments *wall_emissivity*, *sigma*, and
+        *ambient_temperature* are required if enabled.
+
+    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
+
+        Emissivity of the wall material.
+
+    sigma: float
+
+        Stefan-Boltzmann constant.
+
+    ambient_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Ambient temperature of the environment.
+
+    wall_penalty_amount: float
+
+        Coefficient $c$ for the interior penalty on the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
+        for details. Not used if *interface_radiation* is `True`.
+
+    quadrature_tag:
+
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    limiter_func:
+
+        Callable function to be passed to
+        :func:`~mirgecom.gas_model.make_operator_fluid_states`
+        that filters or limits the produced fluid states.  This is used to keep
+        species mass fractions in physical and realizable states, for example.
+
+    use_esdg: bool
+
+        If `True`, use the entropy-stable version of the Navier-Stokes operator.
+
+    Returns
+    -------
+
+        The tuple `(fluid_rhs, wall_rhs)`.
+    """
+    if wall_penalty_amount is None:
+        # FIXME: After verifying the form of the penalty term, figure out what value
+        # makes sense to use as a default here
+        wall_penalty_amount = 0.05
+
+    fluid_boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in fluid_boundaries.items()}
+    wall_boundaries = {
+        as_dofdesc(bdtag).domain_tag: bdry
+        for bdtag, bdry in wall_boundaries.items()}
+
+    # Include boundaries for the fluid-wall interface; no temperature gradient
+    # yet because we need to compute it
+    fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
+        add_interface_boundaries_no_grad(
+            dcoll,
+            gas_model,
+            fluid_dd, wall_dd,
+            fluid_state, wall_kappa, wall_temperature,
+            fluid_boundaries, wall_boundaries,
+            interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
+            quadrature_tag=quadrature_tag)
+
+    # Get the operator fluid states
+    fluid_operator_states_quad = make_operator_fluid_states(
+        dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
+        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag,
+        limiter_func=limiter_func)
+
+    # Compute the temperature gradient for both subdomains
+    fluid_grad_temperature = fluid_grad_t_operator(
+        dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
+        time=time, quadrature_tag=quadrature_tag,
+        dd=fluid_dd, operator_states_quad=fluid_operator_states_quad,
+        comm_tag=_FluidGradTag)
+    wall_grad_temperature = wall_grad_t_operator(
+        dcoll, wall_kappa, wall_all_boundaries_no_grad, wall_temperature,
+        quadrature_tag=quadrature_tag, dd=wall_dd, comm_tag=_WallGradTag)
+
+    # Include boundaries for the fluid-wall interface, now with the temperature
+    # gradient
+    fluid_all_boundaries, wall_all_boundaries = \
+        add_interface_boundaries(
+            dcoll,
+            gas_model,
+            fluid_dd, wall_dd,
+            fluid_state, wall_kappa, wall_temperature,
+            fluid_grad_temperature, wall_grad_temperature,
+            fluid_boundaries, wall_boundaries,
+            interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
+            wall_emissivity=wall_emissivity,
+            sigma=sigma,
+            ambient_temperature=ambient_temperature,
+            wall_penalty_amount=wall_penalty_amount,
+            quadrature_tag=quadrature_tag)
+
+    # Compute the subdomain NS/diffusion operators using the augmented boundaries
+
+    my_ns_operator = partial(ns_operator,
+        viscous_numerical_flux_func=viscous_facial_flux_harmonic,
+        use_esdg=use_esdg)
+    ns_result = my_ns_operator(
+        dcoll, gas_model, fluid_state, fluid_all_boundaries,
+        time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
+        return_gradients=return_gradients,
+        operator_states_quad=fluid_operator_states_quad,
+        grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
+
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,

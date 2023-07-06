@@ -50,6 +50,9 @@ from mirgecom.boundary import (
     AdiabaticNoslipWallBoundary,
     IsothermalWallBoundary,
 )
+from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
+    basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
+)
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -68,82 +71,6 @@ def get_box_mesh(dim, a, b, n):
     from meshmode.mesh.generation import generate_regular_rect_mesh
     return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
         nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
-
-
-def coupled_ns_heat_operator(
-        dcoll,
-        gas_model,
-        fluid_dd, wall_dd,
-        fluid_boundaries, wall_boundaries,
-        fluid_state, wall_kappa, wall_temperature,
-        *,
-        time=0.,
-        interface_radiation=False,
-        sigma=None,
-        ambient_temperature=None,
-        wall_emissivity=None,
-        quadrature_tag=DISCR_TAG_BASE):
-
-    # Insert the interface boundaries for computing the gradient
-    from mirgecom.multiphysics.thermally_coupled_fluid_wall import \
-        add_interface_boundaries_no_grad
-    fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
-        add_interface_boundaries_no_grad(
-            dcoll,
-            gas_model,
-            fluid_dd, wall_dd,
-            fluid_state, wall_kappa, wall_temperature,
-            fluid_boundaries, wall_boundaries,
-            interface_radiation=interface_radiation)
-
-    # Get the operator fluid states
-    from mirgecom.gas_model import make_operator_fluid_states
-    fluid_operator_states_quad = make_operator_fluid_states(
-        dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
-        quadrature_tag, dd=fluid_dd)
-
-    # Compute the temperature gradient for both subdomains
-    from mirgecom.navierstokes import grad_t_operator as fluid_grad_t_operator
-    from mirgecom.diffusion import grad_operator as wall_grad_t_operator
-    fluid_grad_temperature = fluid_grad_t_operator(
-        dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
-        time=time, quadrature_tag=quadrature_tag,
-        dd=fluid_dd, operator_states_quad=fluid_operator_states_quad)
-    wall_grad_temperature = wall_grad_t_operator(
-        dcoll, wall_kappa, wall_all_boundaries_no_grad, wall_temperature,
-        quadrature_tag=quadrature_tag, dd=wall_dd)
-
-    # Insert boundaries for the fluid-wall interface, now with the temperature
-    # gradient
-    from mirgecom.multiphysics.thermally_coupled_fluid_wall import \
-        add_interface_boundaries
-    fluid_all_boundaries, wall_all_boundaries = \
-        add_interface_boundaries(
-            dcoll,
-            gas_model,
-            fluid_dd, wall_dd,
-            fluid_state, wall_kappa, wall_temperature,
-            fluid_grad_temperature, wall_grad_temperature,
-            fluid_boundaries, wall_boundaries,
-            interface_radiation=interface_radiation,
-            sigma=sigma,
-            ambient_temperature=ambient_temperature,
-            wall_emissivity=wall_emissivity)
-
-    # Compute the subdomain NS/diffusion operators using the augmented boundaries
-    from mirgecom.navierstokes import ns_operator
-    from mirgecom.diffusion import diffusion_operator
-    ns_result = ns_operator(
-        dcoll, gas_model, fluid_state, fluid_all_boundaries,
-        time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
-        operator_states_quad=fluid_operator_states_quad,
-        grad_t=fluid_grad_temperature)
-    diffusion_result = diffusion_operator(
-        dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
-        quadrature_tag=quadrature_tag, dd=wall_dd,
-        grad_u=wall_grad_temperature)
-
-    return ns_result, diffusion_result
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
