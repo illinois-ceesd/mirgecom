@@ -1819,8 +1819,7 @@ def basic_coupled_ns_heat_operator(
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
-    from mirgecom.navierstokes import ns_operator as general_ns_operator
-    my_ns_operator = partial(general_ns_operator,
+    my_ns_operator = partial(ns_operator,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
         use_esdg=use_esdg)
     ns_result = my_ns_operator(
