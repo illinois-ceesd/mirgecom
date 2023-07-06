@@ -1117,7 +1117,7 @@ def coupled_grad_t_operator(
     from warnings import warn
     warn(
         "coupled_grad_t_operator is deprecated and will disappear in Q3 2023. "
-        "Set up interface boundaries explicitly via"
+        "Set up interface boundaries explicitly via "
         ":func:`add_interface_boundaries_no_grad` and include them when calling the "
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
@@ -1312,7 +1312,7 @@ def coupled_ns_heat_operator(
     from warnings import warn
     warn(
         "coupled_ns_heat_operator is deprecated and will disappear in Q3 2023. "
-        "Set up interface boundaries explicitly via"
+        "Set up interface boundaries explicitly via "
         ":func:`add_interface_boundaries` and include them when calling the "
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
