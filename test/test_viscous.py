@@ -182,7 +182,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         npts_axis = nfac*(11, 21)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        mesh = _get_box_mesh(2, a=box_ll, b=box_ur, n=npts_axis)
+        mesh = get_box_mesh(2, a=box_ll, b=box_ur, n=npts_axis)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
