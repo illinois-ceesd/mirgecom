@@ -270,7 +270,7 @@ class FluidManufacturedSolution(FluidCase):
         nx = (n,)*self._dim
         a = tuple(-lx_i/2 for lx_i in self._lx)
         b = tuple(lx_i/2 for lx_i in self._lx)
-        return _get_box_mesh(self.dim, a, b, nx, periodic)
+        return get_box_mesh(self.dim, a, b, nx, periodic)
 
     @abstractmethod
     def get_solution(self, x, t):
@@ -375,7 +375,7 @@ class ShearFlow(FluidManufacturedSolution):
         a = (0,)*self._dim
         b = (1,)*self._dim
         periodic = (False,)*self._dim
-        return _get_box_mesh(self._dim, a, b, nx, periodic=periodic)
+        return get_box_mesh(self._dim, a, b, nx, periodic=periodic)
 
     def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
@@ -688,7 +688,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         b = (1,)*dim
 
         print(f"{nx=}")
-        mesh = _get_box_mesh(dim, a, b, n=nx)
+        mesh = get_box_mesh(dim, a, b, n=nx)
 
         dcoll = create_discretization_collection(actx, mesh, order)
         from grudge.dt_utils import h_max_from_volume
