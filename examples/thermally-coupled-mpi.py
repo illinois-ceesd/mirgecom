@@ -29,7 +29,6 @@ from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 from pytools.obj_array import make_obj_array
-import pyopencl as cl
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
@@ -42,9 +41,7 @@ from grudge.dof_desc import (
     DISCR_TAG_QUAD,
     DOFDesc,
 )
-from mirgecom.diffusion import (
-    NeumannDiffusionBoundary,
-)
+from mirgecom.diffusion import NeumannDiffusionBoundary
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -61,7 +58,7 @@ from mirgecom.transport import SimpleTransport
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import (
     GasModel,
-    make_fluid_state
+    make_fluid_state,
 )
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging
@@ -72,9 +69,8 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_ns_heat_operator,
+    basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
 
 logger = logging.getLogger(__name__)
@@ -87,13 +83,11 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(ctx_factory=cl.create_some_context, use_logmgr=True,
+def main(use_logmgr=True,
          use_overintegration=False,
-         use_leap=False, use_profiling=False, casename=None,
-         rst_filename=None, actx_class=None, lazy=False):
+         use_leap=False, casename=None,
+         rst_filename=None, actx_class=None):
     """Drive the example."""
-    cl_ctx = ctx_factory()
-
     if casename is None:
         casename = "mirgecom"
 
@@ -108,19 +102,10 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     logmgr = initialize_logmgr(use_logmgr,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     current_step = 0
@@ -511,13 +496,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_rhs(t, state, return_gradients=False):
         fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
         wall_temperature = state[1]
+
         ns_heat_result = coupled_ns_heat_operator(
             dcoll,
             gas_model,
             dd_vol_fluid, dd_vol_wall,
             fluid_boundaries, wall_boundaries,
-            fluid_state,
-            wall_kappa, wall_temperature,
+            fluid_state, wall_kappa, wall_temperature,
             time=t,
             return_gradients=return_gradients,
             quadrature_tag=quadrature_tag)
@@ -599,8 +584,9 @@ if __name__ == "__main__":
         if args.lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=args.lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=args.lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -610,8 +596,8 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(use_logmgr=args.log, use_overintegration=args.overintegration,
-         use_leap=args.leap, use_profiling=args.profiling,
+         use_leap=args.leap,
          casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         lazy=args.lazy)
+         )
 
 # vim: foldmethod=marker
