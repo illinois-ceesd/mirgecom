@@ -51,7 +51,7 @@ from mirgecom.boundary import (
     IsothermalWallBoundary,
 )
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_ns_heat_operator
+    basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context

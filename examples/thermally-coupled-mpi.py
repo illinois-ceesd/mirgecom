@@ -27,7 +27,7 @@ THE SOFTWARE.
 import logging
 from mirgecom.mpi import mpi_entry_point
 import numpy as np
-from functools import partial, update_wrapper
+from functools import partial
 from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -41,9 +41,7 @@ from grudge.dof_desc import (
     DISCR_TAG_QUAD,
     DOFDesc,
 )
-from mirgecom.diffusion import (
-    NeumannDiffusionBoundary,
-)
+from mirgecom.diffusion import NeumannDiffusionBoundary
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -60,7 +58,7 @@ from mirgecom.transport import SimpleTransport
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import (
     GasModel,
-    make_fluid_state
+    make_fluid_state,
 )
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging
@@ -71,9 +69,8 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-from mirgecom.navierstokes import ns_operator
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_ns_heat_operator,
+    basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
 
 logger = logging.getLogger(__name__)
@@ -102,15 +99,6 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
-
-    from mirgecom.inviscid import inviscid_facial_flux_rusanov
-    from mirgecom.viscous import viscous_facial_flux_harmonic
-    inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
-    viscous_numerical_flux_func = viscous_facial_flux_harmonic
-    ns_op = partial(ns_operator, use_esdg=use_esdg,
-                    inviscid_numerical_flux_func=inviscid_numerical_flux_func,
-                    viscous_numerical_flux_func=viscous_numerical_flux_func)
-    update_wrapper(ns_op, ns_operator)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
@@ -507,17 +495,17 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     def my_rhs(t, state, return_gradients=False):
         fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
         wall_temperature = state[1]
+
         ns_heat_result = coupled_ns_heat_operator(
             dcoll,
             gas_model,
             dd_vol_fluid, dd_vol_wall,
             fluid_boundaries, wall_boundaries,
-            fluid_state,
-            wall_kappa, wall_temperature,
+            fluid_state, wall_kappa, wall_temperature,
             time=t,
-            return_gradients=return_gradients,
             quadrature_tag=quadrature_tag,
-            ns_operator=ns_op)
+            use_esdg=use_esdg,
+            return_gradients=return_gradients)
 
         if return_gradients:
             (
