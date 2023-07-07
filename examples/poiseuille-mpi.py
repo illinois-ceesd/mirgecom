@@ -155,7 +155,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         npts_axis = (npts_x, npts_y)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        generate_mesh = partial(_get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
+        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
