@@ -618,7 +618,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         rst_step = restart_data["step"]
         rst_order = restart_data["order"]
     else:  # generate the grid from scratch
-        generate_mesh = partial(_get_box_mesh, dim, a=box_ll, b=box_ur, n=npts_axis,
+        generate_mesh = partial(get_box_mesh, dim, a=box_ll, b=box_ur, n=npts_axis,
                                 periodic=periodic)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
