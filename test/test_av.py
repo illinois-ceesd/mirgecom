@@ -402,7 +402,7 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     npts_geom = 17
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
     from mirgecom.discretization import create_discretization_collection
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
