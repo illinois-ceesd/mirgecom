@@ -50,7 +50,7 @@ from mirgecom.gas_model import (
     make_fluid_state_trace_pairs
 )
 import grudge.op as op
-from mirgecom.simutil import get_box_mesh
+from mirgecom.simutil import 
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -82,7 +82,7 @@ def test_normal_axes_utility(actx_factory, dim):
     npts_geom = 6
     a = -.01
     b = .01
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -165,7 +165,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
     npts_geom = 17
     a = -1.0
     b = 1.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -334,7 +334,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
     npts_geom = 17
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -450,7 +450,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
     npts_geom = 17
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -617,7 +617,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
     npts_geom = 17
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -799,7 +799,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
     npts_geom = 17
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -1222,7 +1222,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     npts_geom = 17
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
