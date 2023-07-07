@@ -167,7 +167,7 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory):
         npts_axis = (nfac*4,)*dim
         box_ll = (0,)*dim
         box_ur = (1,)*dim
-        mesh = _get_box_mesh(dim, a=box_ll, b=box_ur, n=npts_axis)
+        mesh = get_box_mesh(dim, a=box_ll, b=box_ur, n=npts_axis)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
