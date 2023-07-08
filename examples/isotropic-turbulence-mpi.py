@@ -58,7 +58,7 @@ from mirgecom.logging_quantities import (
 )
 
 logger = logging.getLogger(__name__)
-
+logger.setLevel(logging.DEBUG)
 
 class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
@@ -89,7 +89,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     """Drive the example."""
     if actx_class is None:
         raise RuntimeError("Array context class missing.")
-
+    print(actx_class)
     cl_ctx = ctx_factory()
 
     if casename is None:
@@ -133,7 +133,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     constant_cfl = False
 
     # some i/o frequencies
-    nrestart = 20
+    nrestart = 200
     nstatus = 1
     nviz = 20
     nhealth = -1
@@ -161,7 +161,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         periodic = (True,)*dim
 
         n_refine = 1
-        pts_per_axis = 8
+        pts_per_axis = 16
         npts_axis = tuple([n_refine * pts_per_axis for _ in range(dim)])
         # npts_axis = (npts_x, npts_y)
         box_ll = left_boundary_location
@@ -192,7 +192,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     eos = IdealSingleGas()
-    pathi = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_Ma0.3_nonvis"
+    pathi = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3/ESDG"
     initializer = IsotropicTurbulence(coordinate_path=pathi+"/coordinate.txt",
                                       velocity_path=pathi+"/velocity.txt")
     gas_model = GasModel(eos=eos)
@@ -215,6 +215,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         init_dcoll = create_discretization_collection(actx, local_mesh,
                                                  order=init_order)
         init_nodes = actx.thaw(init_dcoll.nodes())
+        actx = (init_nodes[0]).array_context
+        data_x = actx.to_numpy(init_nodes[0][0])
+        data_y = actx.to_numpy(init_nodes[1][0])
+        data_z = actx.to_numpy(init_nodes[2][0])   
+        np.savetxt(pathi+"/coord/x/rank={RANK}".format(RANK=rank),data_x)
+        np.savetxt(pathi+"/coord/y/rank={RANK}".format(RANK=rank),data_y)
+        np.savetxt(pathi+"/coord/z/rank={RANK}".format(RANK=rank),data_z)
+
         # Set the current state from time 0
         low_order_cv = initializer(init_nodes, eos=eos)
         from meshmode.discretization.connection import make_same_mesh_connection
@@ -282,6 +290,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 + ", ".join("%.3g" % en for en in component_errors))
     def my_write_low_order_data(t,state):
         from meshmode.discretization.connection import make_same_mesh_connection
+
+
         connection2 = make_same_mesh_connection(actx, init_dcoll.discr_from_dd("vol"),
                                                 dcoll.discr_from_dd("vol"))
         currstate = connection2(state)
@@ -290,13 +300,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         momx = actx.to_numpy(currstate.momentum)[0][0]
         momy = actx.to_numpy(currstate.momentum)[1][0]
         momz = actx.to_numpy(currstate.momentum)[2][0]
-        path = "/home/zirui/Desktop/Main/Turbulence/RogalloProcedure/N8_Ma0.3_nonvis/ESDG_time_data"
+        path = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3/ESDG"
 
-        np.savetxt(path+"/mass/t={}".format(t),mass)
-        np.savetxt(path+"/energy/t={}".format(t),energy)
-        np.savetxt(path+"/momx/t={}".format(t),momx)
-        np.savetxt(path+"/momy/t={}".format(t),momy)
-        np.savetxt(path+"/momz/t={}".format(t),momz)
+        np.savetxt(path+"/mass/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),mass)
+        np.savetxt(path+"/energy/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),energy)
+        np.savetxt(path+"/momx/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),momx)
+        np.savetxt(path+"/momy/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),momy)
+        np.savetxt(path+"/momz/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),momz)
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         viz_fields = [("cv", state),
