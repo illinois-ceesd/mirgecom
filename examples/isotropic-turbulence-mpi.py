@@ -192,7 +192,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     eos = IdealSingleGas()
-    pathi = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3/ESDG"
+    pathi = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3"
     initializer = IsotropicTurbulence(coordinate_path=pathi+"/coordinate.txt",
                                       velocity_path=pathi+"/velocity.txt")
     gas_model = GasModel(eos=eos)
@@ -219,9 +219,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         data_x = actx.to_numpy(init_nodes[0][0])
         data_y = actx.to_numpy(init_nodes[1][0])
         data_z = actx.to_numpy(init_nodes[2][0])   
-        np.savetxt(pathi+"/coord/x/rank={RANK}".format(RANK=rank),data_x)
-        np.savetxt(pathi+"/coord/y/rank={RANK}".format(RANK=rank),data_y)
-        np.savetxt(pathi+"/coord/z/rank={RANK}".format(RANK=rank),data_z)
+        np.savetxt(pathi+"/ESDG/coord/x/rank={RANK}.txt".format(RANK=rank),data_x)
+        np.savetxt(pathi+"/ESDG/coord/y/rank={RANK}.txt".format(RANK=rank),data_y)
+        np.savetxt(pathi+"/ESDG/coord/z/rank={RANK}.txt".format(RANK=rank),data_z)
 
         # Set the current state from time 0
         low_order_cv = initializer(init_nodes, eos=eos)
@@ -302,11 +302,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         momz = actx.to_numpy(currstate.momentum)[2][0]
         path = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3/ESDG"
 
-        np.savetxt(path+"/mass/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),mass)
-        np.savetxt(path+"/energy/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),energy)
-        np.savetxt(path+"/momx/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),momx)
-        np.savetxt(path+"/momy/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),momy)
-        np.savetxt(path+"/momz/t={TIME} rank={RANK}".format(TIME=t, RANK=rank),momz)
+        np.savetxt(path+"/mass/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),mass)
+        np.savetxt(path+"/energy/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),energy)
+        np.savetxt(path+"/momx/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),momx)
+        np.savetxt(path+"/momy/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),momy)
+        np.savetxt(path+"/momz/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),momz)
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         viz_fields = [("cv", state),
