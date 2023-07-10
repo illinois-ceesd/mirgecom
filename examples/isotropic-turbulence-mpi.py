@@ -60,6 +60,7 @@ from mirgecom.logging_quantities import (
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+
 class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
 
@@ -134,7 +135,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # some i/o frequencies
     nrestart = 200
-    nstatus = 1
+    nstatus = -1
     nviz = 20
     nhealth = -1
 
@@ -218,10 +219,11 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         actx = (init_nodes[0]).array_context
         data_x = actx.to_numpy(init_nodes[0][0])
         data_y = actx.to_numpy(init_nodes[1][0])
-        data_z = actx.to_numpy(init_nodes[2][0])   
-        np.savetxt(pathi+"/ESDG/coord/x/rank={RANK}.txt".format(RANK=rank),data_x)
-        np.savetxt(pathi+"/ESDG/coord/y/rank={RANK}.txt".format(RANK=rank),data_y)
-        np.savetxt(pathi+"/ESDG/coord/z/rank={RANK}.txt".format(RANK=rank),data_z)
+        data_z = actx.to_numpy(init_nodes[2][0])
+
+        np.savetxt(pathi+f"/ESDG/coord/x_rank{rank}.txt", data_x)
+        np.savetxt(pathi+f"/ESDG/coord/y_rank{rank}.txt", data_y)
+        np.savetxt(pathi+f"/ESDG/coord/z_rank{rank}.txt", data_z)
 
         # Set the current state from time 0
         low_order_cv = initializer(init_nodes, eos=eos)
@@ -288,12 +290,13 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
                 f"------ {cfl=}\n"
                 "------- errors="
                 + ", ".join("%.3g" % en for en in component_errors))
-    def my_write_low_order_data(t,state):
+
+    def my_write_low_order_data(t, state):
         from meshmode.discretization.connection import make_same_mesh_connection
 
+        connection2 = make_same_mesh_connection(
+            actx, init_dcoll.discr_from_dd("vol"), dcoll.discr_from_dd("vol"))
 
-        connection2 = make_same_mesh_connection(actx, init_dcoll.discr_from_dd("vol"),
-                                                dcoll.discr_from_dd("vol"))
         currstate = connection2(state)
         mass = actx.to_numpy(currstate.mass)[0]
         energy = actx.to_numpy(currstate.energy)[0]
@@ -302,16 +305,16 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         momz = actx.to_numpy(currstate.momentum)[2][0]
         path = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3/ESDG"
 
-        np.savetxt(path+"/mass/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),mass)
-        np.savetxt(path+"/energy/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),energy)
-        np.savetxt(path+"/momx/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),momx)
-        np.savetxt(path+"/momy/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),momy)
-        np.savetxt(path+"/momz/t={TIME} rank={RANK}.txt".format(TIME=t, RANK=rank),momz)
+        np.savetxt(path+f"/mass_{t}_{rank}.txt", mass)
+        np.savetxt(path+f"/energy_{t}_{rank}.txt", energy)
+        np.savetxt(path+f"/momx_{t}_{rank}.txt", momx)
+        np.savetxt(path+f"/momy_{t}_{rank}.txt", momy)
+        np.savetxt(path+f"/momz_{t}_{rank}.txt", momz)
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         viz_fields = [("cv", state),
                       ("dv", dv)]
-        my_write_low_order_data(t,state)
+        my_write_low_order_data(t, state)
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -362,8 +365,8 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
-            do_health = False
-            do_status = False
+            do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
