@@ -51,7 +51,7 @@ from mirgecom.boundary import (
     DummyBoundary
 )
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_ns_heat_operator
+    basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
 from mirgecom.navierstokes import (
     grad_t_operator, grad_cv_operator, ns_operator
@@ -580,8 +580,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
                 dd_vol_fluid, dd_vol_solid,
                 fluid_state, wall_kappa, wall_temperature,
                 fluid_boundaries, solid_boundaries,
-                interface_noslip=True, interface_radiation=True,
-                use_kappa_weighted_grad_flux_in_fluid=False)
+                interface_noslip=True, interface_radiation=True)
 
         fluid_grad_cv = grad_cv_operator(
             dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
@@ -603,7 +602,6 @@ def test_thermally_coupled_fluid_wall_with_radiation(
                 fluid_state, wall_kappa, wall_temperature,
                 fluid_grad_temperature, solid_grad_temperature,
                 interface_noslip=True, interface_radiation=True,
-                use_kappa_weighted_grad_flux_in_fluid=False,
                 wall_emissivity=wall_emissivity, sigma=2.0, ambient_temperature=0.0)
 
         fluid_rhs = ns_operator(

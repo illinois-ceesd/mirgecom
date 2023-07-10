@@ -4,6 +4,7 @@
 .. autofunction:: asdict_shallow
 .. autofunction:: force_evaluation
 .. autofunction:: normalize_boundaries
+.. autofunction:: project_from_base
 """
 
 __copyright__ = """
