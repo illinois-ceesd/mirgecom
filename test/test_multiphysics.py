@@ -472,7 +472,7 @@ def test_thermally_coupled_fluid_wall(
 @pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
-        actx_factory, order, use_overintegration, visualize=True):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface with radiation.
 
     Analytic solution prescribedas initial condition, then the RHS is assessed
