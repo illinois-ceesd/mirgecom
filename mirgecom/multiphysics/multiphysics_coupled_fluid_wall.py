@@ -896,8 +896,8 @@ def add_interface_boundaries(
             grad_cv_plus=grad_cv_tpair.ext,
             grad_t_plus=grad_temperature_tpair.ext,
             flux_penalty_amount=wall_penalty_amount,
-            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
-                                          fluid_lengthscales),
+#            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
+#                                          fluid_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[wall_dd, fluid_dd],
@@ -915,8 +915,8 @@ def add_interface_boundaries(
             grad_cv_plus=grad_cv_tpair.ext,
             grad_t_plus=grad_temperature_tpair.ext,
             flux_penalty_amount=wall_penalty_amount,
-            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
-                                          wall_lengthscales),
+#            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
+#                                          wall_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[fluid_dd, wall_dd],
