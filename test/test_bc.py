@@ -50,7 +50,7 @@ from mirgecom.gas_model import (
     make_fluid_state_trace_pairs
 )
 import grudge.op as op
-from mirgecom.simutil import 
+from mirgecom.simutil import get_box_mesh
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
