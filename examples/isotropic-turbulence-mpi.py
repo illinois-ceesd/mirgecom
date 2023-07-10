@@ -193,7 +193,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     vis_timer = None
 
     eos = IdealSingleGas()
-    pathi = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3"
+    pathi = "./output_data"
     initializer = IsotropicTurbulence(coordinate_path=pathi+"/coordinate.txt",
                                       velocity_path=pathi+"/velocity.txt")
     gas_model = GasModel(eos=eos)
@@ -221,9 +221,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         data_y = actx.to_numpy(init_nodes[1][0])
         data_z = actx.to_numpy(init_nodes[2][0])
 
-        np.savetxt(pathi+f"/ESDG/coord/x_rank{rank}.txt", data_x)
-        np.savetxt(pathi+f"/ESDG/coord/y_rank{rank}.txt", data_y)
-        np.savetxt(pathi+f"/ESDG/coord/z_rank{rank}.txt", data_z)
+        np.savetxt(pathi+f"/x_rank{rank}.txt", data_x)
+        np.savetxt(pathi+f"/y_rank{rank}.txt", data_y)
+        np.savetxt(pathi+f"/z_rank{rank}.txt", data_z)
 
         # Set the current state from time 0
         low_order_cv = initializer(init_nodes, eos=eos)
@@ -303,7 +303,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         momx = actx.to_numpy(currstate.momentum)[0][0]
         momy = actx.to_numpy(currstate.momentum)[1][0]
         momz = actx.to_numpy(currstate.momentum)[2][0]
-        path = "~/xpacc/IsotropicTurbulence/16cubMa0.3/order3/ESDG"
+        path = "./output_data/"
 
         np.savetxt(path+f"/mass_{t}_{rank}.txt", mass)
         np.savetxt(path+f"/energy_{t}_{rank}.txt", energy)
