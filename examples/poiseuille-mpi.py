@@ -28,7 +28,6 @@ import numpy as np
 import pyopencl as cl
 from pytools.obj_array import make_obj_array
 from functools import partial
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from grudge.shortcuts import make_visualizer
@@ -38,10 +37,9 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
-    get_sim_timestep
+    get_sim_timestep,
     get_box_mesh
 )
-
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
@@ -62,7 +60,6 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-
 
 logger = logging.getLogger(__name__)
 
