@@ -49,7 +49,7 @@ from mirgecom.fluid import ConservedVars
 from mirgecom.wall_model import WallDependentVars, WallEOS
 
 
-class BprimeTable():
+class BprimeTable:
     """Class containing the table for energy balance at the surface.
 
     This class is only required for uncoupled cases, where only the wall
@@ -75,7 +75,7 @@ class BprimeTable():
                 self._bounds_T, self._Hw[i, :]).c
 
 
-class Pyrolysis():
+class Pyrolysis:
     r"""Evaluate the source terms for the pyrolysis decomposition.
 
     The source terms follow as Arrhenius-like equation given by

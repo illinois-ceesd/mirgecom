@@ -106,7 +106,7 @@ Composite Materials
     order to predict the material degradation. As the
     :class:`~mirgecom.materials.tacot.Pyrolysis` progresses, the mass of each 
     $i$ constituents of the resin, denoted by
-    :attr:`~mirgecom.wall_model.PorousFlowDependentVars.wall_density`,
+    :attr:`~mirgecom.wall_model.PorousFlowDependentVars.material_densities`,
     is calculated as
 
     .. math ::
@@ -163,13 +163,13 @@ Composite Materials
     depend on the current state of the material, as well as the 
     :attr:`~mirgecom.eos.GasDependentVars.temperature`.
     It is evaluated using Newton iteration based on both
-    :attr:`~mirgecom.materials.tacot.GasProperties.gas_enthalpy` (tabulated
+    :attr:`~mirgecom.materials.tacot.GasProperties.enthalpy` (tabulated
     data) or 
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` (Pyrometheus)
     and
     :attr:`~mirgecom.wall_model.WallEOS.enthalpy`,
     as well as their respective derivatives, namely
-    :attr:`~mirgecom.materials.tacot.GasProperties.gas_heat_capacity` and
+    :attr:`~mirgecom.materials.tacot.GasProperties.heat_capacity` and
     :attr:`~mirgecom.wall_model.WallEOS.heat_capacity`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials

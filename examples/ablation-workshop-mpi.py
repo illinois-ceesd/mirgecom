@@ -22,10 +22,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sys  # noqa
+import sys
 import logging
+import gc
 import numpy as np
-import pyopencl as cl
 
 from meshmode.discretization.connection import FACE_RESTR_ALL
 
@@ -39,7 +39,6 @@ from grudge.dof_desc import (
     BoundaryDomainTag,
     DISCR_TAG_BASE
 )
-
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import ssprk43_step
 from mirgecom.diffusion import (
@@ -51,7 +50,8 @@ from mirgecom.diffusion import (
 from mirgecom.simutil import (
     check_naninf_local,
     generate_and_distribute_mesh,
-    write_visfile
+    write_visfile,
+    check_step
 )
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.utils import force_evaluation
@@ -77,7 +77,6 @@ logger.setLevel(logging.DEBUG)
 
 class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
-
     pass
 
 
@@ -100,8 +99,6 @@ class _TempDiffTag:
 @mpi_entry_point
 def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     """Demonstrate the ablation workshop test case 2.1."""
-    cl_ctx = cl.create_some_context()
-    queue = cl.CommandQueue(cl_ctx)
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -127,11 +124,12 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     dt = 1.0e-8
     pressure_scaling_factor = 1.0  # noqa N806
 
-    dt = dt/pressure_scaling_factor
-
     nviz = 200
     ngarbage = 50
     nrestart = 10000
+    nhealth = 10
+
+    current_dt = dt/pressure_scaling_factor
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -221,39 +219,40 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     # soln setup and init
-    wall_density = np.empty((3,), dtype=object)
+    material_densities = np.empty((3,), dtype=object)
 
-    wall_density[0] = 30.0 + nodes[0]*0.0
-    wall_density[1] = 90.0 + nodes[0]*0.0
-    wall_density[2] = 160. + nodes[0]*0.0
-    temperature = 300.0 + nodes[0]*0.0
-    pressure = 101325.0 + nodes[0]*0.0
+    zeros = actx.np.zeros_like(nodes[0])
+    material_densities[0] = 30.0 + zeros
+    material_densities[1] = 90.0 + zeros
+    material_densities[2] = 160. + zeros
+    temperature = 300.0 + zeros
+    pressure = 101325.0 + zeros
 
     pressure = force_evaluation(actx, pressure)
     temperature = force_evaluation(actx, temperature)
-    wall_density = force_evaluation(actx, wall_density)
+    material_densities = force_evaluation(actx, material_densities)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     if restart_file:
-        t = restart_data["t"]
+        current_t = restart_data["t"]
         istep = restart_data["step"]
         cv = restart_data["cv"]
-        wall_density = restart_data["wall_density"]
+        material_densities = restart_data["material_densities"]
+        first_step = istep + 0
     else:
-        t = 0
+        current_t = 0.0
         istep = 0
+        first_step = 0
         import mirgecom.multiphysics.phenolics as phenolics
         cv = phenolics.initializer(
             dcoll=dcoll, gas_model=gas_model,
-            wall_density=wall_density,
+            material_densities=material_densities,
             pressure=pressure, temperature=temperature)
-
-    temperature_seed = nodes[0]*0.0 + 300.0
 
     # stand-alone version of the "gas_model" to bypass some unnecessary
     # variables for this particular case
-    def make_state(cv, temperature_seed, wall_density):
+    def make_state(cv, temperature_seed, material_densities):
         """Return the fluid+wall state for porous media flow.
 
         Ideally one would use the gas_model.make_fluid_state but, since this
@@ -261,12 +260,12 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         implemented in this stand-alone function. Note that some functions
         have slightly different calls and the absence of species.
         """
-        zeros = cv.mass*0.0
+        zeros = actx.np.zeros_like(cv.mass)
 
-        tau = gas_model.wall.decomposition_progress(wall_density)
+        tau = gas_model.wall.decomposition_progress(material_densities)
         epsilon = gas_model.wall.void_fraction(tau)
         temperature = gas_model.wall.get_temperature(
-            cv=cv, wall_density=wall_density,
+            cv=cv, material_densities=material_densities,
             tseed=temperature_seed, tau=tau, eos=my_gas)
 
         pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
@@ -280,26 +279,27 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             smoothness_kappa=zeros,
             smoothness_beta=zeros,
             species_enthalpies=cv.species_mass,
-            wall_density=wall_density
+            material_densities=material_densities
         )
 
         # gas only transport vars
-        gas_mu = gas_model.eos.viscosity(temperature)
-        gas_kappa = gas_model.eos.thermal_conductivity(temperature)
         gas_tv = GasTransportVars(
             bulk_viscosity=zeros,
-            viscosity=gas_mu,
-            thermal_conductivity=gas_kappa,
+            viscosity=my_gas.viscosity(temperature),
+            thermal_conductivity=my_gas.thermal_conductivity(temperature),
             species_diffusivity=cv.species_mass)
 
         # coupled solid-gas thermal conductivity
         kappa = wall_model.thermal_conductivity(
-            cv, wall_density, temperature, tau, gas_tv)
+            cv, material_densities, temperature, tau, gas_tv)
+
+        # coupled solid-gas viscosity
+        viscosity = wall_model.viscosity(temperature, tau, gas_tv)
 
         # return modified transport vars
         tv = GasTransportVars(
             bulk_viscosity=zeros,
-            viscosity=gas_mu,
+            viscosity=viscosity,
             thermal_conductivity=kappa,
             species_diffusivity=cv.species_mass
         )
@@ -308,13 +308,16 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     compiled_make_state = actx.compile(make_state)
 
-    fluid_state = compiled_make_state(cv, temperature_seed, wall_density)
+    cv = force_evaluation(actx, cv)
+    temperature_seed = force_evaluation(actx,
+                                        actx.np.zeros_like(nodes[0]) + 300.0)
+    fluid_state = compiled_make_state(cv, temperature_seed, material_densities)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
-        logmgr_set_time(logmgr, istep, t)
+        logmgr_set_time(logmgr, istep, current_t)
 
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
@@ -336,6 +339,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
+
+        gc_timer_init = IntervalTimer("t_gc", "Time spent garbage collecting")
+        logmgr.add_quantity(gc_timer_init)
+        gc_timer = gc_timer_init.get_sub_timer()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -418,7 +425,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         cv = state.cv
         dv = state.dv
 
-        wdv = gas_model.wall.dependent_vars(dv.wall_density)
+        wdv = gas_model.wall.dependent_vars(dv.material_densities)
 
         actx = cv.mass.array_context
 
@@ -497,10 +504,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         dv = fluid_state.dv
         tv = fluid_state.tv
 
-        wdv = gas_model.wall.dependent_vars(dv.wall_density)
+        wdv = gas_model.wall.dependent_vars(dv.material_densities)
 
-        zeros = wdv.tau*0.0
-        actx = zeros.array_context
+        actx = cv.array_context
+        zeros = actx.np.zeros_like(wdv.tau)
 
         pressure_boundaries, velocity_boundaries = boundaries
 
@@ -554,7 +561,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         # ~~~~~
         # decomposition for each component of the resin
         resin_pyrolysis = pyrolysis.get_source_terms(temperature=dv.temperature,
-                                                     chi=dv.wall_density)
+                                                     chi=dv.material_densities)
 
         # flip sign due to mass conservation
         gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
@@ -571,25 +578,6 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         return inviscid_rhs + viscous_rhs + source_terms, resin_pyrolysis
 
-    def _rhs(t, state):
-
-        cv, wall_density, tseed = state
-
-        fluid_state = make_state(cv, temperature_seed, wall_density)
-
-        boundaries = make_obj_array([pressure_boundaries, velocity_boundaries])
-
-        cv_rhs, wall_rhs = phenolics_operator(
-            dcoll=dcoll, fluid_state=fluid_state, boundaries=boundaries,
-            gas_model=gas_model, pyrolysis=pyrolysis, quadrature_tag=quadrature_tag,
-            time=t, bprime_class=bprime_class,
-            pressure_scaling_factor=pressure_scaling_factor, penalty_amount=1.0)
-
-        # ~~~~~
-        return make_obj_array([cv_rhs, wall_rhs, tseed*0.0])
-
-    compiled_rhs = actx.compile(_rhs)
-
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     visualizer = make_visualizer(dcoll)
@@ -598,15 +586,15 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         cv = state.cv
         dv = state.dv
-        wdv = gas_model.wall.dependent_vars(dv.wall_density)
+        wdv = gas_model.wall.dependent_vars(dv.material_densities)
 
         viz_fields = [("CV_density", cv.mass),
                       ("CV_energy", cv.energy),
                       ("DV_T", dv.temperature),
                       ("DV_P", dv.pressure),
-                      ("WV_phase_1", dv.wall_density[0]),
-                      ("WV_phase_2", dv.wall_density[1]),
-                      ("WV_phase_3", dv.wall_density[2]),
+                      ("WV_phase_1", dv.material_densities[0]),
+                      ("WV_phase_2", dv.material_densities[1]),
+                      ("WV_phase_3", dv.material_densities[2]),
                       ("WDV", wdv)
                       ]
 
@@ -624,7 +612,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             rst_data = {
                 "local_mesh": local_mesh,
                 "cv": cv,
-                "wall_density": dv.wall_density,
+                "material_densities": dv.material_densities,
                 "tseed": dv.temperature,
                 "t": t,
                 "step": step,
@@ -637,66 +625,98 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    from warnings import warn
-    warn("Running gc.collect() to work around memory growth issue ")
-    import gc
-    gc.collect()
+    def my_pre_step(step, t, dt, state):
 
-    my_write_viz(step=istep, t=t, state=fluid_state)
-
-    cv = fluid_state.cv
-    dv = fluid_state.dv
-
-    freeze_gc_flag = True
-    while t < t_final:
-
-        if logmgr:
-            logmgr.tick_before()
+        cv, material_densities, tseed = state
+        fluid_state = compiled_make_state(cv, tseed, material_densities)
+        dv = fluid_state.dv
 
         try:
 
-            state = make_obj_array([cv, wall_density, fluid_state.temperature])
+            if logmgr:
+                logmgr.tick_before()
 
-            state = ssprk43_step(state, t, dt, compiled_rhs)
-            state = force_evaluation(actx, state)
+            do_garbage = check_step(step=step, interval=ngarbage)
+            do_viz = check_step(step=step, interval=nviz)
+            do_restart = check_step(step=step, interval=nrestart)
+            do_health = check_step(step=step, interval=nhealth)
 
-            cv, wall_density, tseed = state
-            fluid_state = compiled_make_state(cv, tseed, wall_density)
+            if do_garbage:
+                with gc_timer:
+                    warn("Running gc.collect() to work around memory growth issue ")
+                    gc.collect()
 
-            t += dt
-            istep += 1
+            if do_health:
+                if check_naninf_local(dcoll, "vol", dv.temperature):
+                    if rank == 0:
+                        logger.info("Fluid solution failed health check.")
+                    raise MyRuntimeError("Failed simulation health check.")
 
-            if check_naninf_local(dcoll, "vol", dv.temperature):
-                if rank == 0:
-                    logger.info("Fluid solution failed health check.")
-                raise MyRuntimeError("Failed simulation health check.")
+            if do_restart:
+                my_write_restart(step=step, t=t, state=fluid_state)
 
-            if istep % nviz == 0:
-                my_write_viz(step=istep, t=t, state=fluid_state)
-
-            if istep % ngarbage == 0:
-                gc.collect()
-
-            if istep % nrestart == 0:
-                my_write_restart(step=istep, t=t, state=fluid_state)
-
-            if freeze_gc_flag is True:
-                freeze_gc_flag = False
-
-                gc.collect()
-                # Freeze the objects that are still alive so they will not
-                # be considered in future gc collections.
-                gc.freeze()
+            if do_viz:
+                my_write_viz(step=step, t=t, state=fluid_state)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=istep, t=t, state=fluid_state)
+            my_write_viz(step=step, t=t, state=cv, dv=dv)
+            my_write_restart(step=step, t=t, state=cv, tseed=tseed)
             raise
+
+        return state, dt
+
+    def my_rhs(t, state):
+
+        cv, material_densities, tseed = state
+
+        fluid_state = make_state(cv, temperature_seed, material_densities)
+
+        boundaries = make_obj_array([pressure_boundaries, velocity_boundaries])
+
+        cv_rhs, wall_rhs = phenolics_operator(
+            dcoll=dcoll, fluid_state=fluid_state, boundaries=boundaries,
+            gas_model=gas_model, pyrolysis=pyrolysis, quadrature_tag=quadrature_tag,
+            time=t, bprime_class=bprime_class,
+            pressure_scaling_factor=pressure_scaling_factor, penalty_amount=1.0)
+
+        return make_obj_array([cv_rhs, wall_rhs, tseed*0.0])
+
+    def my_post_step(step, t, dt, state):
+
+        if step == first_step + 1:
+            with gc_timer:
+                import gc
+                gc.collect()
+                # Freeze the objects that are still alive so they will not
+                # be considered in future gc collections.
+                logger.info("Freezing GC objects to reduce overhead of "
+                            "future GC collections")
+                gc.freeze()
 
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+        return state, dt
+
+    from mirgecom.steppers import advance_state
+    current_step, current_t, advanced_state = \
+        advance_state(rhs=my_rhs, timestepper=ssprk43_step,
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step, dt=current_dt,
+                      state=make_obj_array([fluid_state.cv, material_densities,
+                                            fluid_state.temperature]),
+                      t=current_t, t_final=t_final, force_eval=True)
+
+    # Dump the final data
+    if rank == 0:
+        logger.info("Checkpointing final state ...")
+
+    current_cv, current_material_densities, tseed = advanced_state
+    current_state = make_state(current_cv, tseed, current_material_densities)
+    my_write_viz(step=current_step, t=current_t, state=current_state)
+    my_write_restart(step=current_step, t=current_t, state=current_state)
 
     if logmgr:
         logmgr.close()
@@ -725,7 +745,6 @@ if __name__ == "__main__":
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     lazy = args.lazy
-    log_dependent = False
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
@@ -738,12 +757,12 @@ if __name__ == "__main__":
     if args.casename:
         casename = args.casename
 
-    rst_filename = None
+    restart_file = None
     if args.restart_file:
-        rst_filename = (args.restart_file).replace("'", "")
-        print(f"Restarting from file: {rst_filename}")
+        restart_file = (args.restart_file).replace("'", "")
+        print(f"Restarting from file: {restart_file}")
 
     main(actx_class=actx_class, use_logmgr=args.log, casename=casename,
-         restart_file=rst_filename)
+         restart_file=restart_file)
 
 # vim: foldmethod=marker
