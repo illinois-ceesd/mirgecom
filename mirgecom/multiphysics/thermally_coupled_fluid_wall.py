@@ -810,7 +810,6 @@ def add_interface_boundaries_no_grad(
         fluid_boundaries, wall_boundaries,
         *,
         interface_noslip=True,
-        wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
     """
@@ -869,12 +868,6 @@ def add_interface_boundaries_no_grad(
 
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
-
-    wall_penalty_amount: float
-
-        Coefficient $c$ for the interior penalty on the heat flux. See
-        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
-        for details.
 
     quadrature_tag
 
@@ -1156,8 +1149,6 @@ def coupled_grad_t_operator(
         "_wall_all_boundaries_no_grad or neither")
 
     if _fluid_all_boundaries_no_grad is None:
-        # Note: We don't need to supply wall_penalty_amount here since we're only
-        # using these to compute the temperature gradient
         fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
             add_interface_boundaries_no_grad(
                 dcoll,
