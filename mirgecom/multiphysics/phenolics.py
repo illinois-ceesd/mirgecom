@@ -59,13 +59,13 @@ def initializer(dcoll, gas_model, wall_density, temperature,
     if gas_density is None and pressure is None:
         raise ValueError("Must specify one of 'gas_density' or 'pressure'")
 
-    if isinstance(temperature, DOFArray) is False:
+    if not isinstance(temperature, DOFArray):
         raise ValueError("Temperature does not have the proper shape")
 
     tau = gas_model.wall.decomposition_progress(wall_density)
 
     # gas constant
-    gas_const = 8314.46261815324/gas_model.eos.gas_molar_mass(temperature)
+    gas_const = 8314.46261815324/gas_model.eos.molar_mass(temperature)
 
     if gas_density is None:
         eps_gas = gas_model.wall.void_fraction(tau)
@@ -74,9 +74,8 @@ def initializer(dcoll, gas_model, wall_density, temperature,
     # internal energy (kinetic energy is neglected)
     eps_rho_solid = sum(wall_density)
     bulk_energy = (
-        eps_rho_solid*gas_model.wall.enthalpy(temperature, tau)
-        + eps_rho_gas*(gas_model.eos.gas_enthalpy(temperature)
-                       - gas_const*temperature)
+        eps_rho_gas*(gas_model.eos.enthalpy(temperature) - gas_const*temperature)
+        + eps_rho_solid*gas_model.wall.enthalpy(temperature, tau)
     )
 
     momentum = make_obj_array([tau*0.0 for i in range(dcoll.dim)])

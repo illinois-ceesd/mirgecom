@@ -18,7 +18,7 @@ from mirgecom.transport import GasTransportVars
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class PorousFlowDependentVars(MixtureDependentVars):
     """Dependent variables for the wall model.
 
@@ -29,7 +29,7 @@ class PorousFlowDependentVars(MixtureDependentVars):
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class WallDependentVars:
     """Dependent variables for the wall degradation model.
 

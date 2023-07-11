@@ -56,7 +56,6 @@ class BprimeTable():
     portion is evaluated. This is NOT used for fully-coupled cases.
     """
 
-    # FIXME read from the "materials" folder to not get explictly the table
     def __init__(self, table):
 
         # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
@@ -189,12 +188,12 @@ class GasProperties:
     ablation workshop. Some lines were removed to reduce the number of spline
     interpolation segments.
 
-    .. automethod:: gas_enthalpy
-    .. automethod:: gas_heat_capacity
-    .. automethod:: gas_molar_mass
-    .. automethod:: gas_dMdT
-    .. automethod:: gas_viscosity
-    .. automethod:: gas_thermal_conductivity
+    .. automethod:: enthalpy
+    .. automethod:: heat_capacity
+    .. automethod:: molar_mass
+    .. automethod:: dMdT
+    .. automethod:: viscosity
+    .. automethod:: thermal_conductivity
     .. automethod:: pressure
     """
 
@@ -253,13 +252,13 @@ class GasProperties:
         self._cs_enthalpy = CubicSpline(gas_data[:, 0], gas_data[:, 4]*1000.0)
         self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 5]*1e-4)
 
-    def gas_enthalpy(self, temperature: DOFArray) -> DOFArray:
+    def enthalpy(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas enthalpy $h_g$."""
         coeffs = self._cs_enthalpy.c
         bnds = self._cs_enthalpy.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_heat_capacity(self, temperature: DOFArray) -> DOFArray:
+    def heat_capacity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas heat capacity at constant pressure $C_{p_g}$.
 
         The heat capacity is the derivative of the enthalpy. Thus, to improve
@@ -270,13 +269,13 @@ class GasProperties:
         bnds = self._cs_enthalpy.x
         return eval_spline_derivative(temperature, bnds, coeffs)
 
-    def gas_molar_mass(self, temperature: DOFArray) -> DOFArray:
+    def molar_mass(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas molar mass $M$."""
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_dMdT(self, temperature: DOFArray) -> DOFArray:  # noqa N802
+    def dMdT(self, temperature: DOFArray) -> DOFArray:  # noqa N802
         """Return the partial derivative of molar mass wrt temperature.
 
         This is necessary to evaluate the temperature using Newton iteration.
@@ -285,13 +284,13 @@ class GasProperties:
         bnds = self._cs_molar_mass.x
         return eval_spline_derivative(temperature, bnds, coeffs)
 
-    def gas_viscosity(self, temperature: DOFArray) -> DOFArray:
+    def viscosity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas viscosity $\mu$."""
         coeffs = self._cs_viscosity.c
         bnds = self._cs_viscosity.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def gas_thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas thermal conductivity $\kappa_g$.
 
         .. math::
@@ -300,8 +299,8 @@ class GasProperties:
         with gas viscosity $\mu$, heat capacity at constant pressure $C_p$
         and the Prandtl number $Pr$ (default to 1).
         """
-        cp = self.gas_heat_capacity(temperature)
-        mu = self.gas_viscosity(temperature)
+        cp = self.heat_capacity(temperature)
+        mu = self.viscosity(temperature)
         return mu*cp/self._prandtl
 
     def pressure(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
@@ -310,7 +309,7 @@ class GasProperties:
         .. math::
             P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
         """
-        gas_const = 8314.46261815324/self.gas_molar_mass(temperature)
+        gas_const = 8314.46261815324/self.molar_mass(temperature)
         return cv.mass*gas_const*temperature
 
 
@@ -498,16 +497,16 @@ class WallTabulatedEOS(WallEOS):
         for _ in range(0, niter):
 
             # gas constant R/M
-            molar_mass = eos.gas_molar_mass(temp)
+            molar_mass = eos.molar_mass(temp)
             gas_const = 8314.46261815324/molar_mass  # noqa N806
 
             eps_rho_e = (
-                rho_gas*(eos.gas_enthalpy(temp) - gas_const*temp)
+                rho_gas*(eos.enthalpy(temp) - gas_const*temp)
                 + rho_solid*self.enthalpy(temp, tau))
 
             bulk_cp = (
-                rho_gas*(eos.gas_heat_capacity(temp)
-                         - gas_const*(1.0 - temp/molar_mass*eos.gas_dMdT(temp)))
+                rho_gas*(eos.heat_capacity(temp)
+                         - gas_const*(1.0 - temp/molar_mass*eos.dMdT(temp)))
                 + rho_solid*self.heat_capacity(temp, tau))
 
             temp = temp - (eps_rho_e - rhoe)/bulk_cp

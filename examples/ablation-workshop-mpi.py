@@ -98,8 +98,7 @@ class _TempDiffTag:
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
-         lazy=False, restart_file=None):
+def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     """Demonstrate the ablation workshop test case 2.1."""
     cl_ctx = cl.create_some_context()
     queue = cl.CommandQueue(cl_ctx)
@@ -112,20 +111,10 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     logmgr = initialize_logmgr(use_logmgr,
         filename="ablation.sqlite", mode="wo", mpi_comm=comm)
 
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc,
-                          force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     viz_path = "viz_data/"
     vizname = viz_path+casename
@@ -220,9 +209,9 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
     my_gas = my_composite.GasProperties()
     pyrolysis = my_composite.Pyrolysis()
 
-#    # FIXME there must be a way to get the table from the "materials" directory
+    path = "../mirgecom/materials/aw_Bprime.dat"
     bprime_table = \
-        (np.genfromtxt("aw_Bprime.dat", skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+        (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
     bprime_class = my_composite.BprimeTable(table=bprime_table)
 
     wall_model = WallTabulatedEOS(wall_material=my_material)
@@ -265,9 +254,9 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
     temperature_seed = nodes[0]*0.0 + 300.0
 
-    # stand-alone version of the "gas_model"to bypass some unnecessary variables
-    # for this particular case
-    def _make_state(cv, gas_model, temperature_seed, wall_density):
+    # stand-alone version of the "gas_model" to bypass some unnecessary
+    # variables for this particular case
+    def make_state(cv, temperature_seed, wall_density):
         """Return the fluid+wall state for porous media flow.
 
         Ideally one would use the gas_model.make_fluid_state but, since this
@@ -298,8 +287,8 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         )
 
         # gas only transport vars
-        gas_mu = gas_model.eos.gas_viscosity(temperature)
-        gas_kappa = gas_model.eos.gas_thermal_conductivity(temperature)
+        gas_mu = gas_model.eos.viscosity(temperature)
+        gas_kappa = gas_model.eos.thermal_conductivity(temperature)
         gas_tv = GasTransportVars(
             bulk_viscosity=zeros,
             viscosity=gas_mu,
@@ -319,9 +308,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
         )
 
         return ViscousFluidState(cv=cv, dv=dv, tv=tv)
-
-    def make_state(cv, temperature_seed, wall_density):
-        return _make_state(cv, gas_model, temperature_seed, wall_density)
 
     compiled_make_state = actx.compile(make_state)
 
@@ -495,7 +481,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
                         + bprime_class._cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
                         + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0) + h_w
 
-        h_g = gas_model.eos.gas_enthalpy(temperature_bc)
+        h_g = gas_model.eos.enthalpy(temperature_bc)
 
         flux = -(conv_coeff*(h_e - h_w) - m_dot*h_w + m_dot_g*h_g)
 
@@ -557,7 +543,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         # ~~~~~
         # inviscid RHS, energy equation only
-        field = cv.mass*gas_model.eos.gas_enthalpy(temperature)
+        field = cv.mass*gas_model.eos.enthalpy(temperature)
         energy_inviscid_rhs = compute_div(actx, dcoll, quadrature_tag, field,
                                           velocity, velocity_boundaries, dd_wall)
 
@@ -591,7 +577,7 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
 
         cv, wall_density, tseed = state
 
-        fluid_state = _make_state(cv, gas_model, temperature_seed, wall_density)
+        fluid_state = make_state(cv, temperature_seed, wall_density)
 
         boundaries = make_obj_array([pressure_boundaries, velocity_boundaries])
 
@@ -697,7 +683,6 @@ def main(actx_class, use_logmgr=True, use_profiling=False, casename=None,
                 my_write_restart(step=istep, t=t, state=fluid_state)
 
             if freeze_gc_flag is True:
-                print("Freeze gc")
                 freeze_gc_flag = False
 
                 gc.collect()
@@ -739,13 +724,17 @@ if __name__ == "__main__":
                         help="simulation restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    from warnings import warn
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     lazy = args.lazy
+    log_dependent = False
     if args.profiling:
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy, distributed=True)
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profiling)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -756,8 +745,7 @@ if __name__ == "__main__":
         rst_filename = (args.restart_file).replace("'", "")
         print(f"Restarting from file: {rst_filename}")
 
-    main(actx_class, use_logmgr=args.log, lazy=lazy,
-         use_profiling=args.profiling, casename=casename,
+    main(actx_class=actx_class, use_logmgr=args.log, casename=casename,
          restart_file=rst_filename)
 
 # vim: foldmethod=marker
