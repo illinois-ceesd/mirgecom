@@ -391,9 +391,8 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        external_flux = u_minus*0.0 + self.value
-
-        return np.dot(external_flux, normal)
+        # returns the product "flux @ normal"
+        return actx.np.zeros_like(u_minus) + self.value
 
 
 class _DiffusionKappaTag:

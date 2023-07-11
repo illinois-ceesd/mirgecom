@@ -56,13 +56,17 @@ class BprimeTable():
     portion is evaluated. This is NOT used for fully-coupled cases.
     """
 
-    def __init__(self, table):
+    def __init__(self):
+
+        path = __file__.replace("tacot.py", "aw_Bprime.dat")
+        bprime_table = \
+            (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
 
         # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
-        self._bounds_T = table[   0, :-1:6, 2]  # noqa E201
-        self._bounds_B = table[::-1, 0, 0]
-        self._Bc = table[::-1, :, 1]
-        self._Hw = table[::-1, :-1:6, 3]
+        self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
+        self._bounds_B = bprime_table[::-1, 0, 0]
+        self._Bc = bprime_table[::-1, :, 1]
+        self._Hw = bprime_table[::-1, :-1:6, 3]
 
         # create spline to interpolate the wall enthalpy
         self._cs_Hw = np.zeros((25, 4, 24))
