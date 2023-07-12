@@ -1021,8 +1021,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 fluid_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
                 fluid_all_boundaries_no_grad, holder_boundaries,
-                interface_noslip=True, interface_radiation=use_radiation,
-                use_kappa_weighted_grad_flux_in_fluid=False)
+                interface_noslip=True, interface_radiation=use_radiation)
 
         sample_all_boundaries_no_grad, holder_all_boundaries_no_grad = \
             add_thermal_interface_boundaries_no_grad(
@@ -1031,8 +1030,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 sample_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
                 sample_all_boundaries_no_grad, holder_all_boundaries_no_grad,
-                interface_noslip=True, interface_radiation=False,
-                use_kappa_weighted_grad_flux_in_fluid=False)
+                interface_noslip=True, interface_radiation=False)
 
         # ~~~~~~~~~~~~~~
 
@@ -1111,7 +1109,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 holder_state.dv.temperature,
                 fluid_grad_temperature, holder_grad_temperature,
                 interface_noslip=True, interface_radiation=use_radiation,
-                use_kappa_weighted_grad_flux_in_fluid=False,
                 wall_emissivity=emissivity, sigma=5.67e-8,
                 ambient_temperature=300.0,
                 wall_penalty_amount=wall_penalty_amount)
@@ -1124,7 +1121,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 holder_state.dv.temperature,
                 sample_grad_temperature, holder_grad_temperature,
                 interface_noslip=True, interface_radiation=False,
-                use_kappa_weighted_grad_flux_in_fluid=False,
                 wall_penalty_amount=wall_penalty_amount)
 
         # ~~~~~~~~~~~~~
