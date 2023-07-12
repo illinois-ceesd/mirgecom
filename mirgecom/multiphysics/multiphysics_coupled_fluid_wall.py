@@ -718,7 +718,8 @@ def add_interface_boundaries_no_grad(
         *,
         boundary_velocity=None,
         use_kappa_weighted_grad_flux_in_fluid=False,
-        wall_penalty_amount=None):
+        wall_penalty_amount=None,
+        comm_tag=None):
     r"""Return the interface of the subdomains for gradient calculation.
 
     Parameters
@@ -767,6 +768,9 @@ def add_interface_boundaries_no_grad(
         Coefficient $c$ for the interior penalty on the heat flux. See
         :class:`InterfaceFluidBoundary`
         for details.
+
+    comm_tag: Hashable
+        Tag for distributed communication
 
     Returns
     -------
@@ -834,7 +838,8 @@ def add_interface_boundaries(
         boundary_velocity=None,
         wall_emissivity=None, sigma=None, ambient_temperature=None,
         use_kappa_weighted_grad_flux_in_fluid=False,
-        wall_penalty_amount=None):
+        wall_penalty_amount=None,
+        comm_tag=None):
     r"""Return the interface of the subdomains for viscous fluxes.
 
     Parameters
@@ -886,6 +891,9 @@ def add_interface_boundaries(
         Coefficient $c$ for the interior penalty on the heat flux. See
         :class:`InterfaceFluidBoundary`
         for details.
+
+    comm_tag: Hashable
+        Tag for distributed communication
 
     Returns
     -------

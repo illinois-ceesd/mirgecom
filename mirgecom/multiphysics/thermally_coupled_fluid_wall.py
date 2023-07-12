@@ -1021,6 +1021,7 @@ def add_interface_boundaries_no_grad(
         for details.
 
     comm_tag: Hashable
+
         Tag for distributed communication
     """
     if quadrature_tag is not None:
@@ -1153,6 +1154,7 @@ def add_interface_boundaries(
         for details. Not used if *interface_radiation* is `True`.
 
     comm_tag: Hashable
+
         Tag for distributed communication
     """
     if quadrature_tag is not None:
