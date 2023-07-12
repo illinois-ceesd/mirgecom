@@ -82,8 +82,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
     """Setup of the coupling between both sides of the interface."""
 
     def __init__(self, state_plus, interface_noslip, interface_radiation,
-            boundary_velocity=None, grad_cv_plus=None, grad_t_plus=None,
-            use_kappa_weighted_bc=False):
+            boundary_velocity=None, grad_cv_plus=None, grad_t_plus=None):
         r"""Initialize coupling interface.
 
         Arguments *grad_cv_plus*, *grad_t_plus*, *flux_penalty_amount*, and
@@ -111,11 +110,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
         grad_t_plus: :class:`meshmode.dof_array.DOFArray` or None
             Temperature gradient from the wall side.
-
-        use_kappa_weighted_grad_flux: bool
-            Indicates whether the gradient fluxes at the interface should
-            be computed using a simple or weighted average of quantities
-            from each side by its respective transport coefficients.
         """
         self._state_plus = state_plus
         self._no_slip = interface_noslip
@@ -123,7 +117,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         self._boundary_velocity = boundary_velocity
         self._grad_cv_plus = grad_cv_plus
         self._grad_t_plus = grad_t_plus
-        self._use_kappa_weighted_bc = use_kappa_weighted_bc
 
     def state_plus(self, dcoll, dd_bdry, state_minus, **kwargs):
         """State to enforce inviscid BC at the interface."""
@@ -241,13 +234,10 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         u_plus = state_plus.velocity
-        if self._use_kappa_weighted_bc:
-            kappa_plus = project_from_base(dcoll, dd_bdry,
-                                           state_plus.tv.viscosity)
-            kappa_sum = kappa_minus + kappa_plus
-            return (u_minus * kappa_minus + u_plus * kappa_plus)/kappa_sum
-
-        return (u_minus + u_plus)/2
+        kappa_plus = project_from_base(dcoll, dd_bdry,
+                                       state_plus.tv.viscosity)
+        kappa_sum = kappa_minus + kappa_plus
+        return (u_minus * kappa_minus + u_plus * kappa_plus)/kappa_sum
 
     def species_mass_fractions_bc(self, dcoll, dd_bdry, state_minus):
         """Species mass fractions at the interface."""
@@ -258,13 +248,10 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         y_plus = state_plus.species_mass_fractions
-        if self._use_kappa_weighted_bc:
-            kappa_plus = project_from_base(dcoll, dd_bdry,
-                                            state_plus.tv.species_diffusivity)
-            kappa_sum = kappa_minus + kappa_plus
-            return (y_minus * kappa_minus + y_plus * kappa_plus)/kappa_sum
-
-        return (y_minus + y_plus)/2
+        kappa_plus = project_from_base(dcoll, dd_bdry,
+                                        state_plus.tv.species_diffusivity)
+        kappa_sum = kappa_minus + kappa_plus
+        return (y_minus * kappa_minus + y_plus * kappa_plus)/kappa_sum
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus):
         """Temperature at the interface."""
@@ -275,13 +262,10 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         t_plus = state_plus.temperature
-        if self._use_kappa_weighted_bc:
-            kappa_plus = project_from_base(dcoll, dd_bdry,
-                                            state_plus.tv.thermal_conductivity)
-            kappa_sum = kappa_minus + kappa_plus
-            return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
-
-        return (t_minus + t_plus)/2
+        kappa_plus = project_from_base(dcoll, dd_bdry,
+                                        state_plus.tv.thermal_conductivity)
+        kappa_sum = kappa_minus + kappa_plus
+        return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
 
     def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
         """Gradient averaging for viscous flux."""
@@ -332,8 +316,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
     def __init__(self, state_plus, interface_noslip, interface_radiation,
                  boundary_velocity=None,
                  grad_cv_plus=None, grad_t_plus=None,
-                 flux_penalty_amount=None, lengthscales_minus=None,
-                 use_kappa_weighted_grad_flux=False):
+                 flux_penalty_amount=None, lengthscales_minus=None):
         r"""Initialize InterfaceFluidBoundary.
 
         Arguments *grad_cv_plus*, *grad_t_plus*, *flux_penalty_amount*, and
@@ -364,11 +347,6 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
 
         lengthscales_minus: :class:`meshmode.dof_array.DOFArray` or None
             Characteristic mesh spacing $h^-$.
-
-        use_kappa_weighted_grad_flux: bool
-            Indicates whether the gradient fluxes at the interface should
-            be computed using a simple or weighted average of quantities
-            from each side by its respective transport coefficients.
         """
         self._state_plus = state_plus
         self._flux_penalty_amount = flux_penalty_amount
@@ -381,8 +359,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
             grad_cv_plus=grad_cv_plus,
-            grad_t_plus=grad_t_plus,
-            use_kappa_weighted_bc=use_kappa_weighted_grad_flux)
+            grad_t_plus=grad_t_plus)
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """State to enforce inviscid BC at the interface."""
@@ -477,8 +454,7 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
     def __init__(self, state_plus, interface_noslip, interface_radiation,
                  wall_emissivity=None, sigma=None, u_ambient=None,
                  grad_cv_plus=None, grad_t_plus=None,
-                 flux_penalty_amount=None, lengthscales_minus=None,
-                 use_kappa_weighted_grad_flux=False):
+                 flux_penalty_amount=None, lengthscales_minus=None):
         r"""Initialize InterfaceWallBoundary.
 
         Arguments *grad_cv_plus*, *grad_t_plus*, *flux_penalty_amount*, and
@@ -505,11 +481,6 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
 
         lengthscales_minus: :class:`meshmode.dof_array.DOFArray` or None
             Characteristic mesh spacing $h^-$.
-
-        use_kappa_weighted_grad_flux: bool
-            Indicates whether the gradient fluxes at the interface should
-            be computed using a simple or weighted average of quantities
-            from each side by its respective transport coefficients.
         """
         self._state_plus = state_plus
         self._flux_penalty_amount = flux_penalty_amount
@@ -525,8 +496,7 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
             grad_cv_plus=grad_cv_plus,
-            grad_t_plus=grad_t_plus,
-            use_kappa_weighted_bc=use_kappa_weighted_grad_flux)
+            grad_t_plus=grad_t_plus)
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """State to enforce inviscid BC at the interface."""
@@ -717,7 +687,6 @@ def add_interface_boundaries_no_grad(
         interface_noslip, interface_radiation,
         *,
         boundary_velocity=None,
-        use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None,
         comm_tag=None):
     r"""Return the interface of the subdomains for gradient calculation.
@@ -759,11 +728,6 @@ def add_interface_boundaries_no_grad(
         If `True`, interface includes a radiation sink term in the heat flux
         on the wall side and prescribes the temperature on the fluid side.
 
-    use_kappa_weighted_grad_flux_in_fluid: bool
-        Indicates whether the gradient fluxes on the fluid side of the
-        interface should be computed using either a simple or weighted average
-        by its respective transport coefficients.
-
     wall_penalty_amount: float
         Coefficient $c$ for the interior penalty on the heat flux. See
         :class:`InterfaceFluidBoundary`
@@ -799,16 +763,14 @@ def add_interface_boundaries_no_grad(
             state_plus=interface_tpair.ext.state,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
-            boundary_velocity=boundary_velocity,
-            use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
+            boundary_velocity=boundary_velocity)
         for interface_tpair in interface_tpairs[wall_dd, fluid_dd]}
 
     wall_interface_boundaries_no_grad = {
         interface_tpair.dd.domain_tag: InterfaceWallBoundary(
             state_plus=interface_tpair.ext.state,
             interface_noslip=interface_noslip,
-            interface_radiation=interface_radiation,
-            use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
+            interface_radiation=interface_radiation)
         for interface_tpair in interface_tpairs[fluid_dd, wall_dd]}
 
     # Augment the domain boundaries with the interface boundaries
@@ -837,7 +799,6 @@ def add_interface_boundaries(
         *,
         boundary_velocity=None,
         wall_emissivity=None, sigma=None, ambient_temperature=None,
-        use_kappa_weighted_grad_flux_in_fluid=False,
         wall_penalty_amount=None,
         comm_tag=None):
     r"""Return the interface of the subdomains for viscous fluxes.
@@ -881,11 +842,6 @@ def add_interface_boundaries(
         :class:`InterfaceWallBoundary`
         for details. Additional arguments *wall_emissivity*, *sigma*, and
         *ambient_temperature* are required if enabled.
-
-    use_kappa_weighted_grad_flux_in_fluid: bool
-        Indicates whether the gradient fluxes on the fluid side of the
-        interface should be computed using either a simple or weighted average
-        by its respective transport coefficients.
 
     wall_penalty_amount: float
         Coefficient $c$ for the interior penalty on the heat flux. See
@@ -944,7 +900,7 @@ def add_interface_boundaries(
             flux_penalty_amount=wall_penalty_amount,
 #            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
 #                                          fluid_lengthscales),
-            use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
+            )
         for interface_tpair in interface_tpairs[wall_dd, fluid_dd]}
 
     wall_interface_boundaries = {
@@ -960,7 +916,7 @@ def add_interface_boundaries(
             flux_penalty_amount=wall_penalty_amount,
 #            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
 #                                          wall_lengthscales),
-            use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
+            )
         for interface_tpair in interface_tpairs[fluid_dd, wall_dd]}
 
     # Augment the domain boundaries with the interface boundaries
