@@ -560,7 +560,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
             solid_boundaries, fluid_state, wall_kappa, wall_temperature,
             time=0.0, quadrature_tag=quadrature_tag, interface_noslip=False,
             interface_radiation=True, sigma=2.0,
-            ambient_temperature=0.0, wall_epsilon=wall_emissivity,
+            ambient_temperature=0.0, wall_emissivity=wall_emissivity,
         )
 
         # Check that steady-state solution has 0 RHS
