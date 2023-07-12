@@ -810,7 +810,6 @@ def _get_interface_boundaries_no_grad(
         *,
         interface_noslip=True,
         interface_radiation=False,
-        quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
     interface_tpairs = _get_interface_trace_pairs_no_grad(
         dcoll,
@@ -872,7 +871,6 @@ def _get_interface_boundaries(
         sigma=None,
         ambient_temperature=None,
         wall_penalty_amount=None,
-        quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -1022,14 +1020,15 @@ def add_interface_boundaries_no_grad(
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
         for details.
 
-    quadrature_tag
-
-        An identifier denoting a particular quadrature discretization to use during
-        operator evaluations.
-
     comm_tag: Hashable
         Tag for distributed communication
     """
+    if quadrature_tag is not None:
+        from warnings import warn
+        warn(
+            "quadrature_tag is deprecated and will be removed in Q4 2023.",
+            DeprecationWarning, stacklevel=2)
+
     fluid_interface_boundaries_no_grad, wall_interface_boundaries_no_grad = \
         _get_interface_boundaries_no_grad(
             dcoll,
@@ -1038,7 +1037,6 @@ def add_interface_boundaries_no_grad(
             fluid_state.temperature, wall_temperature,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
-            quadrature_tag=quadrature_tag,
             comm_tag=comm_tag)
 
     fluid_all_boundaries_no_grad = {}
@@ -1154,14 +1152,15 @@ def add_interface_boundaries(
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
         for details. Not used if *interface_radiation* is `True`.
 
-    quadrature_tag
-
-        An identifier denoting a particular quadrature discretization to use during
-        operator evaluations.
-
     comm_tag: Hashable
         Tag for distributed communication
     """
+    if quadrature_tag is not None:
+        from warnings import warn
+        warn(
+            "quadrature_tag is deprecated and will be removed in Q4 2023.",
+            DeprecationWarning, stacklevel=2)
+
     fluid_interface_boundaries, wall_interface_boundaries = \
         _get_interface_boundaries(
             dcoll,
@@ -1175,7 +1174,6 @@ def add_interface_boundaries(
             sigma=sigma,
             ambient_temperature=ambient_temperature,
             wall_penalty_amount=wall_penalty_amount,
-            quadrature_tag=quadrature_tag,
             comm_tag=comm_tag)
 
     fluid_all_boundaries = {}
@@ -1340,8 +1338,7 @@ def coupled_grad_t_operator(
                 fluid_state, wall_kappa, wall_temperature,
                 fluid_boundaries, wall_boundaries,
                 interface_noslip=interface_noslip,
-                interface_radiation=interface_radiation,
-                quadrature_tag=quadrature_tag)
+                interface_radiation=interface_radiation)
     else:
         fluid_all_boundaries_no_grad = _fluid_all_boundaries_no_grad
         wall_all_boundaries_no_grad = _wall_all_boundaries_no_grad
@@ -1559,8 +1556,7 @@ def coupled_ns_heat_operator(
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
-            interface_radiation=interface_radiation,
-            quadrature_tag=quadrature_tag)
+            interface_radiation=interface_radiation)
 
     # Get the operator fluid states
     fluid_operator_states_quad = make_operator_fluid_states(
@@ -1597,8 +1593,7 @@ def coupled_ns_heat_operator(
             wall_emissivity=wall_emissivity,
             sigma=sigma,
             ambient_temperature=ambient_temperature,
-            wall_penalty_amount=wall_penalty_amount,
-            quadrature_tag=quadrature_tag)
+            wall_penalty_amount=wall_penalty_amount)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
@@ -1770,8 +1765,7 @@ def basic_coupled_ns_heat_operator(
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
-            interface_radiation=interface_radiation,
-            quadrature_tag=quadrature_tag)
+            interface_radiation=interface_radiation)
 
     # Get the operator fluid states
     fluid_operator_states_quad = make_operator_fluid_states(
@@ -1803,8 +1797,7 @@ def basic_coupled_ns_heat_operator(
             wall_emissivity=wall_emissivity,
             sigma=sigma,
             ambient_temperature=ambient_temperature,
-            wall_penalty_amount=wall_penalty_amount,
-            quadrature_tag=quadrature_tag)
+            wall_penalty_amount=wall_penalty_amount)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
 
