@@ -207,7 +207,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     my_gas = my_composite.GasProperties()
     pyrolysis = my_composite.Pyrolysis()
 
-    bprime_class = my_composite.BprimeTable()
+    
+    path = "../mirgecom/materials/aw_Bprime.dat"
+    bprime_table = (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+    bprime_class = my_composite.BprimeTable(bprime_table=bprime_table)
 
     wall_model = WallTabulatedEOS(wall_material=my_material)
 
@@ -661,8 +664,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=cv, dv=dv)
-            my_write_restart(step=step, t=t, state=cv, tseed=tseed)
+            my_write_viz(step=step, t=t, state=fluid_state)
+            my_write_restart(step=step, t=t, state=fluid_state)
             raise
 
         return state, dt

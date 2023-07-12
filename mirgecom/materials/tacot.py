@@ -56,11 +56,7 @@ class BprimeTable:
     portion is evaluated. This is NOT used for fully-coupled cases.
     """
 
-    def __init__(self):
-
-        path = __file__.replace("tacot.py", "aw_Bprime.dat")
-        bprime_table = \
-            (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+    def __init__(self, bprime_table):
 
         # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
         self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
@@ -444,7 +440,7 @@ class WallTabulatedEOS(WallEOS):
     for TACOT-tabulated data.
     """
 
-    def get_temperature(self, cv, wall_density, tseed, tau, eos, niter=3):
+    def get_temperature(self, cv, material_densities, tseed, tau, eos, niter=3):
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -467,7 +463,7 @@ class WallTabulatedEOS(WallEOS):
 
             The fluid conserved variables
 
-        wall_density: np.ndarray
+        material_densities: np.ndarray
 
             The density of the different wall constituents
 
@@ -496,7 +492,7 @@ class WallTabulatedEOS(WallEOS):
             temp = tseed*1.0
 
         rho_gas = cv.mass
-        rho_solid = self.solid_density(wall_density)
+        rho_solid = self.solid_density(material_densities)
         rhoe = cv.energy
         for _ in range(0, niter):
 
