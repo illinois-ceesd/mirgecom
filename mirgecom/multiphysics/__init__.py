@@ -1,7 +1,7 @@
 """Multiphysics module for MIRGE-Com."""
 
 __copyright__ = """
-Copyright (C) 2022 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -26,8 +26,10 @@ THE SOFTWARE.
 
 __doc__ = """
 .. automodule:: mirgecom.multiphysics.thermally_coupled_fluid_wall
+.. automodule:: mirgecom.multiphysics.phenolics
 
 .. autofunction:: make_interface_boundaries
+>>>>>>> main
 """
 
 

@@ -86,3 +86,5 @@ References
     `(DOI) <https://doi.org/10.1002/0471461296>`__
 .. [Giles_1988] Michael Giles (1988), Non-Reflecting Boundary Conditions for the Euler \
     Equations, CFDL-TR-88-1
+.. [Lachaud_2014] Jean Lachaud and Nagi Mansour (2014), Porous-Material Analysis Toolbox Based
+    on OpenFOAM and Applications, Journal of Thermophysics and Heat Transfer 28 2 
