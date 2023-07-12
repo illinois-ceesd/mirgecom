@@ -42,7 +42,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from dataclasses import dataclass
 import numpy as np
+
+from arraycontext import dataclass_array_container
 
 from grudge.trace_pair import inter_volume_trace_pairs
 from grudge.dof_desc import as_dofdesc
@@ -67,15 +70,11 @@ from mirgecom.diffusion import diffusion_flux
 from mirgecom.utils import project_from_base
 
 
-class _StateInterVolTag:
+class _InterVolDataNoGradTag:
     pass
 
 
-class _GradCVInterVolTag:
-    pass
-
-
-class _GradTemperatureInterVolTag:
+class _InterVolDataTag:
     pass
 
 
@@ -648,30 +647,67 @@ class InterfaceWallBoundary(MengaldoBoundaryCondition):
         return base_viscous_flux + penalization
 
 
-def _state_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, fluid_state, wall_state):
-    """Exchange state across the fluid-wall interface."""
-    pairwise_state = {(fluid_dd, wall_dd): (fluid_state, wall_state)}
+@dataclass_array_container
+@dataclass(frozen=True, eq=False)
+class _InterVolDataNoGrad:
+    state: ViscousFluidState
+
+
+@dataclass_array_container
+@dataclass(frozen=True, eq=False)
+class _InterVolData(_InterVolDataNoGrad):
+    grad_cv: np.ndarray
+    grad_temperature: np.ndarray
+
+
+def _make_inter_vol_data(state, grad_cv=None, grad_temperature=None):
+    assert (grad_cv is None) == (grad_temperature is None), (
+        "Expected both grad_cv and grad_temperature or neither")
+    if grad_cv is not None:
+        inter_vol_data = _InterVolData(state, grad_cv, grad_temperature)
+    else:
+        inter_vol_data = _InterVolDataNoGrad(state)
+
+    return inter_vol_data
+
+
+def _get_interface_trace_pairs_no_grad(
+        dcoll,
+        fluid_dd, wall_dd,
+        fluid_state, wall_state,
+        *,
+        comm_tag=None):
+    pairwise_inter_vol_data = {
+        (fluid_dd, wall_dd): (
+            _make_inter_vol_data(fluid_state),
+            _make_inter_vol_data(wall_state))}
     return inter_volume_trace_pairs(
-        dcoll, pairwise_state, comm_tag=_StateInterVolTag)
+        dcoll, pairwise_inter_vol_data,
+        comm_tag=(_InterVolDataNoGradTag, comm_tag))
 
 
-def _grad_cv_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, fluid_grad_cv, wall_grad_cv):
-    """Exchange CV gradients across the fluid-wall interface."""
-    pairwise_grad_cv = {(fluid_dd, wall_dd): (fluid_grad_cv, wall_grad_cv)}
+def _get_interface_trace_pairs(
+        dcoll,
+        fluid_dd, wall_dd,
+        fluid_state, wall_state,
+        fluid_grad_cv, wall_grad_cv,
+        fluid_grad_temperature, wall_grad_temperature,
+        *,
+        comm_tag=None):
+    pairwise_inter_vol_data = {
+        (fluid_dd, wall_dd): (
+            _make_inter_vol_data(
+                fluid_state,
+                fluid_grad_cv,
+                fluid_grad_temperature),
+            _make_inter_vol_data(
+                wall_state,
+                wall_grad_cv,
+                wall_grad_temperature))}
+
     return inter_volume_trace_pairs(
-        dcoll, pairwise_grad_cv, comm_tag=_GradCVInterVolTag)
-
-
-def _grad_temperature_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, fluid_grad_temperature, wall_grad_temperature):
-    """Exchange temperature gradient across the fluid-wall interface."""
-    pairwise_grad_temperature = {
-        (fluid_dd, wall_dd):
-            (fluid_grad_temperature, wall_grad_temperature)}
-    return inter_volume_trace_pairs(
-        dcoll, pairwise_grad_temperature, comm_tag=_GradTemperatureInterVolTag)
+        dcoll, pairwise_inter_vol_data,
+        comm_tag=(_InterVolDataTag, comm_tag))
 
 
 def add_interface_boundaries_no_grad(
@@ -746,27 +782,30 @@ def add_interface_boundaries_no_grad(
     # Construct boundaries for the fluid-wall interface; no temperature gradient
     # yet because that's what we're trying to compute
 
-    state_inter_volume_trace_pairs = _state_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, fluid_state, wall_state)
+    interface_tpairs = _get_interface_trace_pairs_no_grad(
+        dcoll,
+        fluid_dd, wall_dd,
+        fluid_state, wall_state,
+        comm_tag=comm_tag)
 
     # Construct interface boundaries without gradient
 
     fluid_interface_boundaries_no_grad = {
-        state_tpair.dd.domain_tag: InterfaceFluidBoundary(
-            state_plus=state_tpair.ext,
+        interface_tpair.dd.domain_tag: InterfaceFluidBoundary(
+            state_plus=interface_tpair.ext.state,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
             boundary_velocity=boundary_velocity,
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
-        for state_tpair in state_inter_volume_trace_pairs[wall_dd, fluid_dd]}
+        for interface_tpair in interface_tpairs[wall_dd, fluid_dd]}
 
     wall_interface_boundaries_no_grad = {
-        state_tpair.dd.domain_tag: InterfaceWallBoundary(
-            state_plus=state_tpair.ext,
+        interface_tpair.dd.domain_tag: InterfaceWallBoundary(
+            state_plus=interface_tpair.ext.state,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
-        for state_tpair in state_inter_volume_trace_pairs[fluid_dd, wall_dd]}
+        for interface_tpair in interface_tpairs[fluid_dd, wall_dd]}
 
     # Augment the domain boundaries with the interface boundaries
 
@@ -871,14 +910,13 @@ def add_interface_boundaries(
 
     # Exchange information
 
-    state_inter_volume_trace_pairs = _state_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, fluid_state, wall_state)
-
-    grad_cv_inter_vol_tpairs = _grad_cv_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, fluid_grad_cv, wall_grad_cv)
-
-    grad_temperature_inter_vol_tpairs = _grad_temperature_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, fluid_grad_temperature, wall_grad_temperature)
+    interface_tpairs = _get_interface_trace_pairs(
+        dcoll,
+        fluid_dd, wall_dd,
+        fluid_state, wall_state,
+        fluid_grad_cv, wall_grad_cv,
+        fluid_grad_temperature, wall_grad_temperature,
+        comm_tag=comm_tag)
 
     # Need to pass lengthscales into the BC constructor
 
@@ -888,40 +926,34 @@ def add_interface_boundaries(
     # Construct interface boundaries with temperature gradient
 
     fluid_interface_boundaries = {
-        state_tpair.dd.domain_tag: InterfaceFluidBoundary(
-            state_plus=state_tpair.ext,
+        interface_tpair.dd.domain_tag: InterfaceFluidBoundary(
+            state_plus=interface_tpair.ext.state,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
             boundary_velocity=boundary_velocity,
-            grad_cv_plus=grad_cv_tpair.ext,
-            grad_t_plus=grad_temperature_tpair.ext,
+            grad_cv_plus=interface_tpair.ext.grad_cv,
+            grad_t_plus=interface_tpair.ext.grad_temperature,
             flux_penalty_amount=wall_penalty_amount,
 #            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
 #                                          fluid_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
-        for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
-            state_inter_volume_trace_pairs[wall_dd, fluid_dd],
-            grad_cv_inter_vol_tpairs[wall_dd, fluid_dd],
-            grad_temperature_inter_vol_tpairs[wall_dd, fluid_dd])}
+        for interface_tpair in interface_tpairs[wall_dd, fluid_dd]}
 
     wall_interface_boundaries = {
-        state_tpair.dd.domain_tag: InterfaceWallBoundary(
-            state_plus=state_tpair.ext,
+        interface_tpair.dd.domain_tag: InterfaceWallBoundary(
+            state_plus=interface_tpair.ext.state,
             interface_noslip=interface_noslip,
             interface_radiation=interface_radiation,
             wall_emissivity=wall_emissivity,
             sigma=sigma,
             u_ambient=ambient_temperature,
-            grad_cv_plus=grad_cv_tpair.ext,
-            grad_t_plus=grad_temperature_tpair.ext,
+            grad_cv_plus=interface_tpair.ext.grad_cv,
+            grad_t_plus=interface_tpair.ext.grad_temperature,
             flux_penalty_amount=wall_penalty_amount,
 #            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
 #                                          wall_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
-        for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
-            state_inter_volume_trace_pairs[fluid_dd, wall_dd],
-            grad_cv_inter_vol_tpairs[fluid_dd, wall_dd],
-            grad_temperature_inter_vol_tpairs[fluid_dd, wall_dd])}
+        for interface_tpair in interface_tpairs[fluid_dd, wall_dd]}
 
     # Augment the domain boundaries with the interface boundaries
 
