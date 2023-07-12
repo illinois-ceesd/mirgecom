@@ -113,15 +113,11 @@ from mirgecom.multiphysics import make_interface_boundaries
 from mirgecom.utils import project_from_base
 
 
-class _ThermalDataNoGradInterVolTag:
+class _InterVolDataNoGradTag:
     pass
 
 
-class _ThermalDataInterVolTag:
-    pass
-
-
-class _GradTemperatureInterVolTag:
+class _InterVolDataTag:
     pass
 
 
@@ -742,28 +738,28 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
-class _ThermalDataNoGrad:
+@dataclass(frozen=True, eq=False)
+class _InterVolDataNoGrad:
     kappa: DOFArray
     temperature: DOFArray
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
-class _ThermalData(_ThermalDataNoGrad):
+@dataclass(frozen=True, eq=False)
+class _InterVolData(_InterVolDataNoGrad):
     grad_temperature: np.ndarray
 
 
-def _make_thermal_data(kappa, temperature, grad_temperature=None):
+def _make_inter_vol_data(kappa, temperature, grad_temperature=None):
     if not isinstance(kappa, DOFArray):
         kappa = kappa * (0*temperature + 1)
 
     if grad_temperature is not None:
-        thermal_data = _ThermalData(kappa, temperature, grad_temperature)
+        inter_vol_data = _InterVolData(kappa, temperature, grad_temperature)
     else:
-        thermal_data = _ThermalDataNoGrad(kappa, temperature)
+        inter_vol_data = _InterVolDataNoGrad(kappa, temperature)
 
-    return thermal_data
+    return inter_vol_data
 
 
 def _get_interface_trace_pairs_no_grad(
@@ -773,13 +769,13 @@ def _get_interface_trace_pairs_no_grad(
         fluid_temperature, wall_temperature,
         *,
         comm_tag=None):
-    pairwise_thermal_data = {
+    pairwise_inter_vol_data = {
         (fluid_dd, wall_dd): (
-            _make_thermal_data(fluid_kappa, fluid_temperature),
-            _make_thermal_data(wall_kappa, wall_temperature))}
+            _make_inter_vol_data(fluid_kappa, fluid_temperature),
+            _make_inter_vol_data(wall_kappa, wall_temperature))}
     return inter_volume_trace_pairs(
-        dcoll, pairwise_thermal_data,
-        comm_tag=(_ThermalDataNoGradInterVolTag, comm_tag))
+        dcoll, pairwise_inter_vol_data,
+        comm_tag=(_InterVolDataNoGradTag, comm_tag))
 
 
 def _get_interface_trace_pairs(
@@ -790,20 +786,20 @@ def _get_interface_trace_pairs(
         fluid_grad_temperature, wall_grad_temperature,
         *,
         comm_tag=None):
-    pairwise_thermal_data = {
+    pairwise_inter_vol_data = {
         (fluid_dd, wall_dd): (
-            _make_thermal_data(
+            _make_inter_vol_data(
                 fluid_kappa,
                 fluid_temperature,
                 fluid_grad_temperature),
-            _make_thermal_data(
+            _make_inter_vol_data(
                 wall_kappa,
                 wall_temperature,
                 wall_grad_temperature))}
 
     return inter_volume_trace_pairs(
-        dcoll, pairwise_thermal_data,
-        comm_tag=(_ThermalDataInterVolTag, comm_tag))
+        dcoll, pairwise_inter_vol_data,
+        comm_tag=(_InterVolDataTag, comm_tag))
 
 
 def _get_interface_boundaries_no_grad(
