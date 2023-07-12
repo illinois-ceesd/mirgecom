@@ -207,10 +207,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     my_gas = my_composite.GasProperties()
     pyrolysis = my_composite.Pyrolysis()
 
-    
-    path = "../mirgecom/materials/aw_Bprime.dat"
-    bprime_table = (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
-    bprime_class = my_composite.BprimeTable(bprime_table=bprime_table)
+    bprime_class = my_composite.BprimeTable()
 
     wall_model = WallTabulatedEOS(wall_material=my_material)
 

@@ -56,7 +56,11 @@ class BprimeTable:
     portion is evaluated. This is NOT used for fully-coupled cases.
     """
 
-    def __init__(self, bprime_table):
+    def __init__(self):
+
+        path = __file__.replace("tacot.py", "aw_Bprime.dat")
+        bprime_table = \
+            (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
 
         # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
         self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
