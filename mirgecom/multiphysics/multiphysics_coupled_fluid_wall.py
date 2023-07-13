@@ -46,8 +46,6 @@ import numpy as np
 
 from grudge.trace_pair import inter_volume_trace_pairs
 from grudge.dof_desc import as_dofdesc
-import grudge.op as op
-from grudge.dt_utils import characteristic_lengthscales
 
 from mirgecom.fluid import make_conserved
 from mirgecom.math import harmonic_mean
@@ -853,8 +851,6 @@ def add_interface_boundaries(
         The tuple `(fluid_interface_boundaries, wall_interface_boundaries)`.
     """
 
-    actx = fluid_state.cv.mass.array_context
-
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
         # makes sense to use as a default here
@@ -882,8 +878,10 @@ def add_interface_boundaries(
 
     # Need to pass lengthscales into the BC constructor
 
-    fluid_lengthscales = characteristic_lengthscales(actx, dcoll, fluid_dd)
-    wall_lengthscales = characteristic_lengthscales(actx, dcoll, wall_dd)
+#    from grudge.dt_utils import characteristic_lengthscales
+#    actx = fluid_state.cv.mass.array_context
+#    fluid_lengthscales = characteristic_lengthscales(actx, dcoll, fluid_dd)
+#    wall_lengthscales = characteristic_lengthscales(actx, dcoll, wall_dd)
 
     # Construct interface boundaries with temperature gradient
 
@@ -896,8 +894,8 @@ def add_interface_boundaries(
             grad_cv_plus=grad_cv_tpair.ext,
             grad_t_plus=grad_temperature_tpair.ext,
             flux_penalty_amount=wall_penalty_amount,
-#            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
-#                                          fluid_lengthscales),
+            # lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
+            #                               fluid_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[wall_dd, fluid_dd],
@@ -915,8 +913,8 @@ def add_interface_boundaries(
             grad_cv_plus=grad_cv_tpair.ext,
             grad_t_plus=grad_temperature_tpair.ext,
             flux_penalty_amount=wall_penalty_amount,
-#            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
-#                                          wall_lengthscales),
+            # lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
+            #                               wall_lengthscales),
             use_kappa_weighted_grad_flux=use_kappa_weighted_grad_flux_in_fluid)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[fluid_dd, wall_dd],
