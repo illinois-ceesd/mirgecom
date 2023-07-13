@@ -1275,20 +1275,12 @@ def coupled_grad_t_operator(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
-    interface_radiation: bool
-
-        If `True`, interface includes a radiation sink term in the heat flux. See
-        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
-        for details. Additional arguments *wall_emissivity*, *sigma*, and
-        *ambient_temperature* are required if enabled and *wall_grad_temperature*
-        is not `None`.
-
     use_kappa_weighted_grad_flux_in_fluid: bool
 
         Indicates whether the temperature gradient flux on the fluid side of the
         interface should be computed using a simple average of temperatures or by
         weighting the temperature from each side by its respective thermal
-        conductivity. Not used if *interface_radiation* is `True`.
+        conductivity.
 
     quadrature_tag:
 
@@ -1350,7 +1342,6 @@ def coupled_grad_t_operator(
                 fluid_state, wall_kappa, wall_temperature,
                 fluid_boundaries, wall_boundaries,
                 interface_noslip=interface_noslip,
-                interface_radiation=interface_radiation,
                 quadrature_tag=quadrature_tag)
     else:
         fluid_all_boundaries_no_grad = _fluid_all_boundaries_no_grad
@@ -1379,11 +1370,7 @@ def coupled_ns_heat_operator(
         *,
         time=0.,
         interface_noslip=True,
-        interface_radiation=False,
         use_kappa_weighted_grad_flux_in_fluid=None,
-        wall_emissivity=None,
-        sigma=None,
-        ambient_temperature=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
@@ -1456,37 +1443,18 @@ def coupled_ns_heat_operator(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
-    interface_radiation: bool
-
-        If `True`, interface includes a radiation sink term in the heat flux. See
-        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
-        for details. Additional arguments *wall_emissivity*, *sigma*, and
-        *ambient_temperature* are required if enabled.
-
     use_kappa_weighted_grad_flux_in_fluid: bool
 
         Indicates whether the temperature gradient flux on the fluid side of the
         interface should be computed using a simple average of temperatures or by
         weighting the temperature from each side by its respective thermal
-        conductivity. Not used if *interface_radiation* is `True`.
-
-    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
-
-        Emissivity of the wall material.
-
-    sigma: float
-
-        Stefan-Boltzmann constant.
-
-    ambient_temperature: :class:`meshmode.dof_array.DOFArray`
-
-        Ambient temperature of the environment.
+        conductivity.
 
     wall_penalty_amount: float
 
         Coefficient $c$ for the interior penalty on the heat flux. See
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
-        for details. Not used if *interface_radiation* is `True`.
+        for details.
 
     quadrature_tag:
 
@@ -1530,15 +1498,6 @@ def coupled_ns_heat_operator(
         ":func:`add_interface_boundaries` and include them when calling the "
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
-    if interface_radiation:
-        if (
-                wall_emissivity is None
-                or sigma is None
-                or ambient_temperature is None):
-            raise TypeError(
-                "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
-                "are required if using surface radiation.")
-
     if use_kappa_weighted_grad_flux_in_fluid is None:
         warn(
             "Default value of use_kappa_weighted_grad_flux_in_fluid has changed "
@@ -1573,7 +1532,6 @@ def coupled_ns_heat_operator(
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
-            interface_radiation=interface_radiation,
             quadrature_tag=quadrature_tag)
 
     # Get the operator fluid states
@@ -1608,10 +1566,6 @@ def coupled_ns_heat_operator(
             fluid_grad_temperature, wall_grad_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
-            interface_radiation=interface_radiation,
-            wall_emissivity=wall_emissivity,
-            sigma=sigma,
-            ambient_temperature=ambient_temperature,
             wall_penalty_amount=wall_penalty_amount,
             quadrature_tag=quadrature_tag)
 
