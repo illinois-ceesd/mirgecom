@@ -45,7 +45,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-
+import numpy as np  # noqa
 from functools import partial
 from dataclasses import dataclass
 from typing import Optional
