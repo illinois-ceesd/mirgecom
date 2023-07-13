@@ -892,9 +892,10 @@ def _get_interface_boundaries(
                 fluid_bc_class = IsothermalSlipWallBoundary
             return fluid_bc_class(interface_tpair.ext.temperature)
 
-        radiation_spec = [wall_emissivity is None, sigma is None,
-                          ambient_temperature is None]
-        if sum(radiation_spec) != 0:
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
             raise TypeError(
                 "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
                 "are required if using surface radiation.")
@@ -1530,9 +1531,10 @@ def coupled_ns_heat_operator(
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
     if interface_radiation:
-        radiation_spec = [wall_emissivity is None, sigma is None,
-                          ambient_temperature is None]
-        if sum(radiation_spec) != 0:
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
             raise TypeError(
                 "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
                 "are required if using surface radiation.")
