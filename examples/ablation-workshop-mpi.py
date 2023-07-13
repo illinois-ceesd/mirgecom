@@ -742,10 +742,8 @@ if __name__ == "__main__":
                         help="simulation restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
-
     lazy = args.lazy
     if args.profiling:
         if lazy:
