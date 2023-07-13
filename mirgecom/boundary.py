@@ -1047,7 +1047,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
 
     def state_plus(
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state with zero normal-component velocity for an adiabatic wall."""
+        """Return state with reflected normal-component velocity."""
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
@@ -1059,7 +1059,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
 
     def state_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return state with zero normal-component velocity for an adiabatic wall."""
+        """Return state with zero normal-component velocity."""
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary

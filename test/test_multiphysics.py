@@ -51,7 +51,7 @@ from mirgecom.boundary import (
     DummyBoundary
 )
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    coupled_ns_heat_operator
+    basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
 from mirgecom.navierstokes import (
     grad_t_operator, grad_cv_operator, ns_operator
