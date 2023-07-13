@@ -278,7 +278,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
         if self._grad_t_plus is None:
-            raise ValueError(
+            raise TypeError(
                 "Boundary does not have external temperature gradient data.")
         grad_t_plus = project_from_base(dcoll, dd_bdry, self._grad_t_plus)
         return (grad_t_plus + grad_t_minus)/2
@@ -612,7 +612,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
             lengthscales_minus, *, penalty_amount=None,
             numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
         if self.grad_u_plus is None:
-            raise ValueError(
+            raise TypeError(
                 "Boundary does not have external gradient data.")
 
         actx = u_minus.array_context
@@ -711,13 +711,13 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             lengthscales_minus, *, penalty_amount=None,
             numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
         if self.grad_u_plus is None:
-            raise ValueError("External temperature gradient is not specified.")
+            raise TypeError("External temperature gradient is not specified.")
         if self.emissivity is None:
-            raise ValueError("Wall emissivity is not specified.")
+            raise TypeError("Wall emissivity is not specified.")
         if self.sigma is None:
-            raise ValueError("Stefan-Boltzmann constant value is not specified.")
+            raise TypeError("Stefan-Boltzmann constant value is not specified.")
         if self.u_ambient is None:
-            raise ValueError("Ambient temperature is not specified.")
+            raise TypeError("Ambient temperature is not specified.")
 
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
@@ -891,9 +891,10 @@ def _get_interface_boundaries(
                 fluid_bc_class = IsothermalSlipWallBoundary
             return fluid_bc_class(interface_tpair.ext.temperature)
 
-        radiation_spec = [wall_emissivity is None, sigma is None,
-                          ambient_temperature is None]
-        if sum(radiation_spec) != 0:
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
             raise TypeError(
                 "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
                 "are required if using surface radiation.")
@@ -1516,9 +1517,10 @@ def coupled_ns_heat_operator(
         "individual operators instead.", DeprecationWarning, stacklevel=2)
 
     if interface_radiation:
-        radiation_spec = [wall_emissivity is None, sigma is None,
-                          ambient_temperature is None]
-        if sum(radiation_spec) != 0:
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
             raise TypeError(
                 "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
                 "are required if using surface radiation.")
