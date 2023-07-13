@@ -1722,6 +1722,15 @@ def basic_coupled_ns_heat_operator(
         # makes sense to use as a default here
         wall_penalty_amount = 0.05
 
+    if interface_radiation:
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
+            raise TypeError(
+                "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
+                "are required if using surface radiation.")
+
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in fluid_boundaries.items()}
