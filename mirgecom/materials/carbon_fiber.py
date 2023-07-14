@@ -31,8 +31,12 @@ THE SOFTWARE.
 from typing import Optional
 import numpy as np
 from meshmode.dof_array import DOFArray
+# from pytools.obj_array import make_obj_array
+# from mirgecom.fluid import make_conserved
+from mirgecom.wall_model import WallDegradationModel
 
 
+# TODO per MTC review, can we generalize the oxidation model?
 class Oxidation:
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
@@ -89,7 +93,7 @@ class Oxidation:
         return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*ox_mass*k*eff_surf_area
 
 
-class SolidProperties:
+class SolidProperties(WallDegradationModel):
     """Evaluate the properties of the solid state containing only fibers.
 
     .. automethod:: void_fraction
@@ -103,10 +107,10 @@ class SolidProperties:
     .. automethod:: tortuosity
     """
 
-    def __init__(self):
-        """Solid volumetric density considering all resin constituents."""
-        self._char_mass = 0.0
-        self._virgin_mass = 160.0
+    def __init__(self, char_mass, virgin_mass):
+        """Bulk density considering the porosity and intrinsic density."""
+        self._char_mass = char_mass
+        self._virgin_mass = virgin_mass
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -166,12 +170,12 @@ class SolidProperties:
 
     # ~~~~~~~~ other properties
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
-        r"""Void fraction $\epsilon$ filled by gas around the fibers."""
+        r"""Fraction $\phi$ occupied by the solid."""
         # FIXME Should this be a quadratic function?
         return 0.10*tau
 
     def permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Permeability $K$ of the composite material."""
+        r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
         return 6.0e-11 + tau*0.0
 

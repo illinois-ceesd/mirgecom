@@ -96,14 +96,13 @@ Composite Materials
 
     This section covers the response of composite materials made of phenolic
     resin and carbon fibers.
-    The carbon fibers are characterized as a highly porous material,
-    with void fraction $\approx 90\%$. Phenolic resins are added to rigidize
-    the fibers by permeating the material and filling partially the gaps between
-    fibers. As the material is heated up by the flow, the resin pyrolysis, i.e.,
-    it degrades and produces gaseous species.
+    Phenolic resins are added to rigidize the fibers by permeating the
+    material and filling partially the gaps between fibers, reducing the porousity
+    to $\approx 80\%$. As the material is heated up by the flow, the resin
+    pyrolyses, i.e., it degrades and produces gaseous species.
 
-    The temporal evolution of wall density is solved in
-    order to predict the material degradation. As the
+    The temporal evolution of wall density is solved in order to predict the
+    material degradation. As the
     :class:`~mirgecom.materials.tacot.Pyrolysis` progresses, the mass of each 
     $i$ constituents of the resin, denoted by
     :attr:`~mirgecom.wall_model.PorousFlowDependentVars.material_densities`,
@@ -162,14 +161,11 @@ Composite Materials
     properties of the solid phase. Thus, the instantaneous material properties
     depend on the current state of the material, as well as the 
     :attr:`~mirgecom.eos.GasDependentVars.temperature`.
-    It is evaluated using Newton iteration based on both
-    :attr:`~mirgecom.materials.tacot.GasProperties.enthalpy` (tabulated
-    data) or 
-    :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` (Pyrometheus)
-    and
+    It is evaluated using Newton iteration based on
+    :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
     :attr:`~mirgecom.wall_model.WallEOS.enthalpy`,
-    as well as their respective derivatives, namely
-    :attr:`~mirgecom.materials.tacot.GasProperties.heat_capacity` and
+    as well as their respective derivatives
+    :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
     :attr:`~mirgecom.wall_model.WallEOS.heat_capacity`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials
@@ -177,12 +173,6 @@ Composite Materials
     temperature. The complete list of properties can be find, for instance, in
     :mod:`~mirgecom.materials.tacot`.
     Different materials can be incorporated as separated files.
-    
-    The
-    :class:`~mirgecom.materials.tacot.GasProperties` are obtained based on
-    tabulated data, assuming chemical equilibrium, and evaluated with splines
-    for interpolation of the entries. However, the data is currently obtained
-    by PICA.
 
 .. important ::
 
@@ -192,4 +182,4 @@ Composite Materials
 
 Helper Functions
 ----------------
-.. autofunction:: mirgecom.multiphysics.phenolics.initializer
+.. automodule:: mirgecom.materials.initializer

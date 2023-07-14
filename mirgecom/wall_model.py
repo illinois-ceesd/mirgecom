@@ -48,7 +48,18 @@ class WallDependentVars:
 
 
 class WallDegradationModel:
-    """Abstract interface for wall degradation model."""
+    """Abstract interface for wall degradation model.
+
+    .. automethod:: void_fraction
+    .. automethod:: decomposition_progress
+    .. automethod:: enthalpy
+    .. automethod:: heat_capacity
+    .. automethod:: thermal_conductivity
+    .. automethod:: volume_fraction
+    .. automethod:: permeability
+    .. automethod:: emissivity
+    .. automethod:: tortuosity
+    """
 
     @abstractmethod
     def void_fraction(self, tau: DOFArray) -> DOFArray:
@@ -56,14 +67,8 @@ class WallDegradationModel:
         raise NotImplementedError()
 
     @abstractmethod
-    def solid_density(self,
-            material_densities: Union[DOFArray, np.ndarray]) -> DOFArray:
-        r"""Return the solid density $\epsilon_s \rho_s$."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def heat_capacity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
-        r"""Evaluate the heat capacity $C_{p_s}$ of the solid."""
+    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -72,8 +77,24 @@ class WallDegradationModel:
         raise NotImplementedError()
 
     @abstractmethod
-    def thermal_conductivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def heat_capacity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+        r"""Evaluate the heat capacity $C_{p_s}$ of the solid."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def thermal_conductivity(self, temperature: DOFArray,
+                             tau: DOFArray) -> DOFArray:
         r"""Evaluate the thermal conductivity $\kappa$ of the solid."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def volume_fraction(self, tau: DOFArray) -> DOFArray:
+        r"""Fraction $\phi$ occupied by the solid."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def permeability(self, tau: DOFArray) -> DOFArray:
+        r"""Permeability $K$ of the porous material."""
         raise NotImplementedError()
 
     @abstractmethod
