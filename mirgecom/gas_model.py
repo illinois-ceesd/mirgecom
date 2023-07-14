@@ -83,7 +83,7 @@ class GasModel:
 
         A gas equation of state to provide thermal properties.
 
-    .. attribute:: transport_model
+    .. attribute:: transport
 
         A gas transport model to provide transport properties.  None for inviscid
         models.
