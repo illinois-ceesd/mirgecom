@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import sys
 import logging
 import gc
 import numpy as np
@@ -94,6 +93,14 @@ class _PresDiffTag:
 
 class _TempDiffTag:
     pass
+
+
+def binary_sum(ary):
+    """Sum the elements of an array, creating a log-depth DAG instead of linear."""
+    n = len(ary)
+    if n == 1:
+        return ary[0]
+    return binary_sum(ary[:n//2]) + binary_sum(ary[n//2:])
 
 
 @mpi_entry_point
@@ -467,15 +474,13 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         bnds_T = bprime_class._bounds_T  # noqa N806
         bnds_B = bprime_class._bounds_B  # noqa N806
 
-        # couldn't make lazy work without this
-        sys.setrecursionlimit(10000)
-
         # using spline for temperature interpolation
         # while using "nearest neighbor" for the "B" parameter
-        h_w = 0.0
+        h_w_comps = make_obj_array([actx.zeros((), dtype=np.float64)]*24*15)
+        i = 0
         for j in range(0, 24):
             for k in range(0, 15):
-                h_w = \
+                h_w_comps[i] = \
                     actx.np.where(actx.np.greater_equal(temperature_bc, bnds_T[j]),
                     actx.np.where(actx.np.less(temperature_bc, bnds_T[j+1]),
                     actx.np.where(actx.np.greater_equal(Bsurf, bnds_B[k]),
@@ -483,7 +488,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                           bprime_class._cs_Hw[k, 0, j]*(temperature_bc-bnds_T[j])**3
                         + bprime_class._cs_Hw[k, 1, j]*(temperature_bc-bnds_T[j])**2
                         + bprime_class._cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
-                        + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0) + h_w
+                        + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0)
+                i += 1
+
+        h_w = binary_sum(h_w_comps)
 
         h_g = gas_model.eos.enthalpy(temperature_bc)
 
