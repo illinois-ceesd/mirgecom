@@ -4,6 +4,7 @@
 .. autofunction:: asdict_shallow
 .. autofunction:: force_evaluation
 .. autofunction:: normalize_boundaries
+.. autofunction:: project_from_base
 """
 
 __copyright__ = """
@@ -130,3 +131,17 @@ def normalize_boundaries(boundaries):
     return {
         as_dofdesc(key).domain_tag: bdry
         for key, bdry in boundaries.items()}
+
+
+def project_from_base(dcoll, tgt_dd, field):
+    """Project *field* from *DISCR_TAG_BASE* to the same discr. as *tgt_dd*."""
+    from grudge.dof_desc import DISCR_TAG_BASE, as_dofdesc
+    from grudge.op import project
+
+    tgt_dd = as_dofdesc(tgt_dd)
+
+    if tgt_dd.discretization_tag is not DISCR_TAG_BASE:
+        tgt_dd_base = tgt_dd.with_discr_tag(DISCR_TAG_BASE)
+        return project(dcoll, tgt_dd_base, tgt_dd, field)
+    else:
+        return field
