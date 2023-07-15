@@ -92,11 +92,12 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
         nnodes = nnodes + (dim+1)*get_number_of_tetrahedron_nodes(dim-1, order)
     return nnodes
 
-def get_box_mesh(dim,a,b,n, t=None, periodic=None):
-    """
-    Creates a rectangular "box" like mesh with tagged boundary faces.
 
-    Ensures parameters needed for generate_regular_rect_mesh are satisfied
+def get_box_mesh(dim, a, b, n, t=None, periodic=None):
+    """
+    Create a rectangular "box" like mesh with tagged boundary faces.
+
+    Ensure parameters needed for generate_regular_rect_mesh are satisfied
     a,b,n,periodic are tuples of dimension = dim and are converted if not in this format
 
     bttf is a list of all dimensions in the problem in both positive and negative directions (x,-x...)
@@ -111,13 +112,14 @@ def get_box_mesh(dim,a,b,n, t=None, periodic=None):
     if np.isscalar(n):
         n = (n,)*dim
 
-    dim_names = ["x","y","z"]
+    dim_names = ["x", "y", "z"]
     bttf = {}
     for i in range(dim):
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a,b=b,n=n,boundary_tag_to_face=bttf,mesh_type=t,periodic=periodic)
+    return gen(a=a, b=b, n=n, 
+               boundary_tag_to_face=bttf,mesh_type=t,periodic=periodic)
 
 
 def check_step(step, interval):
