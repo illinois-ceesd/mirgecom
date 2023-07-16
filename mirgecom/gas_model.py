@@ -390,6 +390,7 @@ def make_fluid_state(cv, gas_model,
 
     else:
 
+        # TODO per previous review, think of a way to de-couple wall and fluid.
         # ~~~ we need to squeeze wall_model in gas_model because this is easily
         # accessible everywhere in the code
 

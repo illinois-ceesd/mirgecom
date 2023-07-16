@@ -16,6 +16,94 @@ from mirgecom.fluid import ConservedVars
 from mirgecom.eos import MixtureDependentVars
 from mirgecom.transport import GasTransportVars
 
+from arraycontext import (
+    dataclass_array_container, with_container_arithmetic,
+    get_container_context_recursively
+)
+
+
+@with_container_arithmetic(bcast_obj_array=False,
+                           bcast_container_types=(DOFArray, np.ndarray),
+                           matmul=True,
+                           _cls_has_array_context_attr=True,
+                           rel_comparison=True)
+@dataclass_array_container
+@dataclass(frozen=True)
+class HolderWallVars:
+# TODO Rename "holder"
+
+    mass: DOFArray
+    energy: DOFArray
+
+    @property
+    def array_context(self):
+        """Return an array context for the :class:`ConservedVars` object."""
+        return get_container_context_recursively(self.mass)
+
+
+@dataclass_array_container
+@dataclass(frozen=True)
+class HolderDependentVars:
+# TODO Rename "holder"
+    thermal_conductivity: DOFArray
+    temperature: DOFArray
+
+
+@dataclass_array_container
+@dataclass(frozen=True)
+class HolderState():
+# TODO Rename "holder"
+    cv: HolderWallVars
+    dv: HolderDependentVars
+
+
+class HolderWallModel:
+# TODO Rename "holder"
+    """Model for calculating wall quantities."""
+    def __init__(self, density_func, enthalpy_func, heat_capacity_func,
+                 thermal_conductivity_func):
+        self._density_func = density_func
+        self._enthalpy_func = enthalpy_func
+        self._heat_capacity_func = heat_capacity_func
+        self._thermal_conductivity_func = thermal_conductivity_func
+
+    def density(self):
+        return self._density_func()
+
+    def heat_capacity(self, temperature=None):
+        return self._heat_capacity_func(temperature)
+
+    def enthalpy(self, temperature):
+        return self._enthalpy_func(temperature)
+
+    def thermal_diffusivity(self, mass, temperature,
+                            thermal_conductivity=None):
+        if thermal_conductivity is None:
+            thermal_conductivity = self.thermal_conductivity(mass,
+                                                             temperature)
+        return thermal_conductivity/(mass * self.heat_capacity(temperature))
+
+    def thermal_conductivity(self, temperature):
+        return self._thermal_conductivity_func(temperature)
+
+    def eval_temperature(self, wv, tseed=None):
+        if tseed is not None:
+            temp = tseed*1.0
+            for i in range(0,3):
+                h = self.enthalpy(temp)
+                cp = self.heat_capacity(temp)
+                temp = temp - (h - wv.energy/wv.mass)/cp
+            return temp
+
+        return wv.energy/(self.density()*self.heat_capacity())
+
+    def dependent_vars(self, wv, tseed=None):
+        temperature = self.eval_temperature(wv, tseed)
+        kappa = self.thermal_conductivity(temperature)
+        # TODO Rename "holder"
+        return HolderDependentVars(thermal_conductivity=kappa,
+                                   temperature=temperature)
+
 
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
@@ -28,6 +116,7 @@ class PorousFlowDependentVars(MixtureDependentVars):
     material_densities: Union[DOFArray, np.ndarray]
 
 
+# TODO rename to PorousWallDependentVars
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
 class WallDependentVars:
@@ -47,6 +136,7 @@ class WallDependentVars:
     density: DOFArray
 
 
+# TODO rename to PorousWallDegradationModel
 class WallDegradationModel:
     """Abstract interface for wall degradation model.
 
@@ -108,15 +198,16 @@ class WallDegradationModel:
         raise NotImplementedError()
 
 
+# TODO rename to PorousWallEOS
 class WallEOS:
     """Interface for porous material degradation models.
 
-    This class evaluates the variables dependent on the wall decomposition state
-    and its different parts. For that, the user must supply external functions
-    in order to consider the different materials employed at wall (for instance,
-    carbon fibers, graphite, alumina, steel etc). The number and types of the
-    materials is case-dependent and, hence, must be defined in the respective
-    simulation driver.
+    This class evaluates the variables dependent on the wall decomposition
+    state and its different parts. For that, the user must supply external
+    functions in order to consider the different materials employed at wall
+    (for instance, carbon fibers, graphite, alumina, steel etc). The number
+    and types of the materials is case-dependent and, hence, must be defined
+    in the respective simulation driver.
 
     .. automethod:: __init__
     .. automethod:: solid_density
@@ -186,8 +277,10 @@ class WallEOS:
                 {\epsilon_g \rho_g C_{p_g} + \epsilon_s \rho_s C_{p_s}}
 
         """
+        actx = cv.array_context
+
         if isinstance(tseed, DOFArray) is False:
-            temp = tseed + tau*0.0
+            temp = tseed + actx.np.zeros_like(tau)
         else:
             temp = tseed*1.0
 
@@ -233,9 +326,9 @@ class WallEOS:
                              gas_tv: GasTransportVars):
         r"""Return the effective thermal conductivity of the gas+solid.
 
-        It is a function of temperature and degradation progress. As the fibers
-        are oxidized, they reduce their cross area and, consequently, their
-        hability to conduct heat.
+        It is a function of temperature and degradation progress. As the
+        fibers are oxidized, they reduce their cross area and, consequently,
+        their hability to conduct heat.
 
         It is evaluated using a mass-weighted average given by
 

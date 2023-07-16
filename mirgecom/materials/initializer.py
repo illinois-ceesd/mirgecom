@@ -26,17 +26,30 @@ THE SOFTWARE.
 
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import make_conserved
+from mirgecom.wall_model import HolderWallVars
+
+
+# TODO Rename "holder"
+class HolderInitializer:
+
+    def __init__(self, temperature):
+        self._temp = temperature
+
+    def __call__(self, actx, x_vec, wall_model):
+        mass = wall_model.density()
+        energy = mass * wall_model.enthalpy(self._temp)
+        return HolderWallVars(mass=mass, energy=energy)
 
 
 class PorousMaterialInitializer:
     """Initializer for porous materials."""
 
-    def __init__(self, pressure, temperature, species, wall_density):
+    def __init__(self, pressure, temperature, species, material_densities):
 
         self._pres = pressure
         self._y = species
         self._temp = temperature
-        self._wall_density = wall_density
+        self._wall_density = material_densities
 
     def __call__(self, actx, x_vec, gas_model):
 
