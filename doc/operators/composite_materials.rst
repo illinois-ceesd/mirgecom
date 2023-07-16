@@ -1,19 +1,10 @@
 Wall Degradation Modeling
 =========================
 
-Conserved Quantities
-^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: mirgecom.wall_model.PorousFlowDependentVars
-
-Equations of State
-^^^^^^^^^^^^^^^^^^
-.. autoclass:: mirgecom.wall_model.WallEOS
-.. autoclass:: mirgecom.wall_model.WallDependentVars
-
 Model-specific properties
 ^^^^^^^^^^^^^^^^^^^^^^^^^
     The properties of the materials are defined in specific files. These files
-    are required by :class:`~mirgecom.wall_model.WallEOS`.
+    are required by :class:`~mirgecom.wall_model.PorousWallEOS`.
 
 Carbon fiber
 ------------
@@ -77,7 +68,7 @@ Carbon Fiber Oxidation
 
     From the conserved variables, it is possible to compute the oxidation
     progress, denoted by
-    :attr:`~mirgecom.wall_model.WallDependentVars.tau`.
+    :attr:`~mirgecom.wall_model.PorousWallDependentVars.tau`.
     As a consequence, the instantaneous material properties will change due to
     the mass loss.
 
@@ -85,10 +76,10 @@ Carbon Fiber Oxidation
     :attr:`~mirgecom.eos.GasDependentVars.temperature`
     is evaluated using Newton iteration based on both
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
-    :attr:`~mirgecom.wall_model.WallEOS.enthalpy`,
+    :attr:`~mirgecom.wall_model.PorousWallEOS.enthalpy`,
     as well as their respective derivatives, namely
     :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
-    :attr:`~mirgecom.wall_model.WallEOS.heat_capacity`.
+    :attr:`~mirgecom.wall_model.PorousWallEOS.heat_capacity`.
     Note that :mod:`pyrometheus` is used to handle the species properties.
 
 Composite Materials
@@ -155,7 +146,7 @@ Composite Materials
 
     From the conserved variables, it is possible to compute the decomposition
     status, denoted by
-    :attr:`~mirgecom.wall_model.WallDependentVars.tau`.
+    :attr:`~mirgecom.wall_model.PorousWallDependentVars.tau`.
     This yields the proportion of virgin (unpyrolyzed material) to char (fully
     pyrolyzed) and, consequently, the different thermophysicochemical
     properties of the solid phase. Thus, the instantaneous material properties
@@ -163,10 +154,10 @@ Composite Materials
     :attr:`~mirgecom.eos.GasDependentVars.temperature`.
     It is evaluated using Newton iteration based on
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
-    :attr:`~mirgecom.wall_model.WallEOS.enthalpy`,
+    :attr:`~mirgecom.wall_model.PorousWallEOS.enthalpy`,
     as well as their respective derivatives
     :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
-    :attr:`~mirgecom.wall_model.WallEOS.heat_capacity`.
+    :attr:`~mirgecom.wall_model.PorousWallEOS.heat_capacity`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials
     to tabulated data for easy evaluation of the properties based on the
@@ -179,7 +170,3 @@ Composite Materials
     The current implementation follows the description of [Lachaud_2014]_ 
     for type 2 code. Additional details, extensive formulation and references
     are provided in https://github.com/illinois-ceesd/phenolics-notes
-
-Helper Functions
-----------------
-.. automodule:: mirgecom.materials.initializer

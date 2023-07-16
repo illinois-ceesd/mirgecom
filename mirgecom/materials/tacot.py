@@ -36,7 +36,7 @@ import numpy as np
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
 # from mirgecom.fluid import make_conserved
-from mirgecom.wall_model import WallDegradationModel
+from mirgecom.wall_model import PorousWallDegradationModel
 
 
 # TODO generalize?
@@ -100,7 +100,7 @@ class Pyrolysis:
             temperature*0.0])
 
 
-class SolidProperties(WallDegradationModel):
+class SolidProperties(PorousWallDegradationModel):
     """Evaluate the properties of the solid state containing resin and fibers.
 
     A linear weighting between the virgin and chared states is applied to

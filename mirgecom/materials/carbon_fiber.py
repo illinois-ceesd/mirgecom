@@ -33,7 +33,7 @@ import numpy as np
 from meshmode.dof_array import DOFArray
 # from pytools.obj_array import make_obj_array
 # from mirgecom.fluid import make_conserved
-from mirgecom.wall_model import WallDegradationModel
+from mirgecom.wall_model import PorousWallDegradationModel
 
 
 # TODO per MTC review, can we generalize the oxidation model?
@@ -156,7 +156,7 @@ class Y3_Oxidation_Model:
         return m_dot_c, m_dot_o2, m_dot_co2
 
 
-class SolidProperties(WallDegradationModel):
+class SolidProperties(PorousWallDegradationModel):
     """Evaluate the properties of the solid state containing only fibers.
 
     .. automethod:: void_fraction

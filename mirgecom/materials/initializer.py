@@ -1,4 +1,8 @@
-""":mod:`~mirgecom.materials.initializer` returns porous material initialization."""
+""":mod:`~mirgecom.materials.initializer` returns porous material initialization.
+
+.. autoclass:: SolidWallInitializer
+.. autoclass:: PorousWallInitializer
+"""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -26,11 +30,11 @@ THE SOFTWARE.
 
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import make_conserved
-from mirgecom.wall_model import HolderWallVars
+from mirgecom.wall_model import SolidWallConservedVars
 
 
-# TODO Rename "holder"
-class HolderInitializer:
+class SolidWallInitializer:
+    """Initializer for heat conduction only materials."""
 
     def __init__(self, temperature):
         self._temp = temperature
@@ -38,10 +42,10 @@ class HolderInitializer:
     def __call__(self, actx, x_vec, wall_model):
         mass = wall_model.density()
         energy = mass * wall_model.enthalpy(self._temp)
-        return HolderWallVars(mass=mass, energy=energy)
+        return SolidWallConservedVars(mass=mass, energy=energy)
 
 
-class PorousMaterialInitializer:
+class PorousWallInitializer:
     """Initializer for porous materials."""
 
     def __init__(self, pressure, temperature, species, material_densities):

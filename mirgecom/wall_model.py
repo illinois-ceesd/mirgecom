@@ -1,9 +1,13 @@
 """:mod:`mirgecom.multiphysics.wall_model` handles the EOS for wall model.
 
+.. autoclass:: SolidWallConservedVars
+.. autoclass:: SolidWallDependentVars
+.. autoclass:: SolidWallState
+.. autoclass:: SolidWallEOS
 .. autoclass:: PorousFlowDependentVars
-.. autoclass:: WallEOS
-.. autoclass:: WallDependentVars
-.. autoclass:: WallDegradationModel
+.. autoclass:: PorousWallDependentVars
+.. autoclass:: PorousWallDegradationModel
+.. autoclass:: PorousWallEOS
 """
 
 from dataclasses import dataclass
@@ -11,15 +15,14 @@ from abc import abstractmethod
 from typing import Union
 import numpy as np
 from meshmode.dof_array import DOFArray
-from arraycontext import dataclass_array_container
+from arraycontext import (
+    dataclass_array_container,
+    with_container_arithmetic,
+     get_container_context_recursively
+)
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import MixtureDependentVars
 from mirgecom.transport import GasTransportVars
-
-from arraycontext import (
-    dataclass_array_container, with_container_arithmetic,
-    get_container_context_recursively
-)
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -29,37 +32,39 @@ from arraycontext import (
                            rel_comparison=True)
 @dataclass_array_container
 @dataclass(frozen=True)
-class HolderWallVars:
-# TODO Rename "holder"
+class SolidWallConservedVars:
+    """Wall conserved variables for heat conduction only material."""
 
     mass: DOFArray
     energy: DOFArray
 
     @property
     def array_context(self):
-        """Return an array context for the :class:`ConservedVars` object."""
+        """Return an array context for the :class:`SolidWallConservedVars` object."""
         return get_container_context_recursively(self.mass)
 
 
 @dataclass_array_container
 @dataclass(frozen=True)
-class HolderDependentVars:
-# TODO Rename "holder"
+class SolidWallDependentVars:
+    """Wall dependent variables for heat conduction only materials."""
+
     thermal_conductivity: DOFArray
     temperature: DOFArray
 
 
 @dataclass_array_container
 @dataclass(frozen=True)
-class HolderState():
-# TODO Rename "holder"
-    cv: HolderWallVars
-    dv: HolderDependentVars
+class SolidWallState:
+    """Wall state for heat conduction only materials."""
+
+    cv: SolidWallConservedVars
+    dv: SolidWallDependentVars
 
 
-class HolderWallModel:
-# TODO Rename "holder"
-    """Model for calculating wall quantities."""
+class SolidWallEOS:
+    """Model for calculating wall quantities for heat conduction only materials."""
+
     def __init__(self, density_func, enthalpy_func, heat_capacity_func,
                  thermal_conductivity_func):
         self._density_func = density_func
@@ -68,28 +73,33 @@ class HolderWallModel:
         self._thermal_conductivity_func = thermal_conductivity_func
 
     def density(self):
+        """Return the wall density for all components."""
         return self._density_func()
 
     def heat_capacity(self, temperature=None):
+        """Return the wall heat_capacity for all components."""
         return self._heat_capacity_func(temperature)
 
     def enthalpy(self, temperature):
+        """Return the wall enthalpy for all components."""
         return self._enthalpy_func(temperature)
 
     def thermal_diffusivity(self, mass, temperature,
                             thermal_conductivity=None):
+        """Return the wall thermal diffusivity for all components."""
         if thermal_conductivity is None:
-            thermal_conductivity = self.thermal_conductivity(mass,
-                                                             temperature)
+            thermal_conductivity = self.thermal_conductivity(temperature)
         return thermal_conductivity/(mass * self.heat_capacity(temperature))
 
     def thermal_conductivity(self, temperature):
+        """Return the wall thermal conductivity for all components."""
         return self._thermal_conductivity_func(temperature)
 
     def eval_temperature(self, wv, tseed=None):
+        """Evaluate the temperature based on the energy."""
         if tseed is not None:
             temp = tseed*1.0
-            for i in range(0,3):
+            for _ in range(0,3):
                 h = self.enthalpy(temp)
                 cp = self.heat_capacity(temp)
                 temp = temp - (h - wv.energy/wv.mass)/cp
@@ -98,17 +108,18 @@ class HolderWallModel:
         return wv.energy/(self.density()*self.heat_capacity())
 
     def dependent_vars(self, wv, tseed=None):
+        """Return solid wall dependent variables."""
         temperature = self.eval_temperature(wv, tseed)
         kappa = self.thermal_conductivity(temperature)
-        # TODO Rename "holder"
-        return HolderDependentVars(thermal_conductivity=kappa,
-                                   temperature=temperature)
+        return SolidWallDependentVars(
+            thermal_conductivity=kappa,
+            temperature=temperature)
 
 
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
 class PorousFlowDependentVars(MixtureDependentVars):
-    """Dependent variables for the wall model.
+    """Dependent variables for the fluid state.
 
     .. attribute:: material_densities
     """
@@ -116,10 +127,9 @@ class PorousFlowDependentVars(MixtureDependentVars):
     material_densities: Union[DOFArray, np.ndarray]
 
 
-# TODO rename to PorousWallDependentVars
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
-class WallDependentVars:
+class PorousWallDependentVars:
     """Dependent variables for the wall degradation model.
 
     .. attribute:: tau
@@ -136,8 +146,7 @@ class WallDependentVars:
     density: DOFArray
 
 
-# TODO rename to PorousWallDegradationModel
-class WallDegradationModel:
+class PorousWallDegradationModel:
     """Abstract interface for wall degradation model.
 
     .. automethod:: void_fraction
@@ -198,8 +207,7 @@ class WallDegradationModel:
         raise NotImplementedError()
 
 
-# TODO rename to PorousWallEOS
-class WallEOS:
+class PorousWallEOS:
     """Interface for porous material degradation models.
 
     This class evaluates the variables dependent on the wall decomposition
@@ -216,9 +224,9 @@ class WallEOS:
     .. automethod:: get_temperature
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
+    .. automethod:: viscosity
     .. automethod:: thermal_conductivity
     .. automethod:: species_diffusivity
-    .. automethod:: viscosity
     .. automethod:: dependent_vars
     """
 
@@ -314,12 +322,14 @@ class WallEOS:
         """Return the heat capacity of the test material."""
         return self._material.heat_capacity(temperature, tau)
 
+    # TODO: maybe create a WallTransportVars?
     def viscosity(self, temperature: DOFArray, tau: DOFArray,
                   gas_tv: GasTransportVars) -> DOFArray:
         """Viscosity of the gas through the (porous) wall."""
         epsilon = self._material.void_fraction(tau)
         return gas_tv.viscosity/epsilon
 
+    # TODO: maybe create a WallTransportVars?
     def thermal_conductivity(self, cv: ConservedVars,
                              material_densities: Union[DOFArray, np.ndarray],
                              temperature: DOFArray, tau: DOFArray,
@@ -347,6 +357,7 @@ class WallEOS:
 
         return y_s*kappa_s + y_g*kappa_g
 
+    # TODO: maybe create a WallTransportVars?
     def species_diffusivity(self, temperature: DOFArray, tau: DOFArray,
                             gas_tv: GasTransportVars):
         """Mass diffusivity of gaseous species through the (porous) wall.
@@ -359,15 +370,15 @@ class WallEOS:
         tortuosity = self._material.tortuosity(tau)
         return gas_tv.species_diffusivity/tortuosity
 
-    def permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Permeability $K$ of the porous material."""
-        return self._material.permeability(tau)
+#    def permeability(self, tau: DOFArray) -> DOFArray:
+#        r"""Permeability $K$ of the porous material."""
+#        return self._material.permeability(tau)
 
     def dependent_vars(self,
-            material_densities: Union[DOFArray, np.ndarray]) -> WallDependentVars:
+            material_densities: Union[DOFArray, np.ndarray]) -> PorousWallDependentVars:
         """Get the state-dependent variables."""
         tau = self.decomposition_progress(material_densities)
-        return WallDependentVars(
+        return PorousWallDependentVars(
             tau=tau,
             void_fraction=self.void_fraction(tau),
             emissivity=self._material.emissivity(tau),

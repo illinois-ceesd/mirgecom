@@ -2,8 +2,8 @@ r""":mod:`mirgecom.multiphysics.multiphysics_coupled_fluid_wall` for fully-coupl
 fluid and wall.
 
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
-with a wall subdomain governed by the porous media equation (on-going work)
-by enforcing continuity of quantities and their respective fluxes
+with a wall subdomain governed by the porous media equation by enforcing
+continuity of quantities and their respective fluxes
 
 .. math::
     q_\text{fluid} &= q_\text{wall} \\
