@@ -1,4 +1,4 @@
-""":mod:`mirgecom.multiphysics.wall_model` handles the EOS for wall model.
+""":mod:`mirgecom.wall_model` handles the EOS for wall model.
 
 .. autoclass:: SolidWallConservedVars
 .. autoclass:: SolidWallDependentVars
@@ -119,7 +119,7 @@ class SolidWallEOS:
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
 class PorousFlowDependentVars(MixtureDependentVars):
-    """Dependent variables for the fluid state.
+    """Dependent variables for the (porous) fluid state.
 
     .. attribute:: material_densities
     """
@@ -369,10 +369,6 @@ class PorousWallEOS:
         """
         tortuosity = self._material.tortuosity(tau)
         return gas_tv.species_diffusivity/tortuosity
-
-#    def permeability(self, tau: DOFArray) -> DOFArray:
-#        r"""Permeability $K$ of the porous material."""
-#        return self._material.permeability(tau)
 
     def dependent_vars(self, material_densities: Union[DOFArray, np.ndarray]):
         """Get the state-dependent variables.
