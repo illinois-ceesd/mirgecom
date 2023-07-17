@@ -33,7 +33,6 @@ from mirgecom.simutil import max_component_norm
 import mirgecom.math as mm
 from mirgecom.diffusion import (
     diffusion_operator,
-    grad_operator as wall_grad_t_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
@@ -55,10 +54,6 @@ from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
 )
 from mirgecom.navierstokes import (
     grad_t_operator, grad_cv_operator, ns_operator
-)
-from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
-    add_interface_boundaries as add_thermal_interface_boundaries,
-    add_interface_boundaries_no_grad as add_thermal_interface_boundaries_no_grad
 )
 from mirgecom.multiphysics.multiphysics_coupled_fluid_wall import (
     add_interface_boundaries_no_grad as add_multiphysics_interface_bdries_no_grad,
@@ -958,6 +953,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
                 op.norm(dcoll, fluid_rhs.species_mass[i], np.inf)) < 1e-10
             assert actx.to_numpy(
                 op.norm(dcoll, solid_rhs.species_mass[i], np.inf)) < 1e-10
+
 
 if __name__ == "__main__":
     import sys

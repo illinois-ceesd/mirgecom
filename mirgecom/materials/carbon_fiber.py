@@ -34,6 +34,7 @@ from abc import abstractmethod
 from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallDegradationModel
 
+
 class Oxidation:
     """Abstract interface for wall oxidation model.
 
@@ -42,14 +43,14 @@ class Oxidation:
 
     @abstractmethod
     def get_source_terms(self, temperature: DOFArray,
-            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:
+            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
         r"""Source terms of fiber oxidation."""
         raise NotImplementedError()
 
 
 # TODO per MTC review, can we generalize the oxidation model?
 # should we keep this in the driver?
-class Y2_Oxidation_Model(Oxidation):
+class Y2_Oxidation_Model(Oxidation):  # noqa N801
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
     .. automethod:: puma_effective_surface_area
@@ -78,7 +79,7 @@ class Y2_Oxidation_Model(Oxidation):
         """
         return self.puma_effective_surface_area(progress)
 
-    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:
+    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:  # noqa N803
         """Return the effective source terms for the oxidation.
 
         Parameters
@@ -107,7 +108,7 @@ class Y2_Oxidation_Model(Oxidation):
 
 # TODO per MTC review, can we generalize the oxidation model?
 # should we keep this in the driver?
-class Y3_Oxidation_Model(Oxidation):
+class Y3_Oxidation_Model(Oxidation):  # noqa N801
     r"""Evaluate the source terms for the Y3 model of carbon fiber oxidation.
 
     Follows ``A. Martin, AIAA 2013-2636'', using a single reaction given by
@@ -135,7 +136,7 @@ class Y3_Oxidation_Model(Oxidation):
         epsilon_0 = self._material.volume_fraction(tau=1.0)
         return 2.0*epsilon_0/original_fiber_radius**2*fiber_radius
 
-    def get_source_terms(self, temperature, tau, rhoY_o2):
+    def get_source_terms(self, temperature, tau, rhoY_o2):  # noqa N803
         r"""Return the effective source terms for the oxidation.
 
         Parameters

@@ -284,7 +284,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
     def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
         """Gradient averaging for viscous flux."""
-
         # TODO ideally there is a continuity of shear stress, but depend on
         # how the coupling is performed
 
@@ -683,6 +682,9 @@ def add_interface_boundaries_no_grad(
         wall_penalty_amount=None):
     r"""Return the interface of the subdomains for gradient calculation.
 
+    Used to apply the boundary fluxes at the interface between fluid and
+    wall domains.
+
     Parameters
     ----------
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
@@ -719,6 +721,12 @@ def add_interface_boundaries_no_grad(
     interface_radiation: bool
         If `True`, interface includes a radiation sink term in the heat flux
         on the wall side and prescribes the temperature on the fluid side.
+        Additional arguments *wall_emissivity*, *sigma*, and
+        *ambient_temperature* are required if enabled.
+
+    boundary_velocity: float or :class:`meshmode.dof_array.DOFArray`
+        Normal velocity due to pyrolysis outgas. Only required for simplified
+        analysis of composite material.
 
     use_kappa_weighted_grad_flux_in_fluid: bool
         Indicates whether the gradient fluxes on the fluid side of the
@@ -796,6 +804,9 @@ def add_interface_boundaries(
         wall_penalty_amount=None):
     r"""Return the interface of the subdomains for viscous fluxes.
 
+    Used to apply the boundary fluxes at the interface between fluid and
+    wall domains.
+
     Parameters
     ----------
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
@@ -836,6 +847,19 @@ def add_interface_boundaries(
         for details. Additional arguments *wall_emissivity*, *sigma*, and
         *ambient_temperature* are required if enabled.
 
+    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
+        Emissivity of the wall material.
+
+    sigma: float
+        Stefan-Boltzmann constant.
+
+    ambient_temperature: :class:`meshmode.dof_array.DOFArray`
+        Ambient temperature of the environment.
+
+    boundary_velocity: float or :class:`meshmode.dof_array.DOFArray`
+        Normal velocity due to pyrolysis outgas. Only required for simplified
+        analysis of composite material.
+
     use_kappa_weighted_grad_flux_in_fluid: bool
         Indicates whether the gradient fluxes on the fluid side of the
         interface should be computed using either a simple or weighted average
@@ -850,7 +874,6 @@ def add_interface_boundaries(
     -------
         The tuple `(fluid_interface_boundaries, wall_interface_boundaries)`.
     """
-
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
         # makes sense to use as a default here

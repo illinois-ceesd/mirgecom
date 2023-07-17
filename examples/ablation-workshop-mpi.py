@@ -76,8 +76,8 @@ from mirgecom.logging_quantities import (
 from mirgecom.gas_model import ViscousFluidState
 from mirgecom.wall_model import (
     PorousFlowDependentVars,
-    WallDependentVars,
-    WallEOS
+    PorousWallDependentVars,
+    PorousWallEOS
 )
 from mirgecom.fluid import ConservedVars
 from mirgecom.transport import GasTransportVars
@@ -396,7 +396,7 @@ class GasProperties:
         return cv.mass*gas_const*temperature
 
 
-class WallTabulatedEOS(WallEOS):
+class WallTabulatedEOS(PorousWallEOS):
     """EOS for wall using tabulated data.
 
     Inherits WallEOS and add an temperature-evaluation function exclusive
@@ -467,7 +467,7 @@ class WallTabulatedEOS(WallEOS):
 
         return temp
 
-    def pressure_diffusivity(self, cv: ConservedVars, wdv: WallDependentVars,
+    def pressure_diffusivity(self, cv: ConservedVars, wdv: PorousWallDependentVars,
                              viscosity: DOFArray) -> DOFArray:
         r"""Return the pressure diffusivity for Darcy flow.
 
@@ -595,7 +595,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     my_gas = GasProperties()
     bprime_class = BprimeTable()
-    my_material = my_composite.SolidProperties()
+    my_material = my_composite.SolidProperties(char_mass=220.0, virgin_mass=280.0)
     pyrolysis = my_composite.Pyrolysis()
     wall_model = WallTabulatedEOS(wall_material=my_material)
 

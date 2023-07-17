@@ -86,6 +86,7 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
 
 
 def mask_from_elements(vol_discr, actx, elements):
+    """Get the individual sub-components from the mesh."""
     mesh = vol_discr.mesh
     zeros = vol_discr.zeros(actx)
 
