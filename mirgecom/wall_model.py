@@ -18,7 +18,7 @@ from meshmode.dof_array import DOFArray
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
-     get_container_context_recursively
+    get_container_context_recursively
 )
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import MixtureDependentVars
@@ -99,7 +99,7 @@ class SolidWallEOS:
         """Evaluate the temperature based on the energy."""
         if tseed is not None:
             temp = tseed*1.0
-            for _ in range(0,3):
+            for _ in range(0, 3):
                 h = self.enthalpy(temp)
                 cp = self.heat_capacity(temp)
                 temp = temp - (h - wv.energy/wv.mass)/cp
@@ -374,9 +374,15 @@ class PorousWallEOS:
 #        r"""Permeability $K$ of the porous material."""
 #        return self._material.permeability(tau)
 
-    def dependent_vars(self,
-            material_densities: Union[DOFArray, np.ndarray]) -> PorousWallDependentVars:
-        """Get the state-dependent variables."""
+    def dependent_vars(self, material_densities: Union[DOFArray, np.ndarray]):
+        """Get the state-dependent variables.
+
+        Returns
+        -------
+        dependent_vars: :class:`PorousWallDependentVars`
+            dependent variables of the wall-only state. These are complementary
+            to the fluid dependent variables, but not stacked together.
+        """
         tau = self.decomposition_progress(material_densities)
         return PorousWallDependentVars(
             tau=tau,

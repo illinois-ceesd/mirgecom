@@ -1,4 +1,4 @@
-""":mod:`~mirgecom.materials.initializer` returns porous material initialization.
+""":mod:`~mirgecom.materials.initializer` returns wall materials initialization.
 
 .. autoclass:: SolidWallInitializer
 .. autoclass:: PorousWallInitializer

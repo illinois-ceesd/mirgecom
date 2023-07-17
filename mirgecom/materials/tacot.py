@@ -35,11 +35,10 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
-# from mirgecom.fluid import make_conserved
 from mirgecom.wall_model import PorousWallDegradationModel
 
 
-# TODO generalize?
+# TODO generalize? keep in the driver?
 class Pyrolysis:
     r"""Evaluate the source terms for the pyrolysis decomposition.
 

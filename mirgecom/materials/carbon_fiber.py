@@ -28,16 +28,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Optional
 import numpy as np
+from typing import Optional
+from abc import abstractmethod
 from meshmode.dof_array import DOFArray
-# from pytools.obj_array import make_obj_array
-# from mirgecom.fluid import make_conserved
 from mirgecom.wall_model import PorousWallDegradationModel
+
+class Oxidation:
+    """Abstract interface for wall oxidation model.
+
+    .. automethod:: get_source_terms
+    """
+
+    @abstractmethod
+    def get_source_terms(self, temperature: DOFArray,
+            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:
+        r"""Source terms of fiber oxidation."""
+        raise NotImplementedError()
 
 
 # TODO per MTC review, can we generalize the oxidation model?
-class Oxidation:
+# should we keep this in the driver?
+class Y2_Oxidation_Model(Oxidation):
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
     .. automethod:: puma_effective_surface_area
@@ -66,7 +78,7 @@ class Oxidation:
         """
         return self.puma_effective_surface_area(progress)
 
-    def get_source_terms(self, temperature, tau, ox_mass) -> DOFArray:
+    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:
         """Return the effective source terms for the oxidation.
 
         Parameters
@@ -90,11 +102,12 @@ class Oxidation:
             / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
         k = alpha*actx.np.sqrt(
             (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
-        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*ox_mass*k*eff_surf_area
+        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
 
 
 # TODO per MTC review, can we generalize the oxidation model?
-class Y3_Oxidation_Model:
+# should we keep this in the driver?
+class Y3_Oxidation_Model(Oxidation):
     r"""Evaluate the source terms for the Y3 model of carbon fiber oxidation.
 
     Follows ``A. Martin, AIAA 2013-2636'', using a single reaction given by
@@ -122,7 +135,7 @@ class Y3_Oxidation_Model:
         epsilon_0 = self._material.volume_fraction(tau=1.0)
         return 2.0*epsilon_0/original_fiber_radius**2*fiber_radius
 
-    def get_source_terms(self, temperature, tau, cv, rhoY_o2) -> DOFArray:
+    def get_source_terms(self, temperature, tau, rhoY_o2):
         r"""Return the effective source terms for the oxidation.
 
         Parameters
@@ -135,6 +148,7 @@ class Y3_Oxidation_Model:
 
         Returns
         -------
+        meshmode.dof_array.DOFArray
             The tuple (\omega_{C}, \omega_{O_2}, \omega_{CO_2})
         """
         actx = temperature.array_context
@@ -143,7 +157,7 @@ class Y3_Oxidation_Model:
         mw_o = 15.999
         mw_o2 = mw_o*2
         mw_co2 = 44.010
-        univ_gas_const = 8.31446261815324 # J/(K-mol)
+        univ_gas_const = 8.31446261815324  # J/(K-mol)
 
         eff_surf_area = self._get_wall_effective_surface_area_fiber(tau)
 
