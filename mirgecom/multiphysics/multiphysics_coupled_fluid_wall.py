@@ -678,8 +678,7 @@ def add_interface_boundaries_no_grad(
         interface_noslip, interface_radiation,
         *,
         boundary_velocity=None,
-        use_kappa_weighted_grad_flux_in_fluid=False,
-        wall_penalty_amount=None):
+        use_kappa_weighted_grad_flux_in_fluid=False):   # FIXME remove
     r"""Return the interface of the subdomains for gradient calculation.
 
     Used to apply the boundary fluxes at the interface between fluid and
@@ -732,11 +731,6 @@ def add_interface_boundaries_no_grad(
         Indicates whether the gradient fluxes on the fluid side of the
         interface should be computed using either a simple or weighted average
         by its respective transport coefficients.
-
-    wall_penalty_amount: float
-        Coefficient $c$ for the interior penalty on the heat flux. See
-        :class:`InterfaceFluidBoundary`
-        for details.
 
     Returns
     -------
@@ -800,7 +794,7 @@ def add_interface_boundaries(
         *,
         boundary_velocity=None,
         wall_emissivity=None, sigma=None, ambient_temperature=None,
-        use_kappa_weighted_grad_flux_in_fluid=False,
+        use_kappa_weighted_grad_flux_in_fluid=False,  # FIXME remove
         wall_penalty_amount=None):
     r"""Return the interface of the subdomains for viscous fluxes.
 
