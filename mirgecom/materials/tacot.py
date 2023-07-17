@@ -204,7 +204,7 @@ class SolidProperties(PorousWallDegradationModel):
         return virgin*tau + char*(1.0 - tau) + fiber
 
     def permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Permeability $K$ of the porous material."""
+        r"""Permeability $K$ of the composite material."""
         virgin = 1.6e-11
         char = 2.0e-11
         return virgin*tau + char*(1.0 - tau)
