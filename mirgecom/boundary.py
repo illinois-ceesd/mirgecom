@@ -1542,7 +1542,7 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
         """
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-        ones = actx.zeros_like(state_minus.temperature) + 1.
+        ones = actx.np.zeros_like(state_minus.temperature) + 1.
 
         free_stream_state = self.free_stream_state_func(
             dcoll, dd_bdry, gas_model, state_minus, **kwargs)
