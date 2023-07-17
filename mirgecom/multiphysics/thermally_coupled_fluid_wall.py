@@ -3,15 +3,22 @@ fluid and wall.
 
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
 (:mod:`mirgecom.navierstokes`) with a wall subdomain governed by the heat
-equation (:mod:`mirgecom.diffusion`) by enforcing continuity of temperature
-and heat flux
+equation (:mod:`mirgecom.diffusion`) through temperature and heat flux. This
+radiation can optionally include a sink term representing emitted radiation.
+In the non-radiating case, coupling enforces continuity of temperature and heat flux
 
 .. math::
-    T_\text{fluid} &= T_\text{wall} \\
-    -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n} &=
-        -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n}.
+    T_\text{wall} &= T_\text{fluid} \\
+    -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n} &=
+        -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n},
 
-at the interface.
+and in the radiating case, coupling enforces a similar condition but with an
+additional radiation sink term in the heat flux
+
+.. math::
+    -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n} =
+        -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n}
+        + \epsilon \sigma (T^4 - T_\text{ambient}^4).
 
 Boundary Setup Functions
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -31,6 +38,7 @@ Boundary Conditions
 .. autoclass:: InterfaceFluidSlipBoundary
 .. autoclass:: InterfaceFluidNoslipBoundary
 .. autoclass:: InterfaceWallBoundary
+.. autoclass:: InterfaceWallRadiationBoundary
 """
 
 __copyright__ = """
@@ -79,7 +87,9 @@ from mirgecom.boundary import (
     MengaldoBoundaryCondition,
     _SlipBoundaryComponent,
     _NoSlipBoundaryComponent,
-    _ImpermeableBoundaryComponent)
+    _ImpermeableBoundaryComponent,
+    IsothermalSlipWallBoundary,
+    IsothermalWallBoundary)
 from mirgecom.flux import num_flux_central
 from mirgecom.viscous import viscous_facial_flux_harmonic
 from mirgecom.gas_model import (
@@ -92,6 +102,7 @@ from mirgecom.navierstokes import (
 )
 from mirgecom.diffusion import (
     grad_facial_flux_weighted,
+    diffusion_flux,
     diffusion_facial_flux_harmonic,
     DiffusionBoundary,
     grad_operator as wall_grad_t_operator,
@@ -267,7 +278,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
         if self._grad_t_plus is None:
-            raise ValueError(
+            raise TypeError(
                 "Boundary does not have external temperature gradient data.")
         grad_t_plus = project_from_base(dcoll, dd_bdry, self._grad_t_plus)
         return (grad_t_plus + grad_t_minus)/2
@@ -601,7 +612,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
             lengthscales_minus, *, penalty_amount=None,
             numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
         if self.grad_u_plus is None:
-            raise ValueError(
+            raise TypeError(
                 "Boundary does not have external gradient data.")
 
         actx = u_minus.array_context
@@ -624,6 +635,102 @@ class InterfaceWallBoundary(DiffusionBoundary):
         return numerical_flux_func(
             kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
             penalty_amount=penalty_amount)
+
+
+class InterfaceWallRadiationBoundary(DiffusionBoundary):
+    r"""
+    Boundary for the wall side of the fluid-wall interface (radiating).
+
+    Enforces the heat flux to be that entering the fluid side plus a radiation sink
+    term:
+
+    .. math::
+        -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n} =
+            -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n}
+            + \epsilon \sigma (T^4 - T_\text{ambient}^4),
+
+    where $\epsilon$ is the wall material's emissivity and $\sigma$ is the
+    Stefan-Boltzmann constant.
+
+    .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
+    """
+
+    def __init__(
+            self, kappa_plus, grad_u_plus=None, emissivity=None, sigma=None,
+            u_ambient=None):
+        r"""
+        Initialize InterfaceWallRadiationBoundary.
+
+        Arguments *grad_u_plus*, *emissivity*, *sigma*, and *u_ambient* are only
+        required if the boundary will be used to compute the heat flux.
+
+        Parameters
+        ----------
+        kappa_plus: float or :class:`meshmode.dof_array.DOFArray`
+
+            Thermal conductivity from the fluid side.
+
+        grad_u_plus: :class:`meshmode.dof_array.DOFArray` or None
+
+            Temperature gradient from the fluid side.
+
+        emissivity: float or :class:`meshmode.dof_array.DOFArray` or None
+
+            Emissivity of the wall material.
+
+        sigma: float or None
+
+            Stefan-Boltzmann constant.
+
+        u_ambient: :class:`meshmode.dof_array.DOFArray` or None
+
+            Ambient temperature of the environment.
+        """
+        self.kappa_plus = kappa_plus
+        self.emissivity = emissivity
+        self.sigma = sigma
+        self.u_ambient = u_ambient
+        self.grad_u_plus = grad_u_plus
+
+    def get_grad_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, *,
+            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+        actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        kappa_tpair = TracePair(
+            dd_bdry, interior=kappa_minus, exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_minus)
+
+        return numerical_flux_func(kappa_tpair, u_tpair, normal)
+
+    def get_diffusion_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
+            lengthscales_minus, *, penalty_amount=None,
+            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+        if self.grad_u_plus is None:
+            raise TypeError("External temperature gradient is not specified.")
+        if self.emissivity is None:
+            raise TypeError("Wall emissivity is not specified.")
+        if self.sigma is None:
+            raise TypeError("Stefan-Boltzmann constant value is not specified.")
+        if self.u_ambient is None:
+            raise TypeError("Ambient temperature is not specified.")
+
+        actx = u_minus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+        kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
+        grad_u_plus = project_from_base(dcoll, dd_bdry, self.grad_u_plus)
+        emissivity = project_from_base(dcoll, dd_bdry, self.emissivity)
+        u_ambient = project_from_base(dcoll, dd_bdry, self.u_ambient)
+
+        # Note: numerical_flux_func is ignored
+        return (
+            np.dot(diffusion_flux(kappa_plus, grad_u_plus), normal)
+            + emissivity * self.sigma * (u_minus**4 - u_ambient**4))
 
 
 @dataclass_array_container
@@ -698,6 +805,7 @@ def _get_interface_boundaries_no_grad(
         fluid_temperature, wall_temperature,
         *,
         interface_noslip=True,
+        interface_radiation=False,
         quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
     interface_tpairs = _get_interface_trace_pairs_no_grad(
@@ -707,20 +815,32 @@ def _get_interface_boundaries_no_grad(
         fluid_temperature, wall_temperature,
         comm_tag=comm_tag)
 
-    if interface_noslip:
-        fluid_bc_class = InterfaceFluidNoslipBoundary
+    if interface_radiation:
+        def make_fluid_boundary(interface_tpair):
+            if interface_noslip:
+                fluid_bc_class = IsothermalWallBoundary
+            else:
+                fluid_bc_class = IsothermalSlipWallBoundary
+            return fluid_bc_class(interface_tpair.ext.temperature)
+
+        def make_wall_boundary(interface_tpair):
+            return InterfaceWallRadiationBoundary(
+                interface_tpair.ext.kappa)
+
     else:
-        fluid_bc_class = InterfaceFluidSlipBoundary
+        def make_fluid_boundary(interface_tpair):
+            if interface_noslip:
+                fluid_bc_class = InterfaceFluidNoslipBoundary
+            else:
+                fluid_bc_class = InterfaceFluidSlipBoundary
+            return fluid_bc_class(
+                interface_tpair.ext.kappa,
+                interface_tpair.ext.temperature)
 
-    def make_fluid_boundary(interface_tpair):
-        return fluid_bc_class(
-            interface_tpair.ext.kappa,
-            interface_tpair.ext.temperature)
-
-    def make_wall_boundary(interface_tpair):
-        return InterfaceWallBoundary(
-            interface_tpair.ext.kappa,
-            interface_tpair.ext.temperature)
+        def make_wall_boundary(interface_tpair):
+            return InterfaceWallBoundary(
+                interface_tpair.ext.kappa,
+                interface_tpair.ext.temperature)
 
     bdry_factories = {
         (wall_dd, fluid_dd): make_fluid_boundary,
@@ -743,6 +863,10 @@ def _get_interface_boundaries(
         fluid_grad_temperature, wall_grad_temperature,
         *,
         interface_noslip=True,
+        interface_radiation=False,
+        wall_emissivity=None,
+        sigma=None,
+        ambient_temperature=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
@@ -759,34 +883,59 @@ def _get_interface_boundaries(
         fluid_grad_temperature, wall_grad_temperature,
         comm_tag=comm_tag)
 
-    if interface_noslip:
-        fluid_bc_class = InterfaceFluidNoslipBoundary
+    if interface_radiation:
+        def make_fluid_boundary(interface_tpair):
+            if interface_noslip:
+                fluid_bc_class = IsothermalWallBoundary
+            else:
+                fluid_bc_class = IsothermalSlipWallBoundary
+            return fluid_bc_class(interface_tpair.ext.temperature)
+
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
+            raise TypeError(
+                "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
+                "are required if using surface radiation.")
+
+        def make_wall_boundary(interface_tpair):
+            emissivity_minus = op.project(dcoll, wall_dd, interface_tpair.dd,
+                                          wall_emissivity)
+            return InterfaceWallRadiationBoundary(
+                interface_tpair.ext.kappa,
+                interface_tpair.ext.grad_temperature,
+                emissivity_minus, sigma,
+                ambient_temperature)
+
     else:
-        fluid_bc_class = InterfaceFluidSlipBoundary
+        # Diffusion operator passes lengthscales_minus into the boundary flux
+        # functions, but NS doesn't; thus we need to pass lengthscales into
+        # the fluid boundary condition constructor
+        from grudge.dt_utils import characteristic_lengthscales
+        fluid_lengthscales = (
+            characteristic_lengthscales(
+                fluid_temperature.array_context, dcoll, fluid_dd)
+            * (0*fluid_temperature+1))
 
-    # Diffusion operator passes lengthscales_minus into the boundary flux
-    # functions, but NS doesn't; thus we need to pass lengthscales into
-    # the fluid boundary condition constructor
-    from grudge.dt_utils import characteristic_lengthscales
-    fluid_lengthscales = (
-        characteristic_lengthscales(
-            fluid_temperature.array_context, dcoll, fluid_dd)
-        * (0*fluid_temperature+1))
+        def make_fluid_boundary(interface_tpair):
+            if interface_noslip:
+                fluid_bc_class = InterfaceFluidNoslipBoundary
+            else:
+                fluid_bc_class = InterfaceFluidSlipBoundary
+            return fluid_bc_class(
+                interface_tpair.ext.kappa,
+                interface_tpair.ext.temperature,
+                interface_tpair.ext.grad_temperature,
+                heat_flux_penalty_amount=wall_penalty_amount,
+                lengthscales_minus=op.project(dcoll,
+                    fluid_dd, interface_tpair.dd, fluid_lengthscales))
 
-    def make_fluid_boundary(interface_tpair):
-        return fluid_bc_class(
-            interface_tpair.ext.kappa,
-            interface_tpair.ext.temperature,
-            interface_tpair.ext.grad_temperature,
-            wall_penalty_amount,
-            lengthscales_minus=op.project(dcoll,
-                fluid_dd, interface_tpair.dd, fluid_lengthscales))
-
-    def make_wall_boundary(interface_tpair):
-        return InterfaceWallBoundary(
-            interface_tpair.ext.kappa,
-            interface_tpair.ext.temperature,
-            interface_tpair.ext.grad_temperature)
+        def make_wall_boundary(interface_tpair):
+            return InterfaceWallBoundary(
+                interface_tpair.ext.kappa,
+                interface_tpair.ext.temperature,
+                interface_tpair.ext.grad_temperature)
 
     bdry_factories = {
         (wall_dd, fluid_dd): make_fluid_boundary,
@@ -809,6 +958,7 @@ def add_interface_boundaries_no_grad(
         fluid_boundaries, wall_boundaries,
         *,
         interface_noslip=True,
+        interface_radiation=False,
         quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
     """
@@ -868,6 +1018,12 @@ def add_interface_boundaries_no_grad(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
+    interface_radiation: bool
+
+        If `True`, interface includes a radiation sink term in the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
+        for details.
+
     quadrature_tag
 
         An identifier denoting a particular quadrature discretization to use during
@@ -883,6 +1039,7 @@ def add_interface_boundaries_no_grad(
             fluid_state.tv.thermal_conductivity, wall_kappa,
             fluid_state.temperature, wall_temperature,
             interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
             quadrature_tag=quadrature_tag,
             comm_tag=comm_tag)
 
@@ -906,6 +1063,10 @@ def add_interface_boundaries(
         fluid_boundaries, wall_boundaries,
         *,
         interface_noslip=True,
+        interface_radiation=False,
+        wall_emissivity=None,
+        sigma=None,
+        ambient_temperature=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
@@ -974,6 +1135,25 @@ def add_interface_boundaries(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
+    interface_radiation: bool
+
+        If `True`, interface includes a radiation sink term in the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
+        for details. Additional arguments *wall_emissivity*, *sigma*, and
+        *ambient_temperature* are required if enabled.
+
+    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
+
+        Emissivity of the wall material.
+
+    sigma: float
+
+        Stefan-Boltzmann constant.
+
+    ambient_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Ambient temperature of the environment.
+
     wall_penalty_amount: float
 
         Coefficient $c$ for the interior penalty on the heat flux. See
@@ -996,6 +1176,10 @@ def add_interface_boundaries(
             fluid_state.temperature, wall_temperature,
             fluid_grad_temperature, wall_grad_temperature,
             interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
+            wall_emissivity=wall_emissivity,
+            sigma=sigma,
+            ambient_temperature=ambient_temperature,
             wall_penalty_amount=wall_penalty_amount,
             quadrature_tag=quadrature_tag,
             comm_tag=comm_tag)
@@ -1020,6 +1204,7 @@ def coupled_grad_t_operator(
         *,
         time=0.,
         interface_noslip=True,
+        interface_radiation=False,
         use_kappa_weighted_grad_flux_in_fluid=None,
         quadrature_tag=DISCR_TAG_BASE,
         fluid_numerical_flux_func=num_flux_central,
@@ -1256,18 +1441,18 @@ def coupled_ns_heat_operator(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
-    wall_penalty_amount: float
-
-        Coefficient $c$ for the interior penalty on the heat flux. See
-        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
-        for details.
-
     use_kappa_weighted_grad_flux_in_fluid: bool
 
         Indicates whether the temperature gradient flux on the fluid side of the
         interface should be computed using a simple average of temperatures or by
         weighting the temperature from each side by its respective thermal
         conductivity.
+
+    wall_penalty_amount: float
+
+        Coefficient $c$ for the interior penalty on the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
+        for details.
 
     quadrature_tag:
 
@@ -1403,6 +1588,10 @@ def basic_coupled_ns_heat_operator(
         *,
         time=0.,
         interface_noslip=True,
+        interface_radiation=False,
+        wall_emissivity=None,
+        sigma=None,
+        ambient_temperature=None,
         wall_penalty_amount=None,
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
@@ -1469,6 +1658,25 @@ def basic_coupled_ns_heat_operator(
         If `True`, interface boundaries on the fluid side will be treated as
         no-slip walls. If `False` they will be treated as slip walls.
 
+    interface_radiation: bool
+
+        If `True`, interface includes a radiation sink term in the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceWallRadiationBoundary`
+        for details. Additional arguments *wall_emissivity*, *sigma*, and
+        *ambient_temperature* are required if enabled.
+
+    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
+
+        Emissivity of the wall material.
+
+    sigma: float
+
+        Stefan-Boltzmann constant.
+
+    ambient_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Ambient temperature of the environment.
+
     wall_penalty_amount: float
 
         Coefficient $c$ for the interior penalty on the heat flux. See
@@ -1501,6 +1709,15 @@ def basic_coupled_ns_heat_operator(
         # makes sense to use as a default here
         wall_penalty_amount = 0.05
 
+    if interface_radiation:
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
+            raise TypeError(
+                "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
+                "are required if using surface radiation.")
+
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in fluid_boundaries.items()}
@@ -1518,6 +1735,7 @@ def basic_coupled_ns_heat_operator(
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
             quadrature_tag=quadrature_tag)
 
     # Get the operator fluid states
@@ -1547,6 +1765,10 @@ def basic_coupled_ns_heat_operator(
             fluid_grad_temperature, wall_grad_temperature,
             fluid_boundaries, wall_boundaries,
             interface_noslip=interface_noslip,
+            interface_radiation=interface_radiation,
+            wall_emissivity=wall_emissivity,
+            sigma=sigma,
+            ambient_temperature=ambient_temperature,
             wall_penalty_amount=wall_penalty_amount,
             quadrature_tag=quadrature_tag)
 
@@ -1562,17 +1784,17 @@ def basic_coupled_ns_heat_operator(
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
 
-    diffusion_result = diffusion_operator(
+    wall_rhs = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-        return_grad_u=return_gradients, dd=wall_dd, grad_u=wall_grad_temperature,
-        comm_tag=_WallOperatorTag)
+        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_WallOperatorTag)
 
     if return_gradients:
-        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
-        wall_rhs, wall_grad_temperature = diffusion_result
+        # Ignore fluid_grad_temperature result here because we already have it
+        fluid_rhs, fluid_grad_cv, _fluid_grad_temperature = ns_result
         return (
             fluid_rhs, wall_rhs, fluid_grad_cv, fluid_grad_temperature,
             wall_grad_temperature)
     else:
-        return ns_result, diffusion_result
+        fluid_rhs = ns_result
+        return fluid_rhs, wall_rhs
