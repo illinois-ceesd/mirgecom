@@ -22,6 +22,7 @@ Diagnostic utilities
 Mesh and element utilities
 --------------------------
 
+.. autofunction:: mask_from_elements
 .. autofunction:: geometric_mesh_partitioner
 .. autofunction:: distribute_mesh
 .. autofunction:: get_number_of_tetrahedron_nodes
@@ -83,6 +84,24 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # pylint: disable=no-name-in-module
     from mpi4py.MPI import Comm
+
+
+def mask_from_elements(vol_discr, actx, elements):
+    """Get the individual sub-components from the mesh."""
+    mesh = vol_discr.mesh
+    zeros = vol_discr.zeros(actx)
+
+    group_arrays = []
+
+    for igrp in range(len(mesh.groups)):
+        start_elem_nr = mesh.base_element_nrs[igrp]
+        end_elem_nr = start_elem_nr + mesh.groups[igrp].nelements
+        grp_elems = elements[
+            (elements >= start_elem_nr)
+            & (elements < end_elem_nr)] - start_elem_nr
+        grp_ary_np = actx.to_numpy(zeros[igrp])
+        grp_ary_np[grp_elems] = 1
+        group_arrays.append(actx.from_numpy(grp_
 
 
 def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
