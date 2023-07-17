@@ -101,7 +101,9 @@ def mask_from_elements(vol_discr, actx, elements):
             & (elements < end_elem_nr)] - start_elem_nr
         grp_ary_np = actx.to_numpy(zeros[igrp])
         grp_ary_np[grp_elems] = 1
-        group_arrays.append(actx.from_numpy(grp_
+        group_arrays.append(actx.from_numpy(grp_ary_np))
+
+    return DOFArray(actx, tuple(group_arrays))
 
 
 def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
