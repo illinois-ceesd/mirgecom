@@ -25,6 +25,7 @@ THE SOFTWARE.
 """
 
 __doc__ = """
+.. automodule:: mirgecom.materials.initializer
 .. automodule:: mirgecom.materials.carbon_fiber
 .. automodule:: mirgecom.materials.tacot
 """

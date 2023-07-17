@@ -28,12 +28,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Optional
 import numpy as np
+from typing import Optional
+from abc import abstractmethod
 from meshmode.dof_array import DOFArray
+from mirgecom.wall_model import PorousWallDegradationModel
 
 
 class Oxidation:
+    """Abstract interface for wall oxidation model.
+
+    .. automethod:: get_source_terms
+    """
+
+    @abstractmethod
+    def get_source_terms(self, temperature: DOFArray,
+            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+        r"""Source terms of fiber oxidation."""
+        raise NotImplementedError()
+
+
+# TODO per MTC review, can we generalize the oxidation model?
+# should we keep this in the driver?
+class Y2_Oxidation_Model(Oxidation):  # noqa N801
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
     .. automethod:: puma_effective_surface_area
@@ -62,7 +79,7 @@ class Oxidation:
         """
         return self.puma_effective_surface_area(progress)
 
-    def get_source_terms(self, temperature, tau, ox_mass) -> DOFArray:
+    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:  # noqa N803
         """Return the effective source terms for the oxidation.
 
         Parameters
@@ -86,10 +103,10 @@ class Oxidation:
             / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
         k = alpha*actx.np.sqrt(
             (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
-        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*ox_mass*k*eff_surf_area
+        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
 
 
-class SolidProperties:
+class SolidProperties(PorousWallDegradationModel):
     """Evaluate the properties of the solid state containing only fibers.
 
     .. automethod:: void_fraction
@@ -103,10 +120,10 @@ class SolidProperties:
     .. automethod:: tortuosity
     """
 
-    def __init__(self):
-        """Solid volumetric density considering all resin constituents."""
-        self._char_mass = 0.0
-        self._virgin_mass = 160.0
+    def __init__(self, char_mass, virgin_mass):
+        """Bulk density considering the porosity and intrinsic density."""
+        self._char_mass = char_mass
+        self._virgin_mass = virgin_mass
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -166,12 +183,12 @@ class SolidProperties:
 
     # ~~~~~~~~ other properties
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
-        r"""Void fraction $\epsilon$ filled by gas around the fibers."""
+        r"""Fraction $\phi$ occupied by the solid."""
         # FIXME Should this be a quadratic function?
         return 0.10*tau
 
     def permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Permeability $K$ of the composite material."""
+        r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
         return 6.0e-11 + tau*0.0
 

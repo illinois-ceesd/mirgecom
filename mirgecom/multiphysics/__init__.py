@@ -26,7 +26,6 @@ THE SOFTWARE.
 
 __doc__ = """
 .. automodule:: mirgecom.multiphysics.thermally_coupled_fluid_wall
-.. automodule:: mirgecom.multiphysics.phenolics
 
 .. autofunction:: make_interface_boundaries
 >>>>>>> main

@@ -72,7 +72,7 @@ from mirgecom.transport import (
     GasTransportVars
 )
 from mirgecom.wall_model import (
-    WallEOS,
+    PorousWallEOS,
     PorousFlowDependentVars
 )
 from mirgecom.utils import normalize_boundaries
@@ -93,14 +93,14 @@ class GasModel:
 
     .. attribute:: wall
 
-        The class :class:`~mirgecom.wall_model.WallEOS` with the
+        The class :class:`~mirgecom.wall_model.PorousWallEOS` with the
         wall model that provide properties for porous media flow.
         None for pure-fluid flows.
     """
 
     eos: GasEOS
     transport: Optional[TransportModel] = None
-    wall: Optional[WallEOS] = None
+    wall: Optional[PorousWallEOS] = None
 
 
 @dataclass_array_container
@@ -390,6 +390,7 @@ def make_fluid_state(cv, gas_model,
 
     else:
 
+        # TODO per previous review, think of a way to de-couple wall and fluid.
         # ~~~ we need to squeeze wall_model in gas_model because this is easily
         # accessible everywhere in the code
 
