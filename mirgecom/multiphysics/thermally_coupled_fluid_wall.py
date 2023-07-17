@@ -1486,6 +1486,12 @@ def coupled_ns_heat_operator(
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
         for details. Not used if *interface_radiation* is `True`.
 
+    wall_penalty_amount: float
+
+        Coefficient $c$ for the interior penalty on the heat flux. See
+        :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
+        for details.
+
     quadrature_tag:
 
         An identifier denoting a particular quadrature discretization to use during
@@ -1756,6 +1762,15 @@ def basic_coupled_ns_heat_operator(
         # makes sense to use as a default here
         wall_penalty_amount = 0.05
 
+    if interface_radiation:
+        if (
+                wall_emissivity is None
+                or sigma is None
+                or ambient_temperature is None):
+            raise TypeError(
+                "Arguments 'wall_emissivity', 'sigma' and 'ambient_temperature'"
+                "are required if using surface radiation.")
+
     fluid_boundaries = {
         as_dofdesc(bdtag).domain_tag: bdry
         for bdtag, bdry in fluid_boundaries.items()}
@@ -1822,17 +1837,17 @@ def basic_coupled_ns_heat_operator(
         operator_states_quad=fluid_operator_states_quad,
         grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
 
-    diffusion_result = diffusion_operator(
+    wall_rhs = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-        return_grad_u=return_gradients, dd=wall_dd, grad_u=wall_grad_temperature,
-        comm_tag=_WallOperatorTag)
+        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_WallOperatorTag)
 
     if return_gradients:
-        fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
-        wall_rhs, wall_grad_temperature = diffusion_result
+        # Ignore fluid_grad_temperature result here because we already have it
+        fluid_rhs, fluid_grad_cv, _fluid_grad_temperature = ns_result
         return (
             fluid_rhs, wall_rhs, fluid_grad_cv, fluid_grad_temperature,
             wall_grad_temperature)
     else:
-        return ns_result, diffusion_result
+        fluid_rhs = ns_result
+        return fluid_rhs, wall_rhs
