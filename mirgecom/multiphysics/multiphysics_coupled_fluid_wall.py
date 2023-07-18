@@ -215,7 +215,9 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
         If no-slip, force the velocity to be zero. Else, uses an averaging.
         """
+        mu_minus = state_minus.tv.viscosity
         u_minus = state_minus.cv.velocity
+        actx = u_minus[0].array_context
 
         # if there is a prescribed velocity normal to the surface
         if self._boundary_velocity is not None:
@@ -229,29 +231,53 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
         # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
-        state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
-        u_plus = state_plus.velocity
-        return (u_minus + u_plus)/2
+        u_plus = project_from_base(dcoll, dd_bdry, self._state_plus.velocity)
+        mu_plus = project_from_base(dcoll, dd_bdry,
+                                    self._state_plus.tv.viscosity)
+        mu_sum = actx.np.where(
+            actx.np.greater(mu_minus + mu_plus, 0*mu_minus),
+            mu_minus + mu_plus,
+            0*mu_minus + 1)
+        return (u_minus * mu_minus + u_plus * mu_plus)/mu_sum
 
     def species_mass_fractions_bc(self, dcoll, dd_bdry, state_minus):
         """Species mass fractions at the interface."""
+        diff_minus = state_minus.tv.species_diffusivity
         y_minus = state_minus.species_mass_fractions
+        if len(y_minus) > 0:
+            actx = y_minus[0].array_context
 
-        # FIXME what was I trying to say with this comment?
-        # do not use the state_plus function because that is for inviscid fluxes
-        state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
-        y_plus = state_plus.species_mass_fractions
-        return (y_minus + y_plus)/2
+            # FIXME what was I trying to say with this comment?
+            # do not use the state_plus function because that is for inviscid fluxes
+            y_plus = project_from_base(dcoll, dd_bdry,
+                                       self._state_plus.species_mass_fractions)
+            diff_plus = project_from_base(dcoll, dd_bdry,
+                                          self._state_plus.tv.species_diffusivity)
+            diff_sum = actx.np.where(
+                actx.np.greater(diff_minus + diff_plus, 0*diff_minus),
+                diff_minus + diff_plus,
+                0*diff_minus + 1)
+            return (y_minus * diff_minus + y_plus * diff_plus)/diff_sum
+
+        else:
+            return 0*y_minus
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus):
         """Temperature at the interface."""
+        kappa_minus = state_minus.tv.thermal_conductivity
         t_minus = state_minus.temperature
+        actx = t_minus.array_context
 
         # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
-        state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
-        t_plus = state_plus.temperature
-        return (t_minus + t_plus)/2
+        t_plus = project_from_base(dcoll, dd_bdry, self._state_plus.temperature)
+        kappa_plus = project_from_base(dcoll, dd_bdry,
+                                       self._state_plus.tv.thermal_conductivity)
+        kappa_sum = actx.np.where(
+            actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
+            kappa_minus + kappa_plus,
+            0*kappa_minus + 1)
+        return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
 
     def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
         """Gradient averaging for viscous flux."""
