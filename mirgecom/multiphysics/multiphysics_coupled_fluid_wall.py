@@ -2,8 +2,8 @@ r""":mod:`mirgecom.multiphysics.multiphysics_coupled_fluid_wall` for fully-coupl
 fluid and wall.
 
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
-with a wall subdomain governed by the porous media equation (on-going work)
-by enforcing continuity of quantities and their respective fluxes
+with a wall subdomain governed by the porous media equation by enforcing
+continuity of quantities and their respective fluxes
 
 .. math::
     q_\text{fluid} &= q_\text{wall} \\
@@ -49,8 +49,6 @@ from arraycontext import dataclass_array_container
 
 from grudge.trace_pair import inter_volume_trace_pairs
 from grudge.dof_desc import as_dofdesc
-import grudge.op as op
-from grudge.dt_utils import characteristic_lengthscales
 
 from mirgecom.fluid import make_conserved
 from mirgecom.math import harmonic_mean
@@ -217,7 +215,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
         If no-slip, force the velocity to be zero. Else, uses an averaging.
         """
-        kappa_minus = state_minus.tv.viscosity
         u_minus = state_minus.cv.velocity
 
         # if there is a prescribed velocity normal to the surface
@@ -234,42 +231,30 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         u_plus = state_plus.velocity
-        kappa_plus = project_from_base(dcoll, dd_bdry,
-                                       state_plus.tv.viscosity)
-        kappa_sum = kappa_minus + kappa_plus
-        return (u_minus * kappa_minus + u_plus * kappa_plus)/kappa_sum
+        return (u_minus + u_plus)/2
 
     def species_mass_fractions_bc(self, dcoll, dd_bdry, state_minus):
         """Species mass fractions at the interface."""
-        kappa_minus = state_minus.tv.species_diffusivity
         y_minus = state_minus.species_mass_fractions
 
         # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         y_plus = state_plus.species_mass_fractions
-        kappa_plus = project_from_base(dcoll, dd_bdry,
-                                        state_plus.tv.species_diffusivity)
-        kappa_sum = kappa_minus + kappa_plus
-        return (y_minus * kappa_minus + y_plus * kappa_plus)/kappa_sum
+        return (y_minus + y_plus)/2
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus):
         """Temperature at the interface."""
-        kappa_minus = state_minus.tv.thermal_conductivity
         t_minus = state_minus.temperature
 
         # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         t_plus = state_plus.temperature
-        kappa_plus = project_from_base(dcoll, dd_bdry,
-                                        state_plus.tv.thermal_conductivity)
-        kappa_sum = kappa_minus + kappa_plus
-        return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
+        return (t_minus + t_plus)/2
 
     def grad_cv_bc(self, dcoll, dd_bdry, grad_cv_minus):
         """Gradient averaging for viscous flux."""
-
         # TODO ideally there is a continuity of shear stress, but depend on
         # how the coupling is performed
 
@@ -687,9 +672,11 @@ def add_interface_boundaries_no_grad(
         interface_noslip, interface_radiation,
         *,
         boundary_velocity=None,
-        wall_penalty_amount=None,
         comm_tag=None):
     r"""Return the interface of the subdomains for gradient calculation.
+
+    Used to apply the boundary fluxes at the interface between fluid and
+    wall domains.
 
     Parameters
     ----------
@@ -727,11 +714,12 @@ def add_interface_boundaries_no_grad(
     interface_radiation: bool
         If `True`, interface includes a radiation sink term in the heat flux
         on the wall side and prescribes the temperature on the fluid side.
+        Additional arguments *wall_emissivity*, *sigma*, and
+        *ambient_temperature* are required if enabled.
 
-    wall_penalty_amount: float
-        Coefficient $c$ for the interior penalty on the heat flux. See
-        :class:`InterfaceFluidBoundary`
-        for details.
+    boundary_velocity: float or :class:`meshmode.dof_array.DOFArray`
+        Normal velocity due to pyrolysis outgas. Only required for simplified
+        analysis of composite material.
 
     comm_tag: Hashable
         Tag for distributed communication
@@ -803,6 +791,9 @@ def add_interface_boundaries(
         comm_tag=None):
     r"""Return the interface of the subdomains for viscous fluxes.
 
+    Used to apply the boundary fluxes at the interface between fluid and
+    wall domains.
+
     Parameters
     ----------
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
@@ -843,6 +834,19 @@ def add_interface_boundaries(
         for details. Additional arguments *wall_emissivity*, *sigma*, and
         *ambient_temperature* are required if enabled.
 
+    wall_emissivity: float or :class:`meshmode.dof_array.DOFArray`
+        Emissivity of the wall material.
+
+    sigma: float
+        Stefan-Boltzmann constant.
+
+    ambient_temperature: :class:`meshmode.dof_array.DOFArray`
+        Ambient temperature of the environment.
+
+    boundary_velocity: float or :class:`meshmode.dof_array.DOFArray`
+        Normal velocity due to pyrolysis outgas. Only required for simplified
+        analysis of composite material.
+
     wall_penalty_amount: float
         Coefficient $c$ for the interior penalty on the heat flux. See
         :class:`InterfaceFluidBoundary`
@@ -855,9 +859,6 @@ def add_interface_boundaries(
     -------
         The tuple `(fluid_interface_boundaries, wall_interface_boundaries)`.
     """
-
-    actx = fluid_state.cv.mass.array_context
-
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
         # makes sense to use as a default here
@@ -884,8 +885,10 @@ def add_interface_boundaries(
 
     # Need to pass lengthscales into the BC constructor
 
-    fluid_lengthscales = characteristic_lengthscales(actx, dcoll, fluid_dd)
-    wall_lengthscales = characteristic_lengthscales(actx, dcoll, wall_dd)
+#    from grudge.dt_utils import characteristic_lengthscales
+#    actx = fluid_state.cv.mass.array_context
+#    fluid_lengthscales = characteristic_lengthscales(actx, dcoll, fluid_dd)
+#    wall_lengthscales = characteristic_lengthscales(actx, dcoll, wall_dd)
 
     # Construct interface boundaries with temperature gradient
 
@@ -898,8 +901,8 @@ def add_interface_boundaries(
             grad_cv_plus=interface_tpair.ext.grad_cv,
             grad_t_plus=interface_tpair.ext.grad_temperature,
             flux_penalty_amount=wall_penalty_amount,
-#            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
-#                                          fluid_lengthscales),
+            # lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
+            #                               fluid_lengthscales),
             )
         for interface_tpair in interface_tpairs[wall_dd, fluid_dd]}
 
@@ -914,8 +917,8 @@ def add_interface_boundaries(
             grad_cv_plus=interface_tpair.ext.grad_cv,
             grad_t_plus=interface_tpair.ext.grad_temperature,
             flux_penalty_amount=wall_penalty_amount,
-#            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
-#                                          wall_lengthscales),
+            # lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
+            #                               wall_lengthscales),
             )
         for interface_tpair in interface_tpairs[fluid_dd, wall_dd]}
 

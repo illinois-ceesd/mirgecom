@@ -355,9 +355,6 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         f_{presc} \cdot \hat{n}
 
-    Note that positive values of flux are going out of the cell since the
-    normal is positive outwards.
-
     .. automethod:: __init__
     .. automethod:: get_grad_flux
     .. automethod:: get_diffusion_flux
@@ -389,11 +386,9 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
             lengthscales_minus, *, penalty_amount=None,
             numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        external_flux = u_minus*0.0 + self.value
-
-        return np.dot(external_flux, normal)
+        # returns the product "flux @ normal"
+        return actx.np.zeros_like(u_minus) + self.value
 
 
 class _DiffusionKappaTag:

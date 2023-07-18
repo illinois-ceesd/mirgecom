@@ -26,9 +26,10 @@ THE SOFTWARE.
 
 import logging
 import sys
-import numpy as np
-import pyopencl as cl
+import gc
 from dataclasses import dataclass
+from warnings import warn
+import numpy as np
 from arraycontext import (
     dataclass_array_container, with_container_arithmetic,
     get_container_context_recursively
@@ -43,6 +44,7 @@ from mirgecom.simutil import (
     check_step, distribute_mesh, write_visfile,
     check_naninf_local, global_reduce
 )
+from mirgecom.array_context import get_reasonable_array_context_class
 from mirgecom.restart import write_restart_file
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -305,9 +307,7 @@ class MyRuntimeError(RuntimeError):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None, lazy=False,
-         restart_filename=None):
+def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -315,24 +315,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     rank = comm.Get_rank()
     nparts = comm.Get_size()
 
-    logmgr = initialize_logmgr(use_logmgr, filename=(f"{casename}.sqlite"),
-                               mode="wo", mpi_comm=comm)
-
-    cl_ctx = ctx_factory()
-
-    if use_profiling:
-        queue = cl.CommandQueue(
-            cl_ctx, properties=cl.command_queue_properties.PROFILING_ENABLE)
-    else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if lazy:
-        actx = actx_class(comm, queue, mpi_base_tag=12000, allocator=alloc)
-    else:
-        actx = actx_class(comm, queue, allocator=alloc, force_device_scalars=True)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # ~~~~~~~~~~~~~~~~~~
 
@@ -532,11 +518,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     # {{{ Initialize wall model
 
-    from mirgecom.wall_model import WallEOS
+    from mirgecom.wall_model import PorousWallEOS
     import mirgecom.materials.carbon_fiber as my_material
 
-    fiber = my_material.SolidProperties()
-    sample_degradation_model = WallEOS(wall_material=fiber)
+    fiber = my_material.SolidProperties(char_mass=0.0, virgin_mass=160.0)
+    sample_degradation_model = PorousWallEOS(wall_material=fiber)
 
     # }}}
 
@@ -654,7 +640,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def _get_sample_state(cv, wv, temp_seed):
         return make_fluid_state(cv=cv, gas_model=gas_model_sample,
-            wall_density=wv,
+            material_densities=wv,
             temperature_seed=temp_seed,
             limiter_func=_limit_sample_cv, limiter_dd=dd_vol_sample)
 
@@ -951,9 +937,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
             if do_garbage:
                 with gc_timer.start_sub_timer():
-                    from warnings import warn
                     warn("Running gc.collect() to work around memory growth issue ")
-                    import gc
                     gc.collect()
 
             if do_health:
@@ -994,7 +978,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         # construct species-limited solid state
         sample_state = make_fluid_state(cv=sample_cv, gas_model=gas_model_sample,
-            wall_density=sample_density,
+            material_densities=sample_density,
             temperature_seed=sample_tseed,
             limiter_func=_limit_sample_cv, limiter_dd=dd_vol_sample)
         sample_cv = sample_state.cv
@@ -1010,12 +994,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                 dcoll, dd_vol_fluid, dd_vol_sample,
                 fluid_state, sample_state,
                 fluid_boundaries, sample_boundaries,
-                interface_noslip=True, interface_radiation=use_radiation,
-                wall_penalty_amount=wall_penalty_amount)
+                interface_noslip=True, interface_radiation=use_radiation)
 
         fluid_all_boundaries_no_grad, holder_all_boundaries_no_grad = \
             add_thermal_interface_boundaries_no_grad(
-                dcoll,
+                dcoll, gas_model_fluid,  # FIXME remove gas_model
                 dd_vol_fluid, dd_vol_holder,
                 fluid_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
@@ -1024,7 +1007,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         sample_all_boundaries_no_grad, holder_all_boundaries_no_grad = \
             add_thermal_interface_boundaries_no_grad(
-                dcoll,
+                dcoll, gas_model_sample,  # FIXME remove gas_model
                 dd_vol_sample, dd_vol_holder,
                 sample_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
@@ -1101,7 +1084,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         fluid_all_boundaries, holder_all_boundaries = \
             add_thermal_interface_boundaries(
-                dcoll, dd_vol_fluid, dd_vol_holder,
+                dcoll, gas_model_fluid,  # FIXME remove gas_model
+                dd_vol_fluid, dd_vol_holder,
                 fluid_all_boundaries, holder_boundaries,
                 fluid_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
@@ -1113,7 +1097,8 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         sample_all_boundaries, holder_all_boundaries = \
             add_thermal_interface_boundaries(
-                dcoll, dd_vol_sample, dd_vol_holder,
+                dcoll, gas_model_sample,  # FIXME remove gas_model
+                dd_vol_sample, dd_vol_holder,
                 sample_all_boundaries, holder_all_boundaries,
                 sample_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
@@ -1155,7 +1140,6 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     def my_post_step(step, t, dt, state):
         if step == first_step + 1:
             with gc_timer.start_sub_timer():
-                import gc
                 gc.collect()
                 # Freeze the objects that are still alive so they will not
                 # be considered in future gc collections.
@@ -1212,7 +1196,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     elif use_profiling:
         print(actx.tabulate_profiling_data())
 
-    exit()
+    sys.exit()
 
 
 if __name__ == "__main__":
@@ -1238,6 +1222,15 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+    lazy = args.lazy
+    if args.profile:
+        if lazy:
+            raise ValueError("Can't use lazy and profiling together.")
+
+    actx_class = get_reasonable_array_context_class(
+        lazy=lazy, distributed=True, profiling=args.profile)
+
     # for writing output
     casename = "coupled_volumes"
     if args.casename:
@@ -1260,10 +1253,5 @@ if __name__ == "__main__":
 
     print(f"Running {sys.argv[0]}\n")
 
-    from grudge.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=args.lazy,
-                                                    distributed=True)
-
-    main(actx_class, use_logmgr=args.log,
-         use_profiling=args.profile, casename=casename,
-         lazy=args.lazy, restart_filename=restart_file)
+    main(actx_class, use_logmgr=args.log, casename=casename,
+         restart_filename=restart_file)
