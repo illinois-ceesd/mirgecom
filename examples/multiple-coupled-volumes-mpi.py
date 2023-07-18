@@ -829,7 +829,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
             ("rhoE_b", sample_state.cv.energy),
             ("pressure", sample_state.pressure),
             ("temperature", sample_state.temperature),
-            ("solid_mass", sample_state.dv.wall_density),
+            ("solid_mass", sample_state.dv.material_densities),
             ("Vx", sample_state.velocity[0]),
             ("Vy", sample_state.velocity[1]),
             ("kappa", sample_state.thermal_conductivity)]
@@ -862,7 +862,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
                 "fluid_cv": fluid_state.cv,
                 "fluid_temperature_seed": fluid_state.temperature,
                 "sample_cv": sample_state.cv,
-                "sample_density": sample_state.dv.wall_density,
+                "sample_density": sample_state.dv.material_densities,
                 "sample_temperature_seed": sample_state.temperature,
                 "holder_cv": holder_state.cv,
                 "holder_temperature_seed": holder_state.dv.temperature,
@@ -883,13 +883,11 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         pressure = force_evaluation(actx, dv.pressure)
         temperature = force_evaluation(actx, dv.temperature)
 
-        if global_reduce(check_naninf_local(dcoll, "vol", pressure),
-                         op="lor"):
+        if global_reduce(check_naninf_local(dcoll, "vol", pressure), op="lor"):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        if global_reduce(check_naninf_local(dcoll, "vol", temperature),
-                         op="lor"):
+        if global_reduce(check_naninf_local(dcoll, "vol", temperature), op="lor"):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in temperature data.")
 
@@ -1088,10 +1086,10 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
             add_thermal_interface_boundaries(
                 dcoll, gas_model_fluid,  # FIXME remove gas_model
                 dd_vol_fluid, dd_vol_holder,
-                fluid_all_boundaries, holder_boundaries,
                 fluid_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
                 fluid_grad_temperature, holder_grad_temperature,
+                fluid_all_boundaries, holder_boundaries,
                 interface_noslip=True, interface_radiation=use_radiation,
                 wall_emissivity=emissivity, sigma=5.67e-8,
                 ambient_temperature=300.0,
@@ -1101,10 +1099,10 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
             add_thermal_interface_boundaries(
                 dcoll, gas_model_sample,  # FIXME remove gas_model
                 dd_vol_sample, dd_vol_holder,
-                sample_all_boundaries, holder_all_boundaries,
                 sample_state, holder_state.dv.thermal_conductivity,
                 holder_state.dv.temperature,
                 sample_grad_temperature, holder_grad_temperature,
+                sample_all_boundaries, holder_all_boundaries,
                 interface_noslip=True, interface_radiation=False,
                 wall_penalty_amount=wall_penalty_amount)
 
@@ -1158,9 +1156,9 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 ##############################################################################
 
     stepper_state = make_obj_array([
-        fluid_state.cv, fluid_state.temperature,
-        sample_state.cv, sample_state.temperature, sample_state.dv.wall_density,
-        holder_state.cv])
+        fluid_state.cv, fluid_state.temperature, sample_state.cv,
+        sample_state.temperature, sample_state.dv.material_densities, holder_state.cv
+    ])
 
     dt = 1.0*current_dt
     t = 1.0*current_t
@@ -1215,7 +1213,7 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--casename",  type=ascii,
                         dest="casename", nargs="?", action="store",
                         help="simulation case name")
-    parser.add_argument("--profile", action="store_true", default=False,
+    parser.add_argument("--profiling", action="store_true", default=False,
         help="enable kernel profiling [OFF]")
     parser.add_argument("--log", action="store_true", default=True,
         help="enable logging profiling [ON]")
