@@ -150,9 +150,10 @@ def initializer(dim, gas_model, material_densities, temperature,
     if not isinstance(temperature, DOFArray):
         raise ValueError("Temperature does not have the proper shape")
 
+    actx = temperature.array_context
+
     tau = gas_model.wall.decomposition_progress(material_densities)
 
-    # gas constant
     gas_const = 8314.46261815324/gas_model.eos.molar_mass(temperature)
 
     if gas_density is None:
@@ -166,7 +167,8 @@ def initializer(dim, gas_model, material_densities, temperature,
         + eps_rho_solid*gas_model.wall.enthalpy(temperature, tau)
     )
 
-    momentum = make_obj_array([tau*0.0 for i in range(dim)])
+    zeros = actx.np.zeros_like(tau)
+    momentum = make_obj_array([zeros for i in range(dim)])
 
     return ConservedVars(mass=eps_rho_gas, energy=bulk_energy, momentum=momentum)
 
@@ -185,7 +187,7 @@ def eval_spline(x, x_bnds, coeffs) -> DOFArray:
     """
     actx = x.array_context
 
-    val = x*0.0
+    val = actx.np.zeros_like(x)
     for i in range(0, len(x_bnds)-1):
         val = (
             actx.np.where(actx.np.less(x, x_bnds[i+1]),
@@ -210,7 +212,7 @@ def eval_spline_derivative(x, x_bnds, coeffs) -> DOFArray:
     """
     actx = x.array_context
 
-    val = x*0.0
+    val = actx.np.zeros_like(x)
     for i in range(0, len(x_bnds)-1):
         val = (
             actx.np.where(actx.np.less(x, x_bnds[i+1]),
@@ -446,7 +448,7 @@ class WallTabulatedEOS(PorousWallEOS):
 
         """
         if isinstance(tseed, DOFArray) is False:
-            temp = tseed + cv.mass*0.0
+            temp = tseed + actx.np.zeros_like(cv.mass)
         else:
             temp = tseed*1.0
 

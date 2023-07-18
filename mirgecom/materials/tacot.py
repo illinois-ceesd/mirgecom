@@ -82,21 +82,21 @@ class Pyrolysis:
         """
         actx = temperature.array_context
 
-        # The density parameters are specific for TACOT. They depend on the
+        # The density parameters are hard-coded for TACOT. They depend on the
         # virgin and char volume fraction.
         return make_obj_array([
             # reaction 1
             actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
-            0.0, (
-                -(30.*((chi[0] - 0.00)/30.)**3)*12000.
-                * actx.np.exp(-8556.000/temperature))),
+                0.0, (
+                    -(30.*((chi[0] - 0.00)/30.)**3)*12000.
+                    * actx.np.exp(-8556.000/temperature))),
             actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
             # reaction 2
-            0.0, (
-                -(90.*((chi[1] - 60.0)/90.)**3)*4.48e9
-                * actx.np.exp(-20444.44/temperature))),
+                0.0, (
+                    -(90.*((chi[1] - 60.0)/90.)**3)*4.48e9
+                    * actx.np.exp(-20444.44/temperature))),
             # fiber oxidation: include in the RHS but dont do anything with it.
-            temperature*0.0])
+            actx.np.zeros_like(temperature)])
 
 
 class SolidProperties(PorousWallDegradationModel):
