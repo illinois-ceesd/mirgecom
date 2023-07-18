@@ -255,13 +255,16 @@ class SolidProperties(PorousWallDegradationModel):
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
-        return 6.0e-11 + tau*0.0
+        actx = tau.array_context
+        return 6.0e-11 + actx.np.zeros_like(tau)
 
     def emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
-        return 0.9 + tau*0.0
+        actx = tau.array_context
+        return 0.9 + actx.np.zeros_like(tau)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
         # FIXME find a relation to make it change as a function of "tau"
-        return 1.1 + tau*0.0
+        actx = tau.array_context
+        return 1.1 + actx.np.zeros_like(tau)
