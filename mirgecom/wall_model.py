@@ -338,7 +338,7 @@ class PorousWallEOS:
 
         It is a function of temperature and degradation progress. As the
         fibers are oxidized, they reduce their cross area and, consequently,
-        their hability to conduct heat.
+        their ability to conduct heat.
 
         It is evaluated using a mass-weighted average given by
 
