@@ -1556,7 +1556,6 @@ def coupled_ns_heat_operator(
             quadrature_tag=quadrature_tag)
 
     # Compute the subdomain NS/diffusion operators using the augmented boundaries
-
     ns_result = ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
