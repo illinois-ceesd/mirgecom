@@ -509,16 +509,16 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     viz_path = "viz_data/"
     vizname = viz_path+casename
 
-    t_final = 1.0e-7
+    t_final = 4.0e-7
 
     dim = 1
 
     order = 2
-    dt = 1.0e-8
-    pressure_scaling_factor = 1.0  # noqa N806
+    dt = 4.0e-8
+    pressure_scaling_factor = 0.1  # noqa N806
 
-    nviz = 200
-    ngarbage = 50
+    nviz = 5000
+    ngarbage = 10
     nrestart = 10000
     nhealth = 10
 
@@ -1094,7 +1094,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([fluid_state.cv, material_densities,
                                             fluid_state.temperature]),
-                      t=current_t, t_final=t_final, force_eval=True)
+                      t=current_t, t_final=t_final, istep=istep,
+                      force_eval=True)
 
     # Dump the final data
     if rank == 0:
