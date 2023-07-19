@@ -28,11 +28,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
 from typing import Optional
 from abc import abstractmethod
+import numpy as np
 from meshmode.dof_array import DOFArray
-from mirgecom.wall_model import PorousWallDegradationModel
+from mirgecom.wall_model import PorousWallProperties
 
 
 class Oxidation:
@@ -171,11 +171,10 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
         return m_dot_c, m_dot_o2, m_dot_co2
 
 
-class SolidProperties(PorousWallDegradationModel):
+class SolidProperties(PorousWallProperties):
     """Evaluate the properties of the solid state containing only fibers.
 
     .. automethod:: void_fraction
-    .. automethod:: decomposition_progress
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: thermal_conductivity
@@ -183,6 +182,7 @@ class SolidProperties(PorousWallDegradationModel):
     .. automethod:: permeability
     .. automethod:: emissivity
     .. automethod:: tortuosity
+    .. automethod:: decomposition_progress
     """
 
     def __init__(self, char_mass, virgin_mass):
@@ -198,10 +198,6 @@ class SolidProperties(PorousWallDegradationModel):
         progress ratio $\tau$.
         """
         return 1.0 - self.volume_fraction(tau)
-
-    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation."""
-        return 1.0 - (self._virgin_mass - mass)/self._virgin_mass
 
     def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
@@ -268,3 +264,12 @@ class SolidProperties(PorousWallDegradationModel):
         # FIXME find a relation to make it change as a function of "tau"
         actx = tau.array_context
         return 1.1 + actx.np.zeros_like(tau)
+
+    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation.
+
+        Where $\tau=1$, the material is locally virgin. On the other hand, if
+        $\tau=0$, then the oxidation is locally complete and the fibers were
+        all consumed.
+        """
+        return 1.0 - (self._virgin_mass - mass)/self._virgin_mass
