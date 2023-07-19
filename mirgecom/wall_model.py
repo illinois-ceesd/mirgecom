@@ -6,9 +6,34 @@
 .. autoclass:: SolidWallEOS
 .. autoclass:: PorousFlowDependentVars
 .. autoclass:: PorousWallDependentVars
-.. autoclass:: PorousWallDegradationModel
-.. autoclass:: PorousWallEOS
+.. autoclass:: PorousWallProperties
+.. autoclass:: PorousFlowEOS
 """
+
+__copyright__ = """
+Copyright (C) 2023 University of Illinois Board of Trustees
+"""
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+
 
 from dataclasses import dataclass
 from abc import abstractmethod
@@ -23,6 +48,7 @@ from arraycontext import (
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import MixtureDependentVars
 from mirgecom.transport import GasTransportVars
+from mirgecom.eos import GasEOS
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -118,6 +144,10 @@ class SolidWallEOS:
 
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
+# FIXME in practice, the density of the wall materials follow a conservation
+# equation. To avoid big changes in the code atm, it is squeezed as a
+# dependent variable for "state.dv", although it is not.
+# TODO if we decide to refactor it, modify this accordingly
 class PorousFlowDependentVars(MixtureDependentVars):
     """Dependent variables for the (porous) fluid state.
 
@@ -136,6 +166,7 @@ class PorousWallDependentVars:
     .. attribute:: void_fraction
     .. attribute:: emissivity
     .. attribute:: permeability
+    .. attribute:: tortuosity
     .. attribute:: density
     """
 
@@ -143,14 +174,14 @@ class PorousWallDependentVars:
     void_fraction: DOFArray
     emissivity: DOFArray
     permeability: DOFArray
+    tortuosity: DOFArray
     density: DOFArray
 
 
-class PorousWallDegradationModel:
-    """Abstract interface for wall degradation model.
+class PorousWallProperties:
+    """Abstract interface for porous media domains.
 
     .. automethod:: void_fraction
-    .. automethod:: decomposition_progress
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: thermal_conductivity
@@ -158,16 +189,12 @@ class PorousWallDegradationModel:
     .. automethod:: permeability
     .. automethod:: emissivity
     .. automethod:: tortuosity
+    .. automethod:: decomposition_progress
     """
 
     @abstractmethod
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ filled by gas around the solid."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -206,30 +233,34 @@ class PorousWallDegradationModel:
         """Tortuosity of the porous material."""
         raise NotImplementedError()
 
+    @abstractmethod
+    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition."""
+        raise NotImplementedError()
 
-class PorousWallEOS:
-    """Interface for porous material degradation models.
+
+class PorousFlowEOS:
+    """EOS for porous media flows, including degradation models.
 
     This class evaluates the variables dependent on the wall decomposition
-    state and its different parts. For that, the user must supply external
-    functions in order to consider the different materials employed at wall
-    (for instance, carbon fibers, graphite, alumina, steel etc). The number
-    and types of the materials is case-dependent and, hence, must be defined
-    in the respective simulation driver.
+    state and the gas permeating the material.
 
     .. automethod:: __init__
     .. automethod:: solid_density
-    .. automethod:: decomposition_progress
     .. automethod:: void_fraction
     .. automethod:: get_temperature
+    .. automethod:: get_pressure
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: viscosity
     .. automethod:: thermal_conductivity
     .. automethod:: species_diffusivity
+    .. automethod:: decomposition_progress
     .. automethod:: dependent_vars
     """
 
+    # TODO create a class that encapsulate the `PorousWallProperties` and
+    # `GasModel` ???
     def __init__(self, wall_material):
         """
         Initialize the model.
@@ -255,23 +286,12 @@ class PorousWallEOS:
             return material_densities
         return sum(material_densities)
 
-    def decomposition_progress(self, material_densities) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the oxidation.
-
-        Where $\tau=1$, the material is locally virgin. On the other hand, if
-        $\tau=0$, then the fibers were all consumed.
-        """
-        mass = self.solid_density(material_densities)
-        return self._material.decomposition_progress(mass)
-
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Void fraction $\epsilon$ of the sample filled with gas."""
         return self._material.void_fraction(tau)
 
-    def get_temperature(self, cv: ConservedVars,
-                        material_densities: Union[DOFArray, np.ndarray],
-                        tseed: DOFArray, tau: DOFArray, gas_model,
-                        niter=3) -> DOFArray:
+    def get_temperature(self, cv: ConservedVars, wdv: PorousWallDependentVars,
+                        tseed: DOFArray, eos: GasEOS, niter=3) -> DOFArray:
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -285,55 +305,57 @@ class PorousWallEOS:
                 {\epsilon_g \rho_g C_{p_g} + \epsilon_s \rho_s C_{p_s}}
 
         """
-        actx = cv.array_context
-
         if isinstance(tseed, DOFArray) is False:
-            temp = tseed + actx.np.zeros_like(tau)
+            actx = cv.array_context
+            temp = tseed + actx.np.zeros_like(wdv.tau)
         else:
             temp = tseed*1.0
 
-        rho_gas = cv.mass
-        rho_solid = self.solid_density(material_densities)
-
-        rhoe = cv.energy - 0.5/cv.mass*np.dot(cv.momentum, cv.momentum)
+        internal_energy = cv.energy - 0.5/cv.mass*np.dot(cv.momentum, cv.momentum)
 
         for _ in range(0, niter):
 
             gas_internal_energy = \
-                gas_model.eos.get_internal_energy(temp, cv.species_mass_fractions)
+                eos.get_internal_energy(temp, cv.species_mass_fractions)
 
-            gas_heat_capacity_cv = gas_model.eos.heat_capacity_cv(cv, temp)
+            gas_heat_capacity_cv = eos.heat_capacity_cv(cv, temp)
 
-            eps_rho_e = rho_gas*gas_internal_energy \
-                      + rho_solid*self.enthalpy(temp, tau)
+            eps_rho_e = cv.mass*gas_internal_energy \
+                      + wdv.density*self._material.enthalpy(temp, wdv.tau)
 
-            bulk_cp = rho_gas*gas_heat_capacity_cv \
-                      + rho_solid*self.heat_capacity(temp, tau)
+            bulk_cp = cv.mass*gas_heat_capacity_cv \
+                      + wdv.density*self._material.heat_capacity(temp, wdv.tau)
 
-            temp = temp - (eps_rho_e - rhoe)/bulk_cp
+            temp = temp - (eps_rho_e - internal_energy)/bulk_cp
 
         return temp
 
+    def get_pressure(self, cv: ConservedVars, wdv: PorousWallDependentVars,
+                     temperature: DOFArray, eos: GasEOS) -> DOFArray:
+        """Return the pressure of the gas considering the void fraction."""
+        return eos.pressure(cv, temperature)/wdv.void_fraction
+
+    # make it return the enthalpy of gas+solid?
     def enthalpy(self, temperature: DOFArray, tau: DOFArray):
-        """Return the enthalpy of the test material as a function of temperature."""
+        """Return the enthalpy of the test material."""
         return self._material.enthalpy(temperature, tau)
 
+    # make it return the heat capacity of gas+solid?
     def heat_capacity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Return the heat capacity of the test material."""
         return self._material.heat_capacity(temperature, tau)
 
     # TODO: maybe create a WallTransportVars?
-    def viscosity(self, temperature: DOFArray, tau: DOFArray,
+    def viscosity(self, wdv: PorousWallDependentVars, temperature: DOFArray,
                   gas_tv: GasTransportVars) -> DOFArray:
         """Viscosity of the gas through the (porous) wall."""
-        epsilon = self._material.void_fraction(tau)
-        return gas_tv.viscosity/epsilon
+        return gas_tv.viscosity/wdv.void_fraction
 
     # TODO: maybe create a WallTransportVars?
     def thermal_conductivity(self, cv: ConservedVars,
-                             material_densities: Union[DOFArray, np.ndarray],
-                             temperature: DOFArray, tau: DOFArray,
-                             gas_tv: GasTransportVars):
+                             wdv: PorousWallDependentVars,
+                             temperature: DOFArray,
+                             gas_tv: GasTransportVars) -> DOFArray:
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the
@@ -344,31 +366,28 @@ class PorousWallEOS:
 
         .. math::
             \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
-
-        Returns
-        -------
-        thermal_conductivity: meshmode.dof_array.DOFArray
-            the thermal_conductivity, including all parts of the solid
         """
-        y_g = cv.mass/(cv.mass + self.solid_density(material_densities))
+        y_g = cv.mass/(cv.mass + wdv.density)
         y_s = 1.0 - y_g
-        kappa_s = self._material.thermal_conductivity(temperature, tau)
+        kappa_s = self._material.thermal_conductivity(temperature, wdv.tau)
         kappa_g = gas_tv.thermal_conductivity
 
         return y_s*kappa_s + y_g*kappa_g
 
     # TODO: maybe create a WallTransportVars?
-    def species_diffusivity(self, temperature: DOFArray, tau: DOFArray,
-                            gas_tv: GasTransportVars):
-        """Mass diffusivity of gaseous species through the (porous) wall.
+    def species_diffusivity(self, wdv: PorousWallDependentVars,
+            temperature: DOFArray, gas_tv: GasTransportVars) -> DOFArray:
+        """Mass diffusivity of gaseous species through the (porous) wall."""
+        return gas_tv.species_diffusivity/wdv.tortuosity
 
-        Returns
-        -------
-        species_diffusivity: meshmode.dof_array.DOFArray
-            the species mass diffusivity inside the wall
+    def decomposition_progress(self, material_densities) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the decomposition.
+
+        Where $\tau=1$, the material is locally virgin. On the other hand, if
+        $\tau=0$, then the fibers were all consumed.
         """
-        tortuosity = self._material.tortuosity(tau)
-        return gas_tv.species_diffusivity/tortuosity
+        mass = self.solid_density(material_densities)
+        return self._material.decomposition_progress(mass)
 
     def dependent_vars(self, material_densities: Union[DOFArray, np.ndarray]):
         """Get the state-dependent variables.
@@ -385,5 +404,6 @@ class PorousWallEOS:
             void_fraction=self.void_fraction(tau),
             emissivity=self._material.emissivity(tau),
             permeability=self._material.permeability(tau),
+            tortuosity=self._material.tortuosity(tau),
             density=self.solid_density(material_densities)
         )

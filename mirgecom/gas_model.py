@@ -72,7 +72,7 @@ from mirgecom.transport import (
     GasTransportVars
 )
 from mirgecom.wall_model import (
-    PorousWallEOS,
+    PorousFlowEOS,
     PorousFlowDependentVars
 )
 from mirgecom.utils import normalize_boundaries
@@ -93,14 +93,13 @@ class GasModel:
 
     .. attribute:: wall
 
-        The class :class:`~mirgecom.wall_model.PorousWallEOS` with the
-        wall model that provide properties for porous media flow.
+        A wall model to provide properties of the solid for porous media flow.
         None for pure-fluid flows.
     """
 
     eos: GasEOS
     transport: Optional[TransportModel] = None
-    wall: Optional[PorousWallEOS] = None
+    wall: Optional[PorousFlowEOS] = None
 
 
 @dataclass_array_container
@@ -390,22 +389,20 @@ def make_fluid_state(cv, gas_model,
 
     else:
 
-        # TODO per previous review, think of a way to de-couple wall and fluid.
+        # FIXME per previous review, think of a way to de-couple wall and fluid.
         # ~~~ we need to squeeze wall_model in gas_model because this is easily
         # accessible everywhere in the code
 
-        tau = gas_model.wall.decomposition_progress(material_densities)
-        epsilon = gas_model.wall.void_fraction(tau)
-        temperature = gas_model.wall.get_temperature(
-            cv=cv, material_densities=material_densities,
-            tseed=temperature_seed, tau=tau, gas_model=gas_model)
+        wdv = gas_model.wall.dependent_vars(material_densities)
 
-        pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv, temperature=temperature)
+        temperature = gas_model.wall.get_temperature(
+            cv=cv, wdv=wdv, tseed=temperature_seed, eos=gas_model.eos)
+
+        pressure = gas_model.wall.get_pressure(cv, wdv, temperature, gas_model.eos)
 
         if limiter_func:
-            cv = limiter_func(cv=cv, wv=material_densities, pressure=pressure,
-                              temperature=temperature, epsilon=epsilon,
-                              dd=limiter_dd)
+            cv = limiter_func(cv=cv, wdv=wdv, pressure=pressure,
+                              temperature=temperature, dd=limiter_dd)
 
         dv = PorousFlowDependentVars(
             temperature=temperature,
@@ -419,17 +416,18 @@ def make_fluid_state(cv, gas_model,
         )
 
         # ~~~ Modify transport vars to include solid effects
+        # TODO create a new transport class exclusive for porous media flow?
         gas_tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
 
         tv = GasTransportVars(
             bulk_viscosity=(
                 gas_tv.bulk_viscosity),
             viscosity=gas_model.wall.viscosity(
-                temperature, tau, gas_tv),
+                wdv, temperature, gas_tv),
             thermal_conductivity=gas_model.wall.thermal_conductivity(
-                cv, material_densities, temperature, tau, gas_tv),
+                cv, wdv, temperature, gas_tv),
             species_diffusivity=gas_model.wall.species_diffusivity(
-                temperature, tau, gas_tv),
+                wdv, temperature, gas_tv),
         )
 
         return ViscousFluidState(cv=cv, dv=dv, tv=tv)

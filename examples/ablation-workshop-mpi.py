@@ -77,7 +77,7 @@ from mirgecom.gas_model import ViscousFluidState
 from mirgecom.wall_model import (
     PorousFlowDependentVars,
     PorousWallDependentVars,
-    PorousWallEOS
+    PorousFlowEOS
 )
 from mirgecom.fluid import ConservedVars
 from mirgecom.transport import GasTransportVars
@@ -398,14 +398,14 @@ class GasProperties:
         return cv.mass*gas_const*temperature
 
 
-class WallTabulatedEOS(PorousWallEOS):
+class WallTabulatedEOS(PorousFlowEOS):
     """EOS for wall using tabulated data.
 
     Inherits WallEOS and add an temperature-evaluation function exclusive
     for TACOT-tabulated data.
     """
 
-    def get_temperature(self, cv, material_densities, tseed, tau, eos, niter=3):
+    def get_temperature(self, cv, wdv, tseed, gas_model, niter=3):
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -424,19 +424,15 @@ class WallTabulatedEOS(PorousWallEOS):
 
             The fluid conserved variables
 
-        material_densities: np.ndarray
+        wdv: PorousWallDependentVars
 
-            The density of the different wall constituents
+            Wall properties as a function of decomposition progress
 
         tseed:
 
             Temperature to use as a seed for Netwon iteration
 
-        tau: meshmode.dof_array.DOFArray
-
-            Progress ratio of the phenolics decomposition
-
-        eos: GasProperties
+        gas_model: GasModel
 
             The class containing the tabulated data for TACOT
 
@@ -453,20 +449,17 @@ class WallTabulatedEOS(PorousWallEOS):
         else:
             temp = tseed*1.0
 
-        rho_gas = cv.mass
-        rho_solid = self.solid_density(material_densities)
-        rhoe = cv.energy
         for _ in range(0, niter):
 
             eps_rho_e = (
-                rho_gas*eos.get_internal_energy(temp)
-                + rho_solid*self.enthalpy(temp, tau))
+                cv.mass*gas_model.eos.get_internal_energy(temp)
+                + wdv.density*self._material.enthalpy(temp, wdv.tau))
 
             bulk_cp = (
-                rho_gas*eos.heat_capacity_cv(temp)
-                + rho_solid*self.heat_capacity(temp, tau))
+                cv.mass*gas_model.eos.heat_capacity_cv(temp)
+                + wdv.density*self._material.heat_capacity(temp, wdv.tau))
 
-            temp = temp - (eps_rho_e - rhoe)/bulk_cp
+            temp = temp - (eps_rho_e - cv.energy)/bulk_cp
 
         return temp
 
@@ -635,7 +628,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         istep = 0
         first_step = 0
         cv = initializer(dim=dim, gas_model=gas_model,
-            material_densities=material_densities,
+            material_densities=material_densities, material=my_material,
             pressure=pressure, temperature=temperature)
 
     # stand-alone version of the "gas_model" to bypass some unnecessary
@@ -650,14 +643,13 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         """
         zeros = actx.np.zeros_like(cv.mass)
 
-        tau = gas_model.wall.decomposition_progress(material_densities)
-        epsilon = gas_model.wall.void_fraction(tau)
-        temperature = gas_model.wall.get_temperature(
-            cv=cv, material_densities=material_densities,
-            tseed=temperature_seed, tau=tau, eos=my_gas)
+        wdv = gas_model.wall.dependent_vars(material_densities)
 
-        pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
-                                                      temperature=temperature)
+        temperature = gas_model.wall.get_temperature(
+            cv=cv, wdv=wdv, tseed=temperature_seed, gas_model=gas_model)
+
+        pressure = gas_model.wall.get_pressure(
+            cv=cv, wdv=wdv, temperature=temperature, gas_model=gas_model)
 
         dv = PorousFlowDependentVars(
             temperature=temperature,
@@ -678,11 +670,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             species_diffusivity=cv.species_mass)
 
         # coupled solid-gas thermal conductivity
-        kappa = wall_model.thermal_conductivity(
-            cv, material_densities, temperature, tau, gas_tv)
+        kappa = wall_model.thermal_conductivity(cv, wdv, temperature, gas_tv)
 
         # coupled solid-gas viscosity
-        viscosity = wall_model.viscosity(temperature, tau, gas_tv)
+        viscosity = wall_model.viscosity(wdv, temperature, gas_tv)
 
         # return modified transport vars
         tv = GasTransportVars(
@@ -1075,7 +1066,6 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         if step == first_step + 1:
             with gc_timer:
-                import gc
                 gc.collect()
                 # Freeze the objects that are still alive so they will not
                 # be considered in future gc collections.

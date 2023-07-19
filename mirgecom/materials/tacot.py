@@ -35,10 +35,10 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
-from mirgecom.wall_model import PorousWallDegradationModel
+from mirgecom.wall_model import PorousWallProperties
 
 
-# TODO generalize? keep in the driver?
+# TODO generalize? define only abstract class and keep this in the driver?
 class Pyrolysis:
     r"""Evaluate the source terms for the pyrolysis decomposition.
 
@@ -99,7 +99,7 @@ class Pyrolysis:
             actx.np.zeros_like(temperature)])
 
 
-class SolidProperties(PorousWallDegradationModel):
+class SolidProperties(PorousWallProperties):
     """Evaluate the properties of the solid state containing resin and fibers.
 
     A linear weighting between the virgin and chared states is applied to
@@ -107,7 +107,6 @@ class SolidProperties(PorousWallDegradationModel):
     interpolation and they are not valid for temperatures above 3200K.
 
     .. automethod:: void_fraction
-    .. automethod:: decomposition_progress
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: thermal_conductivity
@@ -115,6 +114,7 @@ class SolidProperties(PorousWallDegradationModel):
     .. automethod:: permeability
     .. automethod:: emissivity
     .. automethod:: tortuosity
+    .. automethod:: decomposition_progress
     """
 
     def __init__(self, char_mass, virgin_mass):
@@ -133,21 +133,6 @@ class SolidProperties(PorousWallDegradationModel):
         progress ratio $\tau$.
         """
         return 1.0 - self.volume_fraction(tau)
-
-    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
-
-        Where $\tau=1$, the material is locally virgin. On the other hand, if
-        $\tau=0$, then the pyrolysis is locally complete and only charred
-        material exists:
-
-        .. math::
-            \tau = \frac{\rho_0}{\rho_0 - \rho_c}
-                    \left( 1 - \frac{\rho_c}{\rho(t)} \right)
-        """
-        char_mass = self._char_mass
-        virgin_mass = self._virgin_mass
-        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/mass)
 
     def enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Solid enthalpy as a function of pyrolysis progress."""
@@ -220,3 +205,18 @@ class SolidProperties(PorousWallDegradationModel):
         virgin = 1.2
         char = 1.1
         return virgin*tau + char*(1.0 - tau)
+
+    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
+
+        Where $\tau=1$, the material is locally virgin. On the other hand, if
+        $\tau=0$, then the pyrolysis is locally complete and only charred
+        material exists:
+
+        .. math::
+            \tau = \frac{\rho_0}{\rho_0 - \rho_c}
+                    \left( 1 - \frac{\rho_c}{\rho(t)} \right)
+        """
+        char_mass = self._char_mass
+        virgin_mass = self._virgin_mass
+        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/mass)
