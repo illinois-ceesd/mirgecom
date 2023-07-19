@@ -405,7 +405,7 @@ class WallTabulatedEOS(PorousFlowEOS):
     for TACOT-tabulated data.
     """
 
-    def get_temperature(self, cv, wdv, tseed, gas_model, niter=3):
+    def get_temperature(self, cv, wdv, tseed, eos, niter=3):
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -443,8 +443,8 @@ class WallTabulatedEOS(PorousFlowEOS):
             The temperature of the gas+solid
 
         """
-        actx = cv.array_context
         if isinstance(tseed, DOFArray) is False:
+            actx = cv.array_context
             temp = tseed + actx.np.zeros_like(cv.mass)
         else:
             temp = tseed*1.0
@@ -452,12 +452,12 @@ class WallTabulatedEOS(PorousFlowEOS):
         for _ in range(0, niter):
 
             eps_rho_e = (
-                cv.mass*gas_model.eos.get_internal_energy(temp)
-                + wdv.density*self._material.enthalpy(temp, wdv.tau))
+                cv.mass*eos.get_internal_energy(temp)
+                + wdv.density*self.enthalpy(temp, wdv.tau))
 
             bulk_cp = (
-                cv.mass*gas_model.eos.heat_capacity_cv(temp)
-                + wdv.density*self._material.heat_capacity(temp, wdv.tau))
+                cv.mass*eos.heat_capacity_cv(temp)
+                + wdv.density*self.heat_capacity(temp, wdv.tau))
 
             temp = temp - (eps_rho_e - cv.energy)/bulk_cp
 
@@ -628,7 +628,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         istep = 0
         first_step = 0
         cv = initializer(dim=dim, gas_model=gas_model,
-            material_densities=material_densities, material=my_material,
+            material_densities=material_densities,
             pressure=pressure, temperature=temperature)
 
     # stand-alone version of the "gas_model" to bypass some unnecessary
@@ -646,10 +646,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         wdv = gas_model.wall.dependent_vars(material_densities)
 
         temperature = gas_model.wall.get_temperature(
-            cv=cv, wdv=wdv, tseed=temperature_seed, gas_model=gas_model)
+            cv=cv, wdv=wdv, tseed=temperature_seed, eos=gas_model.eos)
 
         pressure = gas_model.wall.get_pressure(
-            cv=cv, wdv=wdv, temperature=temperature, gas_model=gas_model)
+            cv=cv, wdv=wdv, temperature=temperature, eos=gas_model.eos)
 
         dv = PorousFlowDependentVars(
             temperature=temperature,
