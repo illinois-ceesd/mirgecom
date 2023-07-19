@@ -102,7 +102,7 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None):
     converted if not in this format
 
     bttf is a list of all dimensions in the problem
-    in both positive and negative directions (x,-x...)
+    in both positive and negative directions
     depends on value of dim
     """
     if periodic is None:
