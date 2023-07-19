@@ -72,7 +72,6 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-
 @mpi_entry_point
 def main(ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None,
