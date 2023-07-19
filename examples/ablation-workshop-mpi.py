@@ -447,6 +447,7 @@ class WallTabulatedEOS(PorousWallEOS):
             The temperature of the gas+solid
 
         """
+        actx = cv.array_context
         if isinstance(tseed, DOFArray) is False:
             temp = tseed + actx.np.zeros_like(cv.mass)
         else:
