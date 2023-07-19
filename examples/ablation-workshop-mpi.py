@@ -503,13 +503,13 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     viz_path = "viz_data/"
     vizname = viz_path+casename
 
-    t_final = 1.0e-7
+    t_final = 4.0e-6
 
     dim = 1
 
     order = 2
-    dt = 1.0e-8
-    pressure_scaling_factor = 1.0  # noqa N806
+    dt = 4.0e-8
+    pressure_scaling_factor = 0.1  # noqa N806
 
     nviz = 200
     ngarbage = 50
