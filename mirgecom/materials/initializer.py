@@ -63,16 +63,16 @@ class PorousWallInitializer:
         temperature = self._temp + zeros
         species_mass_frac = self._y + zeros
 
-        tau = gas_model.wall.decomposition_progress(self._wall_density)
+        tau = gas_model.decomposition_progress(self._wall_density)
 
-        eps_gas = gas_model.wall.void_fraction(tau)
+        eps_gas = gas_model.wall_model.void_fraction(tau)
         eps_rho_gas = eps_gas*gas_model.eos.get_density(pressure, temperature,
                                                         species_mass_frac)
 
         # internal energy (kinetic energy is neglected)
         eps_rho_solid = sum(self._wall_density)
         bulk_energy = (
-            eps_rho_solid*gas_model.wall.enthalpy(temperature, tau)
+            eps_rho_solid*gas_model.wall_model.enthalpy(temperature, tau)
             + eps_rho_gas*gas_model.eos.get_internal_energy(temperature,
                                                             species_mass_frac)
         )

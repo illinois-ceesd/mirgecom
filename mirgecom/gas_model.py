@@ -71,10 +71,6 @@ from mirgecom.transport import (
     TransportModel,
     GasTransportVars
 )
-from mirgecom.wall_model import (
-    PorousFlowEOS,
-    PorousFlowDependentVars
-)
 from mirgecom.utils import normalize_boundaries
 
 
@@ -90,16 +86,10 @@ class GasModel:
 
         A gas transport model to provide transport properties. None for inviscid
         models.
-
-    .. attribute:: wall
-
-        A wall model to provide properties of the solid for porous media flow.
-        None for pure-fluid flows.
     """
 
     eos: GasEOS
     transport: Optional[TransportModel] = None
-    wall: Optional[PorousFlowEOS] = None
 
 
 @dataclass_array_container
@@ -393,17 +383,18 @@ def make_fluid_state(cv, gas_model,
         # ~~~ we need to squeeze wall_model in gas_model because this is easily
         # accessible everywhere in the code
 
-        wdv = gas_model.wall.dependent_vars(material_densities)
+        wdv = gas_model.dependent_vars(material_densities)
 
-        temperature = gas_model.wall.get_temperature(
-            cv=cv, wdv=wdv, tseed=temperature_seed, eos=gas_model.eos)
+        temperature = gas_model.get_temperature(
+            cv=cv, wdv=wdv, tseed=temperature_seed)
 
-        pressure = gas_model.wall.get_pressure(cv, wdv, temperature, gas_model.eos)
+        pressure = gas_model.get_pressure(cv, wdv, temperature)
 
         if limiter_func:
             cv = limiter_func(cv=cv, wdv=wdv, pressure=pressure,
                               temperature=temperature, dd=limiter_dd)
 
+        from mirgecom.wall_model import PorousFlowDependentVars
         dv = PorousFlowDependentVars(
             temperature=temperature,
             pressure=pressure,
@@ -422,11 +413,11 @@ def make_fluid_state(cv, gas_model,
         tv = GasTransportVars(
             bulk_viscosity=(
                 gas_tv.bulk_viscosity),
-            viscosity=gas_model.wall.viscosity(
+            viscosity=gas_model.viscosity(
                 wdv, temperature, gas_tv),
-            thermal_conductivity=gas_model.wall.thermal_conductivity(
+            thermal_conductivity=gas_model.thermal_conductivity(
                 cv, wdv, temperature, gas_tv),
-            species_diffusivity=gas_model.wall.species_diffusivity(
+            species_diffusivity=gas_model.species_diffusivity(
                 wdv, temperature, gas_tv),
         )
 
