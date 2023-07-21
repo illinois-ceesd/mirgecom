@@ -120,12 +120,12 @@ class DecayingTrig(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(0.)
 
@@ -166,15 +166,15 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             upper_grad_u = op.project(dcoll, "vol", upper_bdtag, exact_grad_u)
             normal = actx.thaw(dcoll.normal(upper_bdtag))
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         upper_u = op.project(dcoll, "vol", upper_bdtag, exact_u)
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(upper_u)
@@ -214,12 +214,12 @@ class OscillatingTrigVarDiff(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(0.)
 
@@ -252,12 +252,12 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(0.)
 
