@@ -73,10 +73,10 @@ from mirgecom.logging_quantities import (
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage
 )
-from mirgecom.gas_model import ViscousFluidState
+from mirgecom.eos import MixtureDependentVars
+from mirgecom.gas_model import PorousFlowFluidState
 from mirgecom.wall_model import (
-    PorousFlowDependentVars,
-    PorousWallDependentVars,
+    PorousWallVars,
     PorousFlowModel as OriginalPorousFlowModel
 )
 from mirgecom.fluid import ConservedVars
@@ -156,7 +156,7 @@ def initializer(dim, gas_model, material_densities, temperature,
     gas_const = 8314.46261815324/gas_model.eos.molar_mass(temperature)
 
     if gas_density is None:
-        eps_gas = gas_model.void_fraction(tau)
+        eps_gas = gas_model.wall_model.void_fraction(tau)
         eps_rho_gas = eps_gas*pressure/(gas_const*temperature)
 
     # internal energy (kinetic energy is neglected)
@@ -358,7 +358,7 @@ class GasProperties:
         bnds = self._cs_enthalpy.x
         return eval_spline_derivative(temperature, bnds, coeffs)
 
-    def heat_capacity_cv(self, temperature: DOFArray) -> DOFArray:
+    def heat_capacity_cv(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the gas heat capacity at constant volume $C_{v_g}$."""
         return self.heat_capacity_cp(temperature)/self.gamma(temperature)
 
@@ -404,29 +404,7 @@ class PorousFlowModel(OriginalPorousFlowModel):
     for TACOT-tabulated data.
     """
 
-    def molar_mass(self, temperature):
-        return self.eos.molar_mass(temperature)
-
-    def internal_energy(self, cv, wdv, temperature) -> DOFArray:
-        r"""Evaluate the gas internal energy $e$.
-
-        It is evaluated based on the tabulated enthalpy and molar mass as
-
-        .. math::
-            e(T) = h(T) - \frac{R}{M} T
-        """
-        gas_const = 8314.46261815324/self.molar_mass(temperature)
-        gas_int_energy = self.eos.enthalpy(temperature) - gas_const*temperature
-
-        return (cv.mass*gas_int_energy
-                + wdv.density*self.wall_model.enthalpy(temperature, wdv.tau))
-
-    def heat_capacity(self, cv, wdv, temperature) -> DOFArray:
-        r"""Evaluate the gas internal energy $e$."""
-        return (cv.mass*self.eos.heat_capacity_cv(temperature)
-                + wdv.density*self.wall_model.heat_capacity(temperature, wdv.tau))
-
-    def get_temperature(self, cv, wdv, tseed, niter=3):
+    def get_temperature(self, cv, wv, tseed, niter=3):
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -445,17 +423,13 @@ class PorousFlowModel(OriginalPorousFlowModel):
 
             The fluid conserved variables
 
-        wdv: PorousWallDependentVars
+        wv: PorousWallVars
 
             Wall properties as a function of decomposition progress
 
         tseed:
 
             Temperature to use as a seed for Netwon iteration
-
-        gas_model: GasModel
-
-            The class containing the tabulated data for TACOT
 
         Returns
         -------
@@ -471,13 +445,15 @@ class PorousFlowModel(OriginalPorousFlowModel):
             temp = tseed*1.0
 
         for _ in range(0, niter):
-            eps_rho_e = self.internal_energy(cv, wdv, temp)
-            bulk_cp = self.heat_capacity(cv, wdv, temp)
+            eps_rho_e = (cv.mass*self.eos.get_internal_energy(temperature=temp)
+                         + wv.density*self.wall_model.enthalpy(temp, wv.tau))
+            bulk_cp = (cv.mass*self.eos.heat_capacity_cv(cv=cv, temperature=temp)
+                       + wv.density*self.wall_model.heat_capacity(temp, wv.tau))
             temp = temp - (eps_rho_e - cv.energy)/bulk_cp
 
         return temp
 
-    def pressure_diffusivity(self, cv: ConservedVars, wdv: PorousWallDependentVars,
+    def pressure_diffusivity(self, cv: ConservedVars, wv: PorousWallVars,
                              viscosity: DOFArray) -> DOFArray:
         r"""Return the pressure diffusivity for Darcy flow.
 
@@ -487,7 +463,7 @@ class PorousFlowModel(OriginalPorousFlowModel):
         where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
         and $\mathbf{K}$ is the permeability matrix.
         """
-        return cv.mass*wdv.permeability/(viscosity*wdv.void_fraction)
+        return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
 
 
 def binary_sum(ary):
@@ -656,14 +632,23 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         """
         zeros = actx.np.zeros_like(cv.mass)
 
-        wdv = gas_model.dependent_vars(material_densities)
+        tau = gas_model.decomposition_progress(material_densities)
+        wv = PorousWallVars(
+            material_densities=material_densities,
+            tau=tau,
+            density=gas_model.solid_density(material_densities),
+            void_fraction=gas_model.wall_model.void_fraction(tau),
+            emissivity=gas_model.wall_model.emissivity(tau),
+            permeability=gas_model.wall_model.permeability(tau),
+            tortuosity=gas_model.wall_model.tortuosity(tau)
+        )
 
-        temperature = gas_model.get_temperature(cv=cv, wdv=wdv,
+        temperature = gas_model.get_temperature(cv=cv, wv=wv,
                                                 tseed=temperature_seed)
 
-        pressure = gas_model.get_pressure(cv=cv, wdv=wdv, temperature=temperature)
+        pressure = gas_model.get_pressure(cv=cv, wv=wv, temperature=temperature)
 
-        dv = PorousFlowDependentVars(
+        dv = MixtureDependentVars(
             temperature=temperature,
             pressure=pressure,
             speed_of_sound=zeros,
@@ -671,7 +656,6 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             smoothness_kappa=zeros,
             smoothness_beta=zeros,
             species_enthalpies=cv.species_mass,
-            material_densities=material_densities
         )
 
         # gas only transport vars
@@ -682,10 +666,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             species_diffusivity=cv.species_mass)
 
         # coupled solid-gas thermal conductivity
-        kappa = gas_model.thermal_conductivity(cv, wdv, temperature, gas_tv)
+        kappa = gas_model.thermal_conductivity(cv, wv, temperature, gas_tv)
 
         # coupled solid-gas viscosity
-        viscosity = gas_model.viscosity(wdv, temperature, gas_tv)
+        viscosity = gas_model.viscosity(wv, temperature, gas_tv)
 
         # return modified transport vars
         tv = GasTransportVars(
@@ -695,7 +679,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             species_diffusivity=cv.species_mass
         )
 
-        return ViscousFluidState(cv=cv, dv=dv, tv=tv)
+        return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
     compiled_make_state = actx.compile(make_state)
 
@@ -815,8 +799,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         """
         cv = state.cv
         dv = state.dv
-
-        wdv = gas_model.dependent_vars(dv.material_densities)
+        wv = state.wv
 
         actx = cv.mass.array_context
 
@@ -828,7 +811,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, dv.temperature)
         m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity)
-        emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.emissivity)
+        emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wv.emissivity)
 
         m_dot_g = np.dot(m_dot_g, normal_vec)
 
@@ -894,16 +877,15 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         cv = fluid_state.cv
         dv = fluid_state.dv
         tv = fluid_state.tv
-
-        wdv = gas_model.dependent_vars(dv.material_densities)
+        wv = fluid_state.wv
 
         actx = cv.array_context
-        zeros = actx.np.zeros_like(wdv.tau)
+        zeros = actx.np.zeros_like(wv.tau)
 
         pressure_boundaries, velocity_boundaries = boundaries
 
         # pressure diffusivity for Darcy flow
-        pressure_diffusivity = gas_model.pressure_diffusivity(cv, wdv, tv.viscosity)
+        pressure_diffusivity = gas_model.pressure_diffusivity(cv, wv, tv.viscosity)
 
         # ~~~~~
         # viscous RHS
@@ -951,14 +933,14 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         # ~~~~~
         # decomposition for each component of the resin
         resin_pyrolysis = pyrolysis.get_source_terms(temperature=dv.temperature,
-                                                     chi=dv.material_densities)
+                                                     chi=wv.material_densities)
 
         # flip sign due to mass conservation
         gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
 
         # viscous dissipation due to friction inside the porous
-        visc_diss_energy = tv.viscosity*wdv.void_fraction**2*(
-            (1.0/wdv.permeability)*np.dot(velocity, velocity))
+        visc_diss_energy = tv.viscosity*wv.void_fraction**2*(
+            (1.0/wv.permeability)*np.dot(velocity, velocity))
 
         source_terms = ConservedVars(
             mass=gas_source_term,
@@ -976,16 +958,21 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         cv = state.cv
         dv = state.dv
-        wdv = gas_model.dependent_vars(dv.material_densities)
+        wv = state.wv
 
         viz_fields = [("CV_density", cv.mass),
                       ("CV_energy", cv.energy),
                       ("DV_T", dv.temperature),
                       ("DV_P", dv.pressure),
-                      ("WV_phase_1", dv.material_densities[0]),
-                      ("WV_phase_2", dv.material_densities[1]),
-                      ("WV_phase_3", dv.material_densities[2]),
-                      ("WDV", wdv)
+                      ("WV_phase_1", wv.material_densities[0]),
+                      ("WV_phase_2", wv.material_densities[1]),
+                      ("WV_phase_3", wv.material_densities[2]),
+                      ("WV_tau", wv.tau),
+                      ("WV_void_fraction", wv.void_fraction),
+                      ("WV_emissivity", wv.emissivity),
+                      ("WV_permeability", wv.permeability),
+                      ("WV_tortuosity", wv.tortuosity),
+                      ("WV_density", wv.density),
                       ]
 
         # depending on the version, paraview may complain without this
@@ -997,12 +984,13 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     def my_write_restart(step, t, state):
         cv = state.cv
         dv = state.dv
+        wv = state.wv
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != restart_file:
             rst_data = {
                 "local_mesh": local_mesh,
                 "cv": cv,
-                "material_densities": dv.material_densities,
+                "material_densities": wv.material_densities,
                 "tseed": dv.temperature,
                 "t": t,
                 "step": step,
