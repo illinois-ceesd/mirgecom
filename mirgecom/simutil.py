@@ -98,7 +98,7 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None):
     Create a rectangular "box" like mesh with tagged boundary faces.
 
     Ensure parameters needed for generate_regular_rect_mesh are satisfied
-    a,b,n,periodic are tuples of dimension = dim 
+    a,b,n,periodic are tuples of dimension = dim
     converted if not in this format
 
     bttf is a list of all dimensions in the problem
