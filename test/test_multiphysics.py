@@ -77,8 +77,8 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     dim_names = ["x", "y", "z"]
     boundary_tag_to_face = {}
     for i in range(dim):
-        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
+        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
+        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
