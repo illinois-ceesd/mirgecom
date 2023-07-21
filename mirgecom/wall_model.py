@@ -36,7 +36,7 @@ THE SOFTWARE.
 
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import Union, Optional
+from typing import Union
 import numpy as np
 from meshmode.dof_array import DOFArray
 from arraycontext import (
@@ -46,10 +46,7 @@ from arraycontext import (
 )
 from mirgecom.transport import TransportModel
 from mirgecom.fluid import ConservedVars
-from mirgecom.eos import (
-    MixtureDependentVars,
-    GasEOS
-)
+from mirgecom.eos import GasEOS
 from mirgecom.transport import GasTransportVars
 
 
@@ -145,7 +142,7 @@ class SolidWallModel:
 
     def dependent_vars(self, wv, tseed=None):
         """Return solid wall dependent variables."""
-        temperature = self.eval_temperature(wv, tseed)
+        temperature = self.get_temperature(wv, tseed)
         kappa = self.thermal_conductivity(temperature)
         return SolidWallDependentVars(
             thermal_conductivity=kappa,
@@ -237,43 +234,49 @@ class PorousWallVars:
 
 
 class PorousFlowEOS:
+    """Abstract interface to equation of porous flow class."""
 
     @abstractmethod
-    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
+    def decomposition_progress(self, material_densities) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition."""
         raise NotImplementedError()
 
+    @abstractmethod
     def solid_density(self, material_densities) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$."""
         raise NotImplementedError()
 
+    @abstractmethod
     def get_temperature(self, cv: ConservedVars, wv: PorousWallVars,
                         tseed: DOFArray, niter=3) -> DOFArray:
         r"""Evaluate the temperature based on solid+gas properties."""
         raise NotImplementedError()
 
+    @abstractmethod
     def get_pressure(self, cv: ConservedVars, wv: PorousWallVars,
                      temperature: DOFArray) -> DOFArray:
         """Return the pressure of the gas considering the void fraction."""
         raise NotImplementedError()
 
+    @abstractmethod
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
         """Return the enthalpy of the gas+solid material."""
         raise NotImplementedError()
 
+    @abstractmethod
     def heat_capacity(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
         """Return the heat capacity of the gas+solid material."""
         raise NotImplementedError()
 
-    # TODO: maybe create a WallTransportVars?
+    @abstractmethod
     def viscosity(self, wv: PorousWallVars, temperature: DOFArray,
                   gas_tv: GasTransportVars) -> DOFArray:
         """Viscosity of the gas through the (porous) wall."""
         raise NotImplementedError()
 
-    # TODO: maybe create a WallTransportVars?
+    @abstractmethod
     def thermal_conductivity(self, cv: ConservedVars,
                              wv: PorousWallVars,
                              temperature: DOFArray,
@@ -281,7 +284,7 @@ class PorousFlowEOS:
         r"""Return the effective thermal conductivity of the gas+solid."""
         raise NotImplementedError()
 
-    # TODO: maybe create a WallTransportVars?
+    @abstractmethod
     def species_diffusivity(self, wv: PorousWallVars,
             temperature: DOFArray, gas_tv: GasTransportVars) -> DOFArray:
         """Mass diffusivity of gaseous species through the (porous) wall."""

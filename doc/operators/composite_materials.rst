@@ -70,7 +70,7 @@ Carbon Fiber Oxidation
 
     From the conserved variables, it is possible to compute the oxidation
     progress, denoted by
-    :attr:`~mirgecom.wall_model.PorousWallDependentVars.tau`.
+    :attr:`~mirgecom.wall_model.PorousWallVars.tau`.
     As a consequence, the instantaneous material properties will change due to
     the mass loss.
 
@@ -98,7 +98,7 @@ Composite Materials
     material degradation. As the
     :class:`~mirgecom.materials.tacot.Pyrolysis` progresses, the mass of each 
     $i$ constituents of the resin, denoted by
-    :attr:`~mirgecom.wall_model.PorousFlowDependentVars.material_densities`,
+    :attr:`~mirgecom.wall_model.PorousWallVars.material_densities`,
     is calculated as
 
     .. math ::
@@ -148,7 +148,7 @@ Composite Materials
 
     From the conserved variables, it is possible to compute the decomposition
     status, denoted by
-    :attr:`~mirgecom.wall_model.PorousWallDependentVars.tau`.
+    :attr:`~mirgecom.wall_model.PorousWallVars.tau`.
     This yields the proportion of virgin (unpyrolyzed material) to char (fully
     pyrolyzed) and, consequently, the different thermophysicochemical
     properties of the solid phase. Thus, the instantaneous material properties

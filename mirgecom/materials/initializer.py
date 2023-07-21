@@ -39,7 +39,16 @@ class SolidWallInitializer:
     def __init__(self, temperature):
         self._temp = temperature
 
-    def __call__(self, actx, x_vec, wall_model):
+    def __call__(self, x_vec, wall_model):
+        """Evaluate the wall+gas properties for porous materials.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        wall_model: :class:`mirgecom.wall_model.SolidWallModel`
+            Equation of state class
+        """
         mass = wall_model.density()
         energy = mass * wall_model.enthalpy(self._temp)
         return SolidWallConservedVars(mass=mass, energy=energy)
@@ -55,8 +64,16 @@ class PorousWallInitializer:
         self._temp = temperature
         self._wall_density = material_densities
 
-    def __call__(self, actx, x_vec, gas_model):
+    def __call__(self, x_vec, gas_model):
+        """Evaluate the wall+gas properties for porous materials.
 
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        gas_model: :class:`mirgecom.wall_model.PorousFlowModel`
+            Equation of state class
+        """
         zeros = actx.np.zeros_like(x_vec[0])
 
         pressure = self._pres + zeros

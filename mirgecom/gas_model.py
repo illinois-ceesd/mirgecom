@@ -442,6 +442,7 @@ def make_fluid_state(cv, gas_model,
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
+    return None
 
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
     """Project a fluid state onto a boundary consistent with the gas model.
@@ -506,7 +507,7 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
 
     material_densities = None
     if isinstance(gas_model, PorousFlowModel):
-        material_densities = op.project(dcoll, src, tgt, state.dv.material_densities)
+        material_densities = op.project(dcoll, src, tgt, state.wv.material_densities)
 
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed,
@@ -763,7 +764,7 @@ def make_operator_fluid_states(
         material_densities_interior_pairs = [
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
-                dcoll, volume_state.dv.material_densities, volume_dd=dd_vol,
+                dcoll, volume_state.wv.material_densities, volume_dd=dd_vol,
                 tag=(_WallDensityTag, comm_tag))]
 
     interior_boundary_states_quad = make_fluid_state_trace_pairs(
@@ -857,8 +858,8 @@ def replace_fluid_state(
         else state.temperature)
 
     material_densities = (None
-        if gas_model.wall is None
-        else state.dv.material_densities)
+        if isinstance(gas_model, PorousFlowModel)
+        else state.wv.material_densities)
 
     return make_fluid_state(
         cv=new_cv,
