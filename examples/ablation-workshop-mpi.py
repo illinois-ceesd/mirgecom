@@ -77,7 +77,7 @@ from mirgecom.gas_model import ViscousFluidState
 from mirgecom.wall_model import (
     PorousFlowDependentVars,
     PorousWallDependentVars,
-    PorousFlowModel
+    PorousFlowModel as OriginalPorousFlowModel
 )
 from mirgecom.fluid import ConservedVars
 from mirgecom.transport import GasTransportVars
@@ -397,7 +397,7 @@ class GasProperties:
         return cv.mass*gas_const*temperature
 
 
-class WallTabulatedModel(PorousFlowModel):
+class PorousFlowModel(OriginalPorousFlowModel):
     """EOS for wall using tabulated data.
 
     Inherits WallEOS and add an temperature-evaluation function exclusive
@@ -599,7 +599,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    # {{{ Initialize wall model
+    # {{{ Initialize flow model
 
     import mirgecom.materials.tacot as my_composite
 
@@ -608,10 +608,9 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     my_material = my_composite.SolidProperties(char_mass=220.0, virgin_mass=280.0)
     pyrolysis = my_composite.Pyrolysis()
 
-    # }}}
+    gas_model = PorousFlowModel(eos=my_gas, wall_model=my_material, transport=None)
 
-    gas_model = WallTabulatedModel(eos=my_gas, wall_model=my_material,
-                                   transport=None)
+    # }}}
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -659,11 +658,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         wdv = gas_model.dependent_vars(material_densities)
 
-        temperature = gas_model.get_temperature(
-            cv=cv, wdv=wdv, tseed=temperature_seed)
+        temperature = gas_model.get_temperature(cv=cv, wdv=wdv,
+                                                tseed=temperature_seed)
 
-        pressure = gas_model.get_pressure(
-            cv=cv, wdv=wdv, temperature=temperature)
+        pressure = gas_model.get_pressure(cv=cv, wdv=wdv, temperature=temperature)
 
         dv = PorousFlowDependentVars(
             temperature=temperature,
@@ -905,8 +903,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         pressure_boundaries, velocity_boundaries = boundaries
 
         # pressure diffusivity for Darcy flow
-        pressure_diffusivity = gas_model.pressure_diffusivity(
-            cv, wdv, tv.viscosity)
+        pressure_diffusivity = gas_model.pressure_diffusivity(cv, wdv, tv.viscosity)
 
         # ~~~~~
         # viscous RHS
