@@ -3,11 +3,11 @@
 .. autoclass:: SolidWallConservedVars
 .. autoclass:: SolidWallDependentVars
 .. autoclass:: SolidWallState
-.. autoclass:: SolidWallEOS
+.. autoclass:: SolidWallModel
 .. autoclass:: PorousFlowDependentVars
 .. autoclass:: PorousWallDependentVars
 .. autoclass:: PorousWallProperties
-.. autoclass:: PorousFlowEOS
+.. autoclass:: PorousFlowModel
 """
 
 __copyright__ = """
@@ -91,8 +91,16 @@ class SolidWallState:
     dv: SolidWallDependentVars
 
 
-class SolidWallEOS:
-    """Model for calculating wall quantities for heat conduction only materials."""
+class SolidWallModel:
+    """Model for calculating wall quantities for heat conduction only materials.
+
+    .. automethod:: density
+    .. automethod:: heat_capacity
+    .. automethod:: enthalpy
+    .. automethod:: thermal_diffusivity
+    .. automethod:: thermal_conductivity
+    .. automethod:: eval_temperature
+    """
 
     def __init__(self, density_func, enthalpy_func, heat_capacity_func,
                  thermal_conductivity_func):
@@ -210,8 +218,10 @@ class PorousWallProperties:
 @dataclass(frozen=True, eq=False)
 # FIXME in practice, the density of the wall materials follow a conservation
 # equation. To avoid big changes in the code atm, it is squeezed as a
-# dependent variable for "state.dv", although it is not.
-# TODO if we decide to refactor it, modify this accordingly
+# dependent variable for "state.dv", although it is not a dv per-se.
+# TODO maybe create an extra .xv to pass the wall var and make it independent
+# of dv/fluid part.
+# TODO extend cv to include wall density?
 class PorousFlowDependentVars(MixtureDependentVars):
     """Dependent variables for the (porous) fluid state.
 
@@ -244,7 +254,25 @@ class PorousWallDependentVars:
 
 @dataclass(frozen=True)
 class PorousFlowModel:
+    """
+    <A very important description>
 
+    .. attribute:: wall_model
+    .. attribute:: eos
+    .. attribute:: transport
+    
+    .. automethod:: solid_density
+    .. automethod:: void_fraction
+    .. automethod:: get_temperature
+    .. automethod:: get_pressure
+    .. automethod:: internal_energy
+    .. automethod:: heat_capacity
+    .. automethod:: viscosity
+    .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
+    .. automethod:: decomposition_progress
+    .. automethod:: dependent_vars
+    """
     wall_model: PorousWallProperties
     eos: Optional[GasEOS] = None
     transport: Optional[TransportModel] = None

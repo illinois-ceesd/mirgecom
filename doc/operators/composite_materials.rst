@@ -5,8 +5,8 @@ Wall Degradation Modeling
 
 Model-specific properties
 ^^^^^^^^^^^^^^^^^^^^^^^^^
-    The properties of the materials are defined in specific files. These files
-    are required by :class:`~mirgecom.wall_model.PorousFlowEOS`.
+    The properties of the materials are defined in specific files and used by
+    :class:`~mirgecom.wall_model.PorousWallProperties`.
 
 Carbon fiber
 ------------
