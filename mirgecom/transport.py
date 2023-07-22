@@ -723,24 +723,29 @@ class PorousWallTransport(TransportModel):
         """Initialize uniform, constant transport properties."""
         self.base_transport = base_transport
 
-    def bulk_viscosity(self, cv, dv, wv, flow_model) -> DOFArray:
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, wv: PorousWallVars,
+            flow_model: PorousFlowModel) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
-        return cv.mass*0.0
+        return self.base_transport.bulk_viscosity(cv, dv, flow_model.eos)
 
-    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, wv: PorousWallVars,
+            flow_model: PorousFlowModel) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$."""
         return (self.bulk_viscosity(cv, dv, wv, flow_model)
             - 2./3. * self.viscosity(cv, dv, wv, flow_model))
 
-    def viscosity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, wv: PorousWallVars,
+            flow_model: PorousFlowModel) -> DOFArray:
         """Viscosity of the gas through the (porous) wall."""
         return 1.0/wv.void_fraction*(
             self.base_transport.viscosity(cv, dv, flow_model.eos))
 
-    def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, wv: PorousWallVars,
+            flow_model: PorousFlowModel) -> DOFArray:
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the
@@ -759,16 +764,18 @@ class PorousWallTransport(TransportModel):
 
         return y_s*kappa_s + y_g*kappa_g
 
-    def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+    def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, wv: PorousWallVars,
+            flow_model: PorousFlowModel) -> DOFArray:
         """Mass diffusivity of gaseous species through the (porous) wall."""
         return 1.0/wv.tortuosity*(
             self.base_transport.species_diffusivity(cv, dv, flow_model.eos))
 
     # FIXME I have to pass "flow_model" but this class is internal to "flow_model"..
     # Seems dumb to me but I dont know to access the other classes...
-    def transport_vars(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, flow_model: PorousFlowModel) -> GasTransportVars:
+    def transport_vars(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, wv: PorousWallVars,
+            flow_model: PorousFlowModel) -> GasTransportVars:
         r"""Compute the transport properties from the conserved state."""
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv, dv, wv, flow_model),
