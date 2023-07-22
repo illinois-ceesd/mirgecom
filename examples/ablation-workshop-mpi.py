@@ -465,6 +465,38 @@ class PorousFlowModel(OriginalPorousFlowModel):
         """
         return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
 
+    def viscosity(self, wv: PorousWallVars, temperature: DOFArray,
+                  gas_tv: GasTransportVars) -> DOFArray:
+        """Viscosity of the gas through the (porous) wall."""
+        return gas_tv.viscosity/wv.void_fraction
+
+    def thermal_conductivity(self, cv: ConservedVars,
+                             wv: PorousWallVars,
+                             temperature: DOFArray,
+                             gas_tv: GasTransportVars) -> DOFArray:
+        r"""Return the effective thermal conductivity of the gas+solid.
+
+        It is a function of temperature and degradation progress. As the
+        fibers are oxidized, they reduce their cross area and, consequently,
+        their ability to conduct heat.
+
+        It is evaluated using a mass-weighted average given by
+
+        .. math::
+            \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
+        """
+        y_g = cv.mass/(cv.mass + wv.density)
+        y_s = 1.0 - y_g
+        kappa_s = self.wall_model.thermal_conductivity(temperature, wv.tau)
+        kappa_g = gas_tv.thermal_conductivity
+
+        return y_s*kappa_s + y_g*kappa_g
+
+    def species_diffusivity(self, wv: PorousWallVars,
+            temperature: DOFArray, gas_tv: GasTransportVars) -> DOFArray:
+        """Mass diffusivity of gaseous species through the (porous) wall."""
+        return gas_tv.species_diffusivity/wv.tortuosity
+
 
 def binary_sum(ary):
     """Sum the elements of an array, creating a log-depth DAG instead of linear."""

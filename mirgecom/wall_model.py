@@ -44,10 +44,9 @@ from arraycontext import (
     with_container_arithmetic,
     get_container_context_recursively
 )
-from mirgecom.transport import TransportModel
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS
-from mirgecom.transport import GasTransportVars
+from mirgecom.transport import TransportModel
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -270,26 +269,6 @@ class PorousFlowEOS:
         """Return the heat capacity of the gas+solid material."""
         raise NotImplementedError()
 
-    @abstractmethod
-    def viscosity(self, wv: PorousWallVars, temperature: DOFArray,
-                  gas_tv: GasTransportVars) -> DOFArray:
-        """Viscosity of the gas through the (porous) wall."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def thermal_conductivity(self, cv: ConservedVars,
-                             wv: PorousWallVars,
-                             temperature: DOFArray,
-                             gas_tv: GasTransportVars) -> DOFArray:
-        r"""Return the effective thermal conductivity of the gas+solid."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def species_diffusivity(self, wv: PorousWallVars,
-            temperature: DOFArray, gas_tv: GasTransportVars) -> DOFArray:
-        """Mass diffusivity of gaseous species through the (porous) wall."""
-        raise NotImplementedError()
-
 
 @dataclass(frozen=True)
 class PorousFlowModel(PorousFlowEOS):
@@ -305,9 +284,6 @@ class PorousFlowModel(PorousFlowEOS):
     .. automethod:: get_pressure
     .. automethod:: internal_energy
     .. automethod:: heat_capacity
-    .. automethod:: viscosity
-    .. automethod:: thermal_conductivity
-    .. automethod:: species_diffusivity
     .. automethod:: decomposition_progress
     """
 
@@ -385,38 +361,3 @@ class PorousFlowModel(PorousFlowEOS):
         """Return the heat capacity of the gas+solid material."""
         return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
                 + wv.density*self.wall_model.heat_capacity(temperature, wv.tau))
-
-    # TODO: maybe create a WallTransportVars?
-    def viscosity(self, wv: PorousWallVars, temperature: DOFArray,
-                  gas_tv: GasTransportVars) -> DOFArray:
-        """Viscosity of the gas through the (porous) wall."""
-        return gas_tv.viscosity/wv.void_fraction
-
-    # TODO: maybe create a WallTransportVars?
-    def thermal_conductivity(self, cv: ConservedVars,
-                             wv: PorousWallVars,
-                             temperature: DOFArray,
-                             gas_tv: GasTransportVars) -> DOFArray:
-        r"""Return the effective thermal conductivity of the gas+solid.
-
-        It is a function of temperature and degradation progress. As the
-        fibers are oxidized, they reduce their cross area and, consequently,
-        their ability to conduct heat.
-
-        It is evaluated using a mass-weighted average given by
-
-        .. math::
-            \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
-        """
-        y_g = cv.mass/(cv.mass + wv.density)
-        y_s = 1.0 - y_g
-        kappa_s = self.wall_model.thermal_conductivity(temperature, wv.tau)
-        kappa_g = gas_tv.thermal_conductivity
-
-        return y_s*kappa_s + y_g*kappa_g
-
-    # TODO: maybe create a WallTransportVars?
-    def species_diffusivity(self, wv: PorousWallVars,
-            temperature: DOFArray, gas_tv: GasTransportVars) -> DOFArray:
-        """Mass diffusivity of gaseous species through the (porous) wall."""
-        return gas_tv.species_diffusivity/wv.tortuosity

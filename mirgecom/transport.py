@@ -16,6 +16,7 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: MixtureAveragedTransport
 .. autoclass:: ArtificialViscosityTransportDiv
 .. autoclass:: ArtificialViscosityTransportDiv2
+.. autoclass:: PorousMediaTransport
 
 Exceptions
 ^^^^^^^^^^
@@ -50,7 +51,6 @@ from typing import Optional
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
 import numpy as np
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS, GasDependentVars
@@ -698,3 +698,81 @@ class ArtificialViscosityTransportDiv2(TransportModel):
                             eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._physical_transport.species_diffusivity(cv, dv, eos)
+
+
+class PorousWallTransport(TransportModel):
+    r"""Transport model for add artificial viscosity.
+
+    Inherits from (and implements) :class:`TransportModel`.
+
+    Takes a physical transport model and adds the artificial viscosity
+    contribution to it. Defaults to simple transport with inviscid settings.
+    This is equivalent to inviscid flow with artifical viscosity enabled.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
+    """
+
+    from mirgecom.wall_model import PorousWallVars, PorousFlowModel
+
+    def __init__(self, base_transport):
+        """Initialize uniform, constant transport properties."""
+        self.base_transport = base_transport
+
+    def bulk_viscosity(self, cv, dv, wv, flow_model) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        return cv.mass*0.0
+
+    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$."""
+        return (self.bulk_viscosity(cv, dv, wv, flow_model)
+            - 2./3. * self.viscosity(cv, dv, wv, flow_model))
+
+    def viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+        """Viscosity of the gas through the (porous) wall."""
+        return 1.0/wv.void_fraction*(
+            self.base_transport.viscosity(cv, dv, flow_model.eos))
+
+    def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+        r"""Return the effective thermal conductivity of the gas+solid.
+
+        It is a function of temperature and degradation progress. As the
+        fibers are oxidized, they reduce their cross area and, consequently,
+        their ability to conduct heat.
+
+        It is evaluated using a mass-weighted average given by
+
+        .. math::
+            \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
+        """
+        y_g = cv.mass/(cv.mass + wv.density)
+        y_s = 1.0 - y_g
+        kappa_s = flow_model.wall_model.thermal_conductivity(dv.temperature, wv.tau)
+        kappa_g = self.base_transport.thermal_conductivity(cv, dv, flow_model.eos)
+
+        return y_s*kappa_s + y_g*kappa_g
+
+    def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, flow_model: PorousFlowModel) -> DOFArray:
+        """Mass diffusivity of gaseous species through the (porous) wall."""
+        return 1.0/wv.tortuosity*(
+            self.base_transport.species_diffusivity(cv, dv, flow_model.eos))
+
+    # FIXME I have to pass "flow_model" but this class is internal to "flow_model"..
+    # Seems dumb to me but I dont know to access the other classes...
+    def transport_vars(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, flow_model: PorousFlowModel) -> GasTransportVars:
+        r"""Compute the transport properties from the conserved state."""
+        return GasTransportVars(
+            bulk_viscosity=self.bulk_viscosity(cv, dv, wv, flow_model),
+            viscosity=self.viscosity(cv, dv, wv, flow_model),
+            thermal_conductivity=self.thermal_conductivity(cv, dv, wv, flow_model),
+            species_diffusivity=self.species_diffusivity(cv, dv, wv, flow_model)
+        )

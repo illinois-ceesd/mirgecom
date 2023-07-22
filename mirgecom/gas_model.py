@@ -10,6 +10,7 @@ Fluid State Encapsulation
 
 .. autoclass:: FluidState
 .. autoclass:: ViscousFluidState
+.. autoclass:: PorousFlowFluidState
 
 Fluid State Handling Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -406,8 +407,7 @@ def make_fluid_state(cv, gas_model,
             tortuosity=gas_model.wall_model.tortuosity(tau)
         )
 
-        temperature = gas_model.get_temperature(
-            cv=cv, wv=wv, tseed=temperature_seed)
+        temperature = gas_model.get_temperature(cv=cv, wv=wv, tseed=temperature_seed)
 
         pressure = gas_model.get_pressure(cv, wv, temperature)
 
@@ -425,20 +425,9 @@ def make_fluid_state(cv, gas_model,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
         )
 
-        # ~~~ Modify transport vars to include solid effects
-        # TODO create a new transport class exclusive for porous media flow?
-        gas_tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
-
-        tv = GasTransportVars(
-            bulk_viscosity=(
-                gas_tv.bulk_viscosity),
-            viscosity=gas_model.viscosity(
-                wv, temperature, gas_tv),
-            thermal_conductivity=gas_model.thermal_conductivity(
-                cv, wv, temperature, gas_tv),
-            species_diffusivity=gas_model.species_diffusivity(
-                wv, temperature, gas_tv),
-        )
+        # FIXME I have to pass "gas_model" but this class is internal to "gas_model"
+        # Seems dumb to me but I dont know to access the other classes...
+        tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
