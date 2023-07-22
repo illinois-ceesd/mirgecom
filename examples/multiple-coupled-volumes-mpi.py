@@ -51,7 +51,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import IsothermalWallBoundary, AdiabaticSlipBoundary
 from mirgecom.fluid import make_conserved
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import SimpleTransport, PorousWallTransport
 import cantera
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import (
@@ -131,53 +131,53 @@ class _WallOpStatesTag:
     pass
 
 
-class HolderInitializer:
+#class HolderInitializer:
 
-    def __init__(self, temperature):
-        self._temp = temperature
+#    def __init__(self, temperature):
+#        self._temp = temperature
 
-    def __call__(self, x_vec, wall_model):
-        mass = wall_model.density() + x_vec[0]*0.0
-        energy = mass * wall_model.enthalpy(self._temp)
-        return HolderWallVars(mass=mass, energy=energy)
+#    def __call__(self, x_vec, wall_model):
+#        mass = wall_model.density() + x_vec[0]*0.0
+#        energy = mass * wall_model.enthalpy(self._temp)
+#        return HolderWallVars(mass=mass, energy=energy)
 
 
-class SampleInitializer:
+#class SampleInitializer:
 
-    def __init__(self, pressure, temperature, species_atm):
+#    def __init__(self, pressure, temperature, species_atm):
 
-        self._pres = pressure
-        self._ya = species_atm
-        self._temp = temperature
+#        self._pres = pressure
+#        self._ya = species_atm
+#        self._temp = temperature
 
-    def __call__(self, x_vec, gas_model, wall_density):
+#    def __call__(self, x_vec, gas_model, wall_density):
 
-        eos = gas_model.eos
-        zeros = x_vec[0]*0.0
+#        eos = gas_model.eos
+#        zeros = x_vec[0]*0.0
 
-        tau = zeros + 1.0
+#        tau = zeros + 1.0
 
-        velocity = make_obj_array([zeros, zeros])
+#        velocity = make_obj_array([zeros, zeros])
 
-        pressure = self._pres + zeros
-        temperature = self._temp + zeros
-        y = self._ya + zeros
+#        pressure = self._pres + zeros
+#        temperature = self._temp + zeros
+#        y = self._ya + zeros
 
-        int_energy = eos.get_internal_energy(temperature, species_mass_fractions=y)
-        mass = eos.get_density(pressure, temperature, species_mass_fractions=y)
+#        int_energy = eos.get_internal_energy(temperature, species_mass_fractions=y)
+#        mass = eos.get_density(pressure, temperature, species_mass_fractions=y)
 
-        epsilon = gas_model.wall.void_fraction(tau=tau)
-        eps_rho_g = epsilon * mass
-        eps_rhoU_g = eps_rho_g * velocity  # noqa N806
-        eps_rhoY_g = eps_rho_g * y  # noqa N806
+#        epsilon = gas_model.wall.void_fraction(tau=tau)
+#        eps_rho_g = epsilon * mass
+#        eps_rhoU_g = eps_rho_g * velocity  # noqa N806
+#        eps_rhoY_g = eps_rho_g * y  # noqa N806
 
-        eps_rho_s = wall_density + zeros
-        enthalpy_s = gas_model.wall.enthalpy(temperature=temperature, tau=tau)
+#        eps_rho_s = wall_density + zeros
+#        enthalpy_s = gas_model.wall.enthalpy(temperature=temperature, tau=tau)
 
-        energy = eps_rho_g * int_energy + eps_rho_s * enthalpy_s
+#        energy = eps_rho_g * int_energy + eps_rho_s * enthalpy_s
 
-        return make_conserved(dim=2, mass=eps_rho_g,
-            momentum=eps_rhoU_g, energy=energy, species_mass=eps_rhoY_g)
+#        return make_conserved(dim=2, mass=eps_rho_g,
+#            momentum=eps_rhoU_g, energy=energy, species_mass=eps_rhoY_g)
 
 
 class FluidInitializer:
@@ -509,8 +509,9 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
     fluid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.1,
         species_diffusivity=np.zeros(nspecies,) + 0.001)
 
-    sample_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.2,
+    base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.2,
         species_diffusivity=np.zeros(nspecies,) + 0.001)
+    sample_transport = PorousWallTransport(base_transport=base_transport)
 
     # }}}
 
@@ -518,11 +519,9 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
     # {{{ Initialize wall model
 
-    from mirgecom.wall_model import PorousWallEOS
     import mirgecom.materials.carbon_fiber as my_material
-
+    sample_density = 0.1*1600.0 + sample_zeros
     fiber = my_material.SolidProperties(char_mass=0.0, virgin_mass=160.0)
-    sample_degradation_model = PorousWallEOS(wall_material=fiber)
 
     # }}}
 
@@ -557,8 +556,10 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
     gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
 
-    gas_model_sample = GasModel(eos=eos, wall=sample_degradation_model,
-                                transport=sample_transport)
+    from mirgecom.wall_model import PorousFlowModel
+    gas_model_sample = PorousFlowModel(eos=eos,
+                                       wall_model=fiber,
+                                       transport=sample_transport)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -602,7 +603,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
     # ~~~~~~~~~~
 
-    def _limit_sample_cv(cv, wv, pressure, temperature, epsilon, dd=None):
+    def _limit_sample_cv(cv, wv, pressure, temperature, dd=None):
 
         # limit species
         spec_lim = make_obj_array([
@@ -618,18 +619,20 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         spec_lim = spec_lim/aux
 
         # recompute gas density
-        mass_lim = epsilon*gas_model_sample.eos.get_density(pressure=pressure,
-            temperature=temperature, species_mass_fractions=spec_lim)
+        mass_lim = wv.void_fraction*gas_model_sample.eos.get_density(
+            pressure=pressure, temperature=temperature,
+            species_mass_fractions=spec_lim)
 
         # recompute gas energy
-        energy_gas = mass_lim*(gas_model_sample.eos.get_internal_energy(
-            temperature, species_mass_fractions=spec_lim)
+        energy_gas = mass_lim*(
+            gas_model_sample.eos.get_internal_energy(
+                temperature, species_mass_fractions=spec_lim)
             + 0.5*np.dot(cv.velocity, cv.velocity)
         )
 
         # compute solid energy
-        tau = gas_model_sample.wall.decomposition_progress(wv)
-        energy_solid = wv*gas_model_sample.wall.enthalpy(temperature, tau)
+        energy_solid = \
+            wv.density*gas_model_sample.wall_model.enthalpy(temperature, wv.tau)
 
         # the total energy is a composition of both solid and gas
         energy = energy_gas + energy_solid
@@ -656,12 +659,17 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    from mirgecom.materials.initializer import (
+        PorousWallInitializer, 
+        SolidWallInitializer
+    )
+
     fluid_init = FluidInitializer(species_left=y_left, species_right=y_right)
 
-    sample_init = SampleInitializer(pressure=101325.0, temperature=300.0,
-                                    species_atm=y_right)
+    sample_init = PorousWallInitializer(pressure=101325.0, temperature=300.0,
+        species=y_right, material_densities=sample_density)
 
-    holder_init = HolderInitializer(temperature=300.0)
+    holder_init = SolidWallInitializer(temperature=300.0)
 
 ##############################################################################
 
@@ -671,11 +679,9 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
         fluid_tseed = temperature_seed + fluid_zeros
         sample_tseed = temp_wall + sample_zeros
+
         fluid_cv = fluid_init(fluid_nodes, gas_model_fluid)
-
-        sample_density = 0.1*1600.0 + sample_zeros
-        sample_cv = sample_init(sample_nodes, gas_model_sample, sample_density)
-
+        sample_cv = sample_init(sample_nodes, gas_model_sample)
         holder_cv = holder_init(holder_nodes, holder_wall_model)
 
     else:
@@ -829,7 +835,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
             ("rhoE_b", sample_state.cv.energy),
             ("pressure", sample_state.pressure),
             ("temperature", sample_state.temperature),
-            ("solid_mass", sample_state.dv.material_densities),
+            ("solid_mass", sample_state.wv.material_densities),
             ("Vx", sample_state.velocity[0]),
             ("Vy", sample_state.velocity[1]),
             ("kappa", sample_state.thermal_conductivity)]
@@ -862,7 +868,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
                 "fluid_cv": fluid_state.cv,
                 "fluid_temperature_seed": fluid_state.temperature,
                 "sample_cv": sample_state.cv,
-                "sample_density": sample_state.dv.material_densities,
+                "sample_density": sample_state.wv.material_densities,
                 "sample_temperature_seed": sample_state.temperature,
                 "holder_cv": holder_state.cv,
                 "holder_temperature_seed": holder_state.dv.temperature,
@@ -1157,7 +1163,8 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
     stepper_state = make_obj_array([
         fluid_state.cv, fluid_state.temperature, sample_state.cv,
-        sample_state.temperature, sample_state.dv.material_densities, holder_state.cv
+        sample_state.temperature, sample_state.wv.material_densities,
+        holder_state.cv
     ])
 
     dt = 1.0*current_dt
