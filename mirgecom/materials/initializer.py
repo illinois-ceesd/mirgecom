@@ -74,6 +74,7 @@ class PorousWallInitializer:
         gas_model: :class:`mirgecom.wall_model.PorousFlowModel`
             Equation of state class
         """
+        actx = x_vec.array_context
         zeros = actx.np.zeros_like(x_vec[0])
 
         pressure = self._pres + zeros

@@ -444,6 +444,7 @@ def make_fluid_state(cv, gas_model,
 
     return None
 
+
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
     """Project a fluid state onto a boundary consistent with the gas model.
 
@@ -858,7 +859,7 @@ def replace_fluid_state(
         else state.temperature)
 
     material_densities = (None
-        if isinstance(gas_model, PorousFlowModel)
+        if isinstance(gas_model, PorousFlowModel) is False
         else state.wv.material_densities)
 
     return make_fluid_state(
