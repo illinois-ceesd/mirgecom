@@ -49,7 +49,8 @@ class SolidWallInitializer:
         wall_model: :class:`mirgecom.wall_model.SolidWallModel`
             Equation of state class
         """
-        mass = wall_model.density()
+        actx = x_vec[0].array_context
+        mass = wall_model.density() + actx.np.zeros_like(x_vec[0])
         energy = mass * wall_model.enthalpy(self._temp)
         return SolidWallConservedVars(mass=mass, energy=energy)
 
