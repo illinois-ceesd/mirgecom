@@ -10,6 +10,7 @@ Fluid State Encapsulation
 
 .. autoclass:: FluidState
 .. autoclass:: ViscousFluidState
+.. autoclass:: PorousFlowFluidState
 
 Fluid State Handling Utilities
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -72,6 +73,7 @@ from mirgecom.transport import (
     GasTransportVars
 )
 from mirgecom.utils import normalize_boundaries
+from mirgecom.wall_model import PorousWallVars, PorousFlowModel
 
 
 @dataclass(frozen=True)
@@ -275,6 +277,19 @@ class ViscousFluidState(FluidState):
         return self.tv.species_diffusivity
 
 
+@dataclass_array_container
+@dataclass(frozen=True, eq=False)
+class PorousFlowFluidState(ViscousFluidState):
+    """Dependent variables for the (porous) fluid state.
+
+    .. attribute:: wv
+
+        Porous media flow state-dependent properties.
+    """
+
+    wv: PorousWallVars
+
+
 def make_fluid_state(cv, gas_model,
                      temperature_seed=None,
                      smoothness_mu=None,
@@ -339,9 +354,7 @@ def make_fluid_state(cv, gas_model,
     smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
 
-    # the porous media is identified if the wall density is not None
-
-    if material_densities is None:
+    if isinstance(gas_model, GasModel):
         temperature = gas_model.eos.temperature(cv=cv,
                                                 temperature_seed=temperature_seed)
         pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
@@ -377,25 +390,32 @@ def make_fluid_state(cv, gas_model,
 
         return FluidState(cv=cv, dv=dv)
 
-    else:
+    if isinstance(gas_model, PorousFlowModel):
 
         # FIXME per previous review, think of a way to de-couple wall and fluid.
         # ~~~ we need to squeeze wall_model in gas_model because this is easily
         # accessible everywhere in the code
 
-        wdv = gas_model.dependent_vars(material_densities)
+        tau = gas_model.decomposition_progress(material_densities)
+        wv = PorousWallVars(
+            material_densities=material_densities,
+            tau=tau,
+            density=gas_model.solid_density(material_densities),
+            void_fraction=gas_model.wall_model.void_fraction(tau),
+            emissivity=gas_model.wall_model.emissivity(tau),
+            permeability=gas_model.wall_model.permeability(tau),
+            tortuosity=gas_model.wall_model.tortuosity(tau)
+        )
 
-        temperature = gas_model.get_temperature(
-            cv=cv, wdv=wdv, tseed=temperature_seed)
+        temperature = gas_model.get_temperature(cv=cv, wv=wv, tseed=temperature_seed)
 
-        pressure = gas_model.get_pressure(cv, wdv, temperature)
+        pressure = gas_model.get_pressure(cv, wv, temperature)
 
         if limiter_func:
-            cv = limiter_func(cv=cv, wdv=wdv, pressure=pressure,
+            cv = limiter_func(cv=cv, wv=wv, pressure=pressure,
                               temperature=temperature, dd=limiter_dd)
 
-        from mirgecom.wall_model import PorousFlowDependentVars
-        dv = PorousFlowDependentVars(
+        dv = MixtureDependentVars(
             temperature=temperature,
             pressure=pressure,
             speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
@@ -403,25 +423,15 @@ def make_fluid_state(cv, gas_model,
             smoothness_kappa=smoothness_kappa,
             smoothness_beta=smoothness_beta,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
-            material_densities=material_densities
         )
 
-        # ~~~ Modify transport vars to include solid effects
-        # TODO create a new transport class exclusive for porous media flow?
-        gas_tv = gas_model.transport.transport_vars(cv=cv, dv=dv, eos=gas_model.eos)
+        # FIXME I have to pass "gas_model" but this class is internal to "gas_model"
+        # Seems dumb to me but I dont know to access the other classes...
+        tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model)
 
-        tv = GasTransportVars(
-            bulk_viscosity=(
-                gas_tv.bulk_viscosity),
-            viscosity=gas_model.viscosity(
-                wdv, temperature, gas_tv),
-            thermal_conductivity=gas_model.thermal_conductivity(
-                cv, wdv, temperature, gas_tv),
-            species_diffusivity=gas_model.species_diffusivity(
-                wdv, temperature, gas_tv),
-        )
+        return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
-        return ViscousFluidState(cv=cv, dv=dv, tv=tv)
+    return None
 
 
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
@@ -486,8 +496,8 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):
         smoothness_beta = op.project(dcoll, src, tgt, state.dv.smoothness_beta)
 
     material_densities = None
-    if gas_model.wall is not None:
-        material_densities = op.project(dcoll, src, tgt, state.dv.material_densities)
+    if isinstance(gas_model, PorousFlowModel):
+        material_densities = op.project(dcoll, src, tgt, state.wv.material_densities)
 
     return make_fluid_state(cv=cv_sd, gas_model=gas_model,
                             temperature_seed=temperature_seed,
@@ -740,11 +750,11 @@ def make_operator_fluid_states(
                 tag=(_FluidSmoothnessBetaTag, comm_tag))]
 
     material_densities_interior_pairs = None
-    if gas_model.wall is not None:
+    if isinstance(gas_model, PorousFlowModel):
         material_densities_interior_pairs = [
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
-                dcoll, volume_state.dv.material_densities, volume_dd=dd_vol,
+                dcoll, volume_state.wv.material_densities, volume_dd=dd_vol,
                 tag=(_WallDensityTag, comm_tag))]
 
     interior_boundary_states_quad = make_fluid_state_trace_pairs(
@@ -838,8 +848,8 @@ def replace_fluid_state(
         else state.temperature)
 
     material_densities = (None
-        if gas_model.wall is None
-        else state.dv.material_densities)
+        if isinstance(gas_model, PorousFlowModel) is False
+        else state.wv.material_densities)
 
     return make_fluid_state(
         cv=new_cv,
