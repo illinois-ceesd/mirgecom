@@ -91,6 +91,7 @@ class SolidWallModel:
     .. automethod:: thermal_diffusivity
     .. automethod:: thermal_conductivity
     .. automethod:: get_temperature
+    .. automethod:: dependent_vars
     """
 
     def __init__(self, density_func, enthalpy_func, heat_capacity_func,
@@ -100,30 +101,31 @@ class SolidWallModel:
         self._heat_capacity_func = heat_capacity_func
         self._thermal_conductivity_func = thermal_conductivity_func
 
-    def density(self):
+    def density(self) -> DOFArray:
         """Return the wall density for all components."""
         return self._density_func()
 
-    def heat_capacity(self, temperature=None):
+    def heat_capacity(self, temperature: DOFArray = None) -> DOFArray:
         """Return the wall heat_capacity for all components."""
         return self._heat_capacity_func(temperature)
 
-    def enthalpy(self, temperature):
+    def enthalpy(self, temperature: DOFArray) -> DOFArray:
         """Return the wall enthalpy for all components."""
         return self._enthalpy_func(temperature)
 
-    def thermal_diffusivity(self, mass, temperature,
-                            thermal_conductivity=None):
+    def thermal_diffusivity(self, mass: DOFArray, temperature: DOFArray,
+            thermal_conductivity: DOFArray = None) -> DOFArray:
         """Return the wall thermal diffusivity for all components."""
         if thermal_conductivity is None:
             thermal_conductivity = self.thermal_conductivity(temperature)
         return thermal_conductivity/(mass * self.heat_capacity(temperature))
 
-    def thermal_conductivity(self, temperature):
+    def thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
         """Return the wall thermal conductivity for all components."""
         return self._thermal_conductivity_func(temperature)
 
-    def get_temperature(self, wv, tseed=None, niter=3):
+    def get_temperature(self, wv: SolidWallConservedVars,
+            tseed: DOFArray = None, niter: int = 3) -> DOFArray:
         """Evaluate the temperature based on the energy."""
         if tseed is not None:
             temp = tseed*1.0
@@ -135,7 +137,8 @@ class SolidWallModel:
 
         return wv.energy/(self.density()*self.heat_capacity())
 
-    def dependent_vars(self, wv, tseed=None, niter=3):
+    def dependent_vars(self, wv: SolidWallConservedVars,
+            tseed: DOFArray = None, niter: int = 3) -> SolidWallDependentVars:
         """Return solid wall dependent variables."""
         temperature = self.get_temperature(wv, tseed, niter)
         kappa = self.thermal_conductivity(temperature)
