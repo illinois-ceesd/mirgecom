@@ -1,21 +1,8 @@
-Wall Degradation Modeling
-=========================
-
-Model-specific properties
-^^^^^^^^^^^^^^^^^^^^^^^^^
-    The properties of the materials are defined in specific files and used by
-    :class:`~mirgecom.wall_model.PorousWallProperties`.
-
-Carbon fiber
-------------
-.. automodule:: mirgecom.materials.carbon_fiber
-
-TACOT
------
-.. automodule:: mirgecom.materials.tacot
+Wall Degradation
+================
 
 Carbon Fiber Oxidation 
-^^^^^^^^^^^^^^^^^^^^^^
+----------------------
 
     This section covers the response of carbon fiber when exposed to oxygen.
     The carbon fibers are characterized as a highly porous material,
@@ -83,7 +70,7 @@ Carbon Fiber Oxidation
     Note that :mod:`pyrometheus` is used to handle the species properties.
 
 Composite Materials
-^^^^^^^^^^^^^^^^^^^
+-------------------
 
     This section covers the response of composite materials made of phenolic
     resin and carbon fibers.

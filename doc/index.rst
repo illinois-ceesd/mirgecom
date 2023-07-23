@@ -70,7 +70,7 @@ Table of Contents
 .. toctree::
     :numbered:
 
-    fluid
+    mathematical/mathematical
     discretization
     operators/operators
     support/support
