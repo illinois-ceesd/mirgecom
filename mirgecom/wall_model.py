@@ -1,13 +1,4 @@
-""":mod:`mirgecom.wall_model` handles the EOS for wall model.
-
-.. autoclass:: SolidWallConservedVars
-.. autoclass:: SolidWallDependentVars
-.. autoclass:: SolidWallState
-.. autoclass:: SolidWallModel
-.. autoclass:: PorousWallVars
-.. autoclass:: PorousWallProperties
-.. autoclass:: PorousFlowModel
-"""
+""":mod:`mirgecom.wall_model` handles the EOS for wall model."""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -89,6 +80,11 @@ class SolidWallState:
 class SolidWallModel:
     """Model for calculating wall quantities for heat conduction only materials.
 
+    Since different materials can be coupled together in the same domain
+    governed by diffusion equation, this wall model works as a wrapper of
+    driver-defined functions that prescribe the actual properties and their
+    spatial distribution.
+
     .. automethod:: density
     .. automethod:: heat_capacity
     .. automethod:: enthalpy
@@ -127,11 +123,11 @@ class SolidWallModel:
         """Return the wall thermal conductivity for all components."""
         return self._thermal_conductivity_func(temperature)
 
-    def get_temperature(self, wv, tseed=None):
+    def get_temperature(self, wv, tseed=None, niter=3):
         """Evaluate the temperature based on the energy."""
         if tseed is not None:
             temp = tseed*1.0
-            for _ in range(0, 3):
+            for _ in range(0, niter):
                 h = self.enthalpy(temp)
                 cp = self.heat_capacity(temp)
                 temp = temp - (h - wv.energy/wv.mass)/cp
@@ -139,13 +135,36 @@ class SolidWallModel:
 
         return wv.energy/(self.density()*self.heat_capacity())
 
-    def dependent_vars(self, wv, tseed=None):
+    def dependent_vars(self, wv, tseed=None, niter=3):
         """Return solid wall dependent variables."""
-        temperature = self.get_temperature(wv, tseed)
+        temperature = self.get_temperature(wv, tseed, niter)
         kappa = self.thermal_conductivity(temperature)
         return SolidWallDependentVars(
             thermal_conductivity=kappa,
             temperature=temperature)
+
+
+@dataclass_array_container
+@dataclass(frozen=True, eq=False)
+class PorousWallVars:
+    """Variables for the (porous) fluid state.
+
+    .. attribute:: material_densities
+    .. attribute:: tau
+    .. attribute:: void_fraction
+    .. attribute:: emissivity
+    .. attribute:: permeability
+    .. attribute:: tortuosity
+    .. attribute:: density
+    """
+
+    material_densities: Union[DOFArray, np.ndarray]
+    tau: DOFArray
+    void_fraction: DOFArray
+    emissivity: DOFArray
+    permeability: DOFArray
+    tortuosity: DOFArray
+    density: DOFArray
 
 
 class PorousWallProperties:
@@ -207,29 +226,6 @@ class PorousWallProperties:
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition."""
         raise NotImplementedError()
-
-
-@dataclass_array_container
-@dataclass(frozen=True, eq=False)
-class PorousWallVars:
-    """Variables for the (porous) fluid state.
-
-    .. attribute:: material_densities
-    .. attribute:: tau
-    .. attribute:: void_fraction
-    .. attribute:: emissivity
-    .. attribute:: permeability
-    .. attribute:: tortuosity
-    .. attribute:: density
-    """
-
-    material_densities: Union[DOFArray, np.ndarray]
-    tau: DOFArray
-    void_fraction: DOFArray
-    emissivity: DOFArray
-    permeability: DOFArray
-    tortuosity: DOFArray
-    density: DOFArray
 
 
 class PorousFlowEOS:

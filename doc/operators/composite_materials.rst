@@ -1,12 +1,20 @@
 Wall Degradation Modeling
 =========================
 
-.. automodule:: mirgecom.wall_model
+Porous Media EOS
+^^^^^^^^^^^^^^^^
+.. autoclass:: mirgecom.wall_model.PorousFlowModel
+
+Wall variables
+^^^^^^^^^^^^^^
+.. autoclass:: mirgecom.wall_model.PorousWallVars
 
 Model-specific properties
 ^^^^^^^^^^^^^^^^^^^^^^^^^
     The properties of the materials are defined in specific files and used by
     :class:`~mirgecom.wall_model.PorousWallProperties`.
+
+.. autoclass:: mirgecom.wall_model.PorousWallProperties
 
 Carbon fiber
 ------------
