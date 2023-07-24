@@ -142,14 +142,16 @@ jobs:
 
         - name: Build docs
           run: |
+            set -x
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
             sudo apt-get update
             sudo apt-get install texlive-latex-extra latexmk
-            conda install sphinx graphviz 'docutils>=0.16'
+            mamba install sphinx graphviz 'docutils>=0.16'
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
+            ulimit -a
             make html SPHINXOPTS="-W --keep-going -n"
             make latexpdf SPHINXOPTS="-W --keep-going -n"
 
