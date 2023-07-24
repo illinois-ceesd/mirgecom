@@ -150,8 +150,8 @@ jobs:
             conda install sphinx graphviz 'docutils>=0.16'
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
-            time -v make html SPHINXOPTS="-W --keep-going -n"
-            time -v make latexpdf SPHINXOPTS="-W --keep-going -n"
+            command time -v make html SPHINXOPTS="-W --keep-going -n"
+            command time -v make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     emirge:
         name: Emirge installation
