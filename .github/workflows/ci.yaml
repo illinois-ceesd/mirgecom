@@ -152,7 +152,8 @@ jobs:
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
             ulimit -a
-            make html SPHINXOPTS="-W --keep-going -n"
+            free -h
+            /bin/time -v make html SPHINXOPTS="-W --keep-going -n"
             make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     # emirge:
