@@ -1660,7 +1660,7 @@ class IsotropicTurbulence:
         for i in tqdm(range(self.Npts)):
             self.injectionMap.update(
                 {
-                    ((self.structuremesh[i, :]).round(7)).tobytes():
+                    ((self.structuremesh[i, :]).round(10)).tobytes():
                     self.sourceVelocity[i, :]
                 })
         r"""
@@ -1715,12 +1715,11 @@ class IsotropicTurbulence:
                 xcord = data_x[i, j]
                 ycord = data_y[i, j]
                 zcord = data_z[i, j]
-                xcord = 0 if abs(data_x[i, j] < 1e-7) else data_x[i, j]
-                ycord = 0 if abs(data_y[i, j] < 1e-7) else data_y[i, j]
-                zcord = 0 if abs(data_z[i, j] < 1e-7) else data_z[i, j]
-                cord = (np.array([xcord, ycord, zcord]).round(7)).tobytes()
-                u_velocity[i, j], v_velocity[i, j], w_velocity[i, j] = \
-                    self.injectionMap[cord][0], self.injectionMap[cord][1], self.injectionMap[cord][2]
+                xcord = 0 if abs(data_x[i, j] < 1e-10) else data_x[i, j]
+                ycord = 0 if abs(data_y[i, j] < 1e-10) else data_y[i, j]
+                zcord = 0 if abs(data_z[i, j] < 1e-10) else data_z[i, j]
+                cord = (np.array([xcord, ycord, zcord]).round(10)).tobytes()
+                u_velocity[i, j], v_velocity[i, j], w_velocity[i, j] = self.injectionMap[cord][0], self.injectionMap[cord][1], self.injectionMap[cord][2]
 
         u_x = DOFArray(actx, data=(actx.from_numpy(np.array(u_velocity)), ))
         u_y = DOFArray(actx, data=(actx.from_numpy(np.array(v_velocity)), ))

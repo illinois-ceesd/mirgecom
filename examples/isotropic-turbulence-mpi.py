@@ -40,6 +40,8 @@ from mirgecom.simutil import (
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 
+from mirgecom.navierstokes import ns_operator
+from mirgecom.transport import SimpleTransport
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 # from mirgecom.boundary import PrescribedFluidBoundary
@@ -129,14 +131,14 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         timestepper = rk4_step
     t_final = 5
     current_cfl = 1.0
-    current_dt = .001
+    current_dt = .00001
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nrestart = 200
+    nrestart = 1000
     nstatus = -1
-    nviz = 20
+    nviz = 1000
     nhealth = -1
 
     # some geometry setup
@@ -192,11 +194,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     vis_timer = None
 
-    eos = IdealSingleGas()
-    pathi = "./output_data"
+    pathi = "/home/ziruiw5/xpacc/IsotropicTurbulence/16cubMa0.3/order3"
     initializer = IsotropicTurbulence(coordinate_path=pathi+"/coordinate.txt",
                                       velocity_path=pathi+"/velocity.txt")
-    gas_model = GasModel(eos=eos)
+    mu = 1e-4
+    eos=IdealSingleGas()
+    gas_model = GasModel(eos=IdealSingleGas(),transport=SimpleTransport(viscosity=mu))
 
     boundaries = {}
 
@@ -415,7 +418,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return euler_operator(dcoll, state=fluid_state, time=t,
+        return ns_operator(dcoll, state=fluid_state, time=t,
                               boundaries=boundaries, gas_model=gas_model,
                               quadrature_tag=quadrature_tag, use_esdg=use_esdg)
 
