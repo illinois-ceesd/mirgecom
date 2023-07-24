@@ -617,11 +617,13 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         for i in range(0, nspecies):
             aux = aux + spec_lim[i]
         spec_lim = spec_lim/aux
-
         # recompute gas density
         mass_lim = wv.void_fraction*gas_model_sample.eos.get_density(
             pressure=pressure, temperature=temperature,
             species_mass_fractions=spec_lim)
+
+#        print(temperature)
+#        print(pressure)
 
         # recompute gas energy
         energy_gas = mass_lim*(
@@ -990,14 +992,16 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         # construct species-limited solid state
         holder_state = _get_holder_state(holder_cv)
         holder_cv = holder_state.cv
-
         # ~~~~~~~~~~~~~
 
         fluid_all_boundaries_no_grad, sample_all_boundaries_no_grad = \
             add_multiphysics_interface_boundaries_no_grad(
                 dcoll, dd_vol_fluid, dd_vol_sample,
+                gas_model_fluid, gas_model_sample,
                 fluid_state, sample_state,
                 fluid_boundaries, sample_boundaries,
+                limiter_func_fluid=_limit_fluid_cv,
+                limiter_func_sample=_limit_sample_cv,
                 interface_noslip=True, interface_radiation=use_radiation,
                 use_kappa_weighted_grad_flux_in_fluid=False)
 
@@ -1078,10 +1082,13 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         fluid_all_boundaries, sample_all_boundaries = \
             add_multiphysics_interface_boundaries(
                 dcoll, dd_vol_fluid, dd_vol_sample,
+                gas_model_fluid, gas_model_sample,
                 fluid_state, sample_state,
                 fluid_grad_cv, sample_grad_cv,
                 fluid_grad_temperature, sample_grad_temperature,
                 fluid_boundaries, sample_boundaries,
+                limiter_func_fluid=_limit_fluid_cv,
+                limiter_func_sample=_limit_sample_cv,
                 interface_noslip=True, interface_radiation=use_radiation,
                 wall_emissivity=emissivity, sigma=5.67e-8,
                 ambient_temperature=300.0,
