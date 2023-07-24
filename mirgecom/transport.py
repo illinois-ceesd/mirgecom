@@ -701,13 +701,12 @@ class ArtificialViscosityTransportDiv2(TransportModel):
 
 
 class PorousWallTransport(TransportModel):
-    r"""Transport model for add artificial viscosity.
+    r"""Transport model for porous media flow.
 
     Inherits from (and implements) :class:`TransportModel`.
 
-    Takes a physical transport model and adds the artificial viscosity
-    contribution to it. Defaults to simple transport with inviscid settings.
-    This is equivalent to inviscid flow with artifical viscosity enabled.
+    Takes a any transport model and modify it to consider the interaction
+    with the porous materials.
 
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
@@ -720,7 +719,7 @@ class PorousWallTransport(TransportModel):
     from mirgecom.wall_model import PorousWallVars, PorousFlowModel
 
     def __init__(self, base_transport):
-        """Initialize uniform, constant transport properties."""
+        """Initialize transport model."""
         self.base_transport = base_transport
 
     def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
@@ -739,7 +738,7 @@ class PorousWallTransport(TransportModel):
     def viscosity(self, cv: ConservedVars,  # type: ignore[override]
             dv: GasDependentVars, wv: PorousWallVars,
             flow_model: PorousFlowModel) -> DOFArray:
-        """Viscosity of the gas through the (porous) wall."""
+        """Viscosity of the gas through the porous wall."""
         return 1.0/wv.void_fraction*(
             self.base_transport.viscosity(cv, dv, flow_model.eos))
 
@@ -767,7 +766,7 @@ class PorousWallTransport(TransportModel):
     def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
             dv: GasDependentVars, wv: PorousWallVars,
             flow_model: PorousFlowModel) -> DOFArray:
-        """Mass diffusivity of gaseous species through the (porous) wall."""
+        """Mass diffusivity of gaseous species through the porous wall."""
         return 1.0/wv.tortuosity*(
             self.base_transport.species_diffusivity(cv, dv, flow_model.eos))
 
