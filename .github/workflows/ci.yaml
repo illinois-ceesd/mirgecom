@@ -149,11 +149,10 @@ jobs:
             sudo apt-get update
             sudo apt-get install texlive-latex-extra latexmk
             mamba install sphinx graphviz 'docutils>=0.16'
+            mamba uninstall pocl
             pip install sphinx-math-dollar sphinx-copybutton furo
             cd doc
-            ulimit -a
-            free -h
-            /bin/time -v make html SPHINXOPTS="-W --keep-going -n"
+            make html SPHINXOPTS="-W --keep-going -n"
             make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     # emirge:
