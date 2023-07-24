@@ -130,28 +130,28 @@ jobs:
     #         # && export POCL_DEBUG=cuda
     #         scripts/run-integrated-tests.sh --examples
 
-    # doc:
-    #     name: Documentation
-    #     runs-on: ubuntu-latest
+    doc:
+        name: Documentation
+        runs-on: ubuntu-latest
 
-    #     steps:
-    #     - uses: actions/checkout@v3
-    #     - name: Install
-    #       run: |
-    #         . .ci-support/install.sh
+        steps:
+        - uses: actions/checkout@v3
+        - name: Install
+          run: |
+            . .ci-support/install.sh
 
-    #     - name: Build docs
-    #       run: |
-    #         MINIFORGE_INSTALL_DIR=.miniforge3
-    #         . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+        - name: Build docs
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
-    #         sudo apt-get update
-    #         sudo apt-get install texlive-latex-extra latexmk
-    #         conda install sphinx graphviz 'docutils>=0.16'
-    #         pip install sphinx-math-dollar sphinx-copybutton furo
-    #         cd doc
-    #         make html SPHINXOPTS="-W --keep-going -n"
-    #         make latexpdf SPHINXOPTS="-W --keep-going -n"
+            sudo apt-get update
+            sudo apt-get install texlive-latex-extra latexmk
+            conda install sphinx graphviz 'docutils>=0.16'
+            pip install sphinx-math-dollar sphinx-copybutton furo
+            cd doc
+            make html SPHINXOPTS="-W --keep-going -n"
+            make latexpdf SPHINXOPTS="-W --keep-going -n"
 
     # emirge:
     #     name: Emirge installation

@@ -12,7 +12,7 @@ if [[ "$(uname)" = "Darwin" ]]; then
 else
     if ! command -v mpicc &> /dev/null ;then
         sudo apt-get update
-        sudo apt-get -y install libopenmpi-dev openmpi-bin moreutils
+        sudo apt-get -y install libopenmpi-dev openmpi-bin
     fi
     if ! command -v octave &> /dev/null ;then
         sudo apt-get -y install octave
@@ -29,7 +29,7 @@ bash "$MINIFORGE_INSTALL_SH" -b -p "$MINIFORGE_INSTALL_DIR"
 #PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update conda --yes --quiet
 #PATH="$MINIFORGE_INSTALL_DIR/bin/:$PATH" conda update --all --yes --quiet
 
-$MINIFORGE_INSTALL_DIR/bin/mamba env create --file conda-env.yml --name testing | ts
+$MINIFORGE_INSTALL_DIR/bin/mamba env create --file conda-env.yml --name testing
 
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 conda list
@@ -38,5 +38,5 @@ conda list
 rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
 
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-pip install -r requirements.txt | ts
-python setup.py install | ts
+pip install -r requirements.txt
+python setup.py install
