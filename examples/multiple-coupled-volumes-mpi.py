@@ -131,55 +131,6 @@ class _WallOpStatesTag:
     pass
 
 
-#class HolderInitializer:
-
-#    def __init__(self, temperature):
-#        self._temp = temperature
-
-#    def __call__(self, x_vec, wall_model):
-#        mass = wall_model.density() + x_vec[0]*0.0
-#        energy = mass * wall_model.enthalpy(self._temp)
-#        return HolderWallVars(mass=mass, energy=energy)
-
-
-#class SampleInitializer:
-
-#    def __init__(self, pressure, temperature, species_atm):
-
-#        self._pres = pressure
-#        self._ya = species_atm
-#        self._temp = temperature
-
-#    def __call__(self, x_vec, gas_model, wall_density):
-
-#        eos = gas_model.eos
-#        zeros = x_vec[0]*0.0
-
-#        tau = zeros + 1.0
-
-#        velocity = make_obj_array([zeros, zeros])
-
-#        pressure = self._pres + zeros
-#        temperature = self._temp + zeros
-#        y = self._ya + zeros
-
-#        int_energy = eos.get_internal_energy(temperature, species_mass_fractions=y)
-#        mass = eos.get_density(pressure, temperature, species_mass_fractions=y)
-
-#        epsilon = gas_model.wall.void_fraction(tau=tau)
-#        eps_rho_g = epsilon * mass
-#        eps_rhoU_g = eps_rho_g * velocity  # noqa N806
-#        eps_rhoY_g = eps_rho_g * y  # noqa N806
-
-#        eps_rho_s = wall_density + zeros
-#        enthalpy_s = gas_model.wall.enthalpy(temperature=temperature, tau=tau)
-
-#        energy = eps_rho_g * int_energy + eps_rho_s * enthalpy_s
-
-#        return make_conserved(dim=2, mass=eps_rho_g,
-#            momentum=eps_rhoU_g, energy=energy, species_mass=eps_rhoY_g)
-
-
 class FluidInitializer:
 
     def __init__(self, species_left, species_right):
@@ -662,7 +613,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     from mirgecom.materials.initializer import (
-        PorousWallInitializer, 
+        PorousWallInitializer,
         SolidWallInitializer
     )
 
@@ -683,7 +634,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         sample_tseed = temp_wall + sample_zeros
 
         fluid_cv = fluid_init(fluid_nodes, gas_model_fluid)
-        sample_cv = sample_init(sample_nodes, gas_model_sample)
+        sample_cv = sample_init(2, sample_nodes, gas_model_sample)
         holder_cv = holder_init(holder_nodes, holder_wall_model)
 
     else:

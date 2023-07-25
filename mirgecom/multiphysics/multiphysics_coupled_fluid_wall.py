@@ -66,6 +66,7 @@ from mirgecom.gas_model import (
 )
 from mirgecom.diffusion import diffusion_flux
 from mirgecom.utils import project_from_base
+from mirgecom.wall_model import PorousFlowModel
 
 
 class _CVInterVolTag:
@@ -201,7 +202,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         cv_bc = make_conserved(dim=dcoll.dim, mass=mass_bc, momentum=mass_bc*u_bc,
             energy=total_energy_bc, species_mass=mass_bc*y_bc)
 
-        from mirgecom.wall_model import PorousFlowModel
         if isinstance(gas_model, PorousFlowModel):
             material_densities = state_minus.wv.material_densities
         else:
@@ -668,41 +668,47 @@ def _getattr_ish(obj, name):
 
 
 def _state_inter_volume_trace_pairs(
-        dcoll, fluid_dd, wall_dd, gas_model_fluid, gas_model_sample,
-        fluid_state, wall_state, limiter_func_fluid, limiter_func_sample):
+        dcoll, fluid_dd, wall_dd, gas_model_fluid, gas_model_wall,
+        fluid_state, wall_state, limiter_func_fluid, limiter_func_wall):
     """Exchange state across the fluid-wall interface."""
 
     pairwise_cv = {(fluid_dd, wall_dd): (fluid_state.cv, wall_state.cv)}
     cv_pairs = inter_volume_trace_pairs(
         dcoll, pairwise_cv, comm_tag=_CVInterVolTag)
 
+    fluid_to_wall_cv_tpairs = cv_pairs[fluid_dd, wall_dd]
+    wall_to_fluid_cv_tpairs = cv_pairs[wall_dd, fluid_dd]
+
+    #
     pairwise_temp = {(fluid_dd, wall_dd):
                      (fluid_state.temperature, wall_state.temperature)}
     temperature_seed_pairs = inter_volume_trace_pairs(
         dcoll, pairwise_temp, comm_tag=_TemperatureInterVolTag)
 
-    zeros = fluid_state.cv.mass*0.0
-    pairwise_dens = {(fluid_dd, wall_dd): (zeros, wall_state.wv.material_densities)}
-    material_densities_pairs = inter_volume_trace_pairs(
-        dcoll, pairwise_dens, comm_tag=_MatDensityInterVolTag)
-
-    fluid_to_wall_cv_tpairs = cv_pairs[fluid_dd, wall_dd]
-    wall_to_fluid_cv_tpairs = cv_pairs[wall_dd, fluid_dd]
-
     fluid_to_wall_tseed_tpairs = temperature_seed_pairs[fluid_dd, wall_dd]
     wall_to_fluid_tseed_tpairs = temperature_seed_pairs[wall_dd, fluid_dd]
 
-    fluid_to_wall_mass_tpairs = material_densities_pairs[fluid_dd, wall_dd]
-    wall_to_fluid_mass_tpairs = material_densities_pairs[wall_dd, fluid_dd]
+    # FIXME dummy workaround unti I fix the test to use multispecies
+    if isinstance(gas_model_wall, PorousFlowModel):
+        zeros = fluid_state.cv.mass*0.0
+        pairwise_dens = {(fluid_dd, wall_dd): (zeros, wall_state.wv.material_densities)}
+        material_densities_pairs = inter_volume_trace_pairs(
+            dcoll, pairwise_dens, comm_tag=_MatDensityInterVolTag)
+
+        fluid_to_wall_mass_tpairs = material_densities_pairs[fluid_dd, wall_dd]
+        wall_to_fluid_mass_tpairs = material_densities_pairs[wall_dd, fluid_dd]
+    else:
+        fluid_to_wall_mass_tpairs = [None] * len(cv_pairs)
+        wall_to_fluid_mass_tpairs = [None] * len(cv_pairs)
 
     return {
         (fluid_dd, wall_dd): [TracePair(
             cv_pair.dd,
             interior=make_fluid_state(
-                cv_pair.int, gas_model_sample,
+                cv_pair.int, gas_model_wall,
                 temperature_seed=_getattr_ish(tseed_pair, "int"),
                 material_densities=_getattr_ish(material_densities_pair, "int"),
-                limiter_func=limiter_func_sample, limiter_dd=cv_pair.dd),
+                limiter_func=limiter_func_wall, limiter_dd=cv_pair.dd),
             exterior=make_fluid_state(
                 cv_pair.ext, gas_model_fluid,
                 temperature_seed=_getattr_ish(tseed_pair, "ext"),
@@ -720,10 +726,10 @@ def _state_inter_volume_trace_pairs(
                 material_densities=_getattr_ish(material_densities_pair, "int"),
                 limiter_func=limiter_func_fluid, limiter_dd=cv_pair.dd),
             exterior=make_fluid_state(
-                cv_pair.ext, gas_model_sample,
+                cv_pair.ext, gas_model_wall,
                 temperature_seed=_getattr_ish(tseed_pair, "ext"),
                 material_densities=_getattr_ish(material_densities_pair, "ext"),
-                limiter_func=limiter_func_sample, limiter_dd=cv_pair.dd))
+                limiter_func=limiter_func_wall, limiter_dd=cv_pair.dd))
             for cv_pair, tseed_pair, material_densities_pair in zip(
                 wall_to_fluid_cv_tpairs,
                 wall_to_fluid_tseed_tpairs,
@@ -750,12 +756,12 @@ def _grad_temperature_inter_volume_trace_pairs(
 
 def add_interface_boundaries_no_grad(
         dcoll, fluid_dd, wall_dd,
-        gas_model_fluid, gas_model_sample,
+        gas_model_fluid, gas_model_wall,
         fluid_state, wall_state,
         fluid_boundaries, wall_boundaries,
         interface_noslip, interface_radiation,
         *,
-        limiter_func_fluid=None, limiter_func_sample=None,
+        limiter_func_fluid=None, limiter_func_wall=None,
         boundary_velocity=None,
         use_kappa_weighted_grad_flux_in_fluid=False):   # FIXME remove
     r"""Return the interface of the subdomains for gradient calculation.
@@ -827,9 +833,9 @@ def add_interface_boundaries_no_grad(
 
     state_inter_volume_trace_pairs = \
         _state_inter_volume_trace_pairs(dcoll, fluid_dd, wall_dd,
-                                        gas_model_fluid, gas_model_sample,
+                                        gas_model_fluid, gas_model_wall,
                                         fluid_state, wall_state,
-                                        limiter_func_fluid, limiter_func_sample)
+                                        limiter_func_fluid, limiter_func_wall)
 
     # Construct interface boundaries without gradient
 
@@ -866,14 +872,14 @@ def add_interface_boundaries_no_grad(
 def add_interface_boundaries(
         dcoll,
         fluid_dd, wall_dd,
-        gas_model_fluid, gas_model_sample,
+        gas_model_fluid, gas_model_wall,
         fluid_state, wall_state,
         fluid_grad_cv, wall_grad_cv,
         fluid_grad_temperature, wall_grad_temperature,
         fluid_boundaries, wall_boundaries,
         interface_noslip, interface_radiation,
         *,
-        limiter_func_fluid=None, limiter_func_sample=None,
+        limiter_func_fluid=None, limiter_func_wall=None,
         boundary_velocity=None,
         wall_emissivity=None, sigma=None, ambient_temperature=None,
         use_kappa_weighted_grad_flux_in_fluid=False,  # FIXME remove
@@ -968,9 +974,9 @@ def add_interface_boundaries(
 
     state_inter_volume_trace_pairs = \
         _state_inter_volume_trace_pairs(dcoll, fluid_dd, wall_dd,
-                                        gas_model_fluid, gas_model_sample,
+                                        gas_model_fluid, gas_model_wall,
                                         fluid_state, wall_state,
-                                        limiter_func_fluid, limiter_func_sample)
+                                        limiter_func_fluid, limiter_func_wall)
 
     grad_cv_inter_vol_tpairs = _grad_cv_inter_volume_trace_pairs(
         dcoll, fluid_dd, wall_dd, fluid_grad_cv, wall_grad_cv)

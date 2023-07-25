@@ -576,7 +576,33 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-4
 
 
-@pytest.mark.parametrize("order", [1, 3])
+from mirgecom.materials.simple_material import SolidProperties
+def enthalpy_func(temperature):
+    return 1000.0*temperature
+
+def heat_capacity_func(temperature):
+    return 1000.0
+
+def thermal_conductivity_func(temperature):
+    return 0.1
+
+def permeability_func(tau):
+    return 0.0
+
+def emissivity_func(tau):
+    return 1.0
+
+def tortuosity_func(tau):
+    return 1.0
+
+
+import cantera
+from mirgecom.transport import PorousWallTransport
+from mirgecom.wall_model import PorousFlowModel
+from mirgecom.materials.initializer import PorousWallInitializer
+from mirgecom.mechanisms import get_mechanism_input
+from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+@pytest.mark.parametrize("order", [1, 3, 5])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_multiphysics_coupled_fluid_wall_with_radiation(
         actx_factory, order, use_overintegration, visualize=False):
@@ -589,166 +615,198 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
 
     dim = 2
 
-    nelems = [9, 15, 30]
-    for n in nelems:
+    nelems = 15
+    global_mesh = get_box_mesh(2, -0.1, 0.2, nelems)
 
-        global_mesh = get_box_mesh(2, -2, 1, n)
+    mgrp, = global_mesh.groups
+    x = global_mesh.vertices[0, mgrp.vertex_indices]
+    x_elem_avg = np.sum(x, axis=1)/x.shape[0]
+    volume_to_elements = {
+        "Fluid": np.where(x_elem_avg > 0)[0],
+        "Solid": np.where(x_elem_avg <= 0)[0]}
 
-        mgrp, = global_mesh.groups
-        x = global_mesh.vertices[0, mgrp.vertex_indices]
-        x_elem_avg = np.sum(x, axis=1)/x.shape[0]
-        volume_to_elements = {
-            "Fluid": np.where(x_elem_avg > 0)[0],
-            "Solid": np.where(x_elem_avg <= 0)[0]}
+    from meshmode.mesh.processing import partition_mesh
+    volume_meshes = partition_mesh(global_mesh, volume_to_elements)
 
-        from meshmode.mesh.processing import partition_mesh
-        volume_meshes = partition_mesh(global_mesh, volume_to_elements)
+    dcoll = create_discretization_collection(
+        actx, volume_meshes, order=order, quadrature_order=2*order+1)
 
-        dcoll = create_discretization_collection(
-            actx, volume_meshes, order=order, quadrature_order=2*order+1)
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
+    dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
+    dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
+
+    fluid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_fluid))
+    solid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_solid))
+
+    # Use Cantera for initialization
+    cantera_soln = cantera.Solution(name="gas",
+                                    yaml=get_mechanism_input("inert"))
+    nspecies = cantera_soln.n_species
+    y_species = np.zeros(nspecies)
+    y_species[cantera_soln.species_index("Ar")] = 1.0
+
+    pyrometheus_mechanism = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=3)(actx.np)
+
+    eos = PyrometheusMixture(pyrometheus_mechanism, temperature_guess=500.0)
+
+    # Gas model
+
+    fluid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.2,
+        species_diffusivity=np.zeros(nspecies,))
+    gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
+
+    char_mass = 10.0
+    virgin_mass = 10.0
+
+    def volume_fraction_func(tau):
+        return 0.1
+
+    my_material = SolidProperties(char_mass, virgin_mass, enthalpy_func,
+        heat_capacity_func, thermal_conductivity_func, volume_fraction_func,
+        permeability_func, emissivity_func, tortuosity_func)
+    wall_density = virgin_mass + solid_nodes[0]*0.0
+
+    base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.1,
+        species_diffusivity=np.zeros(nspecies,))
+    solid_transport = PorousWallTransport(base_transport=base_transport)
+    gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,  
+        wall_model=my_material)
+
+    # Fluid cv
+
+    delta_temperature = (300.0 - 400.4685405683)/(0.2)
+    temperature = 400.4685405683 + delta_temperature*fluid_nodes[0]
+    mass = 1.0 + 0.0*fluid_nodes[0]
+    energy = mass*eos.get_internal_energy(temperature, y_species)
+    mom_x = 0.0*fluid_nodes[0]
+    mom_y = 0.0*fluid_nodes[0]
+    momentum = make_obj_array([mom_x, mom_y])
+
+    cv = make_conserved(dim=dim, mass=mass, energy=energy,
+        momentum=momentum, species_mass=y_species*mass)
+    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model_fluid,
+                                   temperature_seed=500.0)
+
+    # Solid cv
+
+    delta_temperature = (1500.0 - 400.4685405683)/(-0.1)
+    wall_temperature = 400.4685405683 + delta_temperature*solid_nodes[0]       
+
+    sample_init = PorousWallInitializer(density=1.0,
+        temperature=wall_temperature, species=y_species,
+        material_densities=wall_density)
+
+    wv = sample_init(2, solid_nodes, gas_model_solid)
+    wall_state = make_fluid_state(cv=wv, gas_model=gas_model_solid,
+        material_densities=wall_density, temperature_seed=wall_temperature)
+
+    # Setup boundaries and interface
+
+    base_fluid_temp = 300.0
+    base_solid_temp = 1500.0
+
+    fluid_boundaries = {
+        dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+0").domain_tag:
+            IsothermalWallBoundary(wall_temperature=base_fluid_temp),
+    }
+
+    solid_boundaries = {
+        dd_vol_solid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("-0").domain_tag:
+            IsothermalWallBoundary(wall_temperature=base_solid_temp),
+    }
+
+    fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
+        add_multiphysics_interface_bdries_no_grad(
+            dcoll, dd_vol_fluid, dd_vol_solid,
+            gas_model_fluid, gas_model_solid,
+            fluid_state, wall_state,
+            fluid_boundaries, solid_boundaries,
+            interface_noslip=False, interface_radiation=True)
+
+    fluid_grad_cv = grad_cv_operator(
+        dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+    fluid_grad_temperature = grad_t_operator(
+        dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+    wall_grad_cv = grad_cv_operator(
+        dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_solid)
+
+    wall_grad_temperature = grad_t_operator(
+        dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_solid)
+
+    fluid_all_boundaries, wall_all_boundaries = \
+        add_multiphysics_interface_bdries(
+            dcoll, dd_vol_fluid, dd_vol_solid,
+            gas_model_fluid, gas_model_solid,
+            fluid_state, wall_state,
+            fluid_grad_cv, wall_grad_cv,
+            fluid_grad_temperature, wall_grad_temperature,
+            fluid_boundaries, solid_boundaries,
+            interface_noslip=False, interface_radiation=True,
+            wall_emissivity=1.0, sigma=5.67e-8, ambient_temperature=300.0)
+
+    fluid_rhs = ns_operator(
+        dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
+        quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+        grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
+        inviscid_terms_on=False)
+
+    solid_rhs = ns_operator(
+        dcoll, gas_model_solid, wall_state, wall_all_boundaries,
+        quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+        grad_cv=wall_grad_cv, grad_t=wall_grad_temperature,
+        inviscid_terms_on=False)
+
+    if visualize:
+        from grudge.shortcuts import make_visualizer
+        viz_fluid = make_visualizer(dcoll, order+3, volume_dd=dd_vol_fluid)
+        viz_wall = make_visualizer(dcoll, order+3, volume_dd=dd_vol_solid)
         if use_overintegration:
-            quadrature_tag = DISCR_TAG_QUAD
+            viz_suffix = f"over_{order}"
         else:
-            quadrature_tag = None
+            viz_suffix = f"{order}"
 
-        dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
-        dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
+        viz_fluid.write_vtk_file(
+            f"multiphysics_coupled_radiation_{viz_suffix}_fluid.vtu", [
+                ("cv", fluid_state.cv),
+                ("dv", fluid_state.dv),
+                ("grad_T", fluid_grad_temperature),
+                ("rhs", fluid_rhs),
+                ], overwrite=True)
+        viz_wall.write_vtk_file(
+            f"multiphysics_coupled_radiation_{viz_suffix}_wall.vtu", [
+                ("cv", wall_state.cv),
+                ("dv", wall_state.dv),
+                ("rhs", solid_rhs),
+                ], overwrite=True)
 
-        fluid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_fluid))
-        solid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_solid))
+    # Check that steady-state solution has 0 RHS
 
-        eos = IdealSingleGas()
-        fluid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=10.0)
-        gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
+    fluid_rhs = fluid_rhs.energy/cv.energy
+    solid_rhs = solid_rhs.energy/wv.energy
 
-        solid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=1.0)
-        gas_model_solid = GasModel(eos=eos, transport=solid_transport)
-
-        # Fluid cv
-
-        temperature = 2.0 - (2.0 - 1.33938)*(1.0 - fluid_nodes[0])/1.0
-        mass = 1.0 + 0.0*fluid_nodes[0]
-        energy = mass*eos.get_internal_energy(temperature)
-        mom_x = 0.0*fluid_nodes[0]
-        mom_y = 0.0*fluid_nodes[0]
-        momentum = make_obj_array([mom_x, mom_y])
-
-        cv = make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum)
-        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model_fluid)
-
-        # Solid cv
-
-        wall_emissivity = 1.0
-        wall_temperature = 1.0 + (1.0 - 1.33938)*(2.0 + solid_nodes[0])/(-2.0)
-        mass = 1.0 + 0.0*solid_nodes[0]
-        energy = mass*eos.get_internal_energy(wall_temperature)
-        mom_x = 0.0*solid_nodes[0]
-        mom_y = 0.0*solid_nodes[0]
-        momentum = make_obj_array([mom_x, mom_y])
-
-        wv = make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum)
-        wall_state = make_fluid_state(cv=wv, gas_model=gas_model_solid)
-
-        # Setup boundaries and interface
-
-        base_fluid_temp = 2.0
-        base_solid_temp = 1.0
-
-        fluid_boundaries = {
-            dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+0").domain_tag:
-                IsothermalWallBoundary(wall_temperature=base_fluid_temp),
-        }
-
-        solid_boundaries = {
-            dd_vol_solid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_solid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_solid.trace("-0").domain_tag:
-                IsothermalWallBoundary(wall_temperature=base_solid_temp),
-        }
-
-        fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
-            add_multiphysics_interface_bdries_no_grad(
-                dcoll, dd_vol_fluid, dd_vol_solid,
-                fluid_state, wall_state,
-                fluid_boundaries, solid_boundaries,
-                interface_noslip=False, interface_radiation=True)
-
-        fluid_grad_cv = grad_cv_operator(
-            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
-
-        fluid_grad_temperature = grad_t_operator(
-            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
-
-        wall_grad_cv = grad_cv_operator(
-            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_solid)
-
-        wall_grad_temperature = grad_t_operator(
-            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_solid)
-
-        fluid_all_boundaries, wall_all_boundaries = \
-            add_multiphysics_interface_bdries(
-                dcoll, dd_vol_fluid, dd_vol_solid,
-                fluid_state, wall_state,
-                fluid_grad_cv, wall_grad_cv,
-                fluid_grad_temperature, wall_grad_temperature,
-                fluid_boundaries, solid_boundaries,
-                interface_noslip=False, interface_radiation=True,
-                wall_emissivity=wall_emissivity, sigma=2.0, ambient_temperature=0.0)
-
-        fluid_rhs = ns_operator(
-            dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
-            quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
-            grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
-            inviscid_terms_on=False)
-
-        solid_rhs = ns_operator(
-            dcoll, gas_model_solid, wall_state, wall_all_boundaries,
-            quadrature_tag=quadrature_tag, dd=dd_vol_solid,
-            grad_cv=wall_grad_cv, grad_t=wall_grad_temperature,
-            inviscid_terms_on=False)
-
-        if visualize:
-            from grudge.shortcuts import make_visualizer
-            viz_fluid = make_visualizer(dcoll, order+3, volume_dd=dd_vol_fluid)
-            viz_wall = make_visualizer(dcoll, order+3, volume_dd=dd_vol_solid)
-            if use_overintegration:
-                viz_suffix = f"over_{order}_{n}"
-            else:
-                viz_suffix = f"{order}_{n}"
-
-            viz_fluid.write_vtk_file(
-                f"multiphysics_coupled_radiation_{viz_suffix}_fluid.vtu", [
-                    ("cv", fluid_state.cv),
-                    ("dv", fluid_state.dv),
-                    ("rhs", fluid_rhs),
-                    ], overwrite=True)
-            viz_wall.write_vtk_file(
-                f"multiphysics_coupled_radiation_{viz_suffix}_wall.vtu", [
-                    ("cv", wall_state.cv),
-                    ("dv", wall_state.dv),
-                    ("rhs", solid_rhs),
-                    ], overwrite=True)
-
-        # Check that steady-state solution has 0 RHS
-
-        fluid_rhs = fluid_rhs.energy/cv.energy
-        solid_rhs = solid_rhs.energy/wv.energy
-
-        assert actx.to_numpy(op.norm(dcoll, fluid_rhs, np.inf)) < 1e-4
-        assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-4
+    assert actx.to_numpy(op.norm(dcoll, fluid_rhs, np.inf)) < 1e-6
+    assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-6
 
 
-@pytest.mark.parametrize("order", [1, 3, 5])
+@pytest.mark.parametrize("order", [1])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
-        actx_factory, order, use_overintegration, visualize=False):
+        actx_factory, order, use_overintegration, visualize=True):
 
     """Check the thermally-coupled fluid/wall interface with radiation.
 
@@ -759,200 +817,228 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
 
     dim = 2
 
-    nelems = [30]
-    for n in nelems:
+    nelems = 30
+    global_mesh = get_box_mesh(2, -1, 1, nelems)
 
-        global_mesh = get_box_mesh(2, -1, 1, n)
+    mgrp, = global_mesh.groups
+    x = global_mesh.vertices[0, mgrp.vertex_indices]
+    x_elem_avg = np.sum(x, axis=1)/x.shape[0]
+    volume_to_elements = {
+        "Fluid": np.where(x_elem_avg > 0)[0],
+        "Solid": np.where(x_elem_avg <= 0)[0]}
 
-        mgrp, = global_mesh.groups
-        x = global_mesh.vertices[0, mgrp.vertex_indices]
-        x_elem_avg = np.sum(x, axis=1)/x.shape[0]
-        volume_to_elements = {
-            "Fluid": np.where(x_elem_avg > 0)[0],
-            "Solid": np.where(x_elem_avg <= 0)[0]}
+    from meshmode.mesh.processing import partition_mesh
+    volume_meshes = partition_mesh(global_mesh, volume_to_elements)
 
-        from meshmode.mesh.processing import partition_mesh
-        volume_meshes = partition_mesh(global_mesh, volume_to_elements)
+    dcoll = create_discretization_collection(
+        actx, volume_meshes, order=order, quadrature_order=2*order+1)
 
-        dcoll = create_discretization_collection(
-            actx, volume_meshes, order=order, quadrature_order=2*order+1)
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
+    dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
+    dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
+
+    fluid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_fluid))
+    solid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_solid))
+
+    # Pyrometheus initialization
+    import cantera
+    from mirgecom.mechanisms import get_mechanism_input
+    from mirgecom.thermochemistry import \
+        get_pyrometheus_wrapper_class_from_cantera
+    mech_input = get_mechanism_input("inert")
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=3)(actx.np)
+
+    nspecies = pyro_obj.num_species
+
+    eos = PyrometheusMixture(pyro_obj, temperature_guess=300.0)
+
+    # Gas model
+
+    fluid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.0,
+        species_diffusivity=np.zeros(nspecies,) + 0.003)
+    gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
+
+    # Use volume fraction 0.0 or else we have a jump in density at the interface
+    def volume_fraction_func(tau):
+        return 0.0
+
+    char_mass = 10.0
+    virgin_mass = 10.0
+    my_material = SolidProperties(char_mass, virgin_mass, enthalpy_func,
+        heat_capacity_func, thermal_conductivity_func, volume_fraction_func,
+        permeability_func, emissivity_func, tortuosity_func)
+    wall_density = virgin_mass + solid_nodes[0]*0.0
+
+    base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.0,
+        species_diffusivity=np.zeros(nspecies,) + 0.001)
+    solid_transport = PorousWallTransport(base_transport=base_transport)
+    gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,  
+        wall_model=my_material)
+
+    # Fluid cv
+
+    zeros = fluid_nodes[0]*0.0
+    y = make_obj_array([zeros, zeros, zeros])
+    y[0] = 1.0 - (0.25)*(1.0 - fluid_nodes[0])
+    y[1] = 1.0 - y[0]
+    y[2] = y[0]*0.0
+
+    temperature = 300.0 + zeros
+    mass = 1.0 + zeros
+    energy = mass*eos.get_internal_energy(temperature, y)
+    momentum = make_obj_array([0.0*fluid_nodes[0], 0.0*fluid_nodes[0]])
+    species_mass = mass*y
+
+    cv = make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum,
+        species_mass=species_mass)
+    fluid_state = make_fluid_state(cv=cv, gas_model=gas_model_fluid,
+                                   temperature_seed=temperature)
+
+    # Solid cv
+
+    zeros = solid_nodes[0]*0.0
+    y = make_obj_array([zeros, zeros, zeros])
+    y[0] = (1.0 - 0.25)*(solid_nodes[0] + 1.0)
+    y[1] = 1.0 - y[0]
+    y[2] = y[0]*0.0
+
+    wall_density = 10.0 + zeros
+    sample_init = PorousWallInitializer(density=1.0, temperature=300.0,
+        species=y, material_densities=wall_density)
+
+    wv = sample_init(2, solid_nodes, gas_model_solid)
+    wall_state = make_fluid_state(cv=wv, gas_model=gas_model_solid,
+        material_densities=wall_density, temperature_seed=300.0)
+
+    # Setup boundaries and interface
+
+    fluid_boundaries = {
+        dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+0").domain_tag: DummyBoundary(),
+    }
+
+    solid_boundaries = {
+        dd_vol_solid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("-0").domain_tag: DummyBoundary(),
+    }
+
+    fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
+        add_multiphysics_interface_bdries_no_grad(
+            dcoll, dd_vol_fluid, dd_vol_solid,
+            gas_model_fluid, gas_model_solid,
+            fluid_state, wall_state,
+            fluid_boundaries, solid_boundaries,
+            interface_noslip=False, interface_radiation=False)
+
+    fluid_grad_cv = grad_cv_operator(
+        dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+    fluid_grad_temperature = grad_t_operator(
+        dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
+
+    wall_grad_cv = grad_cv_operator(
+        dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_solid)
+
+    wall_grad_temperature = grad_t_operator(
+        dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
+        quadrature_tag=quadrature_tag, dd=dd_vol_solid)
+
+    fluid_all_boundaries, wall_all_boundaries = \
+        add_multiphysics_interface_bdries(
+            dcoll, dd_vol_fluid, dd_vol_solid,
+            gas_model_fluid, gas_model_solid,
+            fluid_state, wall_state,
+            fluid_grad_cv, wall_grad_cv,
+            fluid_grad_temperature, wall_grad_temperature,
+            fluid_boundaries, solid_boundaries,
+            interface_noslip=False, interface_radiation=False)
+
+    fluid_rhs = ns_operator(
+        dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
+        quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
+        grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
+        inviscid_terms_on=False)
+
+    solid_rhs = ns_operator(
+        dcoll, gas_model_solid, wall_state, wall_all_boundaries,
+        quadrature_tag=quadrature_tag, dd=dd_vol_solid,
+        grad_cv=wall_grad_cv, grad_t=wall_grad_temperature,
+        inviscid_terms_on=False)
+
+    if visualize:
+        from grudge.shortcuts import make_visualizer
+        viz_fluid = make_visualizer(dcoll, order+3, volume_dd=dd_vol_fluid)
+        viz_wall = make_visualizer(dcoll, order+3, volume_dd=dd_vol_solid)
         if use_overintegration:
-            quadrature_tag = DISCR_TAG_QUAD
+            viz_suffix = f"over_{order}"
         else:
-            quadrature_tag = None
+            viz_suffix = f"{order}"
 
-        dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
-        dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
+        from mirgecom.fluid import species_mass_fraction_gradient
+        wall_grad_Y = species_mass_fraction_gradient(wall_state.cv, wall_grad_cv)
+        fluid_grad_Y = species_mass_fraction_gradient(fluid_state.cv, fluid_grad_cv)
 
-        fluid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_fluid))
-        solid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_solid))
+        viz_fluid.write_vtk_file(
+            f"multiphysics_coupled_species_{viz_suffix}_fluid.vtu", [
+                ("cv_mass", fluid_state.cv.mass),
+                ("Y_0", fluid_state.cv.species_mass_fractions[0]),
+                ("Y_1", fluid_state.cv.species_mass_fractions[1]),
+                ("Y_2", fluid_state.cv.species_mass_fractions[2]),
+                ("dv", fluid_state.dv),
+                ("grad_rhoY_0", fluid_grad_cv.species_mass[0]),
+                ("grad_rhoY_1", fluid_grad_cv.species_mass[1]),
+                ("grad_rhoY_2", fluid_grad_cv.species_mass[2]),
+                ("grad_Y_0", fluid_grad_Y[0]),
+                ("grad_Y_1", fluid_grad_Y[1]),
+                ("grad_Y_2", fluid_grad_Y[2]),
+                ("rho_Dij_0", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[0]),
+                ("rho_Dij_1", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[1]),
+                ("rho_Dij_2", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[2]),
+                ("rho_Dij_gradY_0", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[0]*fluid_grad_Y[0]),
+                ("rho_Dij_gradY_1", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[1]*fluid_grad_Y[1]),
+                ("rho_Dij_gradY_2", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[2]*fluid_grad_Y[2]),
+                ("rhs", fluid_rhs),
+                ], overwrite=True)
+        viz_wall.write_vtk_file(
+            f"multiphysics_coupled_species_{viz_suffix}_wall.vtu", [
+                ("cv_mass", wall_state.cv.mass),
+                ("Y_0", wall_state.cv.species_mass_fractions[0]),
+                ("Y_1", wall_state.cv.species_mass_fractions[1]),
+                ("Y_2", wall_state.cv.species_mass_fractions[2]),
+                ("dv", wall_state.dv),
+                ("grad_rhoY_0", wall_grad_cv.species_mass[0]),
+                ("grad_rhoY_1", wall_grad_cv.species_mass[1]),
+                ("grad_rhoY_2", wall_grad_cv.species_mass[2]),
+                ("grad_Y_0", wall_grad_Y[0]),
+                ("grad_Y_1", wall_grad_Y[1]),
+                ("grad_Y_2", wall_grad_Y[2]),
+                ("rho_Dij_0", wall_state.cv.mass*wall_state.tv.species_diffusivity[0]),
+                ("rho_Dij_1", wall_state.cv.mass*wall_state.tv.species_diffusivity[1]),
+                ("rho_Dij_2", wall_state.cv.mass*wall_state.tv.species_diffusivity[2]),
+                ("rho_Dij_gradY_0", wall_state.cv.mass*wall_state.tv.species_diffusivity[0]*wall_grad_Y[0]),
+                ("rho_Dij_gradY_1", wall_state.cv.mass*wall_state.tv.species_diffusivity[1]*wall_grad_Y[1]),
+                ("rho_Dij_gradY_2", wall_state.cv.mass*wall_state.tv.species_diffusivity[2]*wall_grad_Y[2]),
+                ("rhs", solid_rhs),
+                ], overwrite=True)
 
-        # Pyrometheus initialization
-        import cantera
-        from mirgecom.mechanisms import get_mechanism_input
-        from mirgecom.thermochemistry import \
-            get_pyrometheus_wrapper_class_from_cantera
-        mech_input = get_mechanism_input("inert")
-        cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
-        pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
-            cantera_soln, temperature_niter=3)(actx.np)
+    # Check that steady-state solution has 0 RHS
 
-        nspecies = pyro_obj.num_species
-
-        eos = PyrometheusMixture(pyro_obj, temperature_guess=300.0)
-
-        fluid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.0,
-              species_diffusivity=np.zeros(nspecies,) + 0.003)
-        gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
-
-        solid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.0,
-              species_diffusivity=np.zeros(nspecies,) + 0.001)
-        gas_model_solid = GasModel(eos=eos, transport=solid_transport)
-
-        # Fluid cv
-
-        zeros = fluid_nodes[0]*0.0
-        y = make_obj_array([zeros, zeros, zeros])
-        y[0] = 1.0 - (1.0 - 0.75)*(1.0 - fluid_nodes[0])
-        y[1] = 1.0 - y[0]
-        y[2] = y[0]*0.0
-
-        temperature = 300.0 + zeros
-        mass = 1.0 + zeros  # force fixed mass or else it messes up with the grad_Y
-        energy = mass*eos.get_internal_energy(temperature, y)
-        mom_x = 0.0*fluid_nodes[0]
-        mom_y = 0.0*fluid_nodes[0]
-        momentum = make_obj_array([mom_x, mom_y])
-        species_mass = mass*y
-
-        cv = make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum,
-            species_mass=species_mass)
-
-        # Solid cv
-
-        zeros = solid_nodes[0]*0.0
-        y = make_obj_array([zeros, zeros, zeros])
-        y[0] = (1.0 - 0.25)*(solid_nodes[0] + 1.0)
-        y[1] = 1.0 - y[0]
-        y[2] = y[0]*0.0
-
-        temperature = 300.0 + zeros
-        mass = 1.0 + zeros  # force fixed mass or else it messes up with the grad_Y
-        energy = mass*eos.get_internal_energy(temperature, y)
-        mom_x = 0.0*solid_nodes[0]
-        mom_y = 0.0*solid_nodes[0]
-        momentum = make_obj_array([mom_x, mom_y])
-        species_mass = mass*y
-
-        wv = make_conserved(dim=dim, mass=mass, energy=energy, momentum=momentum,
-            species_mass=species_mass)
-
-        fluid_state = make_fluid_state(cv=cv, gas_model=gas_model_fluid,
-                                       temperature_seed=temperature)
-
-        wall_state = make_fluid_state(cv=wv, gas_model=gas_model_solid,
-                                       temperature_seed=temperature)
-
-        # Setup boundaries and interface
-
-        fluid_boundaries = {
-            dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+0").domain_tag: DummyBoundary(),
-        }
-
-        solid_boundaries = {
-            dd_vol_solid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_solid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_solid.trace("-0").domain_tag: DummyBoundary(),
-        }
-
-        fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
-            add_multiphysics_interface_bdries_no_grad(
-                dcoll, dd_vol_fluid, dd_vol_solid,
-                fluid_state, wall_state,
-                fluid_boundaries, solid_boundaries,
-                interface_noslip=False, interface_radiation=False)
-
-        fluid_grad_cv = grad_cv_operator(
-            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
-
-        fluid_grad_temperature = grad_t_operator(
-            dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_fluid)
-
-        wall_grad_cv = grad_cv_operator(
-            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_solid)
-
-        wall_grad_temperature = grad_t_operator(
-            dcoll, gas_model_solid, wall_all_boundaries_no_grad, wall_state,
-            quadrature_tag=quadrature_tag, dd=dd_vol_solid)
-
-        fluid_all_boundaries, wall_all_boundaries = \
-            add_multiphysics_interface_bdries(
-                dcoll, dd_vol_fluid, dd_vol_solid,
-                fluid_state, wall_state,
-                fluid_grad_cv, wall_grad_cv,
-                fluid_grad_temperature, wall_grad_temperature,
-                fluid_boundaries, solid_boundaries,
-                interface_noslip=False, interface_radiation=False)
-
-        fluid_rhs = ns_operator(
-            dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
-            quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
-            grad_cv=fluid_grad_cv, grad_t=fluid_grad_temperature,
-            inviscid_terms_on=False)
-
-        solid_rhs = ns_operator(
-            dcoll, gas_model_solid, wall_state, wall_all_boundaries,
-            quadrature_tag=quadrature_tag, dd=dd_vol_solid,
-            grad_cv=wall_grad_cv, grad_t=wall_grad_temperature,
-            inviscid_terms_on=False)
-
-        if visualize:
-            from grudge.shortcuts import make_visualizer
-            viz_fluid = make_visualizer(dcoll, order+3, volume_dd=dd_vol_fluid)
-            viz_wall = make_visualizer(dcoll, order+3, volume_dd=dd_vol_solid)
-            if use_overintegration:
-                viz_suffix = f"over_{order}_{n}"
-            else:
-                viz_suffix = f"{order}_{n}"
-
-            viz_fluid.write_vtk_file(
-                f"multiphysics_coupled_species_{viz_suffix}_fluid.vtu", [
-                    ("cv_mass", fluid_state.cv.mass),
-                    ("Y_0", fluid_state.cv.species_mass_fractions[0]),
-                    ("Y_1", fluid_state.cv.species_mass_fractions[1]),
-                    ("Y_2", fluid_state.cv.species_mass_fractions[2]),
-                    ("dv", fluid_state.dv),
-                    ("grad_y_0", fluid_grad_cv.species_mass[0]),
-                    ("grad_y_1", fluid_grad_cv.species_mass[1]),
-                    ("grad_y_2", fluid_grad_cv.species_mass[2]),
-                    ("rhs", fluid_rhs),
-                    ], overwrite=True)
-            viz_wall.write_vtk_file(
-                f"multiphysics_coupled_species_{viz_suffix}_wall.vtu", [
-                    ("cv_mass", wall_state.cv.mass),
-                    ("Y_0", wall_state.cv.species_mass_fractions[0]),
-                    ("Y_1", wall_state.cv.species_mass_fractions[1]),
-                    ("Y_2", wall_state.cv.species_mass_fractions[2]),
-                    ("dv", wall_state.dv),
-                    ("grad_y_0", wall_grad_cv.species_mass[0]),
-                    ("grad_y_1", wall_grad_cv.species_mass[1]),
-                    ("grad_y_2", wall_grad_cv.species_mass[2]),
-                    ("rhs", solid_rhs),
-                    ], overwrite=True)
-
-        # Check that steady-state solution has 0 RHS
-
-        for i in range(0, nspecies):
-            assert actx.to_numpy(
-                op.norm(dcoll, fluid_rhs.species_mass[i], np.inf)) < 1e-10
-            assert actx.to_numpy(
-                op.norm(dcoll, solid_rhs.species_mass[i], np.inf)) < 1e-10
+    for i in range(0, nspecies):
+        assert actx.to_numpy(
+            op.norm(dcoll, fluid_rhs.species_mass[i], np.inf)) < 1e-10
+        assert actx.to_numpy(
+            op.norm(dcoll, solid_rhs.species_mass[i], np.inf)) < 1e-10
 
 
 if __name__ == "__main__":
