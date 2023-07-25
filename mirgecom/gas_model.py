@@ -407,7 +407,9 @@ def make_fluid_state(cv, gas_model,
             tortuosity=gas_model.wall_model.tortuosity(tau)
         )
 
-        temperature = gas_model.get_temperature(cv=cv, wv=wv, tseed=temperature_seed)
+        # FIXME is there a way to pass the argument to "niter"?
+        temperature = gas_model.get_temperature(cv=cv, wv=wv,
+            tseed=temperature_seed, niter=3)
 
         pressure = gas_model.get_pressure(cv, wv, temperature)
 
