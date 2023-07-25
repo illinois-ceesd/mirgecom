@@ -160,6 +160,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
 
         if self._no_slip is True:
             # use the same idea of no-slip walls
+            print(state_minus.cv.mass)
             cv_plus = make_conserved(dim=dcoll.dim,
                                      mass=state_minus.cv.mass,
                                      energy=state_minus.cv.energy,
@@ -179,7 +180,18 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
 
-        mass_bc = 0.5*(state_minus.mass_density + state_plus.mass_density)
+        # FIXME argh... the gradient that matters is the intrinsic density,
+        # not the bulk density...
+        if isinstance(gas_model, PorousFlowModel):
+            # wall side
+            epsilon_plus = state_minus.wv.void_fraction
+            mass_bc = 0.5*(state_minus.mass_density
+                           + state_plus.mass_density*epsilon_plus)
+        else:
+            # fluid side
+            epsilon_plus = state_plus.wv.void_fraction
+            mass_bc = 0.5*(state_minus.mass_density
+                           + state_plus.mass_density/epsilon_plus)
 
         u_bc = self.velocity_bc(dcoll, dd_bdry, state_minus)
 
@@ -253,7 +265,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         if self._no_slip:
             return u_minus*0.0
 
-        # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         u_plus = state_plus.velocity
@@ -270,7 +281,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         kappa_minus = state_minus.tv.species_diffusivity
         y_minus = state_minus.species_mass_fractions
 
-        # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         y_plus = state_plus.species_mass_fractions
@@ -287,7 +297,6 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         kappa_minus = state_minus.tv.thermal_conductivity
         t_minus = state_minus.temperature
 
-        # FIXME what was I trying to say with this comment?
         # do not use the state_plus function because that is for inviscid fluxes
         state_plus = project_from_base(dcoll, dd_bdry, self._state_plus)
         t_plus = state_plus.temperature
@@ -307,6 +316,7 @@ class _MultiphysicsCoupledHarmonicMeanBoundaryComponent:
         if self._grad_cv_plus is None:
             raise ValueError(
                 "Boundary does not have external CV gradient data.")
+
         grad_cv_plus = project_from_base(dcoll, dd_bdry, self._grad_cv_plus)
 
         # if the coupling involves a no-slip wall:
@@ -672,14 +682,16 @@ def _state_inter_volume_trace_pairs(
         fluid_state, wall_state, limiter_func_fluid, limiter_func_wall):
     """Exchange state across the fluid-wall interface."""
 
-    pairwise_cv = {(fluid_dd, wall_dd): (fluid_state.cv, wall_state.cv)}
+    # exchange CV
+    pairwise_cv = {(fluid_dd, wall_dd):
+                   (fluid_state.cv, wall_state.cv)}
     cv_pairs = inter_volume_trace_pairs(
         dcoll, pairwise_cv, comm_tag=_CVInterVolTag)
 
     fluid_to_wall_cv_tpairs = cv_pairs[fluid_dd, wall_dd]
     wall_to_fluid_cv_tpairs = cv_pairs[wall_dd, fluid_dd]
 
-    #
+    # exchange temperature
     pairwise_temp = {(fluid_dd, wall_dd):
                      (fluid_state.temperature, wall_state.temperature)}
     temperature_seed_pairs = inter_volume_trace_pairs(
@@ -688,18 +700,15 @@ def _state_inter_volume_trace_pairs(
     fluid_to_wall_tseed_tpairs = temperature_seed_pairs[fluid_dd, wall_dd]
     wall_to_fluid_tseed_tpairs = temperature_seed_pairs[wall_dd, fluid_dd]
 
-    # FIXME dummy workaround unti I fix the test to use multispecies
-    if isinstance(gas_model_wall, PorousFlowModel):
-        zeros = fluid_state.cv.mass*0.0
-        pairwise_dens = {(fluid_dd, wall_dd): (zeros, wall_state.wv.material_densities)}
-        material_densities_pairs = inter_volume_trace_pairs(
-            dcoll, pairwise_dens, comm_tag=_MatDensityInterVolTag)
+    # exchange material densities. It is zero on the fluid side...
+    zeros = fluid_state.cv.mass*0.0
+    pairwise_dens = {(fluid_dd, wall_dd):
+                     (zeros, wall_state.wv.material_densities)}
+    material_densities_pairs = inter_volume_trace_pairs(
+        dcoll, pairwise_dens, comm_tag=_MatDensityInterVolTag)
 
-        fluid_to_wall_mass_tpairs = material_densities_pairs[fluid_dd, wall_dd]
-        wall_to_fluid_mass_tpairs = material_densities_pairs[wall_dd, fluid_dd]
-    else:
-        fluid_to_wall_mass_tpairs = [None] * len(cv_pairs)
-        wall_to_fluid_mass_tpairs = [None] * len(cv_pairs)
+    fluid_to_wall_mass_tpairs = material_densities_pairs[fluid_dd, wall_dd]
+    wall_to_fluid_mass_tpairs = material_densities_pairs[wall_dd, fluid_dd]
 
     return {
         (fluid_dd, wall_dd): [TracePair(

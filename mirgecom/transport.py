@@ -767,7 +767,9 @@ class PorousWallTransport(TransportModel):
             dv: GasDependentVars, wv: PorousWallVars,
             flow_model: PorousFlowModel) -> DOFArray:
         """Mass diffusivity of gaseous species through the porous wall."""
-        return 1.0/wv.tortuosity*(
+        # TODO Improve docs: epsilon added here to cancel the "epsilon rho"
+        # such that it yeilds the proper results now
+        return 1.0/(wv.void_fraction*wv.tortuosity)*(
             self.base_transport.species_diffusivity(cv, dv, flow_model.eos))
 
     # FIXME I have to pass "flow_model" but this class is internal to "flow_model"..

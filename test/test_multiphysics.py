@@ -20,6 +20,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import pytest
+import cantera
 import numpy as np
 from dataclasses import replace
 from functools import partial
@@ -62,7 +64,13 @@ from mirgecom.multiphysics.multiphysics_coupled_fluid_wall import (
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-import pytest
+from mirgecom.transport import PorousWallTransport
+from mirgecom.wall_model import PorousFlowModel
+from mirgecom.materials.initializer import PorousWallInitializer
+from mirgecom.materials.simple_material import SolidProperties
+from mirgecom.mechanisms import get_mechanism_input
+from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+
 
 import logging
 logger = logging.getLogger(__name__)
@@ -576,32 +584,30 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-4
 
 
-from mirgecom.materials.simple_material import SolidProperties
 def enthalpy_func(temperature):
     return 1000.0*temperature
+
 
 def heat_capacity_func(temperature):
     return 1000.0
 
-def thermal_conductivity_func(temperature):
+
+def thermal_conductivity_func(temperature=None):
     return 0.1
 
-def permeability_func(tau):
+
+def permeability_func(tau=None):
     return 0.0
 
-def emissivity_func(tau):
+
+def emissivity_func(tau=None):
     return 1.0
 
-def tortuosity_func(tau):
+
+def tortuosity_func(tau=None):
     return 1.0
 
 
-import cantera
-from mirgecom.transport import PorousWallTransport
-from mirgecom.wall_model import PorousFlowModel
-from mirgecom.materials.initializer import PorousWallInitializer
-from mirgecom.mechanisms import get_mechanism_input
-from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 @pytest.mark.parametrize("order", [1, 3, 5])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_multiphysics_coupled_fluid_wall_with_radiation(
@@ -674,7 +680,7 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
     base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.1,
         species_diffusivity=np.zeros(nspecies,))
     solid_transport = PorousWallTransport(base_transport=base_transport)
-    gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,  
+    gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,
         wall_model=my_material)
 
     # Fluid cv
@@ -695,7 +701,7 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
     # Solid cv
 
     delta_temperature = (1500.0 - 400.4685405683)/(-0.1)
-    wall_temperature = 400.4685405683 + delta_temperature*solid_nodes[0]       
+    wall_temperature = 400.4685405683 + delta_temperature*solid_nodes[0]
 
     sample_init = PorousWallInitializer(density=1.0,
         temperature=wall_temperature, species=y_species,
@@ -803,10 +809,10 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
     assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-6
 
 
-@pytest.mark.parametrize("order", [1])
+@pytest.mark.parametrize("order", [1, 3, 5])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
-        actx_factory, order, use_overintegration, visualize=True):
+        actx_factory, order, use_overintegration, visualize=False):
 
     """Check the thermally-coupled fluid/wall interface with radiation.
 
@@ -864,9 +870,10 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
         species_diffusivity=np.zeros(nspecies,) + 0.003)
     gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
 
-    # Use volume fraction 0.0 or else we have a jump in density at the interface
+    # FIXME Use volume fraction 0.0 or else we have a jump in
+    # density at the interface
     def volume_fraction_func(tau):
-        return 0.0
+        return 0.1
 
     char_mass = 10.0
     virgin_mass = 10.0
@@ -878,14 +885,20 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
     base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.0,
         species_diffusivity=np.zeros(nspecies,) + 0.001)
     solid_transport = PorousWallTransport(base_transport=base_transport)
-    gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,  
+    gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,
         wall_model=my_material)
+
+    fluid_diffusivity = 0.003
+    solid_diffusivity = 0.001/tortuosity_func()
+
+    diff_ratio = fluid_diffusivity/solid_diffusivity
+    y_species_interface = 1.0/(1.0 + diff_ratio)
 
     # Fluid cv
 
     zeros = fluid_nodes[0]*0.0
     y = make_obj_array([zeros, zeros, zeros])
-    y[0] = 1.0 - (0.25)*(1.0 - fluid_nodes[0])
+    y[0] = 1.0 - (y_species_interface)*(1.0 - fluid_nodes[0])
     y[1] = 1.0 - y[0]
     y[2] = y[0]*0.0
 
@@ -904,7 +917,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
 
     zeros = solid_nodes[0]*0.0
     y = make_obj_array([zeros, zeros, zeros])
-    y[0] = (1.0 - 0.25)*(solid_nodes[0] + 1.0)
+    y[0] = (1.0 - y_species_interface)*(solid_nodes[0] + 1.0)
     y[1] = 1.0 - y[0]
     y[2] = y[0]*0.0
 
@@ -936,7 +949,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
             gas_model_fluid, gas_model_solid,
             fluid_state, wall_state,
             fluid_boundaries, solid_boundaries,
-            interface_noslip=False, interface_radiation=False)
+            interface_noslip=True, interface_radiation=False)
 
     fluid_grad_cv = grad_cv_operator(
         dcoll, gas_model_fluid, fluid_all_boundaries_no_grad, fluid_state,
@@ -962,7 +975,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
             fluid_grad_cv, wall_grad_cv,
             fluid_grad_temperature, wall_grad_temperature,
             fluid_boundaries, solid_boundaries,
-            interface_noslip=False, interface_radiation=False)
+            interface_noslip=True, interface_radiation=False)
 
     fluid_rhs = ns_operator(
         dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
@@ -985,50 +998,23 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
         else:
             viz_suffix = f"{order}"
 
-        from mirgecom.fluid import species_mass_fraction_gradient
-        wall_grad_Y = species_mass_fraction_gradient(wall_state.cv, wall_grad_cv)
-        fluid_grad_Y = species_mass_fraction_gradient(fluid_state.cv, fluid_grad_cv)
-
         viz_fluid.write_vtk_file(
             f"multiphysics_coupled_species_{viz_suffix}_fluid.vtu", [
-                ("cv_mass", fluid_state.cv.mass),
+                ("rho", fluid_state.cv.mass),
                 ("Y_0", fluid_state.cv.species_mass_fractions[0]),
                 ("Y_1", fluid_state.cv.species_mass_fractions[1]),
                 ("Y_2", fluid_state.cv.species_mass_fractions[2]),
                 ("dv", fluid_state.dv),
-                ("grad_rhoY_0", fluid_grad_cv.species_mass[0]),
-                ("grad_rhoY_1", fluid_grad_cv.species_mass[1]),
-                ("grad_rhoY_2", fluid_grad_cv.species_mass[2]),
-                ("grad_Y_0", fluid_grad_Y[0]),
-                ("grad_Y_1", fluid_grad_Y[1]),
-                ("grad_Y_2", fluid_grad_Y[2]),
-                ("rho_Dij_0", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[0]),
-                ("rho_Dij_1", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[1]),
-                ("rho_Dij_2", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[2]),
-                ("rho_Dij_gradY_0", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[0]*fluid_grad_Y[0]),
-                ("rho_Dij_gradY_1", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[1]*fluid_grad_Y[1]),
-                ("rho_Dij_gradY_2", fluid_state.cv.mass*fluid_state.tv.species_diffusivity[2]*fluid_grad_Y[2]),
                 ("rhs", fluid_rhs),
                 ], overwrite=True)
         viz_wall.write_vtk_file(
             f"multiphysics_coupled_species_{viz_suffix}_wall.vtu", [
-                ("cv_mass", wall_state.cv.mass),
+                ("eps_rho", wall_state.cv.mass),
+                ("rho", wall_state.cv.mass/wall_state.wv.void_fraction),
                 ("Y_0", wall_state.cv.species_mass_fractions[0]),
                 ("Y_1", wall_state.cv.species_mass_fractions[1]),
                 ("Y_2", wall_state.cv.species_mass_fractions[2]),
                 ("dv", wall_state.dv),
-                ("grad_rhoY_0", wall_grad_cv.species_mass[0]),
-                ("grad_rhoY_1", wall_grad_cv.species_mass[1]),
-                ("grad_rhoY_2", wall_grad_cv.species_mass[2]),
-                ("grad_Y_0", wall_grad_Y[0]),
-                ("grad_Y_1", wall_grad_Y[1]),
-                ("grad_Y_2", wall_grad_Y[2]),
-                ("rho_Dij_0", wall_state.cv.mass*wall_state.tv.species_diffusivity[0]),
-                ("rho_Dij_1", wall_state.cv.mass*wall_state.tv.species_diffusivity[1]),
-                ("rho_Dij_2", wall_state.cv.mass*wall_state.tv.species_diffusivity[2]),
-                ("rho_Dij_gradY_0", wall_state.cv.mass*wall_state.tv.species_diffusivity[0]*wall_grad_Y[0]),
-                ("rho_Dij_gradY_1", wall_state.cv.mass*wall_state.tv.species_diffusivity[1]*wall_grad_Y[1]),
-                ("rho_Dij_gradY_2", wall_state.cv.mass*wall_state.tv.species_diffusivity[2]*wall_grad_Y[2]),
                 ("rhs", solid_rhs),
                 ], overwrite=True)
 
