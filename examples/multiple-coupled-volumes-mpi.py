@@ -952,7 +952,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
                 fluid_state, sample_state,
                 fluid_boundaries, sample_boundaries,
                 limiter_func_fluid=_limit_fluid_cv,
-                limiter_func_sample=_limit_sample_cv,
+                limiter_func_wall=_limit_sample_cv,
                 interface_noslip=True, interface_radiation=use_radiation,
                 use_kappa_weighted_grad_flux_in_fluid=False)
 
@@ -1039,7 +1039,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
                 fluid_grad_temperature, sample_grad_temperature,
                 fluid_boundaries, sample_boundaries,
                 limiter_func_fluid=_limit_fluid_cv,
-                limiter_func_sample=_limit_sample_cv,
+                limiter_func_wall=_limit_sample_cv,
                 interface_noslip=True, interface_radiation=use_radiation,
                 wall_emissivity=emissivity, sigma=5.67e-8,
                 ambient_temperature=300.0,
