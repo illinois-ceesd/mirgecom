@@ -150,7 +150,7 @@ class SolidWallModel:
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
 class PorousWallVars:
-    """Variables for the (porous) fluid state.
+    """Variables for the porous material.
 
     .. attribute:: material_densities
     .. attribute:: tau
@@ -271,9 +271,9 @@ class PorousFlowEOS:
 
 @dataclass(frozen=True)
 class PorousFlowModel(PorousFlowEOS):
-    """
-    This is the main class of the porous media flow and is the
-    equivalent to :class:`~mirgecom.gas_model.GasModel`. It wraps:
+    """Main class of the porous media flow.
+
+    It is the equivalent to :class:`~mirgecom.gas_model.GasModel` and wraps:
 
     .. attribute:: wall_model
 
