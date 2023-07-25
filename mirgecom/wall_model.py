@@ -272,32 +272,38 @@ class PorousFlowEOS:
 @dataclass(frozen=True)
 class PorousFlowModel(PorousFlowEOS):
     """
-    <A very important description>...
+    This is the main class of the porous media flow and is the
+    equivalent to :class:`~mirgecom.gas_model.GasModel`. It wraps:
 
     .. attribute:: wall_model
+
+        The thermophysical properties of the wall material and its EOS.
+
     .. attribute:: eos
+
+        The thermophysical properties of the gas and its EOS. For now, only
+        mixtures are considered.
+
     .. attribute:: transport
 
+        Transport class that governs how the gas flows through the porous
+        media. This is accounted for in
+        :class:`~mirgecom.transport.PorousWallTransport`
+
+    It also include functions that combine the properties of the porous
+    material and the gas that permeates, yielding the actual porous flow EOS:
+
     .. automethod:: solid_density
+    .. automethod:: decomposition_progress
     .. automethod:: get_temperature
     .. automethod:: get_pressure
     .. automethod:: internal_energy
     .. automethod:: heat_capacity
-    .. automethod:: decomposition_progress
     """
 
     eos: GasEOS
     transport: TransportModel
     wall_model: PorousWallProperties
-
-    def decomposition_progress(self, material_densities) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the decomposition.
-
-        Where $\tau=1$, the material is locally virgin. On the other hand, if
-        $\tau=0$, then the fibers were all consumed.
-        """
-        mass = self.solid_density(material_densities)
-        return self.wall_model.decomposition_progress(mass)
 
     def solid_density(self, material_densities) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
@@ -312,6 +318,15 @@ class PorousFlowModel(PorousFlowEOS):
         if isinstance(material_densities, DOFArray):
             return material_densities
         return sum(material_densities)
+
+    def decomposition_progress(self, material_densities) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the decomposition.
+
+        Where $\tau=1$, the material is locally virgin. On the other hand, if
+        $\tau=0$, then the fibers were all consumed.
+        """
+        mass = self.solid_density(material_densities)
+        return self.wall_model.decomposition_progress(mass)
 
     def get_temperature(self, cv: ConservedVars, wv: PorousWallVars,
                         tseed: DOFArray, niter=3) -> DOFArray:
@@ -345,18 +360,36 @@ class PorousFlowModel(PorousFlowEOS):
 
     def get_pressure(self, cv: ConservedVars, wv: PorousWallVars,
                      temperature: DOFArray) -> DOFArray:
-        """Return the pressure of the gas considering the void fraction."""
+        r"""Return the pressure of the gas considering the void fraction.
+
+        Since the density is evaluated based on the entire bulk material, i.e.,
+        considering the void fraction, the pressure is evaluated as
+
+        .. math::
+            P = \frac{\epsilon \rho}{\epsilon} \frac{R}{M} T
+
+        where $\epsilon \rho$ is stored in :class:`~mirgecom.fluid.ConservedVars`
+        and $M$ is the molar mass of the mixture.
+        """
         return self.eos.pressure(cv, temperature)/wv.void_fraction
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
-        """Return the enthalpy of the gas+solid material."""
+        r"""Return the enthalpy of the gas+solid material.
+
+        .. math::
+            \rho e = \epsilon_s \rho_s e_s + \epsilon_g \rho_g e_g
+        """
         return (cv.mass*self.eos.get_internal_energy(temperature,
                                                 cv.species_mass_fractions)
                 + wv.density*self.wall_model.enthalpy(temperature, wv.tau))
 
     def heat_capacity(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
-        """Return the heat capacity of the gas+solid material."""
+        r"""Return the heat capacity of the gas+solid material.
+
+        .. math::
+            \rho e = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
+        """
         return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
                 + wv.density*self.wall_model.heat_capacity(temperature, wv.tau))
