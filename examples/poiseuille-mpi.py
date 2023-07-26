@@ -146,7 +146,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
-        n_refine = 5
+        n_refine = 2
         nels_x = 9 * n_refine
         nels_y = 5 * n_refine
         nels_axis = (nels_x, nels_y)
