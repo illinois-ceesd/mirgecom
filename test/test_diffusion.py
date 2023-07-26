@@ -398,8 +398,8 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     kappa = kappa_lower * lower_mask + kappa_upper * upper_mask
 
     boundaries = {
-        BoundaryDomainTag("-0"): DirichletDiffusionBoundary(0.),
-        BoundaryDomainTag("+0"): DirichletDiffusionBoundary(1.),
+        BoundaryDomainTag("-1"): DirichletDiffusionBoundary(0.),
+        BoundaryDomainTag("+1"): DirichletDiffusionBoundary(1.),
     }
 
     flux = -kappa_lower*kappa_upper/(kappa_lower + kappa_upper)

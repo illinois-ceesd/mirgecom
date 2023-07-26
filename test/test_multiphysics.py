@@ -103,17 +103,17 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     # Set solution to y for volume 2
 
     boundaries1 = {
-        dd_vol1.trace("-0").domain_tag: DirichletDiffusionBoundary(-1.),
-        dd_vol1.trace("+0").domain_tag: DirichletDiffusionBoundary(1.),
-        dd_vol1.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol1.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol1.trace("-1").domain_tag: DirichletDiffusionBoundary(-1.),
+        dd_vol1.trace("+1").domain_tag: DirichletDiffusionBoundary(1.),
+        dd_vol1.trace("-2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol1.trace("+2").domain_tag: NeumannDiffusionBoundary(0.),
     }
 
     boundaries2 = {
-        dd_vol2.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol2.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol2.trace("-1").domain_tag: DirichletDiffusionBoundary(-1.),
-        dd_vol2.trace("+1").domain_tag: DirichletDiffusionBoundary(1.),
+        dd_vol2.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol2.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol2.trace("-2").domain_tag: DirichletDiffusionBoundary(-1.),
+        dd_vol2.trace("+2").domain_tag: DirichletDiffusionBoundary(1.),
     }
 
     u1 = nodes1[0]
@@ -227,16 +227,16 @@ def test_thermally_coupled_fluid_wall(
         base_wall_temp = 600
 
         fluid_boundaries = {
-            dd_vol_fluid.trace("-0").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+0").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+1").domain_tag:
+            dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_fluid.trace("+2").domain_tag:
                 IsothermalWallBoundary(wall_temperature=base_fluid_temp),
         }
 
         wall_boundaries = {
-            dd_vol_wall.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
-            dd_vol_wall.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-            dd_vol_wall.trace("-1").domain_tag:
+            dd_vol_wall.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
+            dd_vol_wall.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
+            dd_vol_wall.trace("-2").domain_tag:
                 DirichletDiffusionBoundary(base_wall_temp),
         }
 
