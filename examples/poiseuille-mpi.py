@@ -147,12 +147,12 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
         n_refine = 5
-        npts_x = 10 * n_refine
-        npts_y = 6 * n_refine
-        npts_axis = (npts_x, npts_y)
+        nels_x = 9 * n_refine
+        nels_y = 5 * n_refine
+        nels_axis = (nels_x, nels_y)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
+        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=nels_axis)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)

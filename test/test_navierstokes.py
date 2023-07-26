@@ -267,10 +267,9 @@ class FluidManufacturedSolution(FluidCase):
 
     def get_mesh(self, n=2, periodic=None):
         """Return the mesh: [-pi, pi] by default."""
-        nx = (n,)*self._dim
         a = tuple(-lx_i/2 for lx_i in self._lx)
         b = tuple(lx_i/2 for lx_i in self._lx)
-        return get_box_mesh(self.dim, a, b, nx, periodic)
+        return get_box_mesh(self.dim, a, b, n, periodic)
 
     @abstractmethod
     def get_solution(self, x, t):
@@ -371,11 +370,8 @@ class ShearFlow(FluidManufacturedSolution):
 
     def get_mesh(self, n):
         """Get the mesh."""
-        nx = (n,)*self._dim
-        a = (0,)*self._dim
-        b = (1,)*self._dim
         periodic = (False,)*self._dim
-        return get_box_mesh(self._dim, a, b, nx, periodic=periodic)
+        return get_box_mesh(self._dim, 0, 1, n, periodic=periodic)
 
     def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
@@ -609,7 +605,7 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 
     logger.info(f"{sym_source=}")
 
-    n = 2
+    n = 1
     mesh = man_soln.get_mesh(n)
 
     from mirgecom.discretization import create_discretization_collection

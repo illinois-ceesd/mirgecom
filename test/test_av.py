@@ -399,10 +399,10 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
         return make_fluid_state(prescribed_soln(r=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
     from mirgecom.discretization import create_discretization_collection
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())

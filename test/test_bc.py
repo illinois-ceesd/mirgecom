@@ -79,10 +79,10 @@ def test_normal_axes_utility(actx_factory, dim):
 
     from mirgecom.boundary import _get_normal_axes as gna
     order = 1
-    npts_geom = 6
+    nels_geom = 5
     a = -.01
     b = .01
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -162,10 +162,10 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                              free_stream_pressure=ff_press,
                              free_stream_temperature=ff_temp)
 
-    npts_geom = 17
+    nels_geom = 16
     a = -1.0
     b = 1.0
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -331,10 +331,10 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
                                                    thermal_conductivity=kappa))
     bndry = PressureOutflowBoundary(boundary_pressure=flowbnd_press)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -447,10 +447,10 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
     wall = IsothermalWallBoundary(wall_temperature=wall_temp)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -614,10 +614,10 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
     wall = AdiabaticNoslipWallBoundary()
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -796,10 +796,10 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
     wall = AdiabaticSlipBoundary()
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -1219,10 +1219,10 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=transport_model)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())

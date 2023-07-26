@@ -179,10 +179,10 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     for nfac in [1, 2, 4]:
 
-        npts_axis = nfac*(11, 21)
+        nels_axis = nfac*(10, 20)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        mesh = get_box_mesh(2, a=box_ll, b=box_ur, n=npts_axis)
+        mesh = get_box_mesh(2, a=box_ll, b=box_ur, n=nels_axis)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"

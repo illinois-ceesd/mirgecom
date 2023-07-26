@@ -183,7 +183,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     y_scale = 1
     z_scale = 1
 
-    # - params for unscaled npts/axis
+    # - params for unscaled nels/axis
     domain_xlen = .01
     domain_ylen = .01
     domain_zlen = .01
@@ -253,7 +253,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     # }}}
 
     # coarse-scale grid/domain control
-    n_refine = 1  # scales npts/axis uniformly
+    n_refine = 1  # scales nels/axis uniformly
     weak_scale = 1  # scales domain uniformly, keeping dt constant
 
     # AV / Shock-capturing parameters
@@ -542,9 +542,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     ncy = int(ysize / chlen)
     ncz = int(zsize / chlen)
 
-    npts_x = ncx * n_refine + 1
-    npts_y = ncy * n_refine + 1
-    npts_z = ncz * n_refine + 1
+    nels_x = ncx * n_refine
+    nels_y = ncy * n_refine
+    nels_z = ncz * n_refine
 
     x0 = xsize/2
     y0 = ysize/2
@@ -557,15 +557,15 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     zback = z0 - zsize/2
     zfront = z0 + zsize/2
 
-    npts_axis = (npts_x,)
+    nels_axis = (nels_x,)
     box_ll = (xleft,)
     box_ur = (xright,)
     if dim > 1:
-        npts_axis = (npts_x, npts_y)
+        nels_axis = (nels_x, nels_y)
         box_ll = (xleft, ybottom)
         box_ur = (xright, ytop)
     if dim > 2:
-        npts_axis = (npts_x, npts_y, npts_z)
+        nels_axis = (nels_x, nels_y, nels_z)
         box_ll = (xleft, ybottom, zback)
         box_ur = (xright, ytop, zfront)
 
@@ -573,7 +573,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         print(f"---- Mesh generator inputs -----\n"
               f"\tDomain: [{box_ll}, {box_ur}], {periodic=}\n"
-              f"\tNpts/axis: {npts_axis}")
+              f"\tNels/axis: {nels_axis}")
 
     if single_gas_only:
         inert_only = 1
@@ -618,7 +618,7 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         rst_step = restart_data["step"]
         rst_order = restart_data["order"]
     else:  # generate the grid from scratch
-        generate_mesh = partial(get_box_mesh, dim, a=box_ll, b=box_ur, n=npts_axis,
+        generate_mesh = partial(get_box_mesh, dim, a=box_ll, b=box_ur, n=nels_axis,
                                 periodic=periodic)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
