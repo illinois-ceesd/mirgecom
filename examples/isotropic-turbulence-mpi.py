@@ -194,9 +194,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
 
     vis_timer = None
 
-    pathi = "/home/ziruiw5/xpacc/IsotropicTurbulence/16cubMa0.3/order3"
-    initializer = IsotropicTurbulence(coordinate_path=pathi+"/coordinate.txt",
-                                      velocity_path=pathi+"/velocity.txt")
+    pathi = "./"
+    initializer = IsotropicTurbulence(coordinate_path=pathi+"coordinate.txt",
+                                      velocity_path=pathi+"velocity.txt")
     mu = 1e-4
     eos=IdealSingleGas()
     gas_model = GasModel(eos=IdealSingleGas(),transport=SimpleTransport(viscosity=mu))
@@ -224,9 +224,9 @@ def main(ctx_factory=cl.create_some_context, use_logmgr=True,
         data_y = actx.to_numpy(init_nodes[1][0])
         data_z = actx.to_numpy(init_nodes[2][0])
 
-        np.savetxt(pathi+f"/x_rank{rank}.txt", data_x)
-        np.savetxt(pathi+f"/y_rank{rank}.txt", data_y)
-        np.savetxt(pathi+f"/z_rank{rank}.txt", data_z)
+        np.savetxt(pathi+f"x_rank{rank}.txt", data_x)
+        np.savetxt(pathi+f"y_rank{rank}.txt", data_y)
+        np.savetxt(pathi+f"z_rank{rank}.txt", data_z)
 
         # Set the current state from time 0
         low_order_cv = initializer(init_nodes, eos=eos)
