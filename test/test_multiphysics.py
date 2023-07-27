@@ -67,7 +67,7 @@ from meshmode.array_context import (  # noqa
 from mirgecom.transport import PorousWallTransport
 from mirgecom.wall_model import PorousFlowModel
 from mirgecom.materials.initializer import PorousWallInitializer
-from mirgecom.materials.simple_material import SolidProperties
+from mirgecom.materials.prescribed_material import SolidProperties
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
@@ -608,6 +608,14 @@ def tortuosity_func(tau=None):
     return 1.0
 
 
+def volume_fraction_func(tau=None):
+    return 0.1
+
+
+def decomposition_progress_func(mass):
+    return 1.0 + mass*0.0
+
+
 @pytest.mark.parametrize("order", [1, 3, 5])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_multiphysics_coupled_fluid_wall_with_radiation(
@@ -669,12 +677,9 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
     char_mass = 10.0
     virgin_mass = 10.0
 
-    def volume_fraction_func(tau):
-        return 0.1
-
-    my_material = SolidProperties(char_mass, virgin_mass, enthalpy_func,
-        heat_capacity_func, thermal_conductivity_func, volume_fraction_func,
-        permeability_func, emissivity_func, tortuosity_func)
+    my_material = SolidProperties(enthalpy_func, heat_capacity_func,
+        thermal_conductivity_func, volume_fraction_func, permeability_func,
+        emissivity_func, tortuosity_func, decomposition_progress_func)
     wall_density = virgin_mass + solid_nodes[0]*0.0
 
     base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.1,
@@ -870,16 +875,12 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
         species_diffusivity=np.zeros(nspecies,) + 0.003)
     gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
 
-    # FIXME Use volume fraction 0.0 or else we have a jump in
-    # density at the interface
-    def volume_fraction_func(tau):
-        return 0.1
-
     char_mass = 10.0
     virgin_mass = 10.0
-    my_material = SolidProperties(char_mass, virgin_mass, enthalpy_func,
-        heat_capacity_func, thermal_conductivity_func, volume_fraction_func,
-        permeability_func, emissivity_func, tortuosity_func)
+
+    my_material = SolidProperties(enthalpy_func, heat_capacity_func,
+        thermal_conductivity_func, volume_fraction_func, permeability_func,
+        emissivity_func, tortuosity_func, decomposition_progress_func)
     wall_density = virgin_mass + solid_nodes[0]*0.0
 
     base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.0,
