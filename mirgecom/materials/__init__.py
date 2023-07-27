@@ -28,5 +28,5 @@ __doc__ = """
 .. automodule:: mirgecom.materials.initializer
 .. automodule:: mirgecom.materials.carbon_fiber
 .. automodule:: mirgecom.materials.tacot
-.. automodule:: mirgecom.materials.simple_material
+.. automodule:: mirgecom.materials.prescribed_material
 """
