@@ -73,6 +73,7 @@ def get_box_mesh(dim, a, b, n):
         nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
 
 
+# This is a comment
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_independent_volumes(actx_factory, order, visualize=False):
     """Check multi-volume machinery by setting up two independent volumes."""
