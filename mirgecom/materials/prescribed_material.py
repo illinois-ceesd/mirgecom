@@ -43,9 +43,9 @@ class SolidProperties(PorousWallProperties):
     .. automethod:: decomposition_progress
     """
 
-    def __init__(self, enthalpy_func, heat_capacity_func,thermal_conductivity_func,
-        volume_fraction_func, permeability_func, emissivity_func, tortuosity_func,
-        decomposition_progress_func):
+    def __init__(self, enthalpy_func, heat_capacity_func, thermal_conductivity_func,
+                 volume_fraction_func, permeability_func, emissivity_func,
+                 tortuosity_func, decomposition_progress_func):
 
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
