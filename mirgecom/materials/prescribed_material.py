@@ -1,4 +1,4 @@
-""":mod:`mirgecom.materials.simple_material` for user-defined materials."""
+""":mod:`mirgecom.materials.prescribed_material` for user-defined materials."""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -30,7 +30,7 @@ from mirgecom.wall_model import PorousWallProperties
 
 
 class SolidProperties(PorousWallProperties):
-    """Evaluate the properties of the solid state containing only fibers.
+    """Evaluate the properties of a user-defined material.
 
     .. automethod:: void_fraction
     .. automethod:: enthalpy
@@ -43,12 +43,10 @@ class SolidProperties(PorousWallProperties):
     .. automethod:: decomposition_progress
     """
 
-    def __init__(self, char_mass, virgin_mass, enthalpy_func, heat_capacity_func,
-                 thermal_conductivity_func, volume_fraction_func, permeability_func,
-                 emissivity_func, tortuosity_func):
+    def __init__(self, enthalpy_func, heat_capacity_func,thermal_conductivity_func,
+        volume_fraction_func, permeability_func, emissivity_func, tortuosity_func,
+        decomposition_progress_func):
 
-        self._char_mass = char_mass
-        self._virgin_mass = virgin_mass
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
         self._thermal_conductivity_func = thermal_conductivity_func
@@ -56,6 +54,7 @@ class SolidProperties(PorousWallProperties):
         self._permeability_func = permeability_func
         self._emissivity_func = emissivity_func
         self._tortuosity_func = tortuosity_func
+        self._decomposition_progress_func = decomposition_progress_func
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -106,4 +105,4 @@ class SolidProperties(PorousWallProperties):
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress rate $\tau$."""
-        return 1.0 - (self._virgin_mass - mass)/self._virgin_mass
+        return self._decomposition_progress_func(mass)
