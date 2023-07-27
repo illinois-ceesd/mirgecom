@@ -533,8 +533,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     dt = 4.0e-8
     pressure_scaling_factor = 0.1  # noqa N806
 
-    nviz = 5000
-    ngarbage = 10
+    nviz = 200
+    ngarbage = 50
     nrestart = 10000
     nhealth = 10
 
