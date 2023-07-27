@@ -674,7 +674,6 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
         species_diffusivity=np.zeros(nspecies,))
     gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
 
-    char_mass = 10.0
     virgin_mass = 10.0
 
     my_material = SolidProperties(enthalpy_func, heat_capacity_func,
@@ -875,7 +874,6 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
         species_diffusivity=np.zeros(nspecies,) + 0.003)
     gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
 
-    char_mass = 10.0
     virgin_mass = 10.0
 
     my_material = SolidProperties(enthalpy_func, heat_capacity_func,
