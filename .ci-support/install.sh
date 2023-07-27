@@ -2,6 +2,10 @@
 
 set -ex
 
+pwd
+
+git describe --long --all
+
 if [[ "$(uname)" = "Darwin" ]]; then
     PLATFORM=MacOSX
     brew update
@@ -38,5 +42,8 @@ rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
 
 MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+git describe --long --all
 pip install -r requirements.txt
+git describe --long --all
 python setup.py install
+git describe --long --all
