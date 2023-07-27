@@ -1118,6 +1118,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                                             fluid_state.temperature]),
                       t=current_t, t_final=t_final, istep=istep,
                       force_eval=True)
+
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
