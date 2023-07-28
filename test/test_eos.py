@@ -515,7 +515,6 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
 
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
-        abs_diff = inf_norm(pyro_r - can_r)
         for i, can in enumerate(can_r):
             min_r = np.abs(can)
             if min_r > 0:
