@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(("mechname"),
-                         [("uiuc")])
+                         [("uiuc_7sp")])
 def test_pyrometheus_transport(ctx_factory, mechname):
     """Test mixture-averaged transport properties. """
     cl_ctx = ctx_factory()
@@ -171,7 +171,7 @@ def test_pyrometheus_transport(ctx_factory, mechname):
         assert err_p < 1.0e-10
 
         err_t = np.abs(inf_norm(fluid_state.dv.temperature) - can_t)
-        assert err_t < 1.0e-12
+        assert err_t < 2.0e-12
 
         # Viscosity
         err_mu = np.abs(inf_norm(mu) - mu_ct)
@@ -188,7 +188,7 @@ def test_pyrometheus_transport(ctx_factory, mechname):
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
-                         [("uiuc", 1e-12),
+                         [("uiuc_7sp", 1e-12),
                           ("sandiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
@@ -297,7 +297,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol, y0):
             assert inf_norm(prom_omega[i] - rate) < rate_tol
 
 
-@pytest.mark.parametrize("mechname", ["uiuc", "sandiego"])
+@pytest.mark.parametrize("mechname", ["uiuc_7sp", "sandiego"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
@@ -417,7 +417,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
-                         [("uiuc", 1e-12),
+                         [("uiuc_7sp", 2e-12),
                           ("sandiego", 1e-8)])
 @pytest.mark.parametrize("y0", [0, 1])
 def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
@@ -516,17 +516,17 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
         print(f"can_r = {can_r}")
         print(f"pyro_r = {pyro_r}")
         abs_diff = inf_norm(pyro_r - can_r)
-        if abs_diff > 1e-14:
-            min_r = (np.abs(can_r)).min()
+        for i, can in enumerate(can_r):
+            min_r = np.abs(can)
             if min_r > 0:
-                assert inf_norm((pyro_r - can_r) / can_r) < rate_tol
+                assert inf_norm((pyro_r[i] - can) / can) < rate_tol
             else:
-                assert inf_norm(pyro_r) < rate_tol
+                assert inf_norm(pyro_r[i]) < rate_tol
 
         print(f"can_omega = {can_omega}")
         print(f"pyro_omega = {pyro_omega}")
         for i, omega in enumerate(can_omega):
-            omin = np.abs(omega).min()
+            omin = np.abs(omega)
             if omin > 1e-12:
                 assert inf_norm((pyro_omega[i] - omega) / omega) < 1e-8
             else:

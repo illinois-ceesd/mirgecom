@@ -2,7 +2,6 @@ description:
 generator: cti2yaml
 cantera-version: 2.6.0
 date: Sat, 24 Sep 2022 10:26:00 -0500
-input-files: [Davis2005.cti]
 
 units: {length: cm, quantity: mol, activation-energy: cal/mol}
 

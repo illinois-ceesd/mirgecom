@@ -1,13 +1,18 @@
-cantera-version: 2.5.1
-date: Thu, 02 Jun 2022 10:00:44 -0400
+description: Modified version of UIUC-XPACC mechanism + phenol species
+
+date: Fri 30 Sep 2022 09:43:22 AM CDT
 
 units: {length: cm, quantity: mol, activation-energy: cal/mol}
+
+elements:
+- symbol: X
+  atomic-weight: 12.0
 
 phases:
 - name: gas
   thermo: ideal-gas
-  elements: [O, H, C, N]
-  species: [C2H4, O2, CO2, CO, H2O, H2, N2]
+  elements: [O, H, C, N, X]
+  species: [C2H4, O2, CO2, CO, H2O, H2, N2, X2]
   kinetics: gas
   reactions: all
   transport: mixture-averaged
@@ -141,12 +146,29 @@ species:
     polarizability: 0.79
     rotational-relaxation: 280.0
   note: '000000'
+- name: X2
+  composition: {X: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [300.0, 825.0, 1300.0]
+    data:
+    - [0.7802579705103121, -0.007609981181733882, 3.354054055164417e-05, -6.163508003575292e-08, 4.1747041214556074e-11, -941.81913393634, 0.683010238]
+    - [-794.1579896074667, 3.0991687046792795, -0.004461237234774133, 2.8147843525704823e-06, -6.5771358774755e-10, 159238.71427957236, -3.20502331]
+  transport:
+    model: gas
+    geometry: linear
+    diameter: 3.6
+    well-depth: 200.0
+    polarizability: 1.6
+    rotational-relaxation: 5.0
+  note: '121286'
 
 reactions:
 - equation: C2H4 + O2 => 2 CO + 2 H2  # Reaction 1
-  rate-constant: {A: 1.0e+12, b: 0.0, Ea: 35500}
+  rate-constant: {A: 1.0e+10, b: 0.0, Ea: 36000}
   orders: {C2H4: 0.5, O2: 0.65}
 - equation: ' CO + 0.5 O2 <=> CO2'  # Reaction 2
-  rate-constant: {A: 1.03e+07, b: 0.7, Ea: 12000}
-- equation: ' H2 + 0.5 O2 <=> H2O'  # Reaction 3
-  rate-constant: {A: 2.81e+09, b: 0.0, Ea: 3.5e+04}
+  rate-constant: {A: 1.1e+07, b: 0.7, Ea: 11000}
+- equation: ' H2 + 0.5 O2 => H2O'  # Reaction 3
+  rate-constant: {A: 7.0e+08, b: 0.0, Ea: 12000.0}
+  orders: {H2: 0.75, O2: 0.5}
