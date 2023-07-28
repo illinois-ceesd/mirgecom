@@ -18,6 +18,10 @@ else
     fi
 fi
 
+pwd
+
+git describe --long --all
+
 MINIFORGE_INSTALL_DIR=.miniforge3
 MINIFORGE_INSTALL_SH=Miniforge3-$PLATFORM-x86_64.sh
 curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/$MINIFORGE_INSTALL_SH"
@@ -38,5 +42,8 @@ rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
 
 MINIFORGE_INSTALL_DIR=.miniforge3
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+git describe --long --all
 pip install -r requirements.txt
+git describe --long --all
 python setup.py install
+git describe --long --all
