@@ -101,9 +101,9 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None):
     a,b,n,periodic are tuples of dimension = dim
     converted if not in this format
 
-    bttf is a list of all dimensions in the problem
-    in both positive and negative directions
-    depends on value of dim
+    The resulting mesh has boundary tags
+    `"-i"` and `"+i"` for `i=1,...,dim`
+    corresponding to lower and upper faces normal to coordinate dimension `i`
     """
     if periodic is None:
         periodic = (False,)*dim
