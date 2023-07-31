@@ -12,7 +12,7 @@ git+https://github.com/pythological/kanren.git#egg=miniKanren
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 #--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
---editable git+https://github.com/illinois-ceesd/loopy.git@production-pilot#egg=loopy
+--editable git+https://github.com/illinois-ceesd/loopy.git@production#egg=loopy
 --editable git+https://github.com/inducer/dagrt.git#egg=dagrt
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git#egg=modepy
