@@ -1,15 +1,15 @@
 description: |-
   Approximation of air
 
-date: Fri 30 Sep 2022 09:43:22 AM CDT
+date: Mon 31 Jul 2023 07:41:15 AM CDT
 
 units: {length: cm, quantity: mol, activation-energy: cal/mol}
 
 phases:
 - name: gas
   thermo: ideal-gas
-  elements: [O, N]
-  species: [O2, N2]
+  elements: [O, C, N]
+  species: [O2, CO2, N2]
   kinetics: gas
   reactions: all
   transport: mixture-averaged
@@ -36,6 +36,24 @@ species:
     polarizability: 1.6
     rotational-relaxation: 3.8
   note: TPIS89
+- name: CO2
+  composition: {C: 1, O: 2}
+  thermo:
+    model: NASA7
+    temperature-ranges: [200.0, 1000.0, 3500.0]
+    data:
+    - [2.35677352, 8.98459677e-03, -7.12356269e-06, 2.45919022e-09, -1.43699548e-13,
+      -4.83719697e+04, 9.90105222]
+    - [3.85746029, 4.41437026e-03, -2.21481404e-06, 5.23490188e-10, -4.72084164e-14,
+      -4.8759166e+04, 2.27163806]
+  transport:
+    model: gas
+    geometry: linear
+    diameter: 3.763
+    well-depth: 244.0
+    polarizability: 2.65
+    rotational-relaxation: 2.1
+  note: L7/88
 - name: N2
   composition: {N: 2}
   thermo:
