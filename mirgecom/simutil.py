@@ -25,6 +25,7 @@ Mesh and element utilities
 .. autofunction:: geometric_mesh_partitioner
 .. autofunction:: distribute_mesh
 .. autofunction:: get_number_of_tetrahedron_nodes
+.. autofunction:: get_box_mesh
 
 Simulation support utilities
 ----------------------------
@@ -101,13 +102,34 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None):
     """
     Create a rectangular "box" like mesh with tagged boundary faces.
 
-    Ensure parameters needed for generate_regular_rect_mesh are satisfied
-    a,b,n,periodic are tuples of dimension = dim
-    converted if not in this format
-
     The resulting mesh has boundary tags
     `"-i"` and `"+i"` for `i=1,...,dim`
-    corresponding to lower and upper faces normal to coordinate dimension `i`
+    corresponding to lower and upper faces normal to coordinate dimension `i`.
+
+    Parameters
+    ----------
+    dim: int
+        The mesh topological dimension
+    a: float or tuple
+        The coordinates of the lower corner of the box. If scalar-valued, gets
+        promoted to a uniform tuple.
+    b: float or tuple
+        The coordinates of the upper corner of the box. If scalar-valued, gets
+        promoted to a uniform tuple.
+    n: int or tuple
+        The number of elements along a given dimension. If scalar-valued, gets
+        promoted to a uniform tuple.
+    t: str or None
+        The mesh type. See
+        :func:`meshmode.mesh.generation.generate_box_mesh` for details.
+    periodic: bool or tuple or None
+        Indicates whether the mesh is periodic in a given dimension. If
+        scalar-valued, gets promoted to a uniform tuple.
+
+    Returns
+    -------
+    :class:`meshmode.mesh.Mesh`
+        The generated box mesh.
     """
     if np.isscalar(a):
         a = (a,)*dim
