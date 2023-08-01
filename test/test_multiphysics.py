@@ -530,16 +530,16 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     base_solid_temp = 1.0
 
     fluid_boundaries = {
-        dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+0").domain_tag:
+        dd_vol_fluid.trace("-2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+1").domain_tag:
             IsothermalWallBoundary(wall_temperature=base_fluid_temp),
     }
 
     solid_boundaries = {
-        dd_vol_solid.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_solid.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_solid.trace("-0").domain_tag:
+        dd_vol_solid.trace("-2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol_solid.trace("+2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol_solid.trace("-1").domain_tag:
             DirichletDiffusionBoundary(base_solid_temp),
     }
 
