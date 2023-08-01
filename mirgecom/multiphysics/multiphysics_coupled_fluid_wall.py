@@ -701,7 +701,12 @@ def _state_inter_volume_trace_pairs(
     wall_to_fluid_tseed_tpairs = temperature_seed_pairs[wall_dd, fluid_dd]
 
     # exchange material densities. It is zero on the fluid side...
-    zeros = fluid_state.cv.mass*0.0
+    from pytools.obj_array import make_obj_array
+    ncomponents = len(wall_state.wv.material_densities)
+    if ncomponents == 1:
+        zeros = fluid_state.cv.mass*0.0
+    else:
+        zeros = make_obj_array([fluid_state.cv.mass*0.0 for i in range(ncomponents)])
     pairwise_dens = {(fluid_dd, wall_dd):
                      (zeros, wall_state.wv.material_densities)}
     material_densities_pairs = inter_volume_trace_pairs(
