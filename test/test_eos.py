@@ -69,8 +69,8 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize("mechname", ["uiuc_7sp", "sandiego", "uiuc_8sp_phenol"])
-@pytest.mark.parametrize("dim", [1,2,3])
-@pytest.mark.parametrize("order", [1,3,5])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 3, 5])
 def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
     """XXX."""
     cl_ctx = ctx_factory()
@@ -119,7 +119,6 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
 
         cantera_soln.TPX = tempin, pressin, x
         can_t, can_rho, can_y = cantera_soln.TDY
-        can_p = cantera_soln.P
 
         tin = can_t * ones
         rhoin = can_rho * ones
@@ -169,7 +168,6 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
 
         cantera_soln.TPX = tempin, pressin, x
         can_t, can_rho, can_y = cantera_soln.TDY
-        can_p = cantera_soln.P
 
         tin = can_t * ones
         rhoin = can_rho * ones
@@ -210,8 +208,8 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
 
 
 @pytest.mark.parametrize("mechname", ["sandiego"])
-@pytest.mark.parametrize("dim", [1,2,3])
-@pytest.mark.parametrize("order", [1,3,5])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 3, 5])
 def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
     """Test mixture-averaged transport properties. """
     cl_ctx = ctx_factory()
