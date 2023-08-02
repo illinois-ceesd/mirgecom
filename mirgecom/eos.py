@@ -764,7 +764,7 @@ class PyrometheusMixture(MixtureEOS):
     def get_enthalpy(self, temperature, species_mass_fractions):
         r"""Get the gas enthalpy from temperature, and species fractions (Y).
 
-        The gas internal energy $e$ is calculated from:
+        The enthalpy of the gas mixture $h$ is calculated from:
 
         .. math::
 
