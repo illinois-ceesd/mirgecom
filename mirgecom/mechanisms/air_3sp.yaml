@@ -11,7 +11,7 @@ phases:
   elements: [O, C, N]
   species: [O2, CO2, N2]
   kinetics: gas
-  reactions: all
+  reactions: none
   transport: mixture-averaged
   state:
     T: 300.0
