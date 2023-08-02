@@ -749,7 +749,7 @@ class PyrometheusMixture(MixtureEOS):
 
         .. math::
 
-            e = R_s T \sum{Y_\alpha h_\alpha}
+            e = R_s T \sum{Y_\alpha e_\alpha}
 
         Parameters
         ----------
@@ -759,6 +759,25 @@ class PyrometheusMixture(MixtureEOS):
             Object array of species mass fractions
         """
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
+            temperature, species_mass_fractions)
+
+    def get_enthalpy(self, temperature, species_mass_fractions):
+        r"""Get the gas enthalpy from temperature, and species fractions (Y).
+
+        The gas internal energy $e$ is calculated from:
+
+        .. math::
+
+            h = \sum{Y_\alpha h_\alpha}
+
+        Parameters
+        ----------
+        temperature: :class:`~meshmode.dof_array.DOFArray`
+            The fluid temperature
+        species_mass_fractions: numpy.ndarray
+            Object array of species mass fractions
+        """
+        return self._pyrometheus_mech.get_mixture_enthalpy_mass(
             temperature, species_mass_fractions)
 
     def get_species_molecular_weights(self):
