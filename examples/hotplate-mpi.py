@@ -35,7 +35,10 @@ from grudge.dof_desc import BoundaryDomainTag
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import get_sim_timestep
+from mirgecom.simutil import (
+    get_sim_timestep,
+    get_box_mesh
+)
 
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -66,17 +69,6 @@ class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
 
     pass
-
-
-# Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n, t=None):
-    dim_names = ["x", "y", "z"]
-    bttf = {}
-    for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
 @mpi_entry_point
@@ -144,12 +136,12 @@ def main(use_logmgr=True,
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
         n_refine = 2
-        npts_x = 6 * n_refine
-        npts_y = 4 * n_refine
-        npts_axis = (npts_x, npts_y)
+        nels_x = 5 * n_refine
+        nels_y = 3 * n_refine
+        nels_axis = (nels_x, nels_y)
         box_ll = (left_boundary_location, bottom_boundary_location)
         box_ur = (right_boundary_location, top_boundary_location)
-        generate_mesh = partial(_get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
+        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=nels_axis)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
