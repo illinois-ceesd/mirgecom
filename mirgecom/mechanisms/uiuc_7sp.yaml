@@ -144,15 +144,6 @@ species:
   note: '000000'
 
 reactions:
-#- equation: C2H4 + O2 => 2 CO + 2 H2  # Reaction 1
-#  rate-constant: {A: 1.0e+10, b: 0.0, Ea: 36000}
-#  orders: {C2H4: 0.5, O2: 0.65}
-#- equation: ' CO + 0.5 O2 <=> CO2'  # Reaction 2
-#  rate-constant: {A: 1.1e+07, b: 0.7, Ea: 11000}
-#- equation: ' H2 + 0.5 O2 => H2O'  # Reaction 3
-#  rate-constant: {A: 8.0e+08, b: 0.0, Ea: 12000.0}
-#  orders: {H2: 0.8, O2: 0.5}
-
 - equation: C2H4 + O2 => 2 CO + 2 H2  # Reaction 1
   rate-constant: {A: 1.0e+10, b: 0.0, Ea: 36000}
   orders: {C2H4: 0.5, O2: 0.65}
