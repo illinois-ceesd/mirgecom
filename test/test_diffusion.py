@@ -44,7 +44,7 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 import pytest
-
+from mirgecom.simutil import get_box_mesh
 import logging
 logger = logging.getLogger(__name__)
 
@@ -94,17 +94,6 @@ class HeatProblem(metaclass=ABCMeta):
         pass
 
 
-def get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
-        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
-
-
 # 1D: u(x,t) = exp(-kappa*t)*cos(x)
 # 2D: u(x,y,t) = exp(-2*kappa*t)*sin(x)*cos(y)
 # 3D: u(x,y,z,t) = exp(-3*kappa*t)*sin(x)*sin(y)*cos(z)
@@ -131,12 +120,12 @@ class DecayingTrig(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(0.)
 
@@ -177,15 +166,15 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             upper_grad_u = op.project(dcoll, "vol", upper_bdtag, exact_grad_u)
             normal = actx.thaw(dcoll.normal(upper_bdtag))
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         upper_u = op.project(dcoll, "vol", upper_bdtag, exact_u)
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(upper_u)
@@ -225,12 +214,12 @@ class OscillatingTrigVarDiff(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(0.)
 
@@ -263,12 +252,12 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         boundaries = {}
 
         for i in range(self.dim-1):
-            lower_bdtag = BoundaryDomainTag("-"+str(i))
-            upper_bdtag = BoundaryDomainTag("+"+str(i))
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.)
-        lower_bdtag = BoundaryDomainTag("-"+str(self.dim-1))
-        upper_bdtag = BoundaryDomainTag("+"+str(self.dim-1))
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(0.)
 
@@ -409,8 +398,8 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     kappa = kappa_lower * lower_mask + kappa_upper * upper_mask
 
     boundaries = {
-        BoundaryDomainTag("-0"): DirichletDiffusionBoundary(0.),
-        BoundaryDomainTag("+0"): DirichletDiffusionBoundary(1.),
+        BoundaryDomainTag("-1"): DirichletDiffusionBoundary(0.),
+        BoundaryDomainTag("+1"): DirichletDiffusionBoundary(1.),
     }
 
     flux = -kappa_lower*kappa_upper/(kappa_lower + kappa_upper)
