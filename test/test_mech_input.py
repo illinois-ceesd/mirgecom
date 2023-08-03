@@ -38,7 +38,7 @@ def test_yaml_mechanism_input_reader():
 
 def test_cti_reader():
     """Quick test of CTI-specific reader."""
-    test_cti = get_mechanism_cti("uiuc_xpacc")
+    test_cti = get_mechanism_cti("sanDiego")
     first_line = test_cti.partition("\n")[0].strip()
 
-    assert first_line == "# CH4_BFER mechanisme: CH4 + 1.5 O2  => CO +2H2O"
+    assert first_line == "# UCSD mechanism for hydrogen combustion"

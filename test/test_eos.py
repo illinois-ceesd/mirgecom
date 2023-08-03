@@ -170,7 +170,8 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
             assert err_diff < 1.0e-12
 
 
-@pytest.mark.parametrize("mechname", ["uiuc_7sp", "sandiego", "uiuc_8sp_phenol"])
+@pytest.mark.parametrize("mechname", ["air_3sp", "uiuc_7sp", "sandiego",
+                                      "uiuc_8sp_phenol", "uiuc_4sp_oxidation"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 3, 5])
 def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
