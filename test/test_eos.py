@@ -213,6 +213,8 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
+    # first check each species individually for a fixed temperature
+
     tempin = 600.0
     eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
     gas_model = GasModel(eos=eos, transport=transport_model)
@@ -224,9 +226,17 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
         can_t, can_rho, can_y = cantera_soln.TDY
 
         tin = can_t * ones
-        rhoin = can_rho * ones
         yin = can_y * ones
+        rhoin = can_rho * ones
 
+        # First, check density
+        mass = eos.get_density(pressin*ones, tempin*ones, yin)
+        rel_err_t = (inf_norm(mass) - can_rho)/can_rho
+        abs_err_t = (inf_norm(mass) - can_rho)
+        assert rel_err_t < 1.0e-14
+        assert abs_err_t < 1.0e-10
+
+        # then proceed to conserved variables
         cv = make_conserved(dim=2, mass=rhoin,
                             momentum=make_obj_array([zeros, zeros]),
                             energy=rhoin*gas_model.eos.get_internal_energy(tin, yin),
@@ -234,10 +244,19 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
 
         fluid_state = make_fluid_state(cv, gas_model, tin)
 
+        # check the state built
         rel_err_t = (inf_norm(fluid_state.dv.temperature) - can_t)/can_t
         abs_err_t = (inf_norm(fluid_state.dv.temperature) - can_t)
         assert rel_err_t < 1.0e-14
         assert abs_err_t < 1.0e-10
+
+        # heat capacity per mass unit
+        can_cv = cantera_soln.cv
+        heat_cap_cv = eos.heat_capacity_cv(cv, tin)
+        rel_err_cv = (inf_norm(heat_cap_cv) - np.abs(can_cv))/np.abs(can_cv)
+        abs_err_cv = (inf_norm(heat_cap_cv) - np.abs(can_cv))
+        assert rel_err_cv < 1.0e-12
+        assert abs_err_cv < 1.0e-6
 
         can_cp = cantera_soln.cp
         heat_cap_cp = eos.heat_capacity_cp(cv, tin)
@@ -246,6 +265,7 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
         assert rel_err_cp < 1.0e-12
         assert abs_err_cp < 1.0e-6
 
+        # internal energy and energy per mass unit
         can_e = cantera_soln.int_energy_mass
         int_energy = eos.get_internal_energy(tin, yin)
         rel_err_e = (inf_norm(int_energy) - np.abs(can_e))/np.abs(can_e)
@@ -259,6 +279,8 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
         abs_err_h = (inf_norm(enthalpy) - np.abs(can_h))
         assert rel_err_h < 1.0e-12
         assert abs_err_h < 1.0e-6
+
+    # ~~~ Now check an actual mixture at different temperatures
 
     x = 1.0/nspecies*np.ones(nspecies,)
 
@@ -276,6 +298,12 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
         rhoin = can_rho * ones
         yin = can_y * ones
 
+        mass = eos.get_density(pressin*ones, tempin*ones, yin)
+        rel_err_t = (inf_norm(mass) - can_rho)/can_rho
+        abs_err_t = (inf_norm(mass) - can_rho)
+        assert rel_err_t < 1.0e-14
+        assert abs_err_t < 1.0e-10
+
         cv = make_conserved(dim=2, mass=rhoin,
                             momentum=make_obj_array([zeros, zeros]),
                             energy=rhoin*gas_model.eos.get_internal_energy(tin, yin),
@@ -287,6 +315,13 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, order):
         abs_err_t = (inf_norm(fluid_state.dv.temperature) - can_t)
         assert rel_err_t < 1.0e-14
         assert abs_err_t < 1.0e-10
+
+        can_cv = cantera_soln.cv
+        heat_cap_cv = eos.heat_capacity_cv(cv, tin)
+        rel_err_cv = (inf_norm(heat_cap_cv) - np.abs(can_cv))/np.abs(can_cv)
+        abs_err_cv = (inf_norm(heat_cap_cv) - np.abs(can_cv))
+        assert rel_err_cv < 1.0e-12
+        assert abs_err_cv < 1.0e-6
 
         can_cp = cantera_soln.cp
         heat_cap_cp = eos.heat_capacity_cp(cv, tin)
