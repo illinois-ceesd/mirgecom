@@ -112,7 +112,7 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
     from grudge.array_context import (MPIPyOpenCLArrayContext,
                                       MPIPytatoArrayContext)
 
-    print(actx_class, actx_class_is_numpy(actx_class))
+    # Special handling for NumpyArrayContext since it needs no CL context
     if actx_class_is_numpy(actx_class):
         if comm:
             return actx_class(mpi_communicator=comm)
