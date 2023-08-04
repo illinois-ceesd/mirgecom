@@ -8,7 +8,9 @@ Inviscid Flux Calculation
 .. autofunction:: inviscid_facial_flux_hll
 .. autofunction:: inviscid_flux_on_element_boundary
 .. autofunction:: entropy_conserving_flux_chandrashekar
-.. autofunction:: entropy_stable_inviscid_flux_rusanov
+.. autofunction:: entropy_conserving_flux_renac
+.. autofunction:: entropy_stable_inviscid_facial_flux
+.. autofunction:: entropy_stable_inviscid_facial_flux_rusanov
 
 Inviscid Time Step Computation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -400,13 +402,11 @@ def get_inviscid_cfl(dcoll, state, dt):
 
 
 def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
-    """Compute the entropy conservative fluxes from states *cv_ll* and *cv_rr*.
+    """Compute the entropy conservative fluxes from states *state_ll* and *state_rr*.
 
     This routine implements the two-point volume flux based on the entropy
-    conserving and kinetic energy preserving two-point flux in:
-    - Chandrashekar (2013) Kinetic Energy Preserving and Entropy Stable Finite
-    Volume Schemes for Compressible Euler and Navier-Stokes Equations
-    [DOI](https://doi.org/10.4208/cicp.170712.010313a)
+    conserving and kinetic energy preserving two-point flux in
+    equations (4.12 - 4.14) of [Chandrashekar_2013]_.
 
     Returns
     -------
@@ -431,13 +431,11 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     rho_ll = state_ll.mass_density
     u_ll = state_ll.velocity
     p_ll = state_ll.pressure
-    # rho_species_ll = state_ll.species_mass_density
     y_ll = state_ll.species_mass_fractions
 
     rho_rr = state_rr.mass_density
     u_rr = state_rr.velocity
     p_rr = state_rr.pressure
-    # rho_species_rr = state_rr.species_mass_density
     y_rr = state_rr.species_mass_fractions
 
     beta_ll = 0.5 * rho_ll / p_ll
@@ -449,9 +447,6 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     rho_mean = ln_mean(rho_ll,  rho_rr)
     y_mean = 0.5 * (y_ll + y_rr)
     rho_species_mean = rho_mean * y_mean
-    # rho_species_mean = make_obj_array(
-    #    [ln_mean(y_ll_i, y_rr_i)
-    #     for y_ll_i, y_rr_i in zip(rho_species_ll, rho_species_rr)])
 
     beta_mean = ln_mean(beta_ll, beta_rr)
     beta_avg = 0.5 * (beta_ll + beta_rr)
@@ -479,6 +474,10 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
 def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
     """Compute the entropy conservative fluxes from states *cv_ll* and *cv_rr*.
 
+    This routine implements the two-point volume flux based on the entropy
+    conserving and kinetic energy preserving two-point flux in
+    equation (24) of [Renac_2021]_.
+
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
@@ -495,8 +494,6 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
     gamma_rr = gas_model.eos.gamma(state_rr.cv, state_rr.temperature)
     theta_ll = 1.0/t_ll
     theta_rr = 1.0/t_rr
-    # theta_avg = 0.5*(theta_ll + theta_rr)
-    # p_avg = 0.5*(p_ll + p_rr)
     t_avg = 0.5*(t_ll + t_rr)
 
     pot_ll = p_ll * theta_ll
@@ -511,7 +508,6 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
             (y - x) / actx.np.log(y / x)
         )
 
-    # pot_mean = ln_mean(pot_ll, pot_rr)
     theta_mean = ln_mean(theta_ll, theta_rr)
     t_mean = 1.0/theta_mean
     pec_avg = pot_avg * t_avg
@@ -521,36 +517,20 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
     rho_ll = state_ll.mass_density
     u_ll = state_ll.velocity
     p_ll = state_ll.pressure
-    # rho_species_ll = state_ll.species_mass_density
     y_ll = state_ll.species_mass_fractions
 
     rho_rr = state_rr.mass_density
     u_rr = state_rr.velocity
     p_rr = state_rr.pressure
-    # rho_species_rr = state_rr.species_mass_density
     y_rr = state_rr.species_mass_fractions
 
-    # beta_ll = 0.5 * rho_ll / p_ll
-    # beta_rr = 0.5 * rho_rr / p_rr
-    # specific_kin_ll = 0.5 * np.dot(u_ll, u_ll)
-    # specific_kin_rr = 0.5 * np.dot(u_rr, u_rr)
     kin_comb = 0.5 * np.dot(u_ll, u_rr)
 
-    # rho_avg = 0.5 * (rho_ll + rho_rr)
     rho_mean = ln_mean(rho_ll,  rho_rr)
     y_avg = 0.5 * (y_ll + y_rr)
     species_mass_mean = rho_mean * y_avg
 
-    # species_mass_mean = make_obj_array(
-    #    [ln_mean(y_ll_i, y_rr_i)
-    #     for y_ll_i, y_rr_i in zip(rho_species_ll, rho_species_rr)])
-
-    # beta_mean = ln_mean(beta_ll, beta_rr)
-    # beta_avg = 0.5 * (beta_ll + beta_rr)
-
     u_avg = 0.5 * (u_ll + u_rr)
-    # p_mean = 0.5 * rho_avg / beta_avg
-    # velocity_square_avg = specific_kin_ll + specific_kin_rr
 
     mass_flux = rho_mean * u_avg
     momentum_flux = outer(mass_flux, u_avg) + np.eye(dim) * pec_avg
@@ -563,12 +543,6 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
     ener_term = (heat_cap_cv_es_mix * t_mean + kin_comb) * mass_flux
     energy_flux = ener_term + pec_avg * u_avg
 
-    # energy_flux = (
-    #    mass_flux * 0.5 * (
-    #        1/(gamma_avg - 1)/beta_mean - velocity_square_avg)
-    #    + np.dot(momentum_flux, u_avg)
-    # )
-
     species_mass_flux = species_mass_mean.reshape(-1, 1) * u_avg
 
     return ConservedVars(mass=mass_flux,
@@ -577,15 +551,17 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
                          species_mass=species_mass_flux)
 
 
-def entropy_stable_inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs):
-    r"""Return the entropy stable inviscid numerical flux.
+def entropy_stable_inviscid_facial_flux(state_pair, gas_model, normal,
+                                        entropy_conserving_flux_func=None,
+                                        alpha=None):
+    r"""Return the entropy stable inviscid numerical flux across a face.
 
     This facial flux routine is "entropy stable" in the sense that
     it computes the flux average component of the interface fluxes
     using an entropy conservative two-point flux
     (e.g. :func:`entropy_conserving_flux_chandrashekar`). Additional
-    dissipation is imposed by penalizing the "jump" of the state across
-    interfaces.
+    dissipation is optionally imposed by penalizing the "jump" of the state across
+    interfaces with strength *alpha*.
 
     Parameters
     ----------
@@ -593,35 +569,58 @@ def entropy_stable_inviscid_flux_rusanov(state_pair, gas_model, normal, **kwargs
         Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
         which the flux calculation is to be performed
 
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    normal: numpy.ndarray
+
+        The element interface normals
+
+    entropy_conserving_flux_func:
+
+        Callable function returning the entropy-conserving flux function to
+        use.  If unspecified, an appropriate flux function will be chosen
+        depending on the type of fluid state (e.g. mixture vs. single gas).
+
+    alpha:
+
+        Strength of the dissipation term. This can be a fixed single scalar,
+        or a :class:`DOFArray`.  For example, a Rusanov flux can be constructed
+        by passing the max wavespeed as alpha.
+
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
         A CV object containing the scalar numerical fluxes at the input faces.
     """
-    from mirgecom.inviscid import entropy_conserving_flux_chandrashekar
+    if entropy_conserving_flux_func is None:
+        entropy_conserving_flux_func = \
+            (entropy_conserving_flux_renac if state_pair.int.is_mixture
+             else entropy_conserving_flux_chandrashekar)
 
-    actx = state_pair.int.array_context
-    flux = entropy_conserving_flux_chandrashekar(gas_model,
-                                                 state_pair.int,
-                                                 state_pair.ext)
+    flux = entropy_conserving_flux_func(gas_model,
+                                        state_pair.int,
+                                        state_pair.ext)
 
-    # This calculates the local maximum eigenvalue of the flux Jacobian
-    # for a single component gas, i.e. the element-local max wavespeed |v| + c.
-    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
-    dissipation = -0.5*lam*outer(state_pair.ext.cv - state_pair.int.cv, normal)
+    if alpha is not None:
+        flux = flux - 0.5*alpha*outer(state_pair.ext.cv - state_pair.int.cv, normal)
 
-    return (flux + dissipation) @ normal
+    return flux @ normal
 
 
-def entropy_stable_inviscid_flux_renac(state_pair, gas_model, normal, **kwargs):
+def entropy_stable_inviscid_facial_flux_rusanov(state_pair, gas_model, normal,
+                                                entropy_conserving_flux_func=None,
+                                                **kwargs):
     r"""Return the entropy stable inviscid numerical flux.
 
     This facial flux routine is "entropy stable" in the sense that
     it computes the flux average component of the interface fluxes
     using an entropy conservative two-point flux
-    (e.g. :func:`entropy_conserving_flux_chandrashekar`). Additional
+    (e.g. :func:`entropy_conserving_flux_chandrashekar`). Rusanov
     dissipation is imposed by penalizing the "jump" of the state across
-    interfaces.
+    interfaces with the max wavespeed between the two (+/-) facial states.
 
     Parameters
     ----------
@@ -629,21 +628,32 @@ def entropy_stable_inviscid_flux_renac(state_pair, gas_model, normal, **kwargs):
         Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
         which the flux calculation is to be performed
 
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    normal: numpy.ndarray
+
+        The element interface normals
+
+    entropy_conserving_flux_func:
+
+        Callable function returning the entropy-conserving flux function to
+        use.  If unspecified, an appropriate flux function will be chosen
+        depending on the type of fluid state (e.g. mixture vs. single gas).
+
     Returns
     -------
     :class:`~mirgecom.fluid.ConservedVars`
         A CV object containing the scalar numerical fluxes at the input faces.
     """
-    from mirgecom.inviscid import entropy_conserving_flux_renac
-
-    actx = state_pair.int.array_context
-    flux = entropy_conserving_flux_renac(gas_model,
-                                         state_pair.int,
-                                         state_pair.ext)
-
     # This calculates the local maximum eigenvalue of the flux Jacobian
     # for a single component gas, i.e. the element-local max wavespeed |v| + c.
-    lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
-    dissipation = -0.5*lam*outer(state_pair.ext.cv - state_pair.int.cv, normal)
+    actx = state_pair.int.array_context
+    alpha = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
 
-    return (flux + dissipation) @ normal
+    return entropy_stable_inviscid_facial_flux(
+        state_pair=state_pair, gas_model=gas_model, normal=normal,
+        entropy_conserving_flux_func=entropy_conserving_flux_func,
+        alpha=alpha)
