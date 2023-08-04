@@ -117,7 +117,7 @@ jobs:
           run: |
             . .ci-support/install.sh
 
-        - name: Test lazy accuracy
+        - name: Test lazy/numpy accuracy to eager
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
@@ -126,15 +126,6 @@ jobs:
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
             # && export POCL_DEBUG=cuda
             scripts/run-integrated-tests.sh --lazy-accuracy
-        - name: Test numpy accuracy
-          run: |
-            MINIFORGE_INSTALL_DIR=.miniforge3
-            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            export XDG_CACHE_HOME=/tmp
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
-            set -x
-            python -m mpi4py examples/pulse-mpi.py --casename pulse-numpy --numpy
-            python bin/mirgecompare.py --tolerance 1e-12 pulse-eager-*.vtu pulse-numpy-*.vtu
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
