@@ -4,6 +4,7 @@
 .. autofunction:: actx_class_is_lazy
 .. autofunction:: actx_class_is_eager
 .. autofunction:: actx_class_is_profiling
+.. autofunction:: actx_class_is_numpy
 .. autofunction:: initialize_actx
 """
 
@@ -43,10 +44,26 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
 
 
 def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
-                              profiling: bool) -> Type[ArrayContext]:
+                        profiling: bool, numpy: bool = False) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
+
+    if numpy:
+        if profiling:
+            raise ValueError("Can't specify both numpy and profiling")
+        if lazy:
+            raise ValueError("Can't specify both numpy and lazy")
+
+        from warnings import warn
+        warn("The NumpyArrayContext is still under development")
+
+        if distributed:
+            from grudge.array_context import MPINumpyArrayContext
+            return MPINumpyArrayContext
+        else:
+            from grudge.array_context import NumpyArrayContext
+            return NumpyArrayContext
 
     if profiling:
         from mirgecom.profiling import PyOpenCLProfilingArrayContext
@@ -76,12 +93,31 @@ def actx_class_is_profiling(actx_class: Type[ArrayContext]) -> bool:
     return issubclass(actx_class, PyOpenCLProfilingArrayContext)
 
 
+def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is numpy-based."""
+    try:
+        from grudge.array_context import NumpyArrayContext
+        if issubclass(actx_class, NumpyArrayContext):
+            return True
+        else:
+            return False
+    except ImportError:
+        return False
+
+
 def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
         -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
     from grudge.array_context import (MPIPyOpenCLArrayContext,
                                       MPIPytatoArrayContext)
+
+    print(actx_class, actx_class_is_numpy(actx_class))
+    if actx_class_is_numpy(actx_class):
+        if comm:
+            return actx_class(mpi_communicator=comm)
+        else:
+            return actx_class()
 
     cl_ctx = cl.create_some_context()
     if actx_class_is_profiling(actx_class):

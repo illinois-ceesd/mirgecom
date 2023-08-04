@@ -92,10 +92,11 @@ def initialize_logmgr(enable_logmgr: bool,
 
 def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> None:
     """Add information about the OpenCL device to the log."""
-    dev = queue.device
-    logmgr.set_constant("cl_device_name", str(dev))
-    logmgr.set_constant("cl_device_version", dev.version)
-    logmgr.set_constant("cl_platform_version", dev.platform.version)
+    if queue:
+        dev = queue.device
+        logmgr.set_constant("cl_device_name", str(dev))
+        logmgr.set_constant("cl_device_version", dev.version)
+        logmgr.set_constant("cl_platform_version", dev.platform.version)
 
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
@@ -110,7 +111,7 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa:
 def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue) \
         -> None:
     """Add the OpenCL device memory usage to the log."""
-    if not (queue.device.type & cl.device_type.GPU):
+    if not queue or not (queue.device.type & cl.device_type.GPU):
         return
     logmgr.add_quantity(DeviceMemoryUsage())
 
