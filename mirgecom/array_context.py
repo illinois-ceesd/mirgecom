@@ -44,7 +44,7 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
 
 
 def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
-                        profiling: bool, numpy: bool = False) -> Type[ArrayContext]:
+                        profiling: bool, numpy: bool) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
