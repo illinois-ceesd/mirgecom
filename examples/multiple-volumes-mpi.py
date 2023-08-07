@@ -375,23 +375,11 @@ def main(actx_class, use_logmgr=True,
 
 
 if __name__ == "__main__":
+    from mirgecom.simutil import add_general_args
     import argparse
     casename = "multiple-volumes"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
-    parser.add_argument("--overintegration", action="store_true",
-        help="use overintegration in the RHS computations")
-    parser.add_argument("--lazy", action="store_true",
-        help="switch to a lazy computation mode")
-    parser.add_argument("--profiling", action="store_true",
-        help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
-    parser.add_argument("--leap", action="store_true",
-        help="use leap timestepper")
-    parser.add_argument("--numpy", action="store_true",
-        help="use numpy-based eager actx.")
-    parser.add_argument("--restart_file", help="root name of restart file")
-    parser.add_argument("--casename", help="casename to use for i/o")
+    add_general_args(parser)
     args = parser.parse_args()
 
     from mirgecom.array_context import get_reasonable_array_context_class
