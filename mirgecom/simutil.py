@@ -1184,6 +1184,7 @@ def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
 def add_general_args(parser: argparse.ArgumentParser, *,
                      leap: bool = True, overintegration: bool = True,
                      restart_file: bool = True) -> None:
+    """Add common driver arguments to an :class:`argparse.ArgumentParser`."""
     # keep these sorted by argument name
     parser.add_argument("--casename", help="casename to use for i/o")
     parser.add_argument("--lazy", action="store_true",
