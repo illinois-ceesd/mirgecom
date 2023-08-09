@@ -712,18 +712,17 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
-    lazy = args.lazy
-    if args.profiling:
-        if lazy:
-            raise ValueError("Can't use lazy and profiling together.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=lazy,
+    actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=True,
-                                                    profiling=args.profiling)
+                                                    profiling=args.profiling,
+                                                    numpy=args.numpy)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
