@@ -16,7 +16,7 @@ export PRODUCTION_BRANCH="production-numpy"   # The base production branch to be
 # "fork/repo@branch". The defaults are provided below as an example. Provide custom
 # production drivers in this variable:
 #
-# export PRODUCTION_DRIVERS=""
+export PRODUCTION_DRIVERS="illinois-ceesd/drivers_y3-prediction@add-numpy-ctx-support"
 #
 # Example:
 # PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
