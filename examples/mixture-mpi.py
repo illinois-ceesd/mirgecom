@@ -450,6 +450,7 @@ if __name__ == "__main__":
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
+
     from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
         if not args.lazy and not args.numpy:
