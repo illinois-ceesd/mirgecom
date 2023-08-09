@@ -239,18 +239,13 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
 
 
 if __name__ == "__main__":
+    from mirgecom.simutil import add_general_args
+
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     import argparse
     parser = argparse.ArgumentParser(description="Wave (MPI version)")
-    parser.add_argument("--profiling", action="store_true",
-        help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true",
-        help="enable logging")
-    parser.add_argument("--lazy", action="store_true",
-        help="switch to a lazy computation mode")
-    parser.add_argument("--numpy", action="store_true",
-        help="use numpy-based eager actx.")
+    add_general_args(parser, leap=False, overintegration=False, restart_file=False)
     args = parser.parse_args()
 
     from mirgecom.array_context import get_reasonable_array_context_class
