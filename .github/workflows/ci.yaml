@@ -179,7 +179,7 @@ jobs:
             cd ..
             source emirge/config/activate_env.sh
             cd mirgecom/examples
-            python -m mpi4py ./pulse-mpi.py
+            python -m mpi4py ./pulse.py
 
     production:
         name: Production testing
