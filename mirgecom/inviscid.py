@@ -587,8 +587,8 @@ def entropy_stable_inviscid_facial_flux(state_pair, gas_model, normal,
     alpha:
 
         Strength of the dissipation term. This can be a fixed single scalar,
-        or a :class:`DOFArray`.  For example, a Rusanov flux can be constructed
-        by passing the max wavespeed as alpha.
+        or a :class:`~meshmode.dof_array.DOFArray`.  For example, a Rusanov flux can
+        be constructed by passing the max wavespeed as alpha.
 
     Returns
     -------
