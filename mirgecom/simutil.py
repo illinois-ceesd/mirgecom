@@ -93,18 +93,21 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     from mpi4py.MPI import Comm
 
 
-class SimluationConfigurationError(RuntimeError):
-    """Simulation physics configuration or option parameters error."""
+class SimulationConfigurationError(RuntimeError):
+    """Simulation physics configuration or parameters error."""
+
     pass
 
 
 class SimulationRuntimeError(RuntimeError):
     """General simulation runtime error."""
+
     pass
 
 
 class ApplicationOptionsError(RuntimeError):
     """Application command-line options error."""
+
     pass
 
 

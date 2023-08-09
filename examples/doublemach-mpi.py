@@ -452,10 +452,8 @@ if __name__ == "__main__":
         if not args.overintegration:
             warn("ESDG requires overintegration, enabling --overintegration.")
 
-    lazy = args.lazy or args.esdg
-    if args.profiling:
-        if lazy:
-            raise ValueError("Can't use lazy and profiling together.")
+    if args.profiling and args.lazy:
+        raise ApplicationOptionsError("Can't use lazy and profiling together.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=args.lazy, distributed=True,
