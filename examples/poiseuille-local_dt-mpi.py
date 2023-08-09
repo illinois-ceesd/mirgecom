@@ -475,10 +475,10 @@ if __name__ == "__main__":
         help="use leap timestepper")
     parser.add_argument("--esdg", action="store_true",
         help="use flux-differencing/entropy stable DG for inviscid computations.")
-    parser.add_argument("--restart_file", help="root name of restart file")
-    parser.add_argument("--casename", help="casename to use for i/o")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
+    parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
     from warnings import warn
