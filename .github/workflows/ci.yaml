@@ -117,20 +117,12 @@ jobs:
           run: |
             . .ci-support/install.sh
 
-        - name: Test lazy/numpy accuracy to eager
-          run: |
-            MINIFORGE_INSTALL_DIR=.miniforge3
-            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            mamba install vtk  # needed for the accuracy comparison
-            export XDG_CACHE_HOME=/tmp
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
-            # && export POCL_DEBUG=cuda
-            scripts/run-integrated-tests.sh --lazy-accuracy
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
+            mamba install vtk  # needed for the accuracy comparison
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
             # && export POCL_DEBUG=cuda
             scripts/run-integrated-tests.sh --examples

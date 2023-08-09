@@ -1,6 +1,6 @@
-"""Demonstrate wave serial example."""
+"""Demonstrate wave MPI example."""
 
-__copyright__ = "Copyright (C) 2020 University of Illinos Board of Trustees"
+__copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,11 +21,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import logging
 
 import grudge.op as op
 import numpy as np
+import numpy.linalg as la  # noqa
 from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from pytools.obj_array import flat_obj_array
 
 from mirgecom.discretization import create_discretization_collection
@@ -34,6 +37,7 @@ from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage,
                                          logmgr_add_mempool_usage)
+from mirgecom.mpi import mpi_entry_point
 from mirgecom.utils import force_evaluation
 from mirgecom.wave import wave_operator
 
@@ -57,43 +61,100 @@ def bump(actx, nodes, t=0):
             / source_width**2))
 
 
-def main(actx_class, use_logmgr: bool = False) -> None:
+@mpi_entry_point
+def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
+         restart_step=None, use_logmgr: bool = False) -> None:
     """Drive the example."""
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    num_parts = comm.Get_size()
+
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave.sqlite", mode="wu")
+        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, None)
+    actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     alloc = getattr(actx, "allocator", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
-    dim = 2
-    nel_1d = 16
-    from meshmode.mesh.generation import generate_regular_rect_mesh
+    if restart_step is None:
 
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,)*dim,
-        b=(0.5,)*dim,
-        nelements_per_axis=(nel_1d,)*dim)
+        from meshmode.distributed import (MPIMeshDistributor,
+                                          get_partition_by_pymetis)
+        mesh_dist = MPIMeshDistributor(comm)
+
+        dim = 2
+        nel_1d = 16
+
+        if mesh_dist.is_mananger_rank():
+            from meshmode.mesh.generation import generate_regular_rect_mesh
+            mesh = generate_regular_rect_mesh(
+                a=(-0.5,)*dim, b=(0.5,)*dim,
+                nelements_per_axis=(nel_1d,)*dim)
+
+            print("%d elements" % mesh.nelements)
+            part_per_element = get_partition_by_pymetis(mesh, num_parts)
+            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
+
+            del mesh
+
+        else:
+            local_mesh = mesh_dist.receive_mesh_part()
+
+        fields = None
+
+    else:
+        from mirgecom.restart import read_restart_data
+        restart_data = read_restart_data(
+            actx, snapshot_pattern.format(step=restart_step, rank=rank)
+        )
+        local_mesh = restart_data["local_mesh"]
+        nel_1d = restart_data["nel_1d"]
+        assert comm.Get_size() == restart_data["num_parts"]
 
     order = 3
 
-    dcoll = create_discretization_collection(actx, mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     current_cfl = 0.485
     wave_speed = 1.0
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
+
     dt = actx.to_numpy(current_cfl
-                       * op.nodal_min(dcoll, "vol",
-                                    nodal_dt))[()]  # type: ignore[index]
+                       * op.nodal_min(dcoll,
+                                      "vol", nodal_dt))[()]  # type: ignore[index]
 
-    print("%d elements" % mesh.nelements)
+    t_final = 1
 
-    fields = flat_obj_array(bump(actx, nodes),
-                            [dcoll.zeros(actx) for i in range(dim)])
+    if restart_step is None:
+        t = 0
+        istep = 0
+
+        fields = flat_obj_array(
+            bump(actx, nodes),
+            [dcoll.zeros(actx) for i in range(dim)]
+            )
+
+    else:
+        t = restart_data["t"]
+        istep = restart_step
+        assert istep == restart_step
+        restart_fields = restart_data["fields"]
+        old_order = restart_data["order"]
+        if old_order != order:
+            old_dcoll = create_discretization_collection(
+                actx, local_mesh, order=old_order)
+            from meshmode.discretization.connection import \
+                make_same_mesh_connection
+            connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
+                                                   old_dcoll.discr_from_dd("vol"))
+            fields = connection(restart_fields)
+        else:
+            fields = restart_fields
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -107,6 +168,13 @@ def main(actx_class, use_logmgr: bool = False) -> None:
         except KeyError:
             pass
 
+        try:
+            logmgr.add_watches(
+                ["memory_usage_mempool_managed.max",
+                 "memory_usage_mempool_active.max"])
+        except KeyError:
+            pass
+
         if use_profiling:
             logmgr.add_watches(["multiply_time.max"])
 
@@ -117,31 +185,44 @@ def main(actx_class, use_logmgr: bool = False) -> None:
 
     def rhs(t, w):
         return wave_operator(dcoll, c=wave_speed, w=w)
-
-    compiled_rhs = actx.compile(rhs)
     fields = force_evaluation(actx, fields)
+    compiled_rhs = actx.compile(rhs)
 
-    t = 0
-    t_final = 1
-    istep = 0
     while t < t_final:
         if logmgr:
             logmgr.tick_before()
 
-        fields = rk4_step(fields, t, dt, compiled_rhs)
-        fields = force_evaluation(actx, fields)
+        # restart must happen at beginning of step
+        if istep % 100 == 0 and (
+                # Do not overwrite the restart file that we just read.
+                istep != restart_step):
+            from mirgecom.restart import write_restart_file
+            write_restart_file(
+                actx, restart_data={
+                    "local_mesh": local_mesh,
+                    "order": order,
+                    "fields": fields,
+                    "t": t,
+                    "step": istep,
+                    "nel_1d": nel_1d,
+                    "num_parts": num_parts},
+                filename=snapshot_pattern.format(step=istep, rank=rank),
+                comm=comm
+            )
 
         if istep % 10 == 0:
-            if use_profiling:
-                from mirgecom.profiling import PyOpenCLProfilingArrayContext
-                assert isinstance(actx, PyOpenCLProfilingArrayContext)
-                print(actx.tabulate_profiling_data())
             print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
-            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
-                    [
-                        ("u", fields[0]),
-                        ("v", fields[1:]),
-                        ], overwrite=True)
+            vis.write_parallel_vtk_file(
+                comm,
+                "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
+                [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                ], overwrite=True
+            )
+
+        fields = rk4_step(fields, t, dt, compiled_rhs)
+        fields = force_evaluation(actx, fields)
 
         t += dt
         istep += 1
@@ -153,17 +234,23 @@ def main(actx_class, use_logmgr: bool = False) -> None:
     if logmgr:
         logmgr.close()
 
+    final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
+    assert np.abs(final_soln - 0.04409852463947439) < 1e-14  # type: ignore[operator]
+
 
 if __name__ == "__main__":
     from mirgecom.simutil import add_general_args
+
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+
     import argparse
-    parser = argparse.ArgumentParser(description="Wave (non-MPI version)")
+    parser = argparse.ArgumentParser(description="Wave (MPI version)")
     add_general_args(parser, leap=False, overintegration=False, restart_file=False)
     args = parser.parse_args()
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
-                                                    distributed=False,
+                                                    distributed=True,
                                                     profiling=args.profiling,
                                                     numpy=args.numpy)
 

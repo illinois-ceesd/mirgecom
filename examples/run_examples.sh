@@ -1,18 +1,15 @@
 #!/bin/bash
 
-# set -e
+set -ex
 set -o nounset
 
 rm -f *.vtu *.pvtu
 
 origin=$(pwd)
 examples_dir=${1-$origin}
-declare -i numfail=0
-declare -i numsuccess=0
+
 date
 echo "*** Running examples in $examples_dir ..."
-failed_examples=""
-succeeded_examples=""
 
 if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
     . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
@@ -21,72 +18,38 @@ fi
 mpi_exec="${MIRGE_MPI_EXEC}"
 mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
 
-examples=""
-for example in $examples_dir/*.py
-do
-    example_file=$(basename $example)
-    examples="$examples $example_file"
-done
-
 cd $examples_dir
 
-for example in $examples
+export OMPI_ALLOW_RUN_AS_ROOT=1
+export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
+
+for example in *.py
 do
+    if [[ $example == "wave-nompi.py" ]]; then
+        echo "Skipping $example"
+        continue
+    fi
+
     date
     printf "***\n***\n"
-    if [[ "$example" == *"-mpi-lazy.py" ]]
-    then
-        echo "*** Running parallel lazy example (2 ranks): $example"
-        set -x
-        ${mpi_exec} -n 2 $mpi_launcher python -u -O -m mpi4py ${example} --lazy
-        example_return_code=$?
-        set +x
-    elif [[ "$example" == *"-mpi.py" ]]; then
-        echo "*** Running parallel example (2 ranks): $example"
-        set -x
-        ${mpi_exec} -n 2 $mpi_launcher python -u -O -m mpi4py ${example}
-        example_return_code=$?
-        set +x
-    elif [[ "$example" == *"-lazy.py" ]]; then
-        echo "*** Running serial lazy example: $example"
-        set -x
-        python -u -O ${example} --lazy
-        example_return_code=$?
-        set +x
-    else
-        echo "*** Running serial example: $example"
-        set -x
-        python -u -O ${example}
-        example_return_code=$?
-        set +x
-    fi
+
+    ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${example}-eager
+    ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${example}-lazy --lazy
+    ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${example}-numpy --numpy
+
+    # Note: not all examples produce vtu files, for these the accuracy test won't run.
+    for vizfile in $(ls ${example}-eager-*.vtu); do
+        lazy_vizfile=$(echo ${vizfile/eager/lazy})
+        python ${examples_dir}/../bin/mirgecompare.py --tolerance 1e-04 ${vizfile} ${lazy_vizfile}
+        numpy_vizfile=$(echo ${vizfile/eager/numpy})
+        python ${examples_dir}/../bin/mirgecompare.py --tolerance 1e-05 ${vizfile} ${numpy_vizfile}
+    done
+
     date
     printf "***\n"
-    if [[ $example_return_code -eq 0 ]]
-    then
-        ((numsuccess=numsuccess+1))
-        echo "*** Example $example succeeded."
-        succeeded_examples="$succeeded_examples $example"
-    else
-        ((numfail=numfail+1))
-        echo "*** Example $example failed."
-        failed_examples="$failed_examples $example"
-    fi
     # FIXME: This could delete data from other runs
     # rm -rf *vtu *sqlite *pkl *-journal restart_data
 done
-((numtests=numsuccess+numfail))
 
 cd ${origin}
 echo "*** Done running examples!"
-if [[ $numfail -eq 0 ]]
-then
-    echo "*** No errors."
-else
-    echo "*** Errors detected."
-    echo "*** Failed tests: ($numfail/$numtests): $failed_examples"
-fi
-echo "*** Successful tests: ($numsuccess/$numtests): $succeeded_examples"
-
-exit $numfail
-#rm -f examples/*.vtu
