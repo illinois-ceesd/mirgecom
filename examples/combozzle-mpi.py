@@ -1267,12 +1267,6 @@ if __name__ == "__main__":
     log_dependent = False
     force_eval = not args.no_force
 
-    if args.profiling and args.lazy:
-        raise ApplicationOptionsError("Can't use lazy and profiling together.")
-
-    log_dependent = False
-    force_eval = not args.no_force
-
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
         lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
