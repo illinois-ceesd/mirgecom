@@ -163,12 +163,15 @@ if __name__ == "__main__":
         help="enable logging")
     parser.add_argument("--lazy", action="store_true",
         help="enable lazy evaluation")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
     args = parser.parse_args()
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=False,
-                                                    profiling=args.profiling)
+                                                    profiling=args.profiling,
+                                                    numpy=args.numpy)
 
     main(actx_class, use_logmgr=args.log)
 
