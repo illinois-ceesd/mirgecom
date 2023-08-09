@@ -373,25 +373,23 @@ if __name__ == "__main__":
         help="use leap timestepper")
     parser.add_argument("--esdg", action="store_true",
         help="use entropy-stable dg for inviscid terms.")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
     from warnings import warn
+    from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
-        if not args.lazy:
-            warn("ESDG requires lazy-evaluation, enabling --lazy.")
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
         if not args.overintegration:
             warn("ESDG requires overintegration, enabling --overintegration.")
 
-    lazy = args.lazy or args.esdg
-    if args.profiling:
-        if lazy:
-            raise ValueError("Can't use lazy and profiling together.")
-
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=lazy, distributed=True, profiling=args.profiling)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
