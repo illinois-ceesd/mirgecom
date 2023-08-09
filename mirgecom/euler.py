@@ -67,10 +67,10 @@ from mirgecom.inviscid import (  # noqa
     inviscid_flux,
     inviscid_facial_flux_rusanov,
     inviscid_flux_on_element_boundary,
+    entropy_stable_inviscid_facial_flux_rusanov,
+    entropy_stable_inviscid_facial_flux,
     entropy_conserving_flux_chandrashekar,
-    entropy_conserving_flux_renac,
-    entropy_stable_inviscid_flux_rusanov,
-    entropy_stable_inviscid_flux_renac
+    entropy_conserving_flux_renac
 )
 
 from mirgecom.operators import div_operator
@@ -109,9 +109,11 @@ class _ESFluidTemperatureTag():
 
 def entropy_stable_euler_operator(
         dcoll, gas_model, state, boundaries, time=0.0,
-        inviscid_numerical_flux_func=entropy_stable_inviscid_flux_renac,
+        inviscid_numerical_flux_func=None,
+        entropy_conserving_flux_func=None,
         operator_states_quad=None,
-        dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None):
+        dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None,
+        limiter_func=None):
     """Compute RHS of the Euler flow equations using flux-differencing.
 
     Parameters
@@ -160,8 +162,14 @@ def entropy_stable_euler_operator(
     if operator_states_quad is not None:
         state_quad = operator_states_quad[0]
     else:
+        if state.is_mixture and limiter_func is None:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states, or least pass a limiter_func to this operator.")
         state_quad = project_fluid_state(
-            dcoll, dd_vol, dd_vol_quad, state, gas_model)
+            dcoll, dd_vol, dd_vol_quad, state, gas_model, limiter_func=limiter_func,
+            entropy_stable=True)
 
     gamma_quad = gas_model.eos.gamma(state_quad.cv, state_quad.temperature)
 
@@ -185,7 +193,15 @@ def entropy_stable_euler_operator(
             # Just need group for determining the number of elements
             for grp, subary in zip(dcoll.discr_from_dd(dd_vol).groups, ary)))
 
-    flux_matrices = entropy_conserving_flux_renac(
+    if entropy_conserving_flux_func is None:
+        entropy_conserving_flux_func = \
+            (entropy_conserving_flux_renac if state.is_mixture
+             else entropy_conserving_flux_chandrashekar)
+        flux_func = "renac" if state.is_mixture else "chandrashekar"
+        warn("No entropy_conserving_flux_func was given for ESDG. "
+             f"Setting EC flux to entropy_conserving_flux_{flux_func}.")
+
+    flux_matrices = entropy_conserving_flux_func(
         gas_model,
         _reshape((1, -1), modified_conserved_fluid_state),
         _reshape((-1, 1), modified_conserved_fluid_state))
@@ -259,6 +275,22 @@ def entropy_stable_euler_operator(
                                                    gas_model,
                                                    tseed_interior_pairs)
 
+    if inviscid_numerical_flux_func is None:
+        inviscid_numerical_flux_func = \
+            partial(entropy_stable_inviscid_facial_flux_rusanov,
+                    entropy_conserving_flux_func=entropy_conserving_flux_func)
+        warn("No inviscid_numerical_flux_func was given for ESDG. "
+             "Automatically setting facial flux to entropy-stable Rusanov "
+             "(entropy_stable_inviscid_facial_flux_rusanov).")
+    elif inviscid_numerical_flux_func not in \
+         [entropy_stable_inviscid_facial_flux_rusanov,
+          entropy_stable_inviscid_facial_flux]:
+        warn("Unrecognized inviscid_numerical_flux_func for ESDG. Proceed only "
+             "if you know what you are doing. An ESDG-compatible facial flux "
+             "function *must* be used with ESDG. Valid built-in choices are:\n"
+             "* entropy_stable_inviscid_facial_flux_rusanov, -or-\n"
+             "* entropy_stable_inviscid_facial_flux\n")
+
     # Compute interface contributions
     inviscid_flux_bnd = inviscid_flux_on_element_boundary(
         dcoll, gas_model, boundaries, interior_states,
@@ -277,7 +309,8 @@ def entropy_stable_euler_operator(
 def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=None,
                    quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
-                   comm_tag=None, use_esdg=False, operator_states_quad=None):
+                   comm_tag=None, use_esdg=False, operator_states_quad=None,
+                   entropy_conserving_flux_func=None, limiter_func=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -338,25 +371,27 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
-        if state.is_mixture:
+        if state.is_mixture and limiter_func is None:
             warn("Mixtures often require species limiting, and a non-limited "
                  "state is being created for this operator. For mixtures, "
                  "one should pass the operator_states_quad argument with "
-                 "limited states.")
+                 "limited states or pass a limiter_func to this operator.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
+            entropy_stable=use_esdg)
 
     if use_esdg:
-        if inviscid_numerical_flux_func is None:
-            inviscid_numerical_flux_func = entropy_stable_inviscid_flux_rusanov
         return entropy_stable_euler_operator(
             dcoll, gas_model=gas_model, state=state, boundaries=boundaries,
             time=time, operator_states_quad=operator_states_quad, dd=dd,
             inviscid_numerical_flux_func=inviscid_numerical_flux_func,
+            entropy_conserving_flux_func=entropy_conserving_flux_func,
             quadrature_tag=quadrature_tag, comm_tag=comm_tag)
 
     if inviscid_numerical_flux_func is None:
+        warn("inviscid_numerical_flux_func unspecified, defaulting to "
+             "inviscid_facial_flux_rusanov.")
         inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
 
     volume_state_quad, interior_state_pairs_quad, domain_boundary_states_quad = \
