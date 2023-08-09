@@ -379,10 +379,10 @@ if __name__ == "__main__":
         help="use entropy-stable Euler operator")
     parser.add_argument("--overintegration", action="store_true",
         help="use over-integration")
-    parser.add_argument("--restart_file", help="root name of restart file")
-    parser.add_argument("--casename", help="casename to use for i/o")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
+    parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
     from warnings import warn
