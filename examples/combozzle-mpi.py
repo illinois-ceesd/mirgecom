@@ -717,7 +717,7 @@ def main(actx_class, rst_filename=None,
         # --- Note: Users may add their own CTI file by dropping it into
         # ---       mirgecom/mechanisms alongside the other CTI files.
         from mirgecom.mechanisms import get_mechanism_input
-        mech_input = get_mechanism_input("uiuc")
+        mech_input = get_mechanism_input("uiuc_7sp")
         cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
         nspecies = cantera_soln.n_species
 
@@ -775,7 +775,7 @@ def main(actx_class, rst_filename=None,
             from mirgecom.thermochemistry \
                 import get_thermochemistry_class_by_mechanism_name
             pyro_mechanism = \
-                get_thermochemistry_class_by_mechanism_name("uiuc")(actx.np)
+                get_thermochemistry_class_by_mechanism_name("uiuc_7sp")(actx.np)
             nspecies = pyro_mechanism.num_species
             # species_names = pyro_mechanism.species_names
             eos = PyrometheusMixture(pyro_mechanism,
@@ -1075,7 +1075,12 @@ def main(actx_class, rst_filename=None,
 
         return state, dt
 
-    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    from mirgecom.inviscid import (
+        inviscid_facial_flux_rusanov,
+        entropy_stable_inviscid_facial_flux_rusanov
+    )
+    inv_num_flux_func = entropy_stable_inviscid_facial_flux_rusanov if use_esdg \
+        else inviscid_facial_flux_rusanov
 
     def dummy_pre_step(step, t, dt, state):
         if logmgr:
@@ -1112,7 +1117,7 @@ def main(actx_class, rst_filename=None,
                 euler_operator(
                     dcoll, state=fluid_state, time=t,
                     boundaries=boundaries, gas_model=gas_model,
-                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                    inviscid_numerical_flux_func=inv_num_flux_func,
                     quadrature_tag=quadrature_tag,
                     operator_states_quad=fluid_operator_states,
                     use_esdg=use_esdg)
@@ -1126,7 +1131,7 @@ def main(actx_class, rst_filename=None,
                 ns_operator(
                     dcoll, state=fluid_state, time=t, boundaries=boundaries,
                     gas_model=gas_model, quadrature_tag=quadrature_tag,
-                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                    inviscid_numerical_flux_func=inv_num_flux_func,
                     operator_states_quad=fluid_operator_states,
                     use_esdg=use_esdg)
 

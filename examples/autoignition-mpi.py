@@ -203,7 +203,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     # --- Note: Users may add their own mechanism input file by dropping it into
     # ---       mirgecom/mechanisms alongside the other mech input files.
     from mirgecom.mechanisms import get_mechanism_input
-    mech_input = get_mechanism_input("uiuc")
+    mech_input = get_mechanism_input("uiuc_7sp")
 
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     nspecies = cantera_soln.n_species
@@ -583,9 +583,15 @@ def main(actx_class, use_leap=False, use_overintegration=False,
 
         return make_obj_array([cv, fluid_state.temperature]), dt
 
-    from mirgecom.inviscid import inviscid_facial_flux_rusanov as inv_num_flux_func
+    from mirgecom.inviscid import (
+        inviscid_facial_flux_rusanov,
+        entropy_stable_inviscid_facial_flux_rusanov
+    )
     from mirgecom.gas_model import make_operator_fluid_states
     from mirgecom.navierstokes import ns_operator
+
+    inv_num_flux_func = entropy_stable_inviscid_facial_flux_rusanov if use_esdg \
+        else inviscid_facial_flux_rusanov
 
     fluid_operator = euler_operator
     if viscous_terms_on:
