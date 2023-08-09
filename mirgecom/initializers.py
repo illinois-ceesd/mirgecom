@@ -1146,7 +1146,7 @@ class MixtureInitializer:
 
     def __init__(
             self, *, dim=3, nspecies=0,
-            pressure=101500.0, temperature=300.0,
+            pressure=101325.0, temperature=300.0,
             massfractions=None, velocity=None,
     ):
         r"""Initialize mixture parameters.

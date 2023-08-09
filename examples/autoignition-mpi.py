@@ -203,7 +203,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     # --- Note: Users may add their own mechanism input file by dropping it into
     # ---       mirgecom/mechanisms alongside the other mech input files.
     from mirgecom.mechanisms import get_mechanism_input
-    mech_input = get_mechanism_input("uiuc")
+    mech_input = get_mechanism_input("uiuc_7sp")
 
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     nspecies = cantera_soln.n_species

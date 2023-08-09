@@ -175,7 +175,7 @@ def main(actx_class, use_esdg=False,
 
     # Pyrometheus initialization
     from mirgecom.mechanisms import get_mechanism_input
-    mech_input = get_mechanism_input("uiuc")
+    mech_input = get_mechanism_input("uiuc_7sp")
     sol = cantera.Solution(name="gas", yaml=mech_input)
     from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
     pyrometheus_mechanism = \

@@ -717,7 +717,7 @@ def main(actx_class, rst_filename=None,
         # --- Note: Users may add their own CTI file by dropping it into
         # ---       mirgecom/mechanisms alongside the other CTI files.
         from mirgecom.mechanisms import get_mechanism_input
-        mech_input = get_mechanism_input("uiuc")
+        mech_input = get_mechanism_input("uiuc_7sp")
         cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
         nspecies = cantera_soln.n_species
 
@@ -775,7 +775,7 @@ def main(actx_class, rst_filename=None,
             from mirgecom.thermochemistry \
                 import get_thermochemistry_class_by_mechanism_name
             pyro_mechanism = \
-                get_thermochemistry_class_by_mechanism_name("uiuc")(actx.np)
+                get_thermochemistry_class_by_mechanism_name("uiuc_7sp")(actx.np)
             nspecies = pyro_mechanism.num_species
             # species_names = pyro_mechanism.species_names
             eos = PyrometheusMixture(pyro_mechanism,
