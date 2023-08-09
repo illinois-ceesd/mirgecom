@@ -38,6 +38,13 @@ File comparison utilities
 .. autofunction:: compare_files_vtu
 .. autofunction:: compare_files_xdmf
 .. autofunction:: compare_files_hdf5
+
+Exceptions
+----------
+
+.. autoclass:: SimulationConfigurationError
+.. autoclass:: ApplicationOptionsError
+.. autoclass:: SimulationRuntimeError
 """
 
 __copyright__ = """
@@ -84,6 +91,24 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     # pylint: disable=no-name-in-module
     from mpi4py.MPI import Comm
+
+
+class SimulationConfigurationError(RuntimeError):
+    """Simulation physics configuration or parameters error."""
+
+    pass
+
+
+class SimulationRuntimeError(RuntimeError):
+    """General simulation runtime error."""
+
+    pass
+
+
+class ApplicationOptionsError(RuntimeError):
+    """Application command-line options error."""
+
+    pass
 
 
 def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
