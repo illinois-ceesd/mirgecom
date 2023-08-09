@@ -629,9 +629,6 @@ if __name__ == "__main__":
         if not args.overintegration:
             warn("ESDG requires overintegration, enabling --overintegration.")
 
-    if args.profiling and args.lazy:
-        raise ApplicationOptionsError("Can't use lazy and profiling together.")
-
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
 
