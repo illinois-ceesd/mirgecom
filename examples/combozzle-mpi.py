@@ -1264,13 +1264,12 @@ if __name__ == "__main__":
         if not args.overintegration:
             warn("ESDG requires overintegration, enabling --overintegration.")
 
-    lazy = args.lazy or args.esdg
     log_dependent = False
     force_eval = not args.no_force
 
-    if args.profiling:
-        if lazy:
-            raise ValueError("Can't use lazy and profiling together.")
+    if args.profiling and args.lazy:
+        raise ApplicationOptionsError("Can't use lazy and profiling together.")
+
     log_dependent = False
     force_eval = not args.no_force
 
