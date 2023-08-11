@@ -62,13 +62,17 @@ def bump(actx, nodes, t=0):
 
 
 @mpi_entry_point
-def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
+def main(actx_class, casename="wave", 
          restart_step=None, use_logmgr: bool = False) -> None:
     """Drive the example."""
+
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
+
+    snapshot_pattern = casename + "-{step:04d}-{rank:04d}.pkl"
+    vizfile_pattern = casename + "-%03d-%04d.vtu"
 
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
@@ -214,7 +218,7 @@ def main(actx_class, snapshot_pattern="wave-mpi-{step:04d}-{rank:04d}.pkl",
             print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
             vis.write_parallel_vtk_file(
                 comm,
-                "fld-wave-mpi-%03d-%04d.vtu" % (rank, istep),
+                vizfile_pattern % (rank, istep),
                 [
                     ("u", fields[0]),
                     ("v", fields[1:]),
@@ -247,13 +251,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Wave (MPI version)")
     add_general_args(parser, leap=False, overintegration=False, restart_file=False)
     args = parser.parse_args()
-
+    casename = args.casename or "wave"
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=True,
                                                     profiling=args.profiling,
                                                     numpy=args.numpy)
 
-    main(actx_class, use_logmgr=args.log)
+    main(actx_class, use_logmgr=args.log, casename=casename)
 
 # vim: foldmethod=marker
