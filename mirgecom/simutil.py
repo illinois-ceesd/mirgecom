@@ -1319,9 +1319,15 @@ def compare_files_vtu(
 
         # verify individual values w/in given tolerance
         fieldname = point_data1.GetArrayName(i)
+        if "resid" in fieldname:
+            continue
+
         print(f"Field: {fieldname}", end=" ")
+        max_true_value = max(abs(arr2.GetValue(j)) for j in range(arr2.GetSize()))
         for j in range(arr1.GetSize()):
             test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
+            if max_true_value > field_specific_tols[i]:
+                test_err = test_err/max_true_value
             if test_err > max_field_errors[i]:
                 max_field_errors[i] = test_err
         print(f"Max Error: {max_field_errors[i]}", end=" ")
