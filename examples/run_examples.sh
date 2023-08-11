@@ -9,7 +9,10 @@ set -o nounset
 
 origin=$(pwd)
 examples_dir=${1-$origin}
+echo "DEBUG: ORIGIN=${origin}, EXAMPLES_DIR=${examples_dir}"
 shift
+
+cd $examples_dir
 
 # This bit will let the user specify which
 # examples to run, default to run them all.
@@ -40,8 +43,6 @@ fi
 
 mpi_exec="${MIRGE_MPI_EXEC}"
 mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
-
-cd $examples_dir
 
 export OMPI_ALLOW_RUN_AS_ROOT=1
 export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
