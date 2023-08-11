@@ -134,7 +134,7 @@ do
             lazy_vizfile=$(echo ${eager_vizfile/eager/lazy})
             if [[ -f ${lazy_vizfile} ]]; then
                 echo "***** comparing lazy results..."
-                python ${examples_dir}/../bin/mirgecompare.py --tolerance $TOL_LAZY ${eager_vizfile} ${lazy_vizfile}
+                python ${examples_dir}/../bin/mirgecompare.py --tolerance $TOL_LAZY ${lazy_vizfile} ${eager_vizfile}
                 lazy_compare_return_code=$?
                 lazy_comparison_result=$((lazy_comparison_result + lazy_compare_return_code))
                 ((nlazy_compare++))
@@ -143,7 +143,7 @@ do
             numpy_vizfile=$(echo ${eager_vizfile/eager/numpy})
             if [[ -f ${numpy_vizfile} ]]; then
                 echo "***** comparing numpy results..."
-                python ${examples_dir}/../bin/mirgecompare.py --tolerance $TOL_NUMPY ${eager_vizfile} ${numpy_vizfile}
+                python ${examples_dir}/../bin/mirgecompare.py --tolerance $TOL_NUMPY ${numpy_vizfile} ${eager_vizfile}
                 numpy_compare_return_code=$?
                 numpy_comparison_result=$((numpy_comparison_result + numpy_compare_return_code))
                 ((nnumpy_compare++))

@@ -1305,6 +1305,7 @@ def compare_files_vtu(
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
 
+        num_components = arr1.GetNumberOfComponents()
         # verify both files contain same arrays
         if point_data1.GetArrayName(i) != point_data2.GetArrayName(i):
             print("File 1:", point_data1.GetArrayName(i), "\n",
@@ -1319,19 +1320,29 @@ def compare_files_vtu(
 
         # verify individual values w/in given tolerance
         fieldname = point_data1.GetArrayName(i)
-        if "resid" in fieldname:
+        ignored_fields = ["resid", "tagged"]
+        ignore_field = False
+        for ifld in ignored_fields:
+            if ifld in fieldname:
+                ignore_field = True
+        if ignore_field:
             continue
 
         print(f"Field: {fieldname}", end=" ")
-        max_true_value = max(abs(arr2.GetValue(j)) for j in range(arr2.GetSize()))
-        for j in range(arr1.GetSize()):
-            test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
-            if max_true_value > field_specific_tols[i]:
-                test_err = test_err/max_true_value
-            if test_err > max_field_errors[i]:
-                max_field_errors[i] = test_err
-        print(f"Max Error: {max_field_errors[i]}", end=" ")
-        print(f"Tolerance: {field_specific_tols[i]}")
+        for icomp in range(num_components):
+            if num_components > 1:
+                print(f"Comparing component {icomp}")
+            max_true_value = max(abs(arr2.GetComponent(j, icomp))
+                                 for j in range(arr2.GetNumberOfTuples()))
+            for j in range(arr1.GetNumberOfTuples()):
+                test_err = abs(arr1.GetComponent(j, icomp)
+                               - arr2.GetComponent(j, icomp))
+                if max_true_value > field_specific_tols[i]:
+                    test_err = test_err/max_true_value
+                if test_err > max_field_errors[i]:
+                    max_field_errors[i] = test_err
+            print(f"Max Error: {max_field_errors[i]}", end=" ")
+            print(f"Tolerance: {field_specific_tols[i]}")
 
     violated_tols = []
     for i in range(nfields):
