@@ -62,7 +62,7 @@ def bump(actx, nodes, t=0):
 
 
 @mpi_entry_point
-def main(actx_class, casename="wave", 
+def main(actx_class, casename="wave",
          restart_step=None, use_logmgr: bool = False) -> None:
     """Drive the example."""
 
