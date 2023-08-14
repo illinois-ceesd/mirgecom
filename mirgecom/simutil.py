@@ -1357,7 +1357,7 @@ def compare_files_vtu(
         print(f"{fieldname}: Max true value: {max_true_value}")
         print(f"{fieldname}: Error scale: {err_scale}")
 
-        # Spew out some stats on each field component 
+        # Spew out some stats on each field component
         print(f"Field({fieldname}) Component (min, max, mean)s:")
         for icomp in range(num_components):
             min_true_value = min(arr2.GetComponent(j, icomp)
