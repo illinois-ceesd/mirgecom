@@ -57,22 +57,24 @@ do
         continue        
     fi
 
-    # FIXME: These tolerance tweaks render the comparisons ineffective
-    # for the intended purpose 
-    # TOL_LAZY=1e-04
-    # TOL_NUMPY=1e-05
+
+    # FIXME: The tolerances are really high
+
+    # Should be this:
+    #  TOL_LAZY=1e-12
+    #  TOL_NUMPY=1e-12
+
+    # But this is required to make them all pass
+    TOL_LAZY=1e-9
+    TOL_NUMPY=1e-9
+
+    # FIXME: Have to ignore "rhs", and "gradients" to make
+    # this example pass.
     # if [[ $example == "thermally-coupled.py" ]]; then
     #    echo "Setting tolerance=1 for $example"
     #    TOL_LAZY=1
     #    TOL_NUMPY=1
     # fi
-    # SHOULD BE
-    # TOL_LAZY=1e-12
-    # TOL_NUMPY=1e-12
-    #
-    # TEMPORARILY SET HIGH TOLs
-    TOL_LAZY=1e-9
-    TOL_NUMPY=1e-9
 
     date
     printf "***\n***\n"
