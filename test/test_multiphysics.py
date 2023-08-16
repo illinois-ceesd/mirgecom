@@ -31,7 +31,10 @@ import grudge.op as op
 from mirgecom.symbolic import (
     grad as sym_grad,
     evaluate)
-from mirgecom.simutil import max_component_norm
+from mirgecom.simutil import (
+    max_component_norm,
+    get_box_mesh
+)
 import mirgecom.math as mm
 from mirgecom.diffusion import (
     diffusion_operator,
@@ -62,17 +65,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim,
-        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
-
-
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_independent_volumes(actx_factory, order, visualize=False):
     """Check multi-volume machinery by setting up two independent volumes."""
@@ -85,8 +77,8 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     dim_names = ["x", "y", "z"]
     boundary_tag_to_face = {}
     for i in range(dim):
-        boundary_tag_to_face["-"+str(i)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i)] = ["+"+dim_names[i]]
+        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
+        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -111,17 +103,17 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     # Set solution to y for volume 2
 
     boundaries1 = {
-        dd_vol1.trace("-0").domain_tag: DirichletDiffusionBoundary(-1.),
-        dd_vol1.trace("+0").domain_tag: DirichletDiffusionBoundary(1.),
-        dd_vol1.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol1.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol1.trace("-1").domain_tag: DirichletDiffusionBoundary(-1.),
+        dd_vol1.trace("+1").domain_tag: DirichletDiffusionBoundary(1.),
+        dd_vol1.trace("-2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol1.trace("+2").domain_tag: NeumannDiffusionBoundary(0.),
     }
 
     boundaries2 = {
-        dd_vol2.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol2.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol2.trace("-1").domain_tag: DirichletDiffusionBoundary(-1.),
-        dd_vol2.trace("+1").domain_tag: DirichletDiffusionBoundary(1.),
+        dd_vol2.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol2.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol2.trace("-2").domain_tag: DirichletDiffusionBoundary(-1.),
+        dd_vol2.trace("+2").domain_tag: DirichletDiffusionBoundary(1.),
     }
 
     u1 = nodes1[0]
@@ -235,16 +227,16 @@ def test_thermally_coupled_fluid_wall(
         base_wall_temp = 600
 
         fluid_boundaries = {
-            dd_vol_fluid.trace("-0").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+0").domain_tag: AdiabaticNoslipWallBoundary(),
-            dd_vol_fluid.trace("+1").domain_tag:
+            dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
+            dd_vol_fluid.trace("+2").domain_tag:
                 IsothermalWallBoundary(wall_temperature=base_fluid_temp),
         }
 
         wall_boundaries = {
-            dd_vol_wall.trace("-0").domain_tag: NeumannDiffusionBoundary(0.),
-            dd_vol_wall.trace("+0").domain_tag: NeumannDiffusionBoundary(0.),
-            dd_vol_wall.trace("-1").domain_tag:
+            dd_vol_wall.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
+            dd_vol_wall.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
+            dd_vol_wall.trace("-2").domain_tag:
                 DirichletDiffusionBoundary(base_wall_temp),
         }
 
@@ -538,16 +530,16 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     base_solid_temp = 1.0
 
     fluid_boundaries = {
-        dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+0").domain_tag:
+        dd_vol_fluid.trace("-2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+1").domain_tag:
             IsothermalWallBoundary(wall_temperature=base_fluid_temp),
     }
 
     solid_boundaries = {
-        dd_vol_solid.trace("-1").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_solid.trace("+1").domain_tag: NeumannDiffusionBoundary(0.),
-        dd_vol_solid.trace("-0").domain_tag:
+        dd_vol_solid.trace("-2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol_solid.trace("+2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol_solid.trace("-1").domain_tag:
             DirichletDiffusionBoundary(base_solid_temp),
     }
 

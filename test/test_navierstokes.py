@@ -64,7 +64,8 @@ from mirgecom.gas_model import (
 )
 from mirgecom.simutil import (
     compare_fluid_solutions,
-    componentwise_norms
+    componentwise_norms,
+    get_box_mesh
 )
 
 
@@ -213,20 +214,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     )
 
 
-# Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n, t=None, periodic=None):
-    if periodic is None:
-        periodic = (False,)*dim
-    dim_names = ["x", "y", "z"]
-    bttf = {}
-    for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t,
-               periodic=periodic)
-
-
 class FluidCase(metaclass=ABCMeta):
     """
     A manufactured fluid solution on a mesh.
@@ -280,10 +267,9 @@ class FluidManufacturedSolution(FluidCase):
 
     def get_mesh(self, n=2, periodic=None):
         """Return the mesh: [-pi, pi] by default."""
-        nx = (n,)*self._dim
         a = tuple(-lx_i/2 for lx_i in self._lx)
         b = tuple(lx_i/2 for lx_i in self._lx)
-        return _get_box_mesh(self.dim, a, b, nx, periodic)
+        return get_box_mesh(self.dim, a, b, n, periodic)
 
     @abstractmethod
     def get_solution(self, x, t):
@@ -384,11 +370,8 @@ class ShearFlow(FluidManufacturedSolution):
 
     def get_mesh(self, n):
         """Get the mesh."""
-        nx = (n,)*self._dim
-        a = (0,)*self._dim
-        b = (1,)*self._dim
         periodic = (False,)*self._dim
-        return _get_box_mesh(self._dim, a, b, nx, periodic=periodic)
+        return get_box_mesh(self._dim, 0, 1, n, periodic=periodic)
 
     def get_boundaries(self, dcoll, actx, t):
         """Get the boundaries."""
@@ -622,7 +605,7 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 
     logger.info(f"{sym_source=}")
 
-    n = 2
+    n = 1
     mesh = man_soln.get_mesh(n)
 
     from mirgecom.discretization import create_discretization_collection
@@ -701,7 +684,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         b = (1,)*dim
 
         print(f"{nx=}")
-        mesh = _get_box_mesh(dim, a, b, n=nx)
+        mesh = get_box_mesh(dim, a, b, n=nx)
 
         dcoll = create_discretization_collection(actx, mesh, order)
         from grudge.dt_utils import h_max_from_volume

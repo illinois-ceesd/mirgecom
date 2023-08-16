@@ -53,7 +53,7 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-
+from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
 
 
@@ -113,17 +113,6 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
 
     # The errors come from grad_v
     assert actx.to_numpy(op.norm(dcoll, tau - exp_tau, np.inf)) < 1e-12
-
-
-# Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n, t=None):
-    dim_names = ["x", "y", "z"]
-    bttf = {}
-    for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, npoints_per_axis=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])
@@ -190,10 +179,10 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     for nfac in [1, 2, 4]:
 
-        npts_axis = nfac*(11, 21)
+        nels_axis = nfac*(10, 20)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        mesh = _get_box_mesh(2, a=box_ll, b=box_ur, n=npts_axis)
+        mesh = get_box_mesh(2, a=box_ll, b=box_ur, n=nels_axis)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"

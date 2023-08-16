@@ -1,3 +1,5 @@
+# UCSD mechanism for hydrogen combustion
+
 units(length='cm', time='s', quantity='mol', act_energy='kJ/mol')
 
 ideal_gas(name='gas',

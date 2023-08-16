@@ -24,10 +24,15 @@ if [[ "$SIM" == *"-mpi.py" ]]; then
     MPIARGS=" -m mpi4py "
 fi
 casename_base=$(echo ${SIM/%.py})
+
 python ${MPIARGS} ${SIM} --casename ${casename_base}-eager
 python ${MPIARGS} ${SIM} --casename ${casename_base}-lazy --lazy
+python ${MPIARGS} ${SIM} --casename ${casename_base}-numpy --numpy
+
 for vizfile in $(ls ${casename_base}-eager-*.vtu)
 do
-    lazy_vizfile=$(echo ${vizfile/eager/lazy}) 
+    lazy_vizfile=$(echo ${vizfile/eager/lazy})
     python ${BINDIR}/mirgecompare.py ${TOL} ${vizfile} ${lazy_vizfile}
+    numpy_vizfile=$(echo ${vizfile/eager/numpy})
+    python ${BINDIR}/mirgecompare.py ${TOL} ${vizfile} ${numpy_vizfile}
 done
