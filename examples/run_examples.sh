@@ -128,8 +128,10 @@ do
     echo "**** Accuracy comparison for $example_name."
     lazy_comparison_result=0
     numpy_comparison_result=0
+    lazy_numpy_comparison_result=0
     nlazy_compare=0
     nnumpy_compare=0
+    nlazynumpy_compare=0
     for eager_vizfile in ${example_name}_eager-*.vtu viz_data/${example_name}_eager-*.vtu; do
  
         if [[ -f ${eager_vizfile} ]]; then
@@ -149,6 +151,13 @@ do
                 numpy_compare_return_code=$?
                 numpy_comparison_result=$((numpy_comparison_result + numpy_compare_return_code))
                 ((nnumpy_compare++))
+                if [[ -f ${lazy_vizfile} ]]; then
+                    echo "***** comparing lazy/numpy results..."
+                    python ${examples_dir}/../bin/mirgecompare.py --tolerance $TOL_NUMPY ${lazy_vizfile} ${numpy_vizfile}
+                    lazy_numpy_compare_return_code=$?
+                    lazy_numpy_comparison_result=$((lazy_numpy_comparison_result + lazy_numpy_compare_return_code))
+                    ((nlazynumpy_compare++))
+                fi
             fi
         fi
     done
@@ -162,7 +171,11 @@ do
         test_results["${example_name}_numpy_comparison"]=$numpy_comparison_result
     fi
 
-    gen_test_names=("eager" "lazy" "numpy" "lazy_comparison" "numpy_comparison")
+    if [[ "$nlazynumpy_compare" -gt 0 ]]; then
+        test_results["${example_name}_lazy_numpy_comparison"]=$lazy_numpy_comparison_result
+    fi
+
+    gen_test_names=("eager" "lazy" "numpy" "lazy_comparison" "numpy_comparison" "lazy_numpy_comparison")
 
     example_test_result=0
     num_ex_success=0
