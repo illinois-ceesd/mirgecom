@@ -17,7 +17,7 @@ cd $examples_dir
 # This bit will let the user specify which
 # examples to run, default to run them all.
 if [[ "$#" -eq 0 ]]; then # use all py files
-    example_list=(*.py) 
+    example_list=(*.py)
 else # Run specific examples if given by user
     example_list=("$@")
     # Add the .py extension to each example in the list.
@@ -26,6 +26,7 @@ else # Run specific examples if given by user
     done
 fi
 
+echo "Examples: ${example_list[*]}"
 
 num_failed_examples=0
 num_successful_examples=0
@@ -54,7 +55,7 @@ do
     # FIXME: Let's still test the serial examples
     if [[ $example_name == *"nompi"* ]]; then
         echo "*** Skipping serial example (for now): $example_name"
-        continue        
+        continue
     fi
 
 
@@ -79,7 +80,10 @@ do
     date
     printf "***\n***\n"
 
-    declare -A test_results
+    # Hack: This should be an associative array (declare -A), but these
+    # aren't available in bash 3 (MacOS).
+    # The format of each array item is: "test_name:test_result"
+    test_results=()
 
     # Run Eager, Lazy, and Numpy contexts
     test_name="${example_name}_eager"
@@ -92,7 +96,7 @@ do
     ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${test_name}
     test_return_code=$?
     set +x
-    test_results["${test_name}"]=$test_return_code
+    test_results+=("${test_name}:$test_return_code")
     date
 
     test_name="${example_name}_lazy"
@@ -105,7 +109,7 @@ do
     ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${test_name} --lazy
     test_return_code=$?
     set +x
-    test_results["$test_name"]=$test_return_code
+    test_results+=("${test_name}:$test_return_code")
     date
 
     test_name="${example_name}_numpy"
@@ -119,7 +123,7 @@ do
     ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${test_name} --numpy
     test_return_code=$?
     set +x
-    test_results["$test_name"]=$test_return_code
+    test_results+=("${test_name}:$test_return_code")
     date
 
     # FIXME: not all examples produce vtu files, for these the accuracy test won't be
@@ -133,7 +137,7 @@ do
     nnumpy_compare=0
     nlazynumpy_compare=0
     for eager_vizfile in ${example_name}_eager-*.vtu viz_data/${example_name}_eager-*.vtu; do
- 
+
         if [[ -f ${eager_vizfile} ]]; then
             lazy_vizfile=$(echo ${eager_vizfile/eager/lazy})
             if [[ -f ${lazy_vizfile} ]]; then
@@ -164,18 +168,18 @@ do
 
     # Save any comparison results (if they were done)
     if [[ "$nlazy_compare" -gt 0 ]]; then
-        test_results["${example_name}_lazy_comparison"]=$lazy_comparison_result
+        test_results+=("${example_name}_lazy_comparison:$lazy_comparison_result")
     fi
 
     if [[ "$nnumpy_compare" -gt 0 ]]; then
-        test_results["${example_name}_numpy_comparison"]=$numpy_comparison_result
+        test_results+=("${example_name}_numpy_comparison:$numpy_comparison_result")
     fi
 
     if [[ "$nlazynumpy_compare" -gt 0 ]]; then
-        test_results["${example_name}_lazy_numpy_comparison"]=$lazy_numpy_comparison_result
+        test_results+=("${example_name}_lazy_numpy_comparison:$lazy_numpy_comparison_result")
     fi
 
-    gen_test_names=("eager" "lazy" "numpy" "lazy_comparison" "numpy_comparison" "lazy_numpy_comparison")
+    # gen_test_names=("eager" "lazy" "numpy" "lazy_comparison" "numpy_comparison" "lazy_numpy_comparison")
 
     example_test_result=0
     num_ex_success=0
@@ -185,23 +189,25 @@ do
 
     # Track/report the suite of tests for each example
     echo "${example_name} testing results:"
-    for example_test_name in "${gen_test_names[@]}"; do
-        test_name="${example_name}_${example_test_name}"
+    for test_name_result in "${test_results[@]}"; do
+        _test_name=${test_name_result%%:*}
+        # test_name="${example_name}_${example_test_name}"
         # if [[ -v test_results["$test_name"] ]]; then
-        if [[ ${test_results["$test_name"]+_} ]]; then
-            printf "${test_name}: "
-            if [[ ${test_results["$test_name"]} -eq 0 ]]
-            then
-                example_succeeded_tests="${example_succeeded_tests} ${test_name}"
-                ((num_ex_success++))
-                printf "Pass\n"
-            else
-                example_failed_tests="${example_failed_tests} ${test_name}"
-                example_test_result=1
-                ((num_ex_failed++))
-                printf "Fail\n"
-            fi
+        _test_result=${test_name_result#*:}
+        # if [[ ${test_results["$test_name"]+_} ]]; then
+        printf "${_test_name}: "
+        if [[ $_test_result -eq 0 ]]
+        then
+            example_succeeded_tests="${example_succeeded_tests} ${_test_name}"
+            ((num_ex_success++))
+            printf "Pass\n"
+        else
+            example_failed_tests="${example_failed_tests} ${_test_name}"
+            example_test_result=1
+            ((num_ex_failed++))
+            printf "Fail\n"
         fi
+        # fi
     done
 
     # Global tracking of success/fail for end report
