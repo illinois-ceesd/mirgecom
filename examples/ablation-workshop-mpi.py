@@ -1147,6 +1147,8 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
     parser.add_argument("-r", "--restart_file",  type=ascii,
                         dest="restart_file", nargs="?", action="store",
                         help="simulation restart file")
@@ -1154,14 +1156,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
-    lazy = args.lazy
-    if args.profiling:
-        if lazy:
-            raise ValueError("Can't use lazy and profiling together.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=lazy, distributed=True, profiling=args.profiling)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:

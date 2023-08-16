@@ -50,6 +50,7 @@ from mirgecom.gas_model import (
     make_fluid_state_trace_pairs
 )
 import grudge.op as op
+from mirgecom.simutil import get_box_mesh
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -78,10 +79,10 @@ def test_normal_axes_utility(actx_factory, dim):
 
     from mirgecom.boundary import _get_normal_axes as gna
     order = 1
-    npts_geom = 6
+    nels_geom = 5
     a = -.01
     b = .01
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -161,10 +162,10 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                              free_stream_pressure=ff_press,
                              free_stream_temperature=ff_temp)
 
-    npts_geom = 17
+    nels_geom = 16
     a = -1.0
     b = 1.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -330,10 +331,10 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
                                                    thermal_conductivity=kappa))
     bndry = PressureOutflowBoundary(boundary_pressure=flowbnd_press)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -446,10 +447,10 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
     wall = IsothermalWallBoundary(wall_temperature=wall_temp)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -613,10 +614,10 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
     wall = AdiabaticNoslipWallBoundary()
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -795,10 +796,10 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
     wall = AdiabaticSlipBoundary()
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -1129,18 +1130,6 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
     )
 
 
-# Box grid generator widget lifted from @majosm's diffusion tester
-def _get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
-
-
 class _VortexSoln:
 
     def __init__(self, **kwargs):
@@ -1230,10 +1219,10 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=transport_model)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
