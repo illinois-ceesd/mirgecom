@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 def test_yaml_mechanism_input_reader():
     """Quick test of mechanism input reader."""
-    test_input = get_mechanism_input("uiuc")
+    test_input = get_mechanism_input("uiuc_7sp")
     first_line = test_input.partition("\n")[0].strip()
 
-    assert first_line == "generator: cti2yaml"
+    assert first_line == "description: Modified version of UIUC-XPACC mechanism"

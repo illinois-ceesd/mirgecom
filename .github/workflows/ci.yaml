@@ -6,7 +6,7 @@ on:
     branches: main
   schedule:
   - cron:  '5 0 * * *'
-  
+
 # Cancel in progress CI runs when a new run targeting the same PR or branch/tag is triggered.
 # https://stackoverflow.com/questions/66335225/how-to-cancel-previous-runs-in-the-pr-when-you-push-new-commitsupdate-the-curre
 concurrency:
@@ -117,7 +117,7 @@ jobs:
           run: |
             . .ci-support/install.sh
 
-        - name: Test lazy accuracy
+        - name: Test lazy/numpy accuracy to eager
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing

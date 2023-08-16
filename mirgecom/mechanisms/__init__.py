@@ -65,6 +65,11 @@ def import_mechdata():
 
 def get_mechanism_input(mechanism_name: str) -> str:
     """Get the contents of a mechanism YAML input file."""
+    if mechanism_name == "uiuc":
+        mechanism_name = "uiuc_7sp"
+        from warnings import warn
+        warn("The uiuc mechanism was updated in Q3 2023. Use 'uiuc_7sp' instead.",
+             stacklevel=2)
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)
     return mech_file.read_text()

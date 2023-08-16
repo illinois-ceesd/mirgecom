@@ -719,7 +719,7 @@ def main(use_logmgr=True,
         # --- Note: Users may add their own CTI file by dropping it into
         # ---       mirgecom/mechanisms alongside the other CTI files.
         from mirgecom.mechanisms import get_mechanism_input
-        mech_input = get_mechanism_input("uiuc")
+        mech_input = get_mechanism_input("uiuc_7sp")
         cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
         nspecies = cantera_soln.n_species
 
@@ -777,7 +777,7 @@ def main(use_logmgr=True,
             from mirgecom.thermochemistry \
                 import get_thermochemistry_class_by_mechanism_name
             pyro_mechanism = \
-                get_thermochemistry_class_by_mechanism_name("uiuc")(actx.np)
+                get_thermochemistry_class_by_mechanism_name("uiuc_7sp")(actx.np)
             nspecies = pyro_mechanism.num_species
             # species_names = pyro_mechanism.species_names
             eos = PyrometheusMixture(pyro_mechanism,
@@ -1249,21 +1249,19 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
-    lazy = args.lazy
     log_dependent = False
     force_eval = not args.no_force
-    if args.profiling:
-        if lazy:
-            raise ValueError("Can't use lazy and profiling together.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=lazy, distributed=True, profiling=args.profiling)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
