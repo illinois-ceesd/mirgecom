@@ -311,7 +311,7 @@ class SodShock1D:
         x = x_vec[self._xdir]
         actx = x.array_context
 
-        zeros = 0*x
+        zeros = actx.np.zeros_like(x)
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
