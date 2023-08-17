@@ -1,15 +1,9 @@
 #!/bin/bash
 
-# This option is undesired here.  We want to make sure to try all the examples,
-# even if some fail.
-# set -e
-# I'd prefer to set this judiciously to have clean-looking output in the CI logs
-# set -x
 set -o nounset
 
 origin=$(pwd)
 examples_dir=${1-$origin}
-echo "DEBUG: ORIGIN=${origin}, EXAMPLES_DIR=${examples_dir}"
 shift
 
 cd $examples_dir
@@ -20,10 +14,6 @@ if [[ "$#" -eq 0 ]]; then # use all py files
     example_list=(*.py)
 else # Run specific examples if given by user
     example_list=("$@")
-    # Add the .py extension to each example in the list.
-    for i in "${!example_list[@]}"; do
-        example_list[$i]="${example_list[$i]}.py"
-    done
 fi
 
 echo "Examples: ${example_list[*]}"
@@ -51,11 +41,16 @@ export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 for example in "${example_list[@]}"
 do
     example_name="${example%.py}"
+    example_filename="${example_name}.py"
 
-    # FIXME: Let's still test the serial examples
-    if [[ $example_name == *"nompi"* ]]; then
-        echo "*** Skipping serial example (for now): $example_name"
+    if [[ ! -f "${example_filename}" ]]; then
+        printf "Example file \"${example_filename}\" does not exist, skipping.\n"
         continue
+    fi
+
+    nompi=0
+    if [[ $example_name == *"nompi"* ]]; then
+        nompi=1
     fi
 
 
@@ -92,8 +87,13 @@ do
     rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
     set +x
 
+    basic_command="python -m mpi4py ${example_filename} --casename ${test_name}"
     set -x
-    ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${test_name}
+    if [[ "$nompi" -gt 0 ]]; then
+        ${basic_command}
+    else
+        ${mpi_exec} -n 2 $mpi_launcher $basic_command
+    fi
     test_return_code=$?
     set +x
     test_results+=("${test_name}:$test_return_code")
@@ -105,8 +105,13 @@ do
     rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
     set +x
 
+    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --lazy"
     set -x
-    ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${test_name} --lazy
+    if [[ "$nompi" -gt 0 ]]; then
+        ${basic_command}
+    else
+        ${mpi_exec} -n 2 $mpi_launcher $basic_command
+    fi
     test_return_code=$?
     set +x
     test_results+=("${test_name}:$test_return_code")
@@ -115,20 +120,22 @@ do
     test_name="${example_name}_numpy"
     echo "**** Running $test_name"
 
+    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --numpy"
     set -x
     rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
     set +x
 
     set -x
-    ${mpi_exec} -n 2 $mpi_launcher python -m mpi4py $example --casename ${test_name} --numpy
+    if [[ "$nompi" -gt 0 ]]; then
+        ${basic_command}
+    else
+        ${mpi_exec} -n 2 $mpi_launcher $basic_command
+    fi
     test_return_code=$?
     set +x
     test_results+=("${test_name}:$test_return_code")
     date
 
-    # FIXME: not all examples produce vtu files, for these the accuracy test won't be
-    # run.
-    # - may be fixed now, we look even in viz_data.
     echo "**** Accuracy comparison for $example_name."
     lazy_comparison_result=0
     numpy_comparison_result=0
@@ -179,8 +186,6 @@ do
         test_results+=("${example_name}_lazy_numpy_comparison:$lazy_numpy_comparison_result")
     fi
 
-    # gen_test_names=("eager" "lazy" "numpy" "lazy_comparison" "numpy_comparison" "lazy_numpy_comparison")
-
     example_test_result=0
     num_ex_success=0
     num_ex_failed=0
@@ -191,10 +196,7 @@ do
     echo "${example_name} testing results:"
     for test_name_result in "${test_results[@]}"; do
         _test_name=${test_name_result%%:*}
-        # test_name="${example_name}_${example_test_name}"
-        # if [[ -v test_results["$test_name"] ]]; then
         _test_result=${test_name_result#*:}
-        # if [[ ${test_results["$test_name"]+_} ]]; then
         printf "${_test_name}: "
         if [[ $_test_result -eq 0 ]]
         then
