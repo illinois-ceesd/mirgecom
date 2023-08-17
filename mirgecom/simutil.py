@@ -8,6 +8,7 @@ General utilities
 .. autofunction:: write_visfile
 .. autofunction:: global_reduce
 .. autofunction:: get_reasonable_memory_pool
+.. autofunction:: add_general_args
 
 Diagnostic utilities
 --------------------
@@ -63,6 +64,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import argparse
 import logging
 import sys
 from functools import partial
@@ -1177,6 +1179,33 @@ def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
                  f"returning a CL buffer-based memory pool on {queue.device}. "
                  "Please update your PyOpenCL version.")
         return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
+
+
+def add_general_args(parser: argparse.ArgumentParser, *,
+                     leap: bool = True, overintegration: bool = True,
+                     restart_file: bool = True) -> None:
+    """Add common driver arguments to an :class:`argparse.ArgumentParser`."""
+    # keep these sorted by argument name
+    parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    parser.add_argument("--log", action="store_true", default=True,
+        help="turn on logpyle logging")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed OpenCL kernel performance profiling")
+
+    if leap:
+        parser.add_argument("--leap", action="store_true",
+                             help="use leap timestepper")
+
+    if overintegration:
+        parser.add_argument("--overintegration", action="store_true",
+                             help="use overintegration in the RHS computations")
+
+    if restart_file:
+        parser.add_argument("--restart_file", help="root name of restart file")
 
 
 def configurate(config_key, config_object=None, default_value=None):
