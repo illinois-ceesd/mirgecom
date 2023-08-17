@@ -104,7 +104,7 @@ def main(actx_class, use_logmgr=True,
     nstatus = 1
     nhealth = 1
     nrestart = 10
-    nviz = 1
+    nviz = 100
 
     dim = 2
 

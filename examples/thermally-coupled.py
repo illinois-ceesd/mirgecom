@@ -114,9 +114,9 @@ def main(use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-7
+    t_final = 2e-9
     current_cfl = 1.0
-    current_dt = 1e-8
+    current_dt = 1e-10
     current_t = 0
     constant_cfl = False
 
@@ -126,7 +126,7 @@ def main(use_logmgr=True,
     # some i/o frequencies
     nstatus = 1
     nrestart = 500
-    nviz = 25
+    nviz = 100
     nhealth = 1
 
     dim = 2

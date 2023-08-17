@@ -57,7 +57,8 @@ def bump(actx, nodes, t=0):
             / source_width**2))
 
 
-def main(actx_class, use_logmgr: bool = False) -> None:
+def main(actx_class, use_logmgr: bool = False,
+         casename="wave-nompi") -> None:
     """Drive the example."""
     logmgr = initialize_logmgr(use_logmgr,
         filename="wave.sqlite", mode="wu")
@@ -131,13 +132,13 @@ def main(actx_class, use_logmgr: bool = False) -> None:
         fields = rk4_step(fields, t, dt, compiled_rhs)
         fields = force_evaluation(actx, fields)
 
-        if istep % 10 == 0:
+        if istep % 100 == 0:
             if use_profiling:
                 from mirgecom.profiling import PyOpenCLProfilingArrayContext
                 assert isinstance(actx, PyOpenCLProfilingArrayContext)
                 print(actx.tabulate_profiling_data())
             print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
-            vis.write_vtk_file("fld-wave-%04d.vtu" % istep,
+            vis.write_vtk_file(f"{casename}-%04d.vtu" % istep,
                     [
                         ("u", fields[0]),
                         ("v", fields[1:]),
@@ -167,6 +168,6 @@ if __name__ == "__main__":
                                                     profiling=args.profiling,
                                                     numpy=args.numpy)
 
-    main(actx_class, use_logmgr=args.log)
+    main(actx_class, use_logmgr=args.log, casename=args.casename)
 
 # vim: foldmethod=marker

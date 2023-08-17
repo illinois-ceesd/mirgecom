@@ -14,7 +14,6 @@ The examples and the unique features they exercise are as follows:
 - `vortex.py`: Isentropic vortex advection: outflow boundaries, verification
 - `hotplate.py`: Isothermal BC verification (prescribed exact soln)
 - `doublemach.py`: AV test case
-- `nsmix.py`: Viscous mixture w/Pyrometheus-based EOS
 - `poiseuille.py`: Poiseuille flow verification case
 - `poiseuille-multispecies.py`: Poiseuille flow with passive scalars
 - `scalar-advdiff.py`: Scalar advection-diffusion verification case
