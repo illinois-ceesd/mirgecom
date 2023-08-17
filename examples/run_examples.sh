@@ -87,7 +87,7 @@ do
     rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
     set +x
 
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name}"
+    basic_command="python -u -O -m mpi4py ${example_filename} --casename ${test_name}"
     set -x
     if [[ "$nompi" -gt 0 ]]; then
         ${basic_command}
@@ -105,7 +105,7 @@ do
     rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
     set +x
 
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --lazy"
+    basic_command="python -u -O -m mpi4py ${example_filename} --casename ${test_name} --lazy"
     set -x
     if [[ "$nompi" -gt 0 ]]; then
         ${basic_command}
@@ -120,7 +120,7 @@ do
     test_name="${example_name}_numpy"
     echo "**** Running $test_name"
 
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --numpy"
+    basic_command="python -u -O -m mpi4py ${example_filename} --casename ${test_name} --numpy"
     set -x
     rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
     set +x
