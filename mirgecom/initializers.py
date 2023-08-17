@@ -326,16 +326,6 @@ class SodShock1D:
         energy = energyr + (energyl - energyr)*weight
         momentum = make_obj_array([1.*zeros for _ in range(self._dim)])
 
-        # yesno = actx.np.greater(x_rel, x0)
-        # mass = actx.np.where(yesno, rhor, rhol)
-        # energy = actx.np.where(yesno, energyr, energyl)
-        # mom = make_obj_array(
-        #     [
-        #         0*x_rel
-        #         for i in range(self._dim)
-        #     ]
-        # )
-
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=momentum)
 
