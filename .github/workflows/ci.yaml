@@ -153,7 +153,9 @@ jobs:
 
             sudo apt-get update
             sudo apt-get install texlive-latex-extra latexmk
-            mamba install sphinx graphviz 'docutils>=0.16'
+
+            # Sphinx 7.2 issue: https://github.com/pradyunsg/furo/discussions/693
+            mamba install 'sphinx<7.2' graphviz 'docutils>=0.16'
 
             # Work around "Not enough memory to run on this device." errors in CI:
             mamba uninstall pocl
