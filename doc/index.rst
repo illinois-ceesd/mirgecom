@@ -72,6 +72,7 @@ Table of Contents
 
     mathematical/mathematical
     discretization
+    wall_model
     operators/operators
     support/support
     development/development

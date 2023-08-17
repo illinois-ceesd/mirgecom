@@ -1,4 +1,9 @@
-""":mod:`mirgecom.materials.prescribed_material` for user-defined materials."""
+""":mod:`mirgecom.materials.prescribed_porous_material` for user-defined material.
+
+The user can create any material with driver-oriented functions.
+
+.. autoclass:: PrescribedProperties
+"""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -29,7 +34,7 @@ from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallProperties
 
 
-class SolidProperties(PorousWallProperties):
+class PrescribedProperties(PorousWallProperties):
     """Evaluate the properties of a user-defined material.
 
     .. automethod:: void_fraction

@@ -305,7 +305,8 @@ def make_fluid_state(cv, gas_model,
 
         The gas conserved state
 
-    gas_model: :class:`~mirgecom.gas_model.GasModel`
+    gas_model: :class:`~mirgecom.gas_model.GasModel` or
+        :class:`~mirgecom.wall_model.PorousFlowModel`
 
         The physical model for the gas/fluid.
 
@@ -354,6 +355,12 @@ def make_fluid_state(cv, gas_model,
     smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
 
+    if (not isinstance(gas_model, GasModel)
+            and not isinstance(gas_model, PorousFlowModel)):
+        print(not isinstance(gas_model, GasModel))
+        print(not isinstance(gas_model, PorousFlowModel))
+        raise TypeError("Invalid type for gas_model")
+
     if isinstance(gas_model, GasModel):
         temperature = gas_model.eos.temperature(cv=cv,
                                                 temperature_seed=temperature_seed)
@@ -390,6 +397,8 @@ def make_fluid_state(cv, gas_model,
 
         return FluidState(cv=cv, dv=dv)
 
+    # TODO ideally, we want to avoid using "gas model" because the name contradicts
+    # its usage with solid+fluid.
     if isinstance(gas_model, PorousFlowModel):
 
         # FIXME per previous review, think of a way to de-couple wall and fluid.
@@ -407,9 +416,8 @@ def make_fluid_state(cv, gas_model,
             tortuosity=gas_model.wall_model.tortuosity(tau)
         )
 
-        # FIXME is there a way to pass the argument to "niter"?
         temperature = gas_model.get_temperature(cv=cv, wv=wv,
-            tseed=temperature_seed, niter=3)
+            tseed=temperature_seed)
 
         pressure = gas_model.get_pressure(cv, wv, temperature)
 
@@ -432,8 +440,6 @@ def make_fluid_state(cv, gas_model,
         tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
-
-    return None
 
 
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None):

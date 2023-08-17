@@ -5,6 +5,7 @@
 .. autofunction:: force_evaluation
 .. autofunction:: normalize_boundaries
 .. autofunction:: project_from_base
+.. autofunction:: mask_from_elements
 """
 
 __copyright__ = """
@@ -32,6 +33,11 @@ THE SOFTWARE.
 """
 
 from typing import Optional
+from arraycontext import tag_axes
+from meshmode.dof_array import DOFArray
+from meshmode.transform_metadata import (
+    DiscretizationElementAxisTag,
+    DiscretizationDOFAxisTag)
 
 
 def asdict_shallow(dc_instance) -> dict:
@@ -145,3 +151,34 @@ def project_from_base(dcoll, tgt_dd, field):
         return project(dcoll, tgt_dd_base, tgt_dd, field)
     else:
         return field
+
+
+def mask_from_elements(dcoll, dd, actx, elements):
+    """Get a :class:`~meshmode.dof_array.DOFArray` mask corresponding to *elements*.
+
+    Returns
+    -------
+    mask: :class:`meshmode.dof_array.DOFArray`
+        A DOF array containing $1$ for elements that are in *elements* and $0$
+        for elements that aren't.
+    """
+    discr = dcoll.discr_from_dd(dd)
+    mesh = discr.mesh
+    zeros = discr.zeros(actx)
+
+    group_arrays = []
+
+    for igrp in range(len(mesh.groups)):
+        start_elem_nr = mesh.base_element_nrs[igrp]
+        end_elem_nr = start_elem_nr + mesh.groups[igrp].nelements
+        grp_elems = elements[
+            (elements >= start_elem_nr)
+            & (elements < end_elem_nr)] - start_elem_nr
+        grp_ary_np = actx.to_numpy(zeros[igrp])
+        grp_ary_np[grp_elems] = 1
+        group_arrays.append(actx.from_numpy(grp_ary_np))
+
+    return tag_axes(actx, {
+        0: DiscretizationElementAxisTag(),
+        1: DiscretizationDOFAxisTag()
+    }, DOFArray(actx, tuple(group_arrays)))

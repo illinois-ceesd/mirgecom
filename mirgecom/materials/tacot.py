@@ -5,7 +5,7 @@
     Ablator) proposed as an open-source material for the Ablation Workshop.
 
 .. autoclass:: Pyrolysis
-.. autoclass:: SolidProperties
+.. autoclass:: TACOTProperties
 """
 
 __copyright__ = """
@@ -99,7 +99,7 @@ class Pyrolysis:
             actx.np.zeros_like(temperature)])
 
 
-class SolidProperties(PorousWallProperties):
+class TACOTProperties(PorousWallProperties):
     """Evaluate the properties of the solid state containing resin and fibers.
 
     A linear weighting between the virgin and chared states is applied to
