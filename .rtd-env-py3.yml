@@ -12,6 +12,7 @@ dependencies:
 - pip
 - pyopencl
 - scipy
+- sphinx<7.2
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
   - "git+https://github.com/inducer/loopy.git#egg=loopy"
