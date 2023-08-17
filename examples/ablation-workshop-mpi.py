@@ -1,15 +1,4 @@
-r"""Demonstrate Ablation Workshop case \#2.1.
-
-.. autoclass:: GasProperties
-.. autoclass:: BprimeTable
-.. autoclass:: WallTabulatedEOS
-
-Helper Functions
-----------------
-.. autofunction:: eval_spline
-.. autofunction:: eval_spline_derivative
-
-"""
+r"""Demonstrate Ablation Workshop case \#2.1."""
 
 __copyright__ = "Copyright (C) 2023 University of Illinois Board of Trustees"
 
@@ -77,7 +66,7 @@ from mirgecom.eos import MixtureDependentVars
 from mirgecom.gas_model import PorousFlowFluidState
 from mirgecom.wall_model import (
     PorousWallVars,
-    PorousFlowModel as OriginalPorousFlowModel
+    PorousFlowModel as BasePorousFlowModel
 )
 from mirgecom.fluid import ConservedVars
 from mirgecom.transport import GasTransportVars
@@ -147,7 +136,7 @@ def initializer(dim, gas_model, material_densities, temperature,
         raise ValueError("Must specify one of 'gas_density' or 'pressure'")
 
     if not isinstance(temperature, DOFArray):
-        raise ValueError("Temperature does not have the proper shape")
+        raise TypeError("Temperature does not have the proper shape")
 
     actx = temperature.array_context
 
@@ -229,27 +218,25 @@ class BprimeTable:
     portion is evaluated. This is NOT used for fully-coupled cases.
     """
 
-    def __init__(self):
+    import mirgecom
+    path = mirgecom.__path__[0] + "/materials/aw_Bprime.dat"
+    bprime_table = \
+        (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
 
-        import mirgecom
-        path = mirgecom.__path__[0] + "/materials/aw_Bprime.dat"
-        bprime_table = \
-            (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+    # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
+    bounds_T = bprime_table[0, :-1:6, 2]  # noqa N815
+    bounds_B = bprime_table[::-1, 0, 0]  # noqa N815
+    Bc = bprime_table[::-1, :, 1]
+    Hw = bprime_table[::-1, :-1:6, 3]
 
-        # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
-        self._bounds_T = bprime_table[   0, :-1:6, 2]  # noqa E201
-        self._bounds_B = bprime_table[::-1, 0, 0]
-        self._Bc = bprime_table[::-1, :, 1]
-        self._Hw = bprime_table[::-1, :-1:6, 3]
-
-        # create spline to interpolate the wall enthalpy
-        self._cs_Hw = np.zeros((25, 4, 24))
-        for i in range(0, 25):
-            self._cs_Hw[i, :, :] = scipy.interpolate.CubicSpline(
-                self._bounds_T, self._Hw[i, :]).c
+    # create spline to interpolate the wall enthalpy
+    cs_Hw = np.zeros((25, 4, 24))  # noqa N815
+    for i in range(0, 25):
+        cs_Hw[i, :, :] = scipy.interpolate.CubicSpline(
+            bounds_T, Hw[i, :]).c
 
 
-class GasProperties:
+class GasEOS:
     """Simplified model of the pyrolysis gas using tabulated data.
 
     This section is to be used when species conservation is not employed and
@@ -397,7 +384,7 @@ class GasProperties:
         return cv.mass*gas_const*temperature
 
 
-class PorousFlowModel(OriginalPorousFlowModel):
+class PorousFlowModel(BasePorousFlowModel):
     """EOS for wall using tabulated data.
 
     Inherits WallEOS and add an temperature-evaluation function exclusive
@@ -442,7 +429,7 @@ class PorousFlowModel(OriginalPorousFlowModel):
             actx = cv.array_context
             temp = tseed + actx.np.zeros_like(cv.mass)
         else:
-            temp = tseed*1.0
+            temp = tseed
 
         for _ in range(0, niter):
             eps_rho_e = (cv.mass*self.eos.get_internal_energy(temperature=temp)
@@ -611,9 +598,9 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     import mirgecom.materials.tacot as my_composite
 
-    my_gas = GasProperties()
+    my_gas = GasEOS()
     bprime_class = BprimeTable()
-    my_material = my_composite.SolidProperties(char_mass=220.0, virgin_mass=280.0)
+    my_material = my_composite.TACOTProperties(char_mass=220.0, virgin_mass=280.0)
     pyrolysis = my_composite.Pyrolysis()
 
     gas_model = PorousFlowModel(eos=my_gas, wall_model=my_material, transport=None)
@@ -870,8 +857,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         # ~~~~
         # get the wall enthalpy using spline interpolation
-        bnds_T = bprime_class._bounds_T  # noqa N806
-        bnds_B = bprime_class._bounds_B  # noqa N806
+        bnds_T = bprime_class.bounds_T  # noqa N806
+        bnds_B = bprime_class.bounds_B  # noqa N806
 
         # using spline for temperature interpolation
         # while using "nearest neighbor" for the "B" parameter
@@ -884,10 +871,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                     actx.np.where(actx.np.less(temperature_bc, bnds_T[j+1]),
                     actx.np.where(actx.np.greater_equal(Bsurf, bnds_B[k]),
                     actx.np.where(actx.np.less(Bsurf, bnds_B[k+1]),
-                          bprime_class._cs_Hw[k, 0, j]*(temperature_bc-bnds_T[j])**3
-                        + bprime_class._cs_Hw[k, 1, j]*(temperature_bc-bnds_T[j])**2
-                        + bprime_class._cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
-                        + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0)
+                          bprime_class.cs_Hw[k, 0, j]*(temperature_bc-bnds_T[j])**3
+                        + bprime_class.cs_Hw[k, 1, j]*(temperature_bc-bnds_T[j])**2
+                        + bprime_class.cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
+                        + bprime_class.cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0)
                 i += 1
 
         h_w = binary_sum(h_w_comps)

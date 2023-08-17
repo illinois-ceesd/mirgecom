@@ -1,4 +1,43 @@
-""":mod:`mirgecom.wall_model` handles the EOS for wall model."""
+""":mod:`mirgecom.wall_model` handles solid walls and fluid-wall models.
+
+Solid materials
+^^^^^^^^^^^^^^^
+
+Impermeable-wall variables
+---------------------------
+.. autoclass:: SolidWallConservedVars
+.. autoclass:: SolidWallDependentVars
+.. autoclass:: SolidWallState
+
+Impermeable wall EOS
+--------------------
+.. autoclass:: SolidWallModel
+
+Material properties
+-------------------
+    The material properties are defined exclusively at the driver. The user
+    must provide density, enthalpy, heat capacity and thermal conductivity of
+    all constituents and their spatial distribution using
+    :mod:`~mirgecom.utils.mask_from_elements`.
+
+Porous materials
+^^^^^^^^^^^^^^^^
+
+Porous-wall variables
+---------------------
+.. autoclass:: PorousWallVars
+
+Porous Media EOS
+----------------
+.. autoclass:: PorousFlowModel
+
+Material properties
+-------------------
+    The properties of the materials are defined in specific files and used by
+    :class:`PorousWallProperties`.
+
+.. autoclass:: PorousWallProperties
+"""
 
 __copyright__ = """
 Copyright (C) 2023 University of Illinois Board of Trustees
@@ -152,6 +191,10 @@ class SolidWallModel:
 class PorousWallVars:
     """Variables for the porous material.
 
+    It combines conserved variables, such as material_densities, with those
+    that depend on the current status of the wall, which is uniquely defined
+    based on the material densities.
+
     .. attribute:: material_densities
     .. attribute:: tau
     .. attribute:: void_fraction
@@ -172,6 +215,9 @@ class PorousWallVars:
 
 class PorousWallProperties:
     """Abstract interface for porous media domains.
+
+    The properties are material-dependent and specified in individual files
+    that inherit this class.
 
     .. automethod:: void_fraction
     .. automethod:: enthalpy
@@ -304,6 +350,7 @@ class PorousFlowModel(PorousFlowEOS):
     eos: GasEOS
     transport: TransportModel
     wall_model: PorousWallProperties
+    temperature_iteration = 3
 
     def solid_density(self, material_densities) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
@@ -329,7 +376,7 @@ class PorousFlowModel(PorousFlowEOS):
         return self.wall_model.decomposition_progress(mass)
 
     def get_temperature(self, cv: ConservedVars, wv: PorousWallVars,
-                        tseed: DOFArray, niter=3) -> DOFArray:
+                        tseed: DOFArray, niter=temperature_iteration) -> DOFArray:
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.

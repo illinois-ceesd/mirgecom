@@ -705,7 +705,7 @@ class PorousWallTransport(TransportModel):
 
     Inherits from (and implements) :class:`TransportModel`.
 
-    Takes a any transport model and modify it to consider the interaction
+    Takes any transport model and modifies it to consider the interaction
     with the porous materials.
 
     .. automethod:: __init__

@@ -1,7 +1,7 @@
 r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
 
 .. autoclass:: Oxidation
-.. autoclass:: SolidProperties
+.. autoclass:: FiberProperties
 """
 
 __copyright__ = """
@@ -106,7 +106,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
 
 
-class SolidProperties(PorousWallProperties):
+class FiberProperties(PorousWallProperties):
     """Evaluate the properties of the solid state containing only fibers.
 
     .. automethod:: void_fraction

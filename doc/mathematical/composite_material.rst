@@ -13,7 +13,7 @@ Carbon Fiber Oxidation
 
     The temporal evolution of mass density is solved in
     order to predict the material degradation. As the
-    :class:`~mirgecom.materials.carbon_fiber.Oxidation` progresses,
+    :attr:`~mirgecom.materials.carbon_fiber.Oxidation` progresses,
     the temporal evolution of the fibers mass is given by
 
     .. math ::
