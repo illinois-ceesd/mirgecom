@@ -945,7 +945,7 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
 
     Converts from entropy variables into conserved variables
     (density, momentum, total energy, species density) per
-    eqn. 4.5 of [Chandrashekar_2012]_.
+    eqn. 4.5 of [Chandrashekar_2013]_.
 
     Parameters
     ----------
