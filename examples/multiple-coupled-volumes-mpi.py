@@ -472,7 +472,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
     import mirgecom.materials.carbon_fiber as my_material
     sample_density = 0.1*1600.0 + sample_zeros
-    fiber = my_material.SolidProperties(char_mass=0.0, virgin_mass=160.0)
+    fiber = my_material.FiberProperties(char_mass=0.0, virgin_mass=160.0)
 
     # }}}
 
