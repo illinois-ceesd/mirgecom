@@ -214,7 +214,7 @@ def main(actx_class, casename="wave",
                 comm=comm
             )
 
-        if istep % 10 == 0:
+        if istep % 100 == 0:
             print(istep, t, actx.to_numpy(op.norm(dcoll, fields[0], 2)))
             vis.write_parallel_vtk_file(
                 comm,

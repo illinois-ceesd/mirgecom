@@ -132,7 +132,7 @@ def main(actx_class, use_logmgr: bool = False,
         fields = rk4_step(fields, t, dt, compiled_rhs)
         fields = force_evaluation(actx, fields)
 
-        if istep % 10 == 0:
+        if istep % 100 == 0:
             if use_profiling:
                 from mirgecom.profiling import PyOpenCLProfilingArrayContext
                 assert isinstance(actx, PyOpenCLProfilingArrayContext)
