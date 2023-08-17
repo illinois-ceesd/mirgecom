@@ -126,7 +126,7 @@ def main(actx_class, use_logmgr=True,
 
     # i.o frequencies
     nstatus = 1
-    nviz = 5
+    nviz = 100
     nhealth = 1
     nrestart = 5
 

@@ -126,7 +126,7 @@ def main(use_logmgr=True,
     # some i/o frequencies
     nstatus = 1
     nrestart = 500
-    nviz = 25
+    nviz = 100
     nhealth = 1
 
     dim = 2

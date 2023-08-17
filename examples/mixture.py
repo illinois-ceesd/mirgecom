@@ -112,7 +112,7 @@ def main(actx_class, use_logmgr=True,
     nstatus = 1
     nhealth = 1
     nrestart = 5
-    nviz = 1
+    nviz = 100
 
     dim = 2
     rst_path = "restart_data/"
