@@ -1,4 +1,4 @@
-"""Demonstrate simple scalar lump advection."""
+"""Demonstrate Sod's 1D shock example."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -24,9 +24,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
+import numpy as np  # noqa
 from functools import partial
-from pytools.obj_array import make_obj_array
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
@@ -43,9 +42,9 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import PrescribedFluidBoundary
-from mirgecom.initializers import MulticomponentLump
+from mirgecom.initializers import SodShock1D
 from mirgecom.eos import IdealSingleGas
-
+from mirgecom.gas_model import GasModel, make_fluid_state
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
@@ -69,14 +68,14 @@ class MyRuntimeError(RuntimeError):
 def main(actx_class, use_logmgr=True,
          use_leap=False, casename=None,
          rst_filename=None):
-    """Drive example."""
+    """Drive the example."""
     if casename is None:
         casename = "mirgecom"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    nparts = comm.Get_size()
+    num_parts = comm.Get_size()
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -90,25 +89,25 @@ def main(actx_class, use_logmgr=True,
     use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
-    current_step = 0
     if use_leap:
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.005
+    t_final = 0.01
     current_cfl = 1.0
-    current_dt = .001
+    current_dt = .0001
     current_t = 0
     constant_cfl = False
+    current_step = 0
 
     # some i/o frequencies
-    nstatus = 1
+    nstatus = 10
     nrestart = 5
-    nviz = 1
-    nhealth = 1
+    nviz = 100
+    nhealth = 10
 
-    dim = 2
+    dim = 1
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -120,19 +119,19 @@ def main(actx_class, use_logmgr=True,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["num_parts"] == nparts
+        assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        nel_1d = 24
         box_ll = -5.0
         box_ur = 5.0
-        nel_1d = 16
-        from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 3
+    order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
@@ -156,20 +155,9 @@ def main(actx_class, use_logmgr=True,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    # soln setup and init
-    nspecies = 4
-    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
-    spec_y0s = np.ones(shape=(nspecies,))
-    spec_amplitudes = np.ones(shape=(nspecies,))
+    initializer = SodShock1D(dim=dim)
     eos = IdealSingleGas()
-    velocity = np.ones(shape=(dim,))
-    from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos)
-
-    initializer = MulticomponentLump(dim=dim, nspecies=nspecies,
-                                     spec_centers=centers, velocity=velocity,
-                                     spec_y0s=spec_y0s,
-                                     spec_amplitudes=spec_amplitudes)
 
     def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
@@ -181,7 +169,6 @@ def main(actx_class, use_logmgr=True,
     boundaries = {
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
     }
-
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -192,9 +179,11 @@ def main(actx_class, use_logmgr=True,
     else:
         # Set the current state from time 0
         current_cv = initializer(nodes)
+
     current_state = make_fluid_state(current_cv, gas_model)
 
     visualizer = make_visualizer(dcoll)
+
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
@@ -211,7 +200,8 @@ def main(actx_class, use_logmgr=True,
         if rank == 0:
             logger.info(
                 "------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
+                + ", ".join("%.3g" % en for en in component_errors)
+            )
 
     def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
         if dv is None:
@@ -223,23 +213,23 @@ def main(actx_class, use_logmgr=True,
         viz_fields = [("cv", state),
                       ("dv", dv),
                       ("exact", exact),
-                      ("resid", resid)]
+                      ("residual", resid)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
 
-    def my_write_restart(step, t, state):
+    def my_write_restart(state, step, t):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "state": state,
+                "cv": state,
                 "t": t,
                 "step": step,
                 "order": order,
                 "global_nelements": global_nelements,
-                "num_parts": nparts
+                "num_parts": num_parts
             }
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
@@ -248,7 +238,7 @@ def main(actx_class, use_logmgr=True,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .99999999, 1.00000001):
+           or check_range_local(dcoll, "vol", pressure, .09, 1.1):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
@@ -262,7 +252,6 @@ def main(actx_class, use_logmgr=True,
 
     def my_pre_step(step, t, dt, state):
         fluid_state = make_fluid_state(state, gas_model)
-        cv = fluid_state.cv
         dv = fluid_state.dv
 
         try:
@@ -281,7 +270,7 @@ def main(actx_class, use_logmgr=True,
             if do_health:
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import compare_fluid_solutions
-                component_errors = compare_fluid_solutions(dcoll, cv, exact)
+                component_errors = compare_fluid_solutions(dcoll, state, exact)
                 health_errors = global_reduce(
                     my_health_check(dv.pressure, component_errors), op="lor")
                 if health_errors:
@@ -290,28 +279,29 @@ def main(actx_class, use_logmgr=True,
                     raise MyRuntimeError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=cv)
+                my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
                 if exact is None:
                     exact = initializer(x_vec=nodes, eos=eos, time=t)
-                resid = cv - exact
-                my_write_viz(step=step, t=t, state=cv, dv=dv, exact=exact,
+                resid = state - exact
+                my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
                              resid=resid)
 
             if do_status:
                 if component_errors is None:
                     if exact is None:
                         exact = initializer(x_vec=nodes, eos=eos, time=t)
-                    from mirgecom.simutil import compare_fluid_solutions
-                    component_errors = compare_fluid_solutions(dcoll, cv, exact)
+                        from mirgecom.simutil import compare_fluid_solutions
+                        component_errors = \
+                            compare_fluid_solutions(dcoll, state, exact)
                 my_write_status(component_errors)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=cv)
-            my_write_restart(step=step, t=t, state=cv)
+            my_write_viz(step=step, t=t, state=state)
+            my_write_restart(step=step, t=t, state=state)
             raise
 
         dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
@@ -328,7 +318,7 @@ def main(actx_class, use_logmgr=True,
         return state, dt
 
     def my_rhs(t, state):
-        fluid_state = make_fluid_state(state, gas_model)
+        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
         return euler_operator(dcoll, state=fluid_state, time=t,
                               boundaries=boundaries, gas_model=gas_model)
 
@@ -359,14 +349,12 @@ def main(actx_class, use_logmgr=True,
         print(actx.tabulate_profiling_data())
 
     finish_tol = 1e-16
-    time_err = current_t - t_final
-    if np.abs(time_err) > finish_tol:
-        raise ValueError(f"Simulation did not finish at expected time {time_err=}.")
+    assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":
     import argparse
-    casename = "lumpy-scalars"
+    casename = "sod-shock"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")

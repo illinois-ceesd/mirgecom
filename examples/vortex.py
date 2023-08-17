@@ -1,4 +1,4 @@
-"""Demonstrate a fluid between two hot plates in 2d."""
+"""Demonstrate the isentropic vortex example."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -28,31 +28,27 @@ import numpy as np
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag
 
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.fluid import make_conserved
-from mirgecom.navierstokes import ns_operator
+from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
-    get_box_mesh
+    generate_and_distribute_mesh,
+    check_step
 )
-
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
+
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    PrescribedFluidBoundary,
-    IsothermalWallBoundary
-)
-from mirgecom.transport import SimpleTransport
+from mirgecom.boundary import PrescribedFluidBoundary
+from mirgecom.initializers import Vortex2D
 from mirgecom.eos import IdealSingleGas
 from mirgecom.gas_model import GasModel, make_fluid_state
 from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
+
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
@@ -60,7 +56,6 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -72,20 +67,16 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(use_logmgr=True,
-         use_leap=False, casename=None,
-         rst_filename=None, actx_class=None):
+def main(actx_class, use_logmgr=True,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
     if casename is None:
         casename = "mirgecom"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    nparts = comm.Get_size()
+    num_parts = comm.Get_size()
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -99,57 +90,56 @@ def main(use_logmgr=True,
     use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
-    timestepper = rk4_step
-    t_final = 2e-7
-    current_cfl = .1
-    current_dt = 1e-8
+    current_step = 0
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
+    t_final = 0.01
+    current_cfl = 1.0
+    current_dt = .001
     current_t = 0
     constant_cfl = False
-    current_step = 0
 
     # some i/o frequencies
+    nrestart = 10
     nstatus = 1
-    nviz = 1
-    nrestart = 100
-    nhealth = 1
+    nviz = 100
+    nhealth = 10
 
-    # some geometry setup
     dim = 2
     if dim != 2:
         raise ValueError("This example must be run with dim = 2.")
-    left_boundary_location = 0
-    right_boundary_location = 0.1
-    bottom_boundary_location = 0
-    top_boundary_location = .02
+
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
     if rst_filename:  # read the grid from restart data
         rst_filename = f"{rst_filename}-{rank:04d}.pkl"
-
         from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["nparts"] == nparts
+        assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        n_refine = 2
-        nels_x = 5 * n_refine
-        nels_y = 3 * n_refine
-        nels_axis = (nels_x, nels_y)
-        box_ll = (left_boundary_location, bottom_boundary_location)
-        box_ur = (right_boundary_location, top_boundary_location)
-        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=nels_axis)
-        from mirgecom.simutil import generate_and_distribute_mesh
+        nel_1d = 16
+        box_ll = -5.0
+        box_ur = 5.0
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
+                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
+    order = 3
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+
+    vis_timer = None
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -157,49 +147,35 @@ def main(use_logmgr=True,
         logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
             ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
             ("max_pressure",    "{value:1.9e})\n"),
-            ("min_temperature", "------- T (min, max) (K) = ({value:1.9e}, "),
-            ("max_temperature",    "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
+        try:
+            logmgr.add_watches(["memory_usage_python.max", "memory_usage_gpu.max"])
+        except KeyError:
+            pass
 
-    mu = 1.0
-    kappa = 1.0
+        if use_profiling:
+            logmgr.add_watches(["multiply_time.max"])
 
-    top_boundary_temperature = 400
-    bottom_boundary_temperature = 300
+    # soln setup and init
+    eos = IdealSingleGas()
+    vel = np.zeros(shape=(dim,))
+    orig = np.zeros(shape=(dim,))
+    vel[:dim] = 1.0
+    initializer = Vortex2D(center=orig, velocity=vel)
+    gas_model = GasModel(eos=eos)
 
-    def tramp_2d(x_vec, eos, cv=None, **kwargs):
-        y = x_vec[1]
-        ones = 0*y + 1.0
-        l_y = top_boundary_location - bottom_boundary_location
-        p0 = eos.gas_const() * bottom_boundary_temperature
-        delta_temp = top_boundary_temperature - bottom_boundary_temperature
-        dtdy = delta_temp / l_y
-        temperature_y = bottom_boundary_temperature + dtdy*y
-        mass = p0 / (eos.gas_const() * temperature_y)
-        e0 = p0 / (eos.gamma() - 1.0)
-        velocity = 0 * x_vec
-        energy = e0 * ones
-        momentum = mass * velocity
-        return make_conserved(2, mass=mass, energy=energy, momentum=momentum)
-
-    initializer = tramp_2d
-    gas_model = GasModel(eos=IdealSingleGas(),
-                         transport=SimpleTransport(viscosity=mu,
-                                                   thermal_conductivity=kappa))
-
-    exact = initializer(x_vec=nodes, eos=gas_model.eos)
-
-    def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
         bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
@@ -207,14 +183,8 @@ def main(use_logmgr=True,
                                             **kwargs), gas_model)
 
     boundaries = {
-        BoundaryDomainTag("-1"): PrescribedFluidBoundary(
-            boundary_state_func=_boundary_state),
-        BoundaryDomainTag("+1"): PrescribedFluidBoundary(
-            boundary_state_func=_boundary_state),
-        BoundaryDomainTag("-2"): IsothermalWallBoundary(
-            wall_temperature=bottom_boundary_temperature),
-        BoundaryDomainTag("+2"): IsothermalWallBoundary(
-            wall_temperature=top_boundary_temperature)}
+        BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
+    }
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -225,56 +195,53 @@ def main(use_logmgr=True,
             logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
-        current_cv = exact
-    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
+        current_cv = initializer(nodes)
 
-    vis_timer = None
+    current_state = make_fluid_state(current_cv, gas_model)
 
-    visualizer = make_visualizer(dcoll, order)
+    visualizer = make_visualizer(dcoll)
 
-    eosname = gas_model.eos.__class__.__name__
+    initname = initializer.__class__.__name__
+    eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
                                      dt=current_dt, t_final=t_final, nstatus=nstatus,
                                      nviz=nviz, cfl=current_cfl,
-                                     constant_cfl=constant_cfl, initname=casename,
+                                     constant_cfl=constant_cfl, initname=initname,
                                      eosname=eosname, casename=casename)
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_status(step, t, dt, state, component_errors):
-        from grudge.op import nodal_min, nodal_max
-        dv = state.dv
-        p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
-        p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
-        t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
-        t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
-        if constant_cfl:
-            cfl = current_cfl
-        else:
-            from mirgecom.viscous import get_viscous_cfl
-            cfl = actx.to_numpy(nodal_max(dcoll, "vol",
-                                          get_viscous_cfl(dcoll, dt=current_dt,
-                                                          state=state)))
-
+    def my_write_status(state, component_errors, cfl=None):
+        if cfl is None:
+            if constant_cfl:
+                cfl = current_cfl
+            else:
+                from grudge.op import nodal_max
+                from mirgecom.inviscid import get_inviscid_cfl
+                cfl = actx.to_numpy(
+                    nodal_max(
+                        dcoll, "vol",
+                        get_inviscid_cfl(dcoll, state, current_dt)))[()]
         if rank == 0:
-            logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
-                        f"----- Pressure({p_min}, {p_max})\n"
-                        f"----- Temperature({t_min}, {t_max})\n"
-                        "----- errors="
-                        + ", ".join("%.3g" % en for en in component_errors))
+            logger.info(
+                f"------ {cfl=}\n"
+                "------- errors="
+                + ", ".join("%.3g" % en for en in component_errors))
 
-    def my_write_viz(step, t, state, dv):
-        resid = state - exact
+    def my_write_viz(step, t, state, dv=None, exact=None, resid=None):
+        if exact is None:
+            exact = initializer(x_vec=nodes, eos=eos, time=t)
+        if resid is None:
+            resid = state - exact
         viz_fields = [("cv", state),
                       ("dv", dv),
                       ("exact", exact),
-                      ("resid", resid)]
-
+                      ("residual", resid)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True,
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
 
     def my_write_restart(step, t, state):
@@ -287,37 +254,18 @@ def main(use_logmgr=True,
                 "step": step,
                 "order": order,
                 "global_nelements": global_nelements,
-                "num_parts": nparts
+                "num_parts": num_parts
             }
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(state, dv, component_errors):
+    def my_health_check(pressure, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", dv.pressure):
+        if check_naninf_local(dcoll, "vol", pressure) \
+           or check_range_local(dcoll, "vol", pressure, .2, 1.02):
             health_error = True
-            logger.info(f"{rank=}: NANs/Infs in pressure data.")
-
-        if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 86129, 86131),
-                         op="lor"):
-            health_error = True
-            from grudge.op import nodal_max, nodal_min
-            p_min = nodal_min(dcoll, "vol", dv.pressure)
-            p_max = nodal_max(dcoll, "vol", dv.pressure)
-            logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
-
-        if check_naninf_local(dcoll, "vol", dv.temperature):
-            health_error = True
-            logger.info(f"{rank=}: NANs/INFs in temperature data.")
-
-        if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 299, 401),
-                         op="lor"):
-            health_error = True
-            from grudge.op import nodal_max, nodal_min
-            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
-            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
-            logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
+            logger.info(f"{rank=}: Invalid pressure data found.")
 
         exittol = .1
         if max(component_errors) > exittol:
@@ -329,53 +277,59 @@ def main(use_logmgr=True,
 
     def my_pre_step(step, t, dt, state):
         fluid_state = make_fluid_state(state, gas_model)
+        cv = fluid_state.cv
         dv = fluid_state.dv
 
         try:
+            exact = None
             component_errors = None
 
             if logmgr:
                 logmgr.tick_before()
 
-            from mirgecom.simutil import check_step
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
             do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
+                exact = initializer(x_vec=nodes, eos=eos, time=t)
                 from mirgecom.simutil import compare_fluid_solutions
-                component_errors = compare_fluid_solutions(dcoll, state, exact)
+                component_errors = compare_fluid_solutions(dcoll, cv, exact)
                 health_errors = global_reduce(
-                    my_health_check(state, dv, component_errors), op="lor")
+                    my_health_check(dv.pressure, component_errors), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=state)
-
-            if do_viz:
-                my_write_viz(step=step, t=t, state=state, dv=dv)
-
-            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                                  t_final, constant_cfl)
+                my_write_restart(step=step, t=t, state=cv)
 
             if do_status:
                 if component_errors is None:
+                    if exact is None:
+                        exact = initializer(x_vec=nodes, eos=eos, time=t)
                     from mirgecom.simutil import compare_fluid_solutions
-                    component_errors = compare_fluid_solutions(dcoll, state, exact)
-                my_write_status(step=step, t=t, dt=dt, state=fluid_state,
-                                component_errors=component_errors)
+                    component_errors = compare_fluid_solutions(dcoll, cv, exact)
+                my_write_status(fluid_state, component_errors)
+
+            if do_viz:
+                if exact is None:
+                    exact = initializer(x_vec=nodes, eos=eos, time=t)
+                resid = state - exact
+                my_write_viz(step=step, t=t, state=cv, dv=dv, exact=exact,
+                             resid=resid)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state, dv=dv)
-            my_write_restart(step=step, t=t, state=state)
+            my_write_viz(step=step, t=t, state=cv)
+            my_write_restart(step=step, t=t, state=cv)
             raise
 
+        dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
+                              constant_cfl)
         return state, dt
 
     def my_post_step(step, t, dt, state):
@@ -383,14 +337,14 @@ def main(use_logmgr=True,
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, gas_model.eos)
+            set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state, dt
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
-                           time=t, gas_model=gas_model)
+        return euler_operator(dcoll, state=fluid_state, time=t,
+                              boundaries=boundaries, gas_model=gas_model)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -400,21 +354,18 @@ def main(use_logmgr=True,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=current_state.cv, t=current_t, t_final=t_final)
-    current_state = make_fluid_state(current_cv, gas_model)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_dv = current_state.dv
-    final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-                                current_cfl, t_final, constant_cfl)
-    from mirgecom.simutil import compare_fluid_solutions
-    component_errors = compare_fluid_solutions(dcoll, current_cv, exact)
 
-    my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_cv)
-    my_write_status(step=current_step, t=current_t, dt=final_dt,
-                    state=current_state, component_errors=component_errors)
+    current_state = make_fluid_state(current_cv, gas_model)
+    final_dv = current_state.dv
+    final_exact = initializer(x_vec=nodes, eos=eos, time=current_t)
+    final_resid = current_state.cv - final_exact
+    my_write_viz(step=current_step, t=current_t, state=current_state.cv, dv=final_dv,
+                 exact=final_exact, resid=final_resid)
+    my_write_restart(step=current_step, t=current_t, state=current_state.cv)
 
     if logmgr:
         logmgr.close()
@@ -427,7 +378,7 @@ def main(use_logmgr=True,
 
 if __name__ == "__main__":
     import argparse
-    casename = "hotplate"
+    casename = "vortex"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
@@ -454,7 +405,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

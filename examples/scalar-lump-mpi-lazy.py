@@ -1,1 +1,0 @@
-scalar-lump-mpi.py
