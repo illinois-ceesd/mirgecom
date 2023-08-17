@@ -24,5 +24,4 @@ dependencies:
   - "sphinx-math-dollar"
   - "sphinx-copybutton"
   - "furo"
-  - "sphinx<7.2"
 
