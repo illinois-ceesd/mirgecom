@@ -6,6 +6,21 @@ origin=$(pwd)
 examples_dir=${1-$origin}
 shift
 
+if [[ ! -d "${examples_dir}" ]]; then
+    echo "Usage: run_examples.sh <examples directory> [list of examples]"
+    printf "\nThis script runs examples on 2 MPI ranks (where appropriate) and\n"
+    printf "compares the results it gets from running with eager, lazy, and numpy\n"
+    printf "array contexts. Users may optionally provide a list of which examples\n"
+    printf "to run.\n\nArguments:\n"
+    printf "\n<examples directory>: defaults to the current working directory.\n"
+    printf "[list of examples]: optional list of specific examples\n\n"
+    printf "Usage example (run all the examples in the \"examples\" directory):\n"
+    printf "examples/run_examples.sh examples\n\n"
+    printf "Usage example (run only autoignition and poiseuille examples):\n"
+    printf "run_examples.sh . autoignition poiseuille.py\n"
+    exit 1
+fi
+
 cd $examples_dir
 
 # This bit will let the user specify which
