@@ -1302,6 +1302,9 @@ def compare_files_vtu(
         field_tolerance, tolerance) for i in range(nfields)]
     field_names = []
 
+    max_file_diff = 0.
+    max_field_name = ""
+
     for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
@@ -1336,10 +1339,10 @@ def compare_files_vtu(
             continue
 
         max_true_component = max([max(abs(arr2.GetComponent(j, icomp))
-                                      for j in range(arr2.GetNumberOfTuples()))
+                                      for j in range(num_points))
                                   for icomp in range(num_components)])
         max_other_component = max([max(abs(arr1.GetComponent(j, icomp))
-                                      for j in range(arr2.GetNumberOfTuples()))
+                                      for j in range(num_points))
                                   for icomp in range(num_components)])
 
         # FIXME
@@ -1382,7 +1385,7 @@ def compare_files_vtu(
         for icomp in range(num_components):
             if num_components > 1:
                 print(f"Comparing component {icomp}")
-            for j in range(arr1.GetNumberOfTuples()):
+            for j in range(num_points):
                 test_err = abs(arr1.GetComponent(j, icomp)
                                - arr2.GetComponent(j, icomp))*err_scale
                 if test_err > max_field_errors[i]:
@@ -1396,10 +1399,16 @@ def compare_files_vtu(
     violating_fields = []
 
     for i in range(nfields):
+        if max_field_errors[i] > max_file_diff:
+            max_file_diff = max_field_errors[i]
+            max_field_name = field_names[i]
+
         if max_field_errors[i] > field_specific_tols[i]:
             violated_tols.append(field_specific_tols[i])
             violating_values.append(max_field_errors[i])
             violating_fields.append(field_names[i])
+
+    print(f"Max File Difference: {max_field_name} : {max_file_diff}")
 
     if violated_tols:
         raise ValueError("Data comparison failed:\n"
