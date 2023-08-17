@@ -356,7 +356,9 @@ def make_fluid_state(cv, gas_model,
                        is None else smoothness_beta)
 
     if (not isinstance(gas_model, GasModel)
-            or not isinstance(gas_model, PorousFlowModel)):
+            and not isinstance(gas_model, PorousFlowModel)):
+        print(not isinstance(gas_model, GasModel))
+        print(not isinstance(gas_model, PorousFlowModel))
         raise TypeError("Invalid type for gas_model")
 
     if isinstance(gas_model, GasModel):
