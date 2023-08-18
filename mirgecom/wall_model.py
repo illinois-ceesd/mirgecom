@@ -75,8 +75,8 @@ from arraycontext import (
     get_container_context_recursively
 )
 from mirgecom.fluid import ConservedVars
-from mirgecom.eos import GasEOS
-from mirgecom.transport import PorousWallTransport
+from mirgecom.eos import GasEOS, GasDependentVars
+from mirgecom.transport import GasTransportVars
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -275,6 +275,82 @@ class PorousWallProperties:
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition."""
         raise NotImplementedError()
+
+
+# FIXME: Generalize TransportModel interface to accept state variables
+# other than fluid cv
+class PorousWallTransport:
+    r"""Transport model for porous media flow.
+
+    Takes any transport model and modifies it to consider the interaction
+    with the porous materials.
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
+    """
+
+    def __init__(self, base_transport):
+        """Initialize transport model."""
+        self.base_transport = base_transport
+
+    def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, eos) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        return self.base_transport.bulk_viscosity(cv, dv, eos)
+
+    def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, eos) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$."""
+        return (self.bulk_viscosity(cv, dv, wv, eos)
+            - 2./3. * self.viscosity(cv, dv, wv, eos))
+
+    def viscosity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, eos) -> DOFArray:
+        """Viscosity of the gas through the porous wall."""
+        return 1.0/wv.void_fraction*(
+            self.base_transport.viscosity(cv, dv, eos))
+
+    def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, eos, wall_model) -> DOFArray:
+        r"""Return the effective thermal conductivity of the gas+solid.
+
+        It is a function of temperature and degradation progress. As the
+        fibers are oxidized, they reduce their cross area and, consequently,
+        their ability to conduct heat.
+
+        It is evaluated using a mass-weighted average given by
+
+        .. math::
+            \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
+        """
+        y_g = cv.mass/(cv.mass + wv.density)
+        y_s = 1.0 - y_g
+        kappa_s = wall_model.thermal_conductivity(dv.temperature, wv.tau)
+        kappa_g = self.base_transport.thermal_conductivity(cv, dv, eos)
+
+        return y_s*kappa_s + y_g*kappa_g
+
+    def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, eos) -> DOFArray:
+        """Mass diffusivity of gaseous species through the porous wall."""
+        return 1.0/wv.tortuosity*(
+            self.base_transport.species_diffusivity(cv, dv, eos))
+
+    # FIXME I have to pass "flow_model" but this class is internal to "flow_model"..
+    # Seems dumb to me but I dont know to access the other classes...
+    def transport_vars(self, cv: ConservedVars, dv: GasDependentVars,
+            wv: PorousWallVars, eos, wall_model) -> GasTransportVars:
+        r"""Compute the transport properties."""
+        return GasTransportVars(
+            bulk_viscosity=self.bulk_viscosity(cv, dv, wv, eos),
+            viscosity=self.viscosity(cv, dv, wv, eos),
+            thermal_conductivity=self.thermal_conductivity(cv, dv, wv, eos, wall_model),
+            species_diffusivity=self.species_diffusivity(cv, dv, wv, eos)
+        )
 
 
 @dataclass(frozen=True)

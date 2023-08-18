@@ -434,7 +434,7 @@ def make_fluid_state(cv, gas_model,
 
         # FIXME I have to pass "gas_model" but this class is internal to "gas_model"
         # Seems dumb to me but I dont know to access the other classes...
-        tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model)
+        tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model.eos, gas_model.wall_model)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 

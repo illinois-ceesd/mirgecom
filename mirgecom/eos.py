@@ -136,7 +136,8 @@ class GasEOS(metaclass=ABCMeta):
         """Get the gas sound speed."""
 
     @abstractmethod
-    def gas_const(self, cv: ConservedVars):
+    def gas_const(self, cv: Optional[ConservedVars],
+                  temperature: Optional[DOFArray] = None):
         r"""Get the specific gas constant ($R_s$)."""
 
     @abstractmethod
@@ -169,7 +170,8 @@ class GasEOS(metaclass=ABCMeta):
         """Get the density from pressure, and temperature."""
 
     @abstractmethod
-    def get_internal_energy(self, temperature, species_mass_fractions=None):
+    def get_internal_energy(self, temperature: DOFArray,
+                            species_mass_fractions: DOFArray = None) -> DOFArray:
         """Get the fluid internal energy from temperature."""
 
     def dependent_vars(

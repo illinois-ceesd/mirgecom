@@ -75,7 +75,7 @@ from mirgecom.wall_model import (
 from mirgecom.fluid import ConservedVars
 from mirgecom.transport import PorousWallTransport
 from logpyle import IntervalTimer, set_dt
-
+from typing import Optional
 from pytools.obj_array import make_obj_array
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -402,7 +402,8 @@ class TabulatedGasEOS(GasEOS):
         bnds = self._cs_enthalpy.x
         return eval_spline(temperature, bnds, coeffs)
 
-    def get_internal_energy(self, temperature: DOFArray) -> DOFArray:
+    def get_internal_energy(self, temperature: DOFArray,
+                            species_mass_fractions=None) -> DOFArray:
         r"""Evaluate the gas internal energy $e$.
 
         It is evaluated based on the tabulated enthalpy and molar mass as
@@ -428,7 +429,7 @@ class TabulatedGasEOS(GasEOS):
         r"""Return the gas heat capacity at constant volume $C_{v_g}$."""
         return self.heat_capacity_cp(cv, temperature)/self.gamma(cv, temperature)
 
-    def gamma(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
+    def gamma(self, cv: ConservedVars, temperature: Optional[DOFArray] = None) -> DOFArray:
         r"""Return the heat of capacity ratios $\gamma$."""
         coeffs = self._cs_gamma.c
         bnds = self._cs_gamma.x
@@ -443,7 +444,8 @@ class TabulatedGasEOS(GasEOS):
         gas_const = self.gas_const(cv, temperature)
         return cv.mass*gas_const*temperature
 
-    def gas_const(self, cv: ConservedVars, temperature) -> DOFArray:
+    def gas_const(self, cv: Optional[ConservedVars] = None,
+                  temperature: Optional[DOFArray] = None) -> DOFArray:
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         molar_mass = eval_spline(temperature, bnds, coeffs)
