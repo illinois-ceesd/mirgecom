@@ -7,7 +7,6 @@
 # Options:
 #    -e|--examples: Run the examples (default = No)
 #    -p|--production: Run the production tests (default = No)
-#    -l|--lazy-accuracy: Run lazy accuracy tests (default = No)
 #    -b|--batch: Run tests through a batch system (default = No)
 #
 # Each driver to test is expected to have a smoke test defined in:
@@ -17,7 +16,6 @@
 # for an example `smoke_test.sh`.
 #
 do_examples=false
-do_lazy_accuracy=false
 do_production_tests=false
 do_batch_job=false
 
@@ -28,16 +26,11 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -a|--all)
             do_examples=true
-            do_lazy_accuracy=true
             do_production_tests=true
             shift
             ;;
         -e|--examples)
             do_examples=true
-            shift
-            ;;
-        -l|--lazy-accuracy)
-            do_lazy_accuracy=true
             shift
             ;;
         -p|--production)
@@ -100,26 +93,6 @@ if [[ "${do_examples}" = "true" ]]; then
         ((numfail=numfail+1))
         printf "\-\- Example tests failed.\n"
         failed_tests="${failed_tests} Examples"
-    fi
-fi
-
-if [[ "${do_lazy_accuracy}" = "true" ]]; then
-
-    date
-    printf "\- Testing Lazy Accuracy.\n"
-    cd ${MIRGE_HOME}/examples
-    ${MIRGE_HOME}/examples/test_lazy_accuracy.sh
-    test_result=$?
-    date
-    cd -
-    if [[ $test_result -eq 0 ]]; then
-        ((numsuccess=numsuccess+1))
-        printf "\-\- Lazy accuracy tests passed.\n"
-        succeeded_tests="${succeeded_tests} LazyAccuracy"
-    else
-        ((numfail=numfail+1))
-        printf "\-\- Lazy accuracy tests failed.\n"
-        failed_tests="${failed_tests} LazyAccuracy"
     fi
 fi
 
