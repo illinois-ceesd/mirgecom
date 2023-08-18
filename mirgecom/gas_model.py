@@ -492,8 +492,6 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
                                       temperature_seed=temperature_seed,
                                       limiter_func=limiter_func, limiter_dd=tgt)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        # if isinstance(gamma, DOFArray):
-        #    gamma = op.project(dcoll, src, tgt, gamma)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
 
