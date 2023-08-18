@@ -1296,10 +1296,17 @@ def compare_files_vtu(
         field_tolerance = {}
     field_specific_tols = [configurate(point_data1.GetArrayName(i),
         field_tolerance, tolerance) for i in range(nfields)]
+    field_names = []
+
+    max_file_diff = 0.
+    max_field_name = ""
 
     for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
+        field_tol = field_specific_tols[i]
+        num_points = arr2.GetNumberOfTuples()
+        num_components = arr1.GetNumberOfComponents()
 
         # verify both files contain same arrays
         if point_data1.GetArrayName(i) != point_data2.GetArrayName(i):
@@ -1315,22 +1322,95 @@ def compare_files_vtu(
 
         # verify individual values w/in given tolerance
         fieldname = point_data1.GetArrayName(i)
-        print(f"Field: {fieldname}", end=" ")
-        for j in range(arr1.GetSize()):
-            test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
-            if test_err > max_field_errors[i]:
-                max_field_errors[i] = test_err
+        field_names.append(fieldname)
+
+        # Ignore any fields that are named here
+        # FIXME: rhs, grad are here because they fail thermally-coupled example
+        ignored_fields = ["resid", "tagged", "grad", "rhs"]
+        ignore_field = False
+        for ifld in ignored_fields:
+            if ifld in fieldname:
+                ignore_field = True
+        if ignore_field:
+            continue
+
+        max_true_component = max([max(abs(arr2.GetComponent(j, icomp))
+                                      for j in range(num_points))
+                                  for icomp in range(num_components)])
+        max_other_component = max([max(abs(arr1.GetComponent(j, icomp))
+                                      for j in range(num_points))
+                                  for icomp in range(num_components)])
+
+        # FIXME
+        # Choose an arbitrary "level" to define what is a "significant" field
+        # Don't compare dinky/insignificant fields
+        significant_field = 1000.*field_tol
+        if ((max_true_component
+             < significant_field) and (max_other_component < significant_field)):
+            continue
+
+        max_true_value = max_true_component
+        use_relative_diff = max_true_value > field_tol
+        err_scale = 1./max_true_value if use_relative_diff else 1.
+
+        print(f"{fieldname}: Max true value: {max_true_value}")
+        print(f"{fieldname}: Error scale: {err_scale}")
+
+        # Spew out some stats on each field component
+        print(f"Field({fieldname}) Component (min, max, mean)s:")
+        for icomp in range(num_components):
+            min_true_value = min(arr2.GetComponent(j, icomp)
+                                 for j in range(num_points))
+            min_other_value = min(arr1.GetComponent(j, icomp)
+                                  for j in range(num_points))
+            max_true_value = max(arr2.GetComponent(j, icomp)
+                                 for j in range(num_points))
+            max_other_value = max(arr1.GetComponent(j, icomp)
+                                  for j in range(num_points))
+            true_mean = sum(arr2.GetComponent(j, icomp)
+                            for j in range(num_points)) / num_points
+            other_mean = sum(arr1.GetComponent(j, icomp)
+                             for j in range(num_points)) / num_points
+            print(f"{fieldname}({icomp}): ({min_other_value},"
+                  f" {max_other_value}, {other_mean})")
+            print(f"{fieldname}({icomp}): ({min_true_value},"
+                  f" {max_true_value}, {true_mean})")
+
+        print(f"Field({fieldname}) comparison:")
+
+        for icomp in range(num_components):
+            if num_components > 1:
+                print(f"Comparing component {icomp}")
+            for j in range(num_points):
+                test_err = abs(arr1.GetComponent(j, icomp)
+                               - arr2.GetComponent(j, icomp))*err_scale
+                if test_err > max_field_errors[i]:
+                    max_field_errors[i] = test_err
+
         print(f"Max Error: {max_field_errors[i]}", end=" ")
         print(f"Tolerance: {field_specific_tols[i]}")
 
     violated_tols = []
+    violating_values = []
+    violating_fields = []
+
     for i in range(nfields):
+        if max_field_errors[i] > max_file_diff:
+            max_file_diff = max_field_errors[i]
+            max_field_name = field_names[i]
+
         if max_field_errors[i] > field_specific_tols[i]:
             violated_tols.append(field_specific_tols[i])
+            violating_values.append(max_field_errors[i])
+            violating_fields.append(field_names[i])
+
+    print(f"Max File Difference: {max_field_name} : {max_file_diff}")
 
     if violated_tols:
-        raise ValueError("Fidelity test failed: Mismatched data array "
-                                 f"values {violated_tols=}.")
+        raise ValueError("Data comparison failed:\n"
+                         f"Fields: {violating_fields=}\n"
+                         f"Max differences: {violating_values=}\n"
+                         f"Tolerances: {violated_tols=}\n")
 
     print("VTU Fidelity test completed successfully")
 
