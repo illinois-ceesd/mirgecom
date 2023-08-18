@@ -358,12 +358,6 @@ def make_fluid_state(cv, gas_model,
     smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
 
-    if (not isinstance(gas_model, GasModel)
-            and not isinstance(gas_model, PorousFlowModel)):
-        print(not isinstance(gas_model, GasModel))
-        print(not isinstance(gas_model, PorousFlowModel))
-        raise TypeError("Invalid type for gas_model")
-
     if isinstance(gas_model, GasModel):
         temperature = gas_model.eos.temperature(cv=cv,
                                                 temperature_seed=temperature_seed)
@@ -402,7 +396,7 @@ def make_fluid_state(cv, gas_model,
 
     # TODO ideally, we want to avoid using "gas model" because the name contradicts
     # its usage with solid+fluid.
-    if isinstance(gas_model, PorousFlowModel):
+    elif isinstance(gas_model, PorousFlowModel):
 
         # FIXME per previous review, think of a way to de-couple wall and fluid.
         # ~~~ we need to squeeze wall_model in gas_model because this is easily
@@ -443,6 +437,9 @@ def make_fluid_state(cv, gas_model,
         tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
+
+    else:
+        raise TypeError("Invalid type for gas_model")
 
 
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,

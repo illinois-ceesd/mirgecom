@@ -76,7 +76,7 @@ from arraycontext import (
 )
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS
-from mirgecom.transport import TransportModel
+from mirgecom.transport import PorousWallTransport
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -277,46 +277,8 @@ class PorousWallProperties:
         raise NotImplementedError()
 
 
-class PorousFlowEOS:
-    """Abstract interface to equation of porous flow class."""
-
-    @abstractmethod
-    def decomposition_progress(self, material_densities) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def solid_density(self, material_densities) -> DOFArray:
-        r"""Return the solid density $\epsilon_s \rho_s$."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def get_temperature(self, cv: ConservedVars, wv: PorousWallVars,
-                        tseed: DOFArray, niter=3) -> DOFArray:
-        r"""Evaluate the temperature based on solid+gas properties."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def get_pressure(self, cv: ConservedVars, wv: PorousWallVars,
-                     temperature: DOFArray) -> DOFArray:
-        """Return the pressure of the gas considering the void fraction."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
-                 temperature: DOFArray) -> DOFArray:
-        """Return the enthalpy of the gas+solid material."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def heat_capacity(self, cv: ConservedVars, wv: PorousWallVars,
-                 temperature: DOFArray) -> DOFArray:
-        """Return the heat capacity of the gas+solid material."""
-        raise NotImplementedError()
-
-
 @dataclass(frozen=True)
-class PorousFlowModel(PorousFlowEOS):
+class PorousFlowModel:
     """Main class of the porous media flow.
 
     It is the equivalent to :class:`~mirgecom.gas_model.GasModel` and wraps:
@@ -348,8 +310,8 @@ class PorousFlowModel(PorousFlowEOS):
     """
 
     eos: GasEOS
-    transport: TransportModel
     wall_model: PorousWallProperties
+    transport: PorousWallTransport
     temperature_iteration = 3
 
     def solid_density(self, material_densities) -> DOFArray:

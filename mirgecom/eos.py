@@ -235,7 +235,7 @@ class MixtureEOS(GasEOS):
         """Get the density from pressure, temperature, and species fractions (Y)."""
 
     @abstractmethod
-    def get_species_molecular_weights(self):
+    def get_species_molecular_weights(self, temperature: DOFArray):
         """Get the species molecular weights."""
 
     @abstractmethod
@@ -341,7 +341,7 @@ class IdealSingleGas(GasEOS):
         """
         return self._gas_const / (self._gamma - 1)
 
-    def gas_const(self, cv: Optional[ConservedVars] = None):
+    def gas_const(self, cv: Optional[ConservedVars] = None, temperature=None):
         """Get specific gas constant R."""
         return self._gas_const
 
@@ -662,7 +662,7 @@ class PyrometheusMixture(MixtureEOS):
         rspec = self.gas_const(cv)
         return cp / (cp - rspec)
 
-    def gas_const(self, cv: ConservedVars):
+    def gas_const(self, cv: ConservedVars, temperature=None):
         r"""Get specific gas constant $R_s$.
 
         The mixture specific gas constant is calculated
@@ -780,7 +780,7 @@ class PyrometheusMixture(MixtureEOS):
         return self._pyrometheus_mech.get_mixture_enthalpy_mass(
             temperature, species_mass_fractions)
 
-    def get_species_molecular_weights(self):
+    def get_species_molecular_weights(self, temperature=None):
         """Get the species molecular weights."""
         return self._pyrometheus_mech.wts
 

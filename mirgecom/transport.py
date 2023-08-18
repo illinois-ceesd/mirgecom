@@ -700,10 +700,10 @@ class ArtificialViscosityTransportDiv2(TransportModel):
         return self._physical_transport.species_diffusivity(cv, dv, eos)
 
 
-class PorousWallTransport(TransportModel):
+# FIXME: Generalize TransportModel interface to accept state variables
+# other than fluid cv
+class PorousWallTransport:
     r"""Transport model for porous media flow.
-
-    Inherits from (and implements) :class:`TransportModel`.
 
     Takes any transport model and modifies it to consider the interaction
     with the porous materials.
@@ -772,10 +772,10 @@ class PorousWallTransport(TransportModel):
 
     # FIXME I have to pass "flow_model" but this class is internal to "flow_model"..
     # Seems dumb to me but I dont know to access the other classes...
-    def transport_vars(self, cv: ConservedVars,  # type: ignore[override]
+    def transport_vars(self, cv: ConservedVars,
             dv: GasDependentVars, wv: PorousWallVars,
             flow_model: PorousFlowModel) -> GasTransportVars:
-        r"""Compute the transport properties from the conserved state."""
+        r"""Compute the transport properties."""
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv, dv, wv, flow_model),
             viscosity=self.viscosity(cv, dv, wv, flow_model),

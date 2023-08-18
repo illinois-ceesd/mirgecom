@@ -63,15 +63,17 @@ from mirgecom.logging_quantities import (
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage
 )
-from mirgecom.eos import MixtureDependentVars
+from mirgecom.eos import (
+    GasDependentVars,
+    GasEOS
+)
 from mirgecom.gas_model import PorousFlowFluidState
 from mirgecom.wall_model import (
     PorousWallVars,
     PorousFlowModel as BasePorousFlowModel
 )
 from mirgecom.fluid import ConservedVars
-from mirgecom.transport import GasTransportVars
-
+from mirgecom.transport import PorousWallTransport
 from logpyle import IntervalTimer, set_dt
 
 from pytools.obj_array import make_obj_array
@@ -143,7 +145,7 @@ def initializer(dim, gas_model, material_densities, temperature,
 
     tau = gas_model.decomposition_progress(material_densities)
 
-    gas_const = 8314.46261815324/gas_model.eos.molar_mass(temperature)
+    gas_const = gas_model.eos.gas_const(cv=None, temperature=temperature)
 
     if gas_density is None:
         eps_gas = gas_model.wall_model.void_fraction(tau)
@@ -152,7 +154,7 @@ def initializer(dim, gas_model, material_densities, temperature,
     # internal energy (kinetic energy is neglected)
     eps_rho_solid = sum(material_densities)
     bulk_energy = (
-        eps_rho_gas*gas_model.eos.get_internal_energy(temperature)
+        eps_rho_gas*gas_model.eos.get_internal_energy(temperature=temperature)
         + eps_rho_solid*gas_model.wall_model.enthalpy(temperature, tau)
     )
 
@@ -219,43 +221,34 @@ class BprimeTable:
     portion is evaluated. This is NOT used for fully-coupled cases.
     """
 
-    import mirgecom
-    path = mirgecom.__path__[0] + "/materials/aw_Bprime.dat"
-    bprime_table = \
-        (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+    T_bounds: np.ndarray
+    B_bounds: np.ndarray
+    Bc: np.ndarray
+    Hw: np.ndarray
+    Hw_cs: np.ndarray
 
-    # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
-    bounds_T = bprime_table[0, :-1:6, 2]  # noqa N815
-    bounds_B = bprime_table[::-1, 0, 0]  # noqa N815
-    Bc = bprime_table[::-1, :, 1]
-    Hw = bprime_table[::-1, :-1:6, 3]
+    def __init__(self):
 
-    # create spline to interpolate the wall enthalpy
-    cs_Hw = np.zeros((25, 4, 24))  # noqa N815
-    for i in range(0, 25):
-        cs_Hw[i, :, :] = scipy.interpolate.CubicSpline(
-            bounds_T, Hw[i, :]).c
+        import mirgecom
+        path = mirgecom.__path__[0] + "/materials/aw_Bprime.dat"
+        bprime_table = \
+            (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+
+        # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
+        self.T_bounds = bprime_table[0, :-1:6, 2]
+        self.B_bounds = bprime_table[::-1, 0, 0]
+        self.Bc = bprime_table[::-1, :, 1]
+        self.Hw = bprime_table[::-1, :-1:6, 3]
+
+        # create spline to interpolate the wall enthalpy
+        self.Hw_cs = np.zeros((25, 4, 24))
+        for i in range(0, 25):
+            self.Hw_cs[i, :, :] = \
+                scipy.interpolate.CubicSpline(self.T_bounds, self.Hw[i, :]).c
 
 
-class GasEOS:
-    """Simplified model of the pyrolysis gas using tabulated data.
-
-    This section is to be used when species conservation is not employed and
-    the output gas is assumed to be in chemical equilibrium.
-    The table was extracted from the suplementar material from the
-    ablation workshop. Some lines were removed to reduce the number of spline
-    interpolation segments.
-
-    .. automethod:: molar_mass
-    .. automethod:: enthalpy
-    .. automethod:: gamma
-    .. automethod:: get_internal_energy
-    .. automethod:: heat_capacity_cp
-    .. automethod:: heat_capacity_cv
-    .. automethod:: viscosity
-    .. automethod:: thermal_conductivity
-    .. automethod:: pressure
-    """
+class GasTabulatedTransport:
+    """Evaluate tabulated transport data for TACOT."""
 
     def __init__(self, prandtl=1.0, lewis=1.0):
         """Return gas tabulated data and interpolating functions.
@@ -270,53 +263,138 @@ class GasEOS:
         self._prandtl = prandtl
         self._lewis = lewis
 
-        #    T     , M      ,  Cp    , gamma  ,  enthalpy, viscosity
+        #    T     ,  viscosity
         gas_data = np.array([
-            [200.00,  21.996,  1.5119,  1.3334,  -7246.50,  0.086881],
-            [350.00,  21.995,  1.7259,  1.2807,  -7006.30,  0.144380],
-            [500.00,  21.948,  2.2411,  1.2133,  -6715.20,  0.196150],
-            [650.00,  21.418,  4.3012,  1.1440,  -6265.70,  0.243230],
-            [700.00,  20.890,  6.3506,  1.1242,  -6004.60,  0.258610],
-            [750.00,  19.990,  9.7476,  1.1131,  -5607.70,  0.274430],
-            [800.00,  18.644,  14.029,  1.1116,  -5014.40,  0.290920],
-            [850.00,  17.004,  17.437,  1.1171,  -4218.50,  0.307610],
-            [900.00,  15.457,  17.009,  1.1283,  -3335.30,  0.323490],
-            [975.00,  14.119,  8.5576,  1.1620,  -2352.90,  0.344350],
-            [1025.0,  13.854,  4.7840,  1.1992,  -2034.20,  0.356630],
-            [1100.0,  13.763,  3.5092,  1.2240,  -1741.20,  0.373980],
-            [1150.0,  13.737,  3.9008,  1.2087,  -1560.90,  0.385360],
-            [1175.0,  13.706,  4.8067,  1.1899,  -1453.50,  0.391330],
-            [1200.0,  13.639,  6.2353,  1.1737,  -1315.90,  0.397930],
-            [1275.0,  13.256,  8.4790,  1.1633,  -739.700,  0.421190],
-            [1400.0,  12.580,  9.0239,  1.1583,  353.3100,  0.458870],
-            [1525.0,  11.982,  11.516,  1.1377,  1608.400,  0.483230],
-            [1575.0,  11.732,  12.531,  1.1349,  2214.000,  0.487980],
-            [1625.0,  11.495,  11.514,  1.1444,  2826.800,  0.491950],
-            [1700.0,  11.255,  7.3383,  1.1849,  3529.400,  0.502120],
-            [1775.0,  11.139,  5.3118,  1.2195,  3991.000,  0.516020],
-            [1925.0,  11.046,  4.2004,  1.2453,  4681.800,  0.545280],
-            [2000.0,  11.024,  4.0784,  1.2467,  4991.300,  0.559860],
-            [2150.0,  10.995,  4.1688,  1.2382,  5605.400,  0.588820],
-            [2300.0,  10.963,  4.5727,  1.2214,  6257.300,  0.617610],
-            [2450.0,  10.914,  5.3049,  1.2012,  6993.500,  0.646380],
-            [2600.0,  10.832,  6.4546,  1.1815,  7869.600,  0.675410],
-            [2750.0,  10.701,  8.1450,  1.1650,  8956.900,  0.705000],
-            [2900.0,  10.503,  10.524,  1.1528,  10347.00,  0.735570],
-            [3050.0,  10.221,  13.755,  1.1449,  12157.00,  0.767590],
-            [3200.0,  9.8394,  17.957,  1.1408,  14523.00,  0.801520],
-            [3350.0,  9.3574,  22.944,  1.1401,  17584.00,  0.837430],
+            [200.00,  0.086881],
+            [350.00,  0.144380],
+            [500.00,  0.196150],
+            [650.00,  0.243230],
+            [700.00,  0.258610],
+            [750.00,  0.274430],
+            [800.00,  0.290920],
+            [850.00,  0.307610],
+            [900.00,  0.323490],
+            [975.00,  0.344350],
+            [1025.0,  0.356630],
+            [1100.0,  0.373980],
+            [1150.0,  0.385360],
+            [1175.0,  0.391330],
+            [1200.0,  0.397930],
+            [1275.0,  0.421190],
+            [1400.0,  0.458870],
+            [1525.0,  0.483230],
+            [1575.0,  0.487980],
+            [1625.0,  0.491950],
+            [1700.0,  0.502120],
+            [1775.0,  0.516020],
+            [1925.0,  0.545280],
+            [2000.0,  0.559860],
+            [2150.0,  0.588820],
+            [2300.0,  0.617610],
+            [2450.0,  0.646380],
+            [2600.0,  0.675410],
+            [2750.0,  0.705000],
+            [2900.0,  0.735570],
+            [3050.0,  0.767590],
+            [3200.0,  0.801520],
+            [3350.0,  0.837430],
+        ])
+
+        self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 1]*1e-4)
+
+    def bulk_viscosity(self, cv, dv, eos) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        actx = cv.mass.array_context
+        return actx.np.zeros_like(cv.mass)
+
+    def volume_viscosity(self, cv, dv, eos) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$."""
+        return (self.bulk_viscosity(cv, dv, eos) - 2./3.)*self.viscosity(cv, dv, eos)
+
+    def viscosity(self, cv, dv, eos) -> DOFArray:
+        r"""Return the gas viscosity $\mu$."""
+        coeffs = self._cs_viscosity.c
+        bnds = self._cs_viscosity.x
+        return eval_spline(dv.temperature, bnds, coeffs)
+
+    def thermal_conductivity(self, cv, dv, eos) -> DOFArray:
+        r"""Return the gas thermal conductivity $\kappa_g$.
+
+        .. math::
+            \kappa = \frac{\mu C_p}{Pr}
+
+        with gas viscosity $\mu$, heat capacity at constant pressure $C_p$
+        and the Prandtl number $Pr$ (default to 1).
+        """
+        cp = eos.heat_capacity_cp(cv, dv.temperature)
+        mu = self.viscosity(cv, dv, eos)
+        return mu*cp/self._prandtl
+
+    def species_diffusivity(self, cv, dv, eos) -> DOFArray:
+        return cv.species_mass  # empty array
+
+
+class TabulatedGasEOS(GasEOS):
+    """Simplified model of the pyrolysis gas using tabulated data.
+
+    This section is to be used when species conservation is not employed and
+    the output gas is assumed to be in chemical equilibrium.
+    The table was extracted from the suplementar material from the
+    ablation workshop. Some lines were removed to reduce the number of spline
+    interpolation segments.
+
+    .. automethod:: molar_mass
+    .. automethod:: enthalpy
+    .. automethod:: gamma
+    .. automethod:: get_internal_energy
+    .. automethod:: heat_capacity_cp
+    .. automethod:: heat_capacity_cv
+    .. automethod:: pressure
+    """
+
+    def __init__(self):
+        """Return gas tabulated data and interpolating functions."""
+
+        #    T     , M      ,  Cp    , gamma  ,  enthalpy
+        gas_data = np.array([
+            [200.00,  21.996,  1.5119,  1.3334,  -7246.50],
+            [350.00,  21.995,  1.7259,  1.2807,  -7006.30],
+            [500.00,  21.948,  2.2411,  1.2133,  -6715.20],
+            [650.00,  21.418,  4.3012,  1.1440,  -6265.70],
+            [700.00,  20.890,  6.3506,  1.1242,  -6004.60],
+            [750.00,  19.990,  9.7476,  1.1131,  -5607.70],
+            [800.00,  18.644,  14.029,  1.1116,  -5014.40],
+            [850.00,  17.004,  17.437,  1.1171,  -4218.50],
+            [900.00,  15.457,  17.009,  1.1283,  -3335.30],
+            [975.00,  14.119,  8.5576,  1.1620,  -2352.90],
+            [1025.0,  13.854,  4.7840,  1.1992,  -2034.20],
+            [1100.0,  13.763,  3.5092,  1.2240,  -1741.20],
+            [1150.0,  13.737,  3.9008,  1.2087,  -1560.90],
+            [1175.0,  13.706,  4.8067,  1.1899,  -1453.50],
+            [1200.0,  13.639,  6.2353,  1.1737,  -1315.90],
+            [1275.0,  13.256,  8.4790,  1.1633,  -739.700],
+            [1400.0,  12.580,  9.0239,  1.1583,  353.3100],
+            [1525.0,  11.982,  11.516,  1.1377,  1608.400],
+            [1575.0,  11.732,  12.531,  1.1349,  2214.000],
+            [1625.0,  11.495,  11.514,  1.1444,  2826.800],
+            [1700.0,  11.255,  7.3383,  1.1849,  3529.400],
+            [1775.0,  11.139,  5.3118,  1.2195,  3991.000],
+            [1925.0,  11.046,  4.2004,  1.2453,  4681.800],
+            [2000.0,  11.024,  4.0784,  1.2467,  4991.300],
+            [2150.0,  10.995,  4.1688,  1.2382,  5605.400],
+            [2300.0,  10.963,  4.5727,  1.2214,  6257.300],
+            [2450.0,  10.914,  5.3049,  1.2012,  6993.500],
+            [2600.0,  10.832,  6.4546,  1.1815,  7869.600],
+            [2750.0,  10.701,  8.1450,  1.1650,  8956.900],
+            [2900.0,  10.503,  10.524,  1.1528,  10347.00],
+            [3050.0,  10.221,  13.755,  1.1449,  12157.00],
+            [3200.0,  9.8394,  17.957,  1.1408,  14523.00],
+            [3350.0,  9.3574,  22.944,  1.1401,  17584.00],
         ])
 
         self._cs_molar_mass = CubicSpline(gas_data[:, 0], gas_data[:, 1])
         self._cs_gamma = CubicSpline(gas_data[:, 0], gas_data[:, 3])
         self._cs_enthalpy = CubicSpline(gas_data[:, 0], gas_data[:, 4]*1000.0)
-        self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 5]*1e-4)
-
-    def molar_mass(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas molar mass $M$."""
-        coeffs = self._cs_molar_mass.c
-        bnds = self._cs_molar_mass.x
-        return eval_spline(temperature, bnds, coeffs)
 
     def enthalpy(self, temperature: DOFArray) -> DOFArray:
         r"""Return the gas enthalpy $h_g$."""
@@ -332,10 +410,10 @@ class GasEOS:
         .. math::
             e(T) = h(T) - \frac{R}{M} T
         """
-        gas_const = 8314.46261815324/self.molar_mass(temperature)
+        gas_const = self.gas_const(cv=None, temperature=temperature)
         return self.enthalpy(temperature) - gas_const*temperature
 
-    def heat_capacity_cp(self, temperature: DOFArray) -> DOFArray:
+    def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the gas heat capacity at constant pressure $C_{p_g}$.
 
         The heat capacity is the derivative of the enthalpy. Thus, to improve
@@ -348,32 +426,13 @@ class GasEOS:
 
     def heat_capacity_cv(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the gas heat capacity at constant volume $C_{v_g}$."""
-        return self.heat_capacity_cp(temperature)/self.gamma(temperature)
+        return self.heat_capacity_cp(cv, temperature)/self.gamma(cv, temperature)
 
-    def gamma(self, temperature: DOFArray) -> DOFArray:
+    def gamma(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the heat of capacity ratios $\gamma$."""
         coeffs = self._cs_gamma.c
         bnds = self._cs_gamma.x
         return eval_spline(temperature, bnds, coeffs)
-
-    def viscosity(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas viscosity $\mu$."""
-        coeffs = self._cs_viscosity.c
-        bnds = self._cs_viscosity.x
-        return eval_spline(temperature, bnds, coeffs)
-
-    def thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
-        r"""Return the gas thermal conductivity $\kappa_g$.
-
-        .. math::
-            \kappa = \frac{\mu C_p}{Pr}
-
-        with gas viscosity $\mu$, heat capacity at constant pressure $C_p$
-        and the Prandtl number $Pr$ (default to 1).
-        """
-        cp = self.heat_capacity_cp(temperature)
-        mu = self.viscosity(temperature)
-        return mu*cp/self._prandtl
 
     def pressure(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the gas pressure.
@@ -381,15 +440,44 @@ class GasEOS:
         .. math::
             P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
         """
-        gas_const = 8314.46261815324/self.molar_mass(temperature)
+        gas_const = self.gas_const(cv, temperature)
         return cv.mass*gas_const*temperature
+
+    def gas_const(self, cv: ConservedVars, temperature) -> DOFArray:
+        coeffs = self._cs_molar_mass.c
+        bnds = self._cs_molar_mass.x
+        molar_mass = eval_spline(temperature, bnds, coeffs)
+        return 8314.46261815324/molar_mass
+
+    def temperature(self, cv: ConservedVars, temperature_seed=None):
+        raise NotImplementedError
+
+    def sound_speed(self, cv: ConservedVars, temperature: DOFArray):
+        raise NotImplementedError
+
+    def internal_energy(self, cv: ConservedVars):
+        raise NotImplementedError
+
+    def total_energy(self, cv: ConservedVars, pressure: DOFArray,
+                     temperature: DOFArray):
+        raise NotImplementedError
+
+    def kinetic_energy(self, cv: ConservedVars):
+        raise NotImplementedError
+
+    def get_density(self, pressure, temperature, species_mass_fractions=None):
+        raise NotImplementedError
+
+    def dependent_vars(self, cv: ConservedVars, temperature_seed=None,
+            smoothness_mu=None, smoothness_kappa=None, smoothness_beta=None):
+        raise NotImplementedError
 
 
 class PorousFlowModel(BasePorousFlowModel):
     """EOS for wall using tabulated data.
 
-    Inherits WallEOS and add an temperature-evaluation function exclusive
-    for TACOT-tabulated data.
+    Inherits :mod:`~mirgecom.wall_model.PorousFlowModel` and add an
+    temperature-evaluation function exclusive for TACOT-tabulated data.
     """
 
     def get_temperature(self, cv, wv, tseed, niter=3):
@@ -404,6 +492,8 @@ class PorousFlowModel(BasePorousFlowModel):
                 \frac
                 {\epsilon_g \rho_g e_g + \rho_s h_s - \rho e}
                 {\epsilon_g \rho_g C_{v_g} + \epsilon_s \rho_s C_{p_s}}
+
+        Note that kinetic energy is neglected is this case.
 
         Parameters
         ----------
@@ -452,38 +542,6 @@ class PorousFlowModel(BasePorousFlowModel):
         and $\mathbf{K}$ is the permeability matrix.
         """
         return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
-
-    def viscosity(self, wv: PorousWallVars, temperature: DOFArray,
-                  gas_tv: GasTransportVars) -> DOFArray:
-        """Viscosity of the gas through the (porous) wall."""
-        return gas_tv.viscosity/wv.void_fraction
-
-    def thermal_conductivity(self, cv: ConservedVars,
-                             wv: PorousWallVars,
-                             temperature: DOFArray,
-                             gas_tv: GasTransportVars) -> DOFArray:
-        r"""Return the effective thermal conductivity of the gas+solid.
-
-        It is a function of temperature and degradation progress. As the
-        fibers are oxidized, they reduce their cross area and, consequently,
-        their ability to conduct heat.
-
-        It is evaluated using a mass-weighted average given by
-
-        .. math::
-            \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
-        """
-        y_g = cv.mass/(cv.mass + wv.density)
-        y_s = 1.0 - y_g
-        kappa_s = self.wall_model.thermal_conductivity(temperature, wv.tau)
-        kappa_g = gas_tv.thermal_conductivity
-
-        return y_s*kappa_s + y_g*kappa_g
-
-    def species_diffusivity(self, wv: PorousWallVars,
-            temperature: DOFArray, gas_tv: GasTransportVars) -> DOFArray:
-        """Mass diffusivity of gaseous species through the (porous) wall."""
-        return gas_tv.species_diffusivity/wv.tortuosity
 
 
 def binary_sum(ary):
@@ -599,12 +657,15 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     import mirgecom.materials.tacot as my_composite
 
-    my_gas = GasEOS()
+    my_gas = TabulatedGasEOS()
     bprime_class = BprimeTable()
     my_material = my_composite.TACOTProperties(char_mass=220.0, virgin_mass=280.0)
     pyrolysis = my_composite.Pyrolysis()
 
-    gas_model = PorousFlowModel(eos=my_gas, wall_model=my_material, transport=None)
+    base_transport = GasTabulatedTransport()
+    sample_transport = PorousWallTransport(base_transport=base_transport)
+    gas_model = PorousFlowModel(eos=my_gas, wall_model=my_material,
+                                transport=sample_transport)
 
     # }}}
 
@@ -668,36 +729,17 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         pressure = gas_model.get_pressure(cv=cv, wv=wv, temperature=temperature)
 
-        dv = MixtureDependentVars(
+        dv = GasDependentVars(
             temperature=temperature,
             pressure=pressure,
             speed_of_sound=zeros,
             smoothness_mu=zeros,
             smoothness_kappa=zeros,
-            smoothness_beta=zeros,
-            species_enthalpies=cv.species_mass,
+            smoothness_beta=zeros
         )
 
-        # gas only transport vars
-        gas_tv = GasTransportVars(
-            bulk_viscosity=zeros,
-            viscosity=my_gas.viscosity(temperature),
-            thermal_conductivity=my_gas.thermal_conductivity(temperature),
-            species_diffusivity=cv.species_mass)
-
-        # coupled solid-gas thermal conductivity
-        kappa = gas_model.thermal_conductivity(cv, wv, temperature, gas_tv)
-
-        # coupled solid-gas viscosity
-        viscosity = gas_model.viscosity(wv, temperature, gas_tv)
-
-        # return modified transport vars
-        tv = GasTransportVars(
-            bulk_viscosity=zeros,
-            viscosity=viscosity,
-            thermal_conductivity=kappa,
-            species_diffusivity=cv.species_mass
-        )
+        tv = gas_model.transport.transport_vars(cv=cv, dv=dv, wv=wv,
+                                                flow_model=gas_model)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
