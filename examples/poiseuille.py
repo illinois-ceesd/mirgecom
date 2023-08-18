@@ -45,7 +45,8 @@ from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     PrescribedFluidBoundary,
-    AdiabaticNoslipWallBoundary
+    AdiabaticNoslipWallBoundary,
+    IsothermalWallBoundary
 )
 from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas
@@ -70,14 +71,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(use_logmgr=True,
-         use_overintegration=False,
-         use_leap=False, casename=None,
-         rst_filename=None, actx_class=None):
+def main(actx_class, use_esdg=False, use_overintegration=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
     if casename is None:
         casename = "mirgecom"
 
@@ -89,7 +85,7 @@ def main(use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -108,8 +104,8 @@ def main(use_logmgr=True,
 
     # some i/o frequencies
     nstatus = 1
-    nviz = 100
-    nrestart = 100
+    nviz = 1
+    nrestart = 10
     nhealth = 1
 
     # some geometry setup
@@ -146,8 +142,12 @@ def main(use_logmgr=True,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
+    # from meshmode.mesh.processing import rotate_mesh_around_axis
+    # local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/4)
+
     order = 2
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=order+2)
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
@@ -198,10 +198,10 @@ def main(use_logmgr=True,
         velocity = make_obj_array([u_x, u_y])
         ke = .5*np.dot(velocity, velocity)*mass
         gamma = eos.gamma()
-        if cv is not None:
-            mass = cv.mass
-            vel = cv.velocity
-            ke = .5*np.dot(vel, vel)*mass
+        # if cv is not None:
+        #    mass = cv.mass
+        #    vel = cv.velocity
+        #    ke = .5*np.dot(vel, vel)*mass
 
         rho_e = p_x/(gamma-1) + ke
         return make_conserved(2, mass=mass, energy=rho_e,
@@ -210,7 +210,9 @@ def main(use_logmgr=True,
     initializer = poiseuille_2d
     gas_model = GasModel(eos=IdealSingleGas(),
                          transport=SimpleTransport(viscosity=mu))
-    exact = initializer(x_vec=nodes, eos=gas_model.eos)
+
+    from mirgecom.simutil import force_evaluation
+    exact = force_evaluation(actx, initializer(x_vec=nodes, eos=gas_model.eos))
 
     def _boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
@@ -219,6 +221,12 @@ def main(use_logmgr=True,
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             cv=state_minus.cv, **kwargs), gas_model)
 
+    use_adiabatic = False
+    if use_adiabatic:
+        wall_boundary = AdiabaticNoslipWallBoundary()
+    else:
+        wall_boundary = IsothermalWallBoundary(wall_temperature=300)
+
     boundaries = {
         BoundaryDomainTag("-1"):
             PrescribedFluidBoundary(
@@ -226,8 +234,8 @@ def main(use_logmgr=True,
         BoundaryDomainTag("+1"):
             PrescribedFluidBoundary(
                 boundary_state_func=_boundary_solution),
-        BoundaryDomainTag("-2"): AdiabaticNoslipWallBoundary(),
-        BoundaryDomainTag("+2"): AdiabaticNoslipWallBoundary()}
+        BoundaryDomainTag("-2"): wall_boundary,
+        BoundaryDomainTag("+2"): wall_boundary}
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -240,7 +248,12 @@ def main(use_logmgr=True,
         # Set the current state from time 0
         current_cv = exact
 
-    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
+    def _make_fluid_state(cv):
+        return make_fluid_state(cv=cv, gas_model=gas_model)
+
+    make_fluid_state_compiled = actx.compile(_make_fluid_state)
+
+    current_state = make_fluid_state_compiled(current_cv)
 
     vis_timer = None
 
@@ -311,7 +324,7 @@ def main(use_logmgr=True,
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
         if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
-                                           1.00101e5), op="lor"):
+                                          1.00101e5), op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
@@ -323,14 +336,14 @@ def main(use_logmgr=True,
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
         if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
-                         op="lor"):
+                        op="lor"):
             health_error = True
             from grudge.op import nodal_max, nodal_min
             t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
             t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
             logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
-        exittol = .1
+        exittol = 0.1
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
@@ -339,8 +352,10 @@ def main(use_logmgr=True,
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
+
+        fluid_state = make_fluid_state_compiled(cv=state)
         dv = fluid_state.dv
+
         try:
             component_errors = None
 
@@ -399,9 +414,13 @@ def main(use_logmgr=True,
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
-        return ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
-                           state=fluid_state, time=t,
-                           quadrature_tag=quadrature_tag)
+        return ns_operator(dcoll, gas_model=gas_model,
+                            boundaries=boundaries,
+                            state=fluid_state, time=t, use_esdg=use_esdg,
+                            quadrature_tag=quadrature_tag)
+
+    from mirgecom.simutil import force_evaluation
+    current_state = force_evaluation(actx, current_state)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -417,6 +436,7 @@ def main(use_logmgr=True,
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
+
     final_dv = current_state.dv
     final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
@@ -445,10 +465,10 @@ if __name__ == "__main__":
         help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--numpy", action="store_true",
@@ -456,6 +476,14 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
+    from warnings import warn
+    from mirgecom.simutil import ApplicationOptionsError
+    if args.esdg:
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
@@ -468,8 +496,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class)
+    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg,
+         casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

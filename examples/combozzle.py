@@ -29,8 +29,6 @@ import yaml
 import numpy as np
 from functools import partial
 
-from meshmode.array_context import PyOpenCLArrayContext
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
@@ -41,12 +39,14 @@ from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.euler import euler_operator
 from mirgecom.navierstokes import ns_operator
+
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
     write_visfile,
     force_evaluation,
-    get_box_mesh
+    get_box_mesh,
+    ApplicationOptionsError
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -146,11 +146,10 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(use_logmgr=True,
+def main(actx_class, rst_filename=None,
          use_overintegration=False, casename=None,
-         rst_filename=None, actx_class=PyOpenCLArrayContext,
          log_dependent=False, input_file=None,
-         force_eval=True):
+         force_eval=True, use_esdg=False):
     """Drive example."""
     if casename is None:
         casename = "mirgecom"
@@ -171,7 +170,7 @@ def main(use_logmgr=True,
 
     # {{{ Some discretization parameters
 
-    dim = 3
+    dim = 2
     order = 3
 
     # - scales the size of the domain
@@ -675,7 +674,7 @@ def main(use_logmgr=True,
 
     casename = f"{casename}-d{dim}p{order}e{global_nelements}n{nparts}"
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     if logmgr:
@@ -1077,7 +1076,12 @@ def main(use_logmgr=True,
 
         return state, dt
 
-    from mirgecom.inviscid import inviscid_facial_flux_rusanov
+    from mirgecom.inviscid import (
+        inviscid_facial_flux_rusanov,
+        entropy_stable_inviscid_facial_flux_rusanov
+    )
+    inv_num_flux_func = entropy_stable_inviscid_facial_flux_rusanov if use_esdg \
+        else inviscid_facial_flux_rusanov
 
     def dummy_pre_step(step, t, dt, state):
         if logmgr:
@@ -1106,18 +1110,18 @@ def main(use_logmgr=True,
         from mirgecom.gas_model import make_fluid_state
         fluid_state = make_fluid_state(cv=cv, gas_model=gas_model,
                                        temperature_seed=tseed)
-        fluid_operator_states = make_operator_fluid_states(dcoll, fluid_state,
-                                                           gas_model, boundaries,
-                                                           quadrature_tag)
+        fluid_operator_states = make_operator_fluid_states(
+            dcoll, fluid_state, gas_model, boundaries, quadrature_tag=quadrature_tag)
 
         if inviscid_only:
             fluid_rhs = \
                 euler_operator(
                     dcoll, state=fluid_state, time=t,
                     boundaries=boundaries, gas_model=gas_model,
-                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
+                    inviscid_numerical_flux_func=inv_num_flux_func,
                     quadrature_tag=quadrature_tag,
-                    operator_states_quad=fluid_operator_states)
+                    operator_states_quad=fluid_operator_states,
+                    use_esdg=use_esdg)
         else:
             grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state,
                                        time=t,
@@ -1128,33 +1132,29 @@ def main(use_logmgr=True,
                 ns_operator(
                     dcoll, state=fluid_state, time=t, boundaries=boundaries,
                     gas_model=gas_model, quadrature_tag=quadrature_tag,
-                    inviscid_numerical_flux_func=inviscid_facial_flux_rusanov)
+                    inviscid_numerical_flux_func=inv_num_flux_func,
+                    operator_states_quad=fluid_operator_states,
+                    use_esdg=use_esdg)
 
-        if inert_only:
-            chem_rhs = 0*fluid_rhs
-        else:
-            chem_rhs = eos.get_species_source_terms(cv, fluid_state.temperature)
+        if not inert_only:
+            fluid_rhs = fluid_rhs + eos.get_species_source_terms(
+                cv, fluid_state.temperature)
 
         if av_on:
             alpha_f = compute_av_alpha_field(fluid_state)
             indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
                                              kappa=kappa_sc, s0=s0_sc)
-            av_rhs = av_laplacian_operator(
+            fluid_rhs = fluid_rhs + av_laplacian_operator(
                 dcoll, fluid_state=fluid_state, boundaries=boundaries, time=t,
                 gas_model=gas_model, grad_cv=grad_cv,
                 operator_states_quad=fluid_operator_states,
                 alpha=alpha_f, s0=s0_sc, kappa=kappa_sc,
                 indicator=indicator)
-        else:
-            av_rhs = 0*fluid_rhs
 
         if sponge_on:
-            sponge_rhs = _sponge(fluid_state.cv)
-        else:
-            sponge_rhs = 0*fluid_rhs
+            fluid_rhs = fluid_rhs + _sponge(fluid_state.cv)
 
-        fluid_rhs = fluid_rhs + chem_rhs + av_rhs + sponge_rhs
-        tseed_rhs = fluid_state.temperature - tseed
+        tseed_rhs = actx.zeros_like(fluid_state.temperature)
 
         return make_obj_array([fluid_rhs, tseed_rhs])
 
@@ -1245,8 +1245,8 @@ if __name__ == "__main__":
         help="Turn off force lazy eval between timesteps")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable for inviscid terms")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--numpy", action="store_true",
@@ -1254,8 +1254,16 @@ if __name__ == "__main__":
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+
+    if args.esdg:
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
     log_dependent = False
     force_eval = not args.no_force
 
@@ -1279,9 +1287,9 @@ if __name__ == "__main__":
 
     print(f"Calling main: {time.ctime(time.time())}")
 
-    main(use_logmgr=args.log, input_file=input_file,
-         use_overintegration=args.overintegration,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent, force_eval=force_eval)
+    main(actx_class, input_file=input_file,
+         use_overintegration=args.overintegration or args.esdg,
+         casename=casename, rst_filename=rst_filename,
+         log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
 
 # vim: foldmethod=marker
