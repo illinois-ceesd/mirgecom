@@ -165,6 +165,7 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--log", action="store_true",
         help="enable logging")
+    parser.add_argument("--casename", help="casename to use for i/o")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--numpy", action="store_true",

@@ -253,6 +253,7 @@ if __name__ == "__main__":
         help="enable logging")
     parser.add_argument("--lazy", action="store_true",
         help="enable lazy evaluation")
+    parser.add_argument("--casename", help="casename to use for i/o")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     args = parser.parse_args()
