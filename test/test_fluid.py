@@ -185,7 +185,7 @@ def test_velocity_gradient_structure(actx_factory):
     exp_trace = 15
     assert grad_v.shape == (dim, dim)
     from meshmode.dof_array import DOFArray
-    assert type(grad_v[0, 0]) == DOFArray
+    assert isinstance(grad_v[0, 0], DOFArray)
 
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))
@@ -237,7 +237,7 @@ def test_species_mass_gradient(actx_factory, dim):
 
     assert grad_y.shape == (nspecies, dim)
     from meshmode.dof_array import DOFArray
-    assert type(grad_y[0, 0]) == DOFArray
+    assert isinstance(grad_y[0, 0], DOFArray)
 
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))

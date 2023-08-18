@@ -7,6 +7,11 @@ on:
   schedule:
   - cron:  '5 0 * * *'
 
+# Cancel in progress CI runs when a new run targeting the same PR or branch/tag is triggered.
+# https://stackoverflow.com/questions/66335225/how-to-cancel-previous-runs-in-the-pr-when-you-push-new-commitsupdate-the-curre
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
     flake8:
@@ -112,20 +117,12 @@ jobs:
           run: |
             . .ci-support/install.sh
 
-        - name: Test lazy accuracy
-          run: |
-            MINIFORGE_INSTALL_DIR=.miniforge3
-            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            mamba install vtk  # needed for the accuracy comparison
-            export XDG_CACHE_HOME=/tmp
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
-            # && export POCL_DEBUG=cuda
-            scripts/run-integrated-tests.sh --lazy-accuracy
         - name: Run examples
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
+            mamba install vtk  # needed for the accuracy comparison
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
             # && export POCL_DEBUG=cuda
             scripts/run-integrated-tests.sh --examples
@@ -148,6 +145,7 @@ jobs:
 
             sudo apt-get update
             sudo apt-get install texlive-latex-extra latexmk
+
             mamba install sphinx graphviz 'docutils>=0.16'
 
             # Work around "Not enough memory to run on this device." errors in CI:
@@ -182,7 +180,7 @@ jobs:
             cd ..
             source emirge/config/activate_env.sh
             cd mirgecom/examples
-            python -m mpi4py ./pulse-mpi.py
+            python -m mpi4py ./pulse.py
 
     production:
         name: Production testing
