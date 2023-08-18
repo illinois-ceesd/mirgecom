@@ -23,7 +23,7 @@ THE SOFTWARE.
 """
 
 import logging
-from mirgecom.mechanisms import get_mechanism_input, get_mechanism_cti
+from mirgecom.mechanisms import get_mechanism_input
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +34,3 @@ def test_yaml_mechanism_input_reader():
     first_line = test_input.partition("\n")[0].strip()
 
     assert first_line == "description: Modified version of UIUC-XPACC mechanism"
-
-
-def test_cti_reader():
-    """Quick test of CTI-specific reader."""
-    test_cti = get_mechanism_cti("sanDiego")
-    first_line = test_cti.partition("\n")[0].strip()
-
-    assert first_line == "# UCSD mechanism for hydrogen combustion"

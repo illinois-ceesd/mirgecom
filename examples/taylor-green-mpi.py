@@ -1,4 +1,4 @@
-"""Demonstratefl the inviscid Taylor-Green vortex problem."""
+"""Demonstrate the inviscid Taylor-Green vortex problem."""
 
 __copyright__ = """
 Copyright (C) 2021 University of Illinois Board of Trustees

@@ -19,6 +19,9 @@ Fluid State Handling Utilities
 .. autofunction:: project_fluid_state
 .. autofunction:: make_fluid_state_trace_pairs
 .. autofunction:: make_operator_fluid_states
+.. autofunction:: make_entropy_projected_fluid_state
+.. autofunction:: conservative_to_entropy_vars
+.. autofunction:: entropy_to_conservative_vars
 """
 
 __copyright__ = """
@@ -489,8 +492,6 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
                                       temperature_seed=temperature_seed,
                                       limiter_func=limiter_func, limiter_dd=tgt)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        # if isinstance(gamma, DOFArray):
-        #    gamma = op.project(dcoll, src, tgt, gamma)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
 
@@ -903,8 +904,9 @@ def make_entropy_projected_fluid_state(
 def conservative_to_entropy_vars(gamma, state):
     """Compute the entropy variables from conserved variables.
 
-    Converts from conserved variables (density, momentum, total energy)
-    into entropy variables.
+    Converts from conserved variables
+    (density, momentum, total energy, species densities)
+    into entropy variables, per eqn. 4.5 of [Chandrashekar_2013]_.
 
     Parameters
     ----------
@@ -940,7 +942,8 @@ def entropy_to_conservative_vars(gamma, ev: ConservedVars):
     """Compute the conserved variables from entropy variables *ev*.
 
     Converts from entropy variables into conserved variables
-    (density, momentum, total energy).
+    (density, momentum, total energy, species density) per
+    eqn. 4.5 of [Chandrashekar_2013]_.
 
     Parameters
     ----------
