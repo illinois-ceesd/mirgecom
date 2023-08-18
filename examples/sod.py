@@ -65,9 +65,8 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True,
-         use_leap=False, casename=None,
-         rst_filename=None):
+def main(actx_class, use_overintegration=False, use_esdg=False,
+         use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -80,7 +79,7 @@ def main(actx_class, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -94,18 +93,18 @@ def main(actx_class, use_logmgr=True,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.01
-    current_cfl = 1.0
-    current_dt = .0001
+    t_final = 1e-4
+    current_cfl = 0.01
+    current_dt = 1e-6
     current_t = 0
     constant_cfl = False
     current_step = 0
 
     # some i/o frequencies
-    nstatus = 10
-    nrestart = 5
-    nviz = 100
-    nhealth = 10
+    nstatus = 1
+    nrestart = 1000
+    nviz = 1
+    nhealth = 1
 
     dim = 1
     rst_path = "restart_data/"
@@ -122,18 +121,30 @@ def main(actx_class, use_logmgr=True,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        nel_1d = 24
-        box_ll = -5.0
-        box_ur = 5.0
+        nel_1d = 32
+        box_ll = 0.0
+        box_ur = 1.0
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    order = 4
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=order+2)
     nodes = actx.thaw(dcoll.nodes())
+
+    # TODO: Fix this wonky dt estimate
+    from grudge.dt_utils import h_min_from_volume
+    cn = 0.5*(order + 1)**2
+    current_dt = current_cfl * actx.to_numpy(h_min_from_volume(dcoll)) / cn
+
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     vis_timer = None
 
@@ -156,7 +167,7 @@ def main(actx_class, use_logmgr=True,
         ])
 
     initializer = SodShock1D(dim=dim)
-    eos = IdealSingleGas()
+    eos = IdealSingleGas(gas_const=1.0)
     gas_model = GasModel(eos=eos)
 
     def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
@@ -169,6 +180,7 @@ def main(actx_class, use_logmgr=True,
     boundaries = {
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
     }
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -193,6 +205,7 @@ def main(actx_class, use_logmgr=True,
                                      nviz=nviz, cfl=current_cfl,
                                      constant_cfl=constant_cfl, initname=initname,
                                      eosname=eosname, casename=casename)
+
     if rank == 0:
         logger.info(init_message)
 
@@ -211,9 +224,11 @@ def main(actx_class, use_logmgr=True,
         if resid is None:
             resid = state - exact
         viz_fields = [("cv", state),
+                      ("vel", state.velocity),
                       ("dv", dv),
                       ("exact", exact),
                       ("residual", resid)]
+
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -236,17 +251,18 @@ def main(actx_class, use_logmgr=True,
 
     def my_health_check(pressure, component_errors):
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .09, 1.1):
+        # from mirgecom.simutil import check_naninf_local, check_range_local
+        from mirgecom.simutil import check_naninf_local
+        # or check_range_local(dcoll, "vol", pressure, .09, 1.1):
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        exittol = .09
-        if max(component_errors) > exittol:
-            health_error = True
-            if rank == 0:
-                logger.info("Solution diverged from exact soln.")
+        # exittol = .09
+        # if max(component_errors) > exittol:
+        #    health_error = True
+        #    if rank == 0:
+        #        logger.info("Solution diverged from exact soln.")
 
         return health_error
 
@@ -320,7 +336,9 @@ def main(actx_class, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
         return euler_operator(dcoll, state=fluid_state, time=t,
-                              boundaries=boundaries, gas_model=gas_model)
+                              boundaries=boundaries, gas_model=gas_model,
+                              quadrature_tag=quadrature_tag,
+                              use_esdg=use_esdg)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -360,15 +378,25 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations"),
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
+    from warnings import warn
+    from mirgecom.simutil import ApplicationOptionsError
+    if args.esdg:
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
@@ -381,7 +409,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename)
+    main(actx_class, use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename,
+         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

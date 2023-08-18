@@ -67,7 +67,7 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True,
+def main(actx_class, use_overintegration=False, use_esdg=False,
          use_leap=False, casename=None, rst_filename=None):
     """Drive the example."""
     if casename is None:
@@ -81,7 +81,7 @@ def main(actx_class, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -138,6 +138,12 @@ def main(actx_class, use_logmgr=True,
     order = 3
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None
 
     vis_timer = None
 
@@ -344,7 +350,8 @@ def main(actx_class, use_logmgr=True,
     def my_rhs(t, state):
         fluid_state = make_fluid_state(state, gas_model)
         return euler_operator(dcoll, state=fluid_state, time=t,
-                              boundaries=boundaries, gas_model=gas_model)
+                              boundaries=boundaries, gas_model=gas_model,
+                              quadrature_tag=quadrature_tag, use_esdg=use_esdg)
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
@@ -384,15 +391,25 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations"),
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+
+    from warnings import warn
+    from mirgecom.simutil import ApplicationOptionsError
+    if args.esdg:
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
@@ -405,7 +422,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename)
+    main(actx_class, use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename,
+         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg)
 
 # vim: foldmethod=marker
