@@ -77,14 +77,11 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(use_logmgr=True,
+def main(actx_class, use_esdg=False,
          use_leap=False, casename=None,
-         rst_filename=None, actx_class=None,
+         rst_filename=None,
          log_dependent=True, use_overintegration=False):
     """Drive example."""
-    if actx_class is None:
-        raise RuntimeError("Array context class missing.")
-
     if casename is None:
         casename = "mirgecom"
 
@@ -96,7 +93,7 @@ def main(use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -282,7 +279,8 @@ def main(use_logmgr=True,
         ns_rhs, grad_cv, grad_t = \
             ns_operator(dcoll, state=fluid_state, time=time,
                         boundaries=visc_bnds, gas_model=gas_model,
-                        return_gradients=True, quadrature_tag=quadrature_tag)
+                        return_gradients=True, quadrature_tag=quadrature_tag,
+                        use_esdg=use_esdg)
         return make_obj_array([ns_rhs, grad_cv, grad_t])
 
     get_temperature_update = actx.compile(_get_temperature_update)
@@ -552,7 +550,7 @@ def main(use_logmgr=True,
                              boundaries=visc_bnds, gas_model=gas_model,
                              gradient_numerical_flux_func=grad_num_flux_func,
                              viscous_numerical_flux_func=viscous_num_flux_func,
-                             quadrature_tag=quadrature_tag)
+                             quadrature_tag=quadrature_tag, use_esdg=use_esdg)
         cv_rhs = ns_rhs + pyro_eos.get_species_source_terms(cv,
                                                             fluid_state.temperature)
         return make_obj_array([cv_rhs, 0*tseed])
@@ -581,7 +579,7 @@ def main(use_logmgr=True,
     ns_rhs, grad_cv, grad_t = \
         ns_operator(dcoll, state=current_state, time=current_t,
                     boundaries=visc_bnds, gas_model=gas_model,
-                    return_gradients=True)
+                    return_gradients=True, use_esdg=use_esdg)
     grad_v = velocity_gradient(current_state.cv, grad_cv)
     chem_rhs = \
         pyro_eos.get_species_source_terms(current_state.cv,
@@ -613,10 +611,10 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -624,6 +622,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from warnings import warn
+    from mirgecom.simutil import ApplicationOptionsError
+    if args.esdg:
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
     log_dependent = False
 
@@ -638,9 +643,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(use_logmgr=args.log, use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename, actx_class=actx_class,
-         log_dependent=log_dependent,
-         use_overintegration=args.overintegration)
+    main(actx_class, use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename,
+         log_dependent=log_dependent, use_esdg=args.esdg,
+         use_overintegration=args.overintegration or args.esdg)
 
 # vim: foldmethod=marker

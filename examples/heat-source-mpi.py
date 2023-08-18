@@ -47,14 +47,15 @@ from logpyle import IntervalTimer, set_dt
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True,
+def main(actx_class, use_esdg=False,
+         use_overintegration=False,
          use_leap=False, casename=None, rst_filename=None):
     """Run the example."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     num_parts = comm.Get_size()
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -99,6 +100,12 @@ def main(actx_class, use_logmgr=True,
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
 
+    from grudge.dof_desc import DISCR_TAG_QUAD
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = None  # noqa
+
     if dim == 2:
         # no deep meaning here, just a fudge factor
         dt = 0.0025/(nel_1d*order**2)
@@ -137,7 +144,8 @@ def main(actx_class, use_logmgr=True,
 
     def rhs(t, u):
         return (
-            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u)
+            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u,
+                               quadrature_tag=quadrature_tag)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
     compiled_rhs = actx.compile(rhs)
@@ -182,8 +190,8 @@ if __name__ == "__main__":
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
+    parser.add_argument("--overintegration", action="store_true",
+        help="turn on overintegration.")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--numpy", action="store_true",
@@ -203,7 +211,8 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
+    main(actx_class, use_leap=args.leap,
+         use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

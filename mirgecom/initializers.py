@@ -15,6 +15,7 @@ Solution Initializers
 .. autoclass:: ShearFlow
 .. autoclass:: PlanarDiscontinuity
 .. autoclass:: MulticomponentTrig
+.. autoclass:: InviscidTaylorGreenVortex
 
 State Initializers
 ^^^^^^^^^^^^^^^^^^
@@ -261,7 +262,7 @@ class SodShock1D:
     """
 
     def __init__(
-            self, *, dim=2, xdir=0, x0=0.5, rhol=1.0,
+            self, *, dim=1, xdir=0, x0=0.5, rhol=1.0,
             rhor=0.125, pleft=1.0, pright=0.1,
     ):
         """Initialize shock parameters.
@@ -284,8 +285,8 @@ class SodShock1D:
         self._x0 = x0
         self._rhol = rhol
         self._rhor = rhor
-        self._energyl = pleft
-        self._energyr = pright
+        self._pl = pleft
+        self._pr = pright
         self._dim = dim
         self._xdir = xdir
         if self._xdir >= self._dim:
@@ -304,30 +305,29 @@ class SodShock1D:
         """
         if eos is None:
             eos = IdealSingleGas()
+
         gm1 = eos.gamma() - 1.0
         gmn1 = 1.0 / gm1
-        x_rel = x_vec[self._xdir]
-        actx = x_rel.array_context
+        x = x_vec[self._xdir]
+        actx = x.array_context
 
-        zeros = 0*x_rel
+        zeros = actx.np.zeros_like(x)
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
         x0 = zeros + self._x0
-        energyl = zeros + gmn1 * self._energyl
-        energyr = zeros + gmn1 * self._energyr
-        yesno = actx.np.greater(x_rel, x0)
-        mass = actx.np.where(yesno, rhor, rhol)
-        energy = actx.np.where(yesno, energyr, energyl)
-        mom = make_obj_array(
-            [
-                0*x_rel
-                for i in range(self._dim)
-            ]
-        )
+        energyl = zeros + gmn1 * self._pl
+        energyr = zeros + gmn1 * self._pr
+
+        sigma = 1e-13
+        weight = 0.5 * (1.0 - actx.np.tanh(1.0/sigma * (x - x0)))
+
+        mass = rhor + (rhol - rhor)*weight
+        energy = energyr + (energyl - energyr)*weight
+        momentum = make_obj_array([1.*zeros for _ in range(self._dim)])
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom)
+                              momentum=momentum)
 
 
 class DoubleMachReflection:
@@ -818,7 +818,8 @@ class MulticomponentTrig:
             spec_centers=None,
             spec_omegas=None,
             spec_diffusivities=None,
-            wave_vector=None
+            wave_vector=None,
+            trig_function=None
     ):
         r"""Initialize MulticomponentLump parameters.
 
@@ -835,6 +836,10 @@ class MulticomponentTrig:
         velocity: numpy.ndarray
             fixed flow velocity used for exact solution at t != 0,
             shape ``(dim,)``
+        wave_vector: numpy.ndarray
+            optional fixed vector indicating normal direction of wave
+        trig_function
+            callable trig function
         """
         if center is None:
             center = np.zeros(shape=(dim,))
@@ -843,7 +848,7 @@ class MulticomponentTrig:
         if center.shape != (dim,) or velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional vector inputs.")
         if spec_y0s is None:
-            spec_y0s = np.ones(shape=(nspecies,))
+            spec_y0s = 2.0*np.ones(shape=(nspecies,))
         if spec_centers is None:
             spec_centers = make_obj_array([np.zeros(shape=dim,)
                                            for i in range(nspecies)])
@@ -852,12 +857,17 @@ class MulticomponentTrig:
 
         if spec_amplitudes is None:
             spec_amplitudes = np.ones(shape=(nspecies,))
+
         if spec_diffusivities is None:
             spec_diffusivities = np.ones(shape=(nspecies,))
 
         if wave_vector is None:
             wave_vector = np.zeros(shape=(dim,))
             wave_vector[0] = 1
+
+        import mirgecom.math as mm
+        if trig_function is None:
+            trig_function = mm.sin
 
         if len(spec_y0s) != nspecies or\
            len(spec_amplitudes) != nspecies or\
@@ -881,6 +891,7 @@ class MulticomponentTrig:
         self._spec_omegas = spec_omegas
         self._d = spec_diffusivities
         self._wave_vector = wave_vector
+        self._trig_func = trig_function
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
@@ -910,15 +921,15 @@ class MulticomponentTrig:
         energy = ((self._p0 / (self._gamma - 1.0))
                   + 0.5*mass*np.dot(self._velocity, self._velocity))
 
-        import mirgecom.math as mm
         vel_t = t * self._velocity
+        import mirgecom.math as mm
         spec_mass = np.empty((self._nspecies,), dtype=object)
         for i in range(self._nspecies):
             spec_x = x_vec - self._spec_centers[i]
             wave_r = spec_x - vel_t
             wave_x = np.dot(wave_r, self._wave_vector)
             expterm = mm.exp(-t*self._d[i]*self._spec_omegas[i]**2)
-            trigterm = mm.sin(self._spec_omegas[i]*wave_x)
+            trigterm = self._trig_func(self._spec_omegas[i]*wave_x)
             spec_y = self._spec_y0s[i] + self._spec_amps[i]*expterm*trigterm
             spec_mass[i] = mass * spec_y
 
@@ -1552,3 +1563,74 @@ class ShearFlow:
 
         return make_conserved(dim=self._dim, mass=density, momentum=mom,
                               energy=total_energy)
+
+
+class InviscidTaylorGreenVortex:
+    """Initialize Taylor-Green Vortex."""
+
+    def __init__(
+            self, *, dim=3, mach_number=0.05, domain_lengthscale=1, v0=1, p0=1,
+            viscosity=1e-5
+    ):
+        """Initialize vortex parameters."""
+        self._mach_number = mach_number
+        self._domain_lengthscale = domain_lengthscale
+        self._v0 = v0
+        self._p0 = p0
+        self._mu = viscosity
+        self._dim = dim
+
+    def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
+        """
+        Create the 3D Taylor-Green initial profile at locations *x_vec*.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+        """
+        if eos is None:
+            eos = IdealSingleGas()
+
+        length = self._domain_lengthscale
+        gamma = eos.gamma()
+        v0 = self._v0
+        p0 = self._p0
+        rho0 = gamma * self._mach_number ** 2
+        dim = len(x_vec)
+        x = x_vec[0]
+        y = x_vec[1]
+        actx = x_vec[0].array_context
+        zeros = actx.zeros_like(x)
+        ones = 1 + zeros
+        nu = self._mu/rho0
+        ft = actx.np.exp(-2*nu*time)
+
+        if dim == 3:
+            z = x_vec[0]
+
+            p = p0 + rho0 * (v0 ** 2) / 16 * (
+                actx.np.cos(2*x / length + actx.np.cos(2*y / length))
+            ) * actx.np.cos(2*z / length + 2)
+            u = (
+                v0 * actx.np.sin(x / length) * actx.np.cos(y / length)
+            ) * actx.np.cos(z / length)
+            v = (
+                -v0 * actx.np.cos(x / length) * actx.np.sin(y / length)
+            ) * actx.np.cos(z / length)
+            w = zeros
+            velocity = make_obj_array([u, v, w])
+        else:
+            u = actx.np.sin(x)*actx.np.cos(y)*ft
+            v = -actx.np.cos(x)*actx.np.sin(y)*ft
+            p = rho0/4.0 * (actx.np.cos(2*x) + actx.np.sin(2*y)) * ft * ft
+            velocity = make_obj_array([u, v])
+
+        momentum = rho0 * velocity
+        energy = p / (gamma - 1) + rho0 / 2 * np.dot(velocity, velocity)
+        rho = rho0 * ones
+
+        return make_conserved(dim=self._dim, mass=rho,
+                              energy=energy, momentum=momentum)
