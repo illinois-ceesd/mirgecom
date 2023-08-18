@@ -668,7 +668,7 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
 
     virgin_mass = 10.0
 
-    my_material = SolidProperties(enthalpy_func, heat_capacity_func,
+    my_material = PrescribedProperties(enthalpy_func, heat_capacity_func,
         thermal_conductivity_func, volume_fraction_func, permeability_func,
         emissivity_func, tortuosity_func, decomposition_progress_func)
     wall_density = virgin_mass + solid_nodes[0]*0.0
@@ -868,7 +868,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
 
     virgin_mass = 10.0
 
-    my_material = SolidProperties(enthalpy_func, heat_capacity_func,
+    my_material = PrescribedProperties(enthalpy_func, heat_capacity_func,
         thermal_conductivity_func, volume_fraction_func, permeability_func,
         emissivity_func, tortuosity_func, decomposition_progress_func)
     wall_density = virgin_mass + solid_nodes[0]*0.0
