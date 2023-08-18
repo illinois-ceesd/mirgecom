@@ -1154,7 +1154,7 @@ def main(actx_class, rst_filename=None,
         if sponge_on:
             fluid_rhs = fluid_rhs + _sponge(fluid_state.cv)
 
-        tseed_rhs = actx.zeros_like(fluid_state.temperature)
+        tseed_rhs = actx.np.zeros_like(fluid_state.temperature)
 
         return make_obj_array([fluid_rhs, tseed_rhs])
 
