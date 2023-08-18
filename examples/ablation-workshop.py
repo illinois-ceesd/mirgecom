@@ -64,18 +64,18 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage
 )
 from mirgecom.eos import (
-    GasDependentVars,
-    GasEOS
+    MixtureDependentVars,
+    MixtureEOS
 )
 from mirgecom.gas_model import PorousFlowFluidState
 from mirgecom.wall_model import (
     PorousWallVars,
-    PorousFlowModel as BasePorousFlowModel
+    PorousFlowModel as BasePorousFlowModel,
+    PorousWallTransport
 )
 from mirgecom.fluid import ConservedVars
-from mirgecom.transport import PorousWallTransport
 from logpyle import IntervalTimer, set_dt
-from typing import Optional
+from typing import Optional, Union
 from pytools.obj_array import make_obj_array
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -334,7 +334,7 @@ class GasTabulatedTransport:
         return cv.species_mass  # empty array
 
 
-class TabulatedGasEOS(GasEOS):
+class TabulatedGasEOS(MixtureEOS):
     """Simplified model of the pyrolysis gas using tabulated data.
 
     This section is to be used when species conservation is not employed and
@@ -429,7 +429,8 @@ class TabulatedGasEOS(GasEOS):
         r"""Return the gas heat capacity at constant volume $C_{v_g}$."""
         return self.heat_capacity_cp(cv, temperature)/self.gamma(cv, temperature)
 
-    def gamma(self, cv: ConservedVars, temperature: Optional[DOFArray] = None) -> DOFArray:
+    def gamma(self, cv: ConservedVars,
+              temperature: Optional[DOFArray] = None) -> DOFArray:
         r"""Return the heat of capacity ratios $\gamma$."""
         coeffs = self._cs_gamma.c
         bnds = self._cs_gamma.x
@@ -467,7 +468,23 @@ class TabulatedGasEOS(GasEOS):
     def kinetic_energy(self, cv: ConservedVars):
         raise NotImplementedError
 
-    def get_density(self, pressure, temperature, species_mass_fractions=None):
+    def get_temperature_seed(self, cv: ConservedVars,
+            temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
+        raise NotImplementedError
+
+    def get_density(self, pressure, temperature, species_mass_fractions):
+        raise NotImplementedError
+
+    def get_species_molecular_weights(self, temperature: DOFArray):
+        raise NotImplementedError
+
+    def species_enthalpies(self, cv: ConservedVars, temperature: DOFArray):
+        raise NotImplementedError
+
+    def get_production_rates(self, cv: ConservedVars, temperature: DOFArray):
+        raise NotImplementedError
+
+    def get_species_source_terms(self, cv: ConservedVars, temperature: DOFArray):
         raise NotImplementedError
 
     def dependent_vars(self, cv: ConservedVars, temperature_seed=None,
@@ -731,17 +748,18 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         pressure = gas_model.get_pressure(cv=cv, wv=wv, temperature=temperature)
 
-        dv = GasDependentVars(
+        dv = MixtureDependentVars(
             temperature=temperature,
             pressure=pressure,
             speed_of_sound=zeros,
             smoothness_mu=zeros,
             smoothness_kappa=zeros,
-            smoothness_beta=zeros
+            smoothness_beta=zeros,
+            species_enthalpies=cv.species_mass,  # empty array
         )
 
-        tv = gas_model.transport.transport_vars(cv=cv, dv=dv, wv=wv,
-                                                flow_model=gas_model)
+        tv = gas_model.transport.transport_vars(
+            cv=cv, dv=dv, wv=wv, eos=gas_model.eos, wall_model=gas_model.wall_model)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
@@ -902,8 +920,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         # ~~~~
         # get the wall enthalpy using spline interpolation
-        bnds_T = bprime_class.bounds_T  # noqa N806
-        bnds_B = bprime_class.bounds_B  # noqa N806
+        bnds_T = bprime_class.T_bounds  # noqa N806
+        bnds_B = bprime_class.B_bounds  # noqa N806
 
         # using spline for temperature interpolation
         # while using "nearest neighbor" for the "B" parameter
@@ -916,10 +934,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                     actx.np.where(actx.np.less(temperature_bc, bnds_T[j+1]),
                     actx.np.where(actx.np.greater_equal(Bsurf, bnds_B[k]),
                     actx.np.where(actx.np.less(Bsurf, bnds_B[k+1]),
-                          bprime_class.cs_Hw[k, 0, j]*(temperature_bc-bnds_T[j])**3
-                        + bprime_class.cs_Hw[k, 1, j]*(temperature_bc-bnds_T[j])**2
-                        + bprime_class.cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
-                        + bprime_class.cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0)
+                          bprime_class.Hw_cs[k, 0, j]*(temperature_bc-bnds_T[j])**3
+                        + bprime_class.Hw_cs[k, 1, j]*(temperature_bc-bnds_T[j])**2
+                        + bprime_class.Hw_cs[k, 2, j]*(temperature_bc-bnds_T[j])
+                        + bprime_class.Hw_cs[k, 3, j], 0.0), 0.0), 0.0), 0.0)
                 i += 1
 
         h_w = binary_sum(h_w_comps)

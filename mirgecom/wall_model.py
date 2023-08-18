@@ -31,6 +31,10 @@ Porous Media EOS
 ----------------
 .. autoclass:: PorousFlowModel
 
+Porous Media Transport
+----------------------
+.. autoclass:: PorousWallTransport
+
 Material properties
 -------------------
     The properties of the materials are defined in specific files and used by
@@ -75,7 +79,11 @@ from arraycontext import (
     get_container_context_recursively
 )
 from mirgecom.fluid import ConservedVars
-from mirgecom.eos import GasEOS, GasDependentVars
+from mirgecom.eos import (
+    GasEOS,
+    MixtureEOS,
+    GasDependentVars
+)
 from mirgecom.transport import GasTransportVars
 
 
@@ -298,24 +306,25 @@ class PorousWallTransport:
         self.base_transport = base_transport
 
     def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         return self.base_transport.bulk_viscosity(cv, dv, eos)
 
     def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$."""
         return (self.bulk_viscosity(cv, dv, wv, eos)
             - 2./3. * self.viscosity(cv, dv, wv, eos))
 
     def viscosity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         """Viscosity of the gas through the porous wall."""
         return 1.0/wv.void_fraction*(
             self.base_transport.viscosity(cv, dv, eos))
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos, wall_model) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS,
+            wall_model: PorousWallProperties) -> DOFArray:
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the
@@ -335,20 +344,20 @@ class PorousWallTransport:
         return y_s*kappa_s + y_g*kappa_g
 
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         """Mass diffusivity of gaseous species through the porous wall."""
         return 1.0/wv.tortuosity*(
             self.base_transport.species_diffusivity(cv, dv, eos))
 
-    # FIXME I have to pass "flow_model" but this class is internal to "flow_model"..
-    # Seems dumb to me but I dont know to access the other classes...
     def transport_vars(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos, wall_model) -> GasTransportVars:
+            wv: PorousWallVars, eos: GasEOS,
+            wall_model: PorousWallProperties) -> GasTransportVars:
         r"""Compute the transport properties."""
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv, dv, wv, eos),
             viscosity=self.viscosity(cv, dv, wv, eos),
-            thermal_conductivity=self.thermal_conductivity(cv, dv, wv, eos, wall_model),
+            thermal_conductivity=self.thermal_conductivity(cv, dv, wv, eos,
+                                                           wall_model),
             species_diffusivity=self.species_diffusivity(cv, dv, wv, eos)
         )
 
@@ -371,8 +380,7 @@ class PorousFlowModel:
     .. attribute:: transport
 
         Transport class that governs how the gas flows through the porous
-        media. This is accounted for in
-        :class:`~mirgecom.transport.PorousWallTransport`
+        media. This is accounted for in :class:`PorousWallTransport`
 
     It also include functions that combine the properties of the porous
     material and the gas that permeates, yielding the actual porous flow EOS:
@@ -385,7 +393,7 @@ class PorousFlowModel:
     .. automethod:: heat_capacity
     """
 
-    eos: GasEOS
+    eos: MixtureEOS
     wall_model: PorousWallProperties
     transport: PorousWallTransport
     temperature_iteration = 3
@@ -466,7 +474,7 @@ class PorousFlowModel:
             \rho e = \epsilon_s \rho_s e_s + \epsilon_g \rho_g e_g
         """
         return (cv.mass*self.eos.get_internal_energy(temperature,
-                                                cv.species_mass_fractions)
+                                                     cv.species_mass_fractions)
                 + wv.density*self.wall_model.enthalpy(temperature, wv.tau))
 
     def heat_capacity(self, cv: ConservedVars, wv: PorousWallVars,

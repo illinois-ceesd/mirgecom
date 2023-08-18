@@ -16,7 +16,6 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: MixtureAveragedTransport
 .. autoclass:: ArtificialViscosityTransportDiv
 .. autoclass:: ArtificialViscosityTransportDiv2
-.. autoclass:: PorousWallTransport
 
 Exceptions
 ^^^^^^^^^^
