@@ -105,10 +105,10 @@ def main(actx_class, use_leap=False, casename=None,
     constant_cfl = False
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 5
-    nviz = 100
-    nhealth = 1
+    nstatus = 100
+    nrestart = 10000
+    nviz = 10
+    nhealth = 100
 
     dim = 2
     rst_path = "restart_data/"

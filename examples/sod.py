@@ -101,10 +101,10 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     current_step = 0
 
     # some i/o frequencies
-    nstatus = 10
-    nrestart = 5
-    nviz = 100
-    nhealth = 10
+    nstatus = 1
+    nrestart = 1000
+    nviz = 1
+    nhealth = 1
 
     dim = 1
     rst_path = "restart_data/"
