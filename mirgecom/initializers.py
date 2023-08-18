@@ -1603,7 +1603,7 @@ class InviscidTaylorGreenVortex:
         x = x_vec[0]
         y = x_vec[1]
         actx = x_vec[0].array_context
-        zeros = actx.zeros_like(x)
+        zeros = actx.np.zeros_like(x)
         ones = 1 + zeros
         nu = self._mu/rho0
         ft = actx.np.exp(-2*nu*time)

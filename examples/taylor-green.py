@@ -196,7 +196,7 @@ def main(actx_class, order=1, t_final=1, resolution=4,
     if rank == 0:
         logger.info(init_message)
 
-    def _make_fluid_state(cv, tseed):
+    def _make_fluid_state(cv):
         return make_fluid_state(cv=cv, gas_model=gas_model)
 
     make_fluid_state_compiled = actx.compile(_make_fluid_state)
@@ -235,7 +235,7 @@ def main(actx_class, order=1, t_final=1, resolution=4,
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        fluid_state = make_fluid_state_compiled(state, gas_model)
+        fluid_state = make_fluid_state_compiled(state)
         dv = fluid_state.dv
 
         try:
