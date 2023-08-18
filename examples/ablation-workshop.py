@@ -35,6 +35,7 @@ from grudge.trace_pair import (
     TracePair, interior_trace_pairs, tracepair_with_discr_tag
 )
 from grudge import op
+import grudge.geometry as geo
 from grudge.dof_desc import DD_VOLUME_ALL
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import (
@@ -765,7 +766,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         def interior_flux(f_tpair, u_tpair):
             dd_trace_quad = f_tpair.dd.with_discr_tag(quadrature_tag)
-            normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
+            normal_quad = geo.normal(actx, dcoll, dd_trace_quad)
 
             bnd_u_tpair_quad = \
                 tracepair_with_discr_tag(dcoll, quadrature_tag, u_tpair)
@@ -786,7 +787,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         def boundary_flux(bdtag, bdry_cond_function):
             dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
-            normal_quad = actx.thaw(dcoll.normal(dd_bdry_quad))
+            normal_quad = geo.normal(actx, dcoll, dd_bdry_quad)
 
             int_flux_quad = op.project(dcoll, dd_vol_quad, dd_bdry_quad, flux_quad)
             ext_flux_quad = bdry_cond_function(int_flux_quad)
@@ -825,7 +826,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         # restrict variables to the domain boundary
         dd_vol_quad = dd_wall.with_discr_tag(quadrature_tag)
         bdtag = dd_wall.trace("prescribed").domain_tag
-        normal_vec = actx.thaw(dcoll.normal(bdtag))
+        normal_vec = geo.normal(actx, dcoll, bdtag)
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
 
         temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, dv.temperature)
