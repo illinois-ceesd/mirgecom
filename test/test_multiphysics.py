@@ -70,7 +70,7 @@ from meshmode.array_context import (  # noqa
 from mirgecom.transport import PorousWallTransport
 from mirgecom.wall_model import PorousFlowModel
 from mirgecom.materials.initializer import PorousWallInitializer
-from mirgecom.materials.prescribed_material import SolidProperties
+from mirgecom.materials.prescribed_porous_material import PrescribedProperties
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
