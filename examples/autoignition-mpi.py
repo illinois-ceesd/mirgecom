@@ -38,7 +38,8 @@ from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
     generate_and_distribute_mesh,
-    write_visfile
+    write_visfile,
+    ApplicationOptionsError
 )
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -74,10 +75,9 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_logmgr=True,
-         use_leap=False, use_overintegration=False,
+def main(actx_class, use_leap=False, use_overintegration=False,
          casename=None, rst_filename=None, log_dependent=True,
-         viscous_terms_on=False):
+         viscous_terms_on=False, use_esdg=False):
     """Drive example."""
     if casename is None:
         casename = "mirgecom"
@@ -90,7 +90,7 @@ def main(actx_class, use_logmgr=True,
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
-    logmgr = initialize_logmgr(use_logmgr,
+    logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
@@ -584,9 +584,15 @@ def main(actx_class, use_logmgr=True,
 
         return make_obj_array([cv, fluid_state.temperature]), dt
 
-    from mirgecom.inviscid import inviscid_facial_flux_rusanov as inv_num_flux_func
+    from mirgecom.inviscid import (
+        inviscid_facial_flux_rusanov,
+        entropy_stable_inviscid_facial_flux_rusanov
+    )
     from mirgecom.gas_model import make_operator_fluid_states
     from mirgecom.navierstokes import ns_operator
+
+    inv_num_flux_func = entropy_stable_inviscid_facial_flux_rusanov if use_esdg \
+        else inviscid_facial_flux_rusanov
 
     fluid_operator = euler_operator
     if viscous_terms_on:
@@ -606,8 +612,9 @@ def main(actx_class, use_logmgr=True,
         fluid_rhs = fluid_operator(
             dcoll, state=fluid_state, gas_model=gas_model, time=t,
             boundaries=boundaries, operator_states_quad=fluid_operator_states,
-            quadrature_tag=quadrature_tag,
+            quadrature_tag=quadrature_tag, use_esdg=use_esdg,
             inviscid_numerical_flux_func=inv_num_flux_func)
+
         chem_rhs = eos.get_species_source_terms(cv, fluid_state.temperature)
         tseed_rhs = fluid_state.temperature - tseed
         cv_rhs = fluid_rhs + chem_rhs
@@ -662,8 +669,8 @@ if __name__ == "__main__":
                         help="turns on compressible Navier-Stokes RHS")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
-    parser.add_argument("--log", action="store_true", default=True,
-        help="turn on logging")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--numpy", action="store_true",
@@ -673,6 +680,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+
+    if args.esdg:
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
     log_dependent = False
     viscous_terms_on = args.navierstokes
 
@@ -687,9 +701,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_logmgr=args.log, use_leap=args.leap,
-         use_overintegration=args.overintegration,
-         casename=casename, rst_filename=rst_filename,
+    main(actx_class, use_leap=args.leap,
+         use_overintegration=args.overintegration or args.esdg,
+         casename=casename, rst_filename=rst_filename, use_esdg=args.esdg,
          log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
 
 # vim: foldmethod=marker
