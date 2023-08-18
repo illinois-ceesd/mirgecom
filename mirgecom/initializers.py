@@ -311,7 +311,7 @@ class SodShock1D:
         x = x_vec[self._xdir]
         actx = x.array_context
 
-        zeros = 0*x
+        zeros = actx.np.zeros_like(x)
 
         rhor = zeros + self._rhor
         rhol = zeros + self._rhol
@@ -325,16 +325,6 @@ class SodShock1D:
         mass = rhor + (rhol - rhor)*weight
         energy = energyr + (energyl - energyr)*weight
         momentum = make_obj_array([1.*zeros for _ in range(self._dim)])
-
-        # yesno = actx.np.greater(x_rel, x0)
-        # mass = actx.np.where(yesno, rhor, rhol)
-        # energy = actx.np.where(yesno, energyr, energyl)
-        # mom = make_obj_array(
-        #     [
-        #         0*x_rel
-        #         for i in range(self._dim)
-        #     ]
-        # )
 
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=momentum)

@@ -59,7 +59,6 @@ from mirgecom.utils import normalize_boundaries
 
 from arraycontext import outer
 from meshmode.dof_array import DOFArray
-# from pytools.obj_array import make_obj_array
 
 
 def inviscid_flux(state):
@@ -586,7 +585,7 @@ def entropy_stable_inviscid_facial_flux(state_pair, gas_model, normal,
 
     alpha:
 
-        Strength of the dissipation term. This can be a fixed single scalar,
+        Strength of the penalization term. This can be a fixed single scalar,
         or a :class:`~meshmode.dof_array.DOFArray`.  For example, a Rusanov flux can
         be constructed by passing the max wavespeed as alpha.
 
@@ -595,10 +594,15 @@ def entropy_stable_inviscid_facial_flux(state_pair, gas_model, normal,
     :class:`~mirgecom.fluid.ConservedVars`
         A CV object containing the scalar numerical fluxes at the input faces.
     """
+    # Automatically choose the appropriate EC flux if none is given
     if entropy_conserving_flux_func is None:
         entropy_conserving_flux_func = \
             (entropy_conserving_flux_renac if state_pair.int.is_mixture
              else entropy_conserving_flux_chandrashekar)
+        if state_pair.int.is_mixture:
+            from warnings import warn
+            warn("`entropy_conserving_flux_renac` is expensive to compile for "
+                 "mixtures.")
 
     flux = entropy_conserving_flux_func(gas_model,
                                         state_pair.int,

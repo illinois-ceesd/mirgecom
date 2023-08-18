@@ -556,7 +556,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
     ns_rhs = div_operator(dcoll, dd_vol_quad, dd_allfaces_quad, vol_term, bnd_term)
 
-    # Call an external operator for the invsicid terms (Euler by default)
+    # Call an external operator for the inviscid terms (Euler by default)
     # ESDG *always* uses this branch
     if inviscid_terms_on and inviscid_fluid_operator is not None:
         ns_rhs = ns_rhs + inviscid_fluid_operator(
