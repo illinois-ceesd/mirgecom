@@ -2,7 +2,21 @@
 
 set -o nounset
 
-origin=$(pwd)
+# {{{ Provide grouping for GitHub actions
+
+function startgroup {
+    # Start a foldable group of log lines
+    # Pass a single argument, quoted
+    echo "::group::$1"
+}
+
+function endgroup {
+    echo "::endgroup::"
+}
+
+# }}}
+
+origin="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 examples_dir=${1-$origin}
 shift
 
@@ -44,7 +58,7 @@ date
 echo "*** Running examples in $examples_dir ..."
 
 if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
-    . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
+    source scripts/mirge-testing-env.sh
 fi
 
 mpi_exec="${MIRGE_MPI_EXEC}"
@@ -102,6 +116,8 @@ do
     rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
     set +x
 
+    startgroup "Starting ${test_name}"
+
     basic_command="python -m mpi4py ${example_filename} --casename ${test_name}"
     set -x
     if [[ "$nompi" -gt 0 ]]; then
@@ -113,6 +129,9 @@ do
     set +x
     test_results+=("${test_name}:$test_return_code")
     date
+
+    endgroup
+    startgroup "Starting ${test_name}"
 
     test_name="${example_name}_lazy"
     echo "**** Running $test_name"
@@ -132,8 +151,10 @@ do
     test_results+=("${test_name}:$test_return_code")
     date
 
+    endgroup
+    startgroup "Starting ${test_name}"
+
     test_name="${example_name}_numpy"
-    echo "**** Running $test_name"
 
     basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --numpy"
     set -x
@@ -151,7 +172,9 @@ do
     test_results+=("${test_name}:$test_return_code")
     date
 
-    echo "**** Accuracy comparison for $example_name."
+    endgroup
+
+    startgroup "**** Accuracy comparison for $example_name."
     lazy_comparison_result=0
     numpy_comparison_result=0
     lazy_numpy_comparison_result=0
@@ -187,6 +210,8 @@ do
             fi
         fi
     done
+
+    endgroup
 
     # Save any comparison results (if they were done)
     if [[ "$nlazy_compare" -gt 0 ]]; then
