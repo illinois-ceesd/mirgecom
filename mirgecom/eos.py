@@ -664,7 +664,8 @@ class PyrometheusMixture(MixtureEOS):
         rspec = self.gas_const(cv)
         return cp / (cp - rspec)
 
-    def gas_const(self, cv: ConservedVars, temperature=None):
+    def gas_const(self, cv: ConservedVars,  # type: ignore[override]
+                  temperature=None):
         r"""Get specific gas constant $R_s$.
 
         The mixture specific gas constant is calculated
