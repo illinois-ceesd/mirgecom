@@ -2,7 +2,7 @@
 
 set -o nounset
 
-# {{{ Provide grouping for GitHub actions
+# {{{ Provide log grouping for GitHub actions
 
 function startgroup {
     # Start a foldable group of log lines
@@ -109,70 +109,29 @@ do
     # The format of each array item is: "test_name:test_result"
     test_results=()
 
-    # Run Eager, Lazy, and Numpy contexts
-    test_name="${example_name}_eager"
-    echo "**** Running $test_name"
-    set -x
-    rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
-    set +x
+    # Run example with Eager, Lazy, and Numpy arraycontexts
+    for actx in eager lazy numpy; do
+        test_name="${example_name}_$actx"
+        startgroup "**** Running $test_name"
+        set -x
+        rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
+        set +x
 
-    startgroup "Starting ${test_name}"
+        basic_command="python -m mpi4py ${example_filename} --casename ${test_name}"
+        [[ $actx != "eager" ]] && basic_command+=" --$actx"
+        set -x
+        if [[ "$nompi" -gt 0 ]]; then
+            ${basic_command}
+        else
+            ${mpi_exec} -n 2 $mpi_launcher $basic_command
+        fi
+        test_return_code=$?
+        set +x
+        test_results+=("${test_name}:$test_return_code")
+        date
 
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name}"
-    set -x
-    if [[ "$nompi" -gt 0 ]]; then
-        ${basic_command}
-    else
-        ${mpi_exec} -n 2 $mpi_launcher $basic_command
-    fi
-    test_return_code=$?
-    set +x
-    test_results+=("${test_name}:$test_return_code")
-    date
-
-    endgroup
-    startgroup "Starting ${test_name}"
-
-    test_name="${example_name}_lazy"
-    echo "**** Running $test_name"
-    set -x
-    rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
-    set +x
-
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --lazy"
-    set -x
-    if [[ "$nompi" -gt 0 ]]; then
-        ${basic_command}
-    else
-        ${mpi_exec} -n 2 $mpi_launcher $basic_command
-    fi
-    test_return_code=$?
-    set +x
-    test_results+=("${test_name}:$test_return_code")
-    date
-
-    endgroup
-    startgroup "Starting ${test_name}"
-
-    test_name="${example_name}_numpy"
-
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --numpy"
-    set -x
-    rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
-    set +x
-
-    set -x
-    if [[ "$nompi" -gt 0 ]]; then
-        ${basic_command}
-    else
-        ${mpi_exec} -n 2 $mpi_launcher $basic_command
-    fi
-    test_return_code=$?
-    set +x
-    test_results+=("${test_name}:$test_return_code")
-    date
-
-    endgroup
+        endgroup
+    done
 
     startgroup "**** Accuracy comparison for $example_name."
     lazy_comparison_result=0
@@ -233,7 +192,7 @@ do
     example_failed_tests=""
 
     # Track/report the suite of tests for each example
-    echo "${example_name} testing results:"
+    echo "**** ${example_name} testing results:"
     for test_name_result in "${test_results[@]}"; do
         _test_name=${test_name_result%%:*}
         _test_result=${test_name_result#*:}
