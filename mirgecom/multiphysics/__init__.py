@@ -28,7 +28,6 @@ __doc__ = """
 .. automodule:: mirgecom.multiphysics.thermally_coupled_fluid_wall
 
 .. autofunction:: make_interface_boundaries
->>>>>>> main
 """
 
 
