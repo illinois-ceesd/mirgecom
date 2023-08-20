@@ -678,7 +678,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     my_gas = TabulatedGasEOS()
     bprime_class = BprimeTable()
-    my_material = my_composite.TACOTProperties(char_mass=220.0, virgin_mass=280.0)
+    my_material = my_composite.TacotEOS(char_mass=220.0, virgin_mass=280.0)
     pyrolysis = my_composite.Pyrolysis()
 
     base_transport = GasTabulatedTransport()
