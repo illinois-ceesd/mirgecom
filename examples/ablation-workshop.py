@@ -475,7 +475,7 @@ class TabulatedGasEOS(MixtureEOS):
     def get_density(self, pressure, temperature, species_mass_fractions):
         raise NotImplementedError
 
-    def get_species_molecular_weights(self, temperature: DOFArray):
+    def get_species_molecular_weights(self):
         raise NotImplementedError
 
     def species_enthalpies(self, cv: ConservedVars, temperature: DOFArray):

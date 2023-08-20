@@ -44,12 +44,11 @@ THE SOFTWARE.
 """
 from typing import Union, Optional
 from dataclasses import dataclass
-import numpy as np
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import DOFArray
-from mirgecom.fluid import ConservedVars, make_conserved
 from abc import ABCMeta, abstractmethod
 from arraycontext import dataclass_array_container
+import numpy as np
+from meshmode.dof_array import DOFArray
+from mirgecom.fluid import ConservedVars, make_conserved
 
 
 class TemperatureSeedMissingError(Exception):
@@ -237,7 +236,7 @@ class MixtureEOS(GasEOS):
         """Get the density from pressure, temperature, and species fractions (Y)."""
 
     @abstractmethod
-    def get_species_molecular_weights(self, temperature: DOFArray):
+    def get_species_molecular_weights(self):
         """Get the species molecular weights."""
 
     @abstractmethod
@@ -783,7 +782,7 @@ class PyrometheusMixture(MixtureEOS):
         return self._pyrometheus_mech.get_mixture_enthalpy_mass(
             temperature, species_mass_fractions)
 
-    def get_species_molecular_weights(self, temperature=None):
+    def get_species_molecular_weights(self):
         """Get the species molecular weights."""
         return self._pyrometheus_mech.wts
 

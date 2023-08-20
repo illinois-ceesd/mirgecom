@@ -49,10 +49,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np  # noqa
 from functools import partial
 from dataclasses import dataclass
 from typing import Optional
+import numpy as np  # noqa
 from arraycontext import dataclass_array_container
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -432,10 +432,8 @@ def make_fluid_state(cv, gas_model,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
         )
 
-        # FIXME I have to pass "gas_model" but this class is internal to "gas_model"
-        # Seems dumb to me but I dont know to access the other classes...
-        tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model.eos,
-                                                gas_model.wall_model)
+        tv = gas_model.transport.transport_vars(cv=cv, dv=dv, wv=wv,
+            eos=gas_model.eos, wall_model=gas_model.wall_model)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
