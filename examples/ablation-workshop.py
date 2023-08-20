@@ -148,14 +148,14 @@ def initializer(dim, gas_model, material_densities, temperature,
     gas_const = gas_model.eos.gas_const(cv=None, temperature=temperature)
 
     if gas_density is None:
-        eps_gas = gas_model.wall_model.void_fraction(tau)
+        eps_gas = gas_model.wall_eos.void_fraction(tau)
         eps_rho_gas = eps_gas*pressure/(gas_const*temperature)
 
     # internal energy (kinetic energy is neglected)
     eps_rho_solid = sum(material_densities)
     bulk_energy = (
         eps_rho_gas*gas_model.eos.get_internal_energy(temperature=temperature)
-        + eps_rho_solid*gas_model.wall_model.enthalpy(temperature, tau)
+        + eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
     )
 
     zeros = actx.np.zeros_like(tau)
@@ -543,9 +543,9 @@ class PorousFlowModel(BasePorousFlowModel):
 
         for _ in range(0, niter):
             eps_rho_e = (cv.mass*self.eos.get_internal_energy(temperature=temp)
-                         + wv.density*self.wall_model.enthalpy(temp, wv.tau))
+                         + wv.density*self.wall_eos.enthalpy(temp, wv.tau))
             bulk_cp = (cv.mass*self.eos.heat_capacity_cv(cv=cv, temperature=temp)
-                       + wv.density*self.wall_model.heat_capacity(temp, wv.tau))
+                       + wv.density*self.wall_eos.heat_capacity(temp, wv.tau))
             temp = temp - (eps_rho_e - cv.energy)/bulk_cp
 
         return temp
@@ -683,7 +683,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     base_transport = GasTabulatedTransport()
     sample_transport = PorousWallTransport(base_transport=base_transport)
-    gas_model = PorousFlowModel(eos=my_gas, wall_model=my_material,
+    gas_model = PorousFlowModel(eos=my_gas, wall_eos=my_material,
                                 transport=sample_transport)
 
     # }}}
@@ -737,10 +737,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             material_densities=material_densities,
             tau=tau,
             density=gas_model.solid_density(material_densities),
-            void_fraction=gas_model.wall_model.void_fraction(tau),
-            emissivity=gas_model.wall_model.emissivity(tau),
-            permeability=gas_model.wall_model.permeability(tau),
-            tortuosity=gas_model.wall_model.tortuosity(tau)
+            void_fraction=gas_model.wall_eos.void_fraction(tau),
+            emissivity=gas_model.wall_eos.emissivity(tau),
+            permeability=gas_model.wall_eos.permeability(tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau)
         )
 
         temperature = gas_model.get_temperature(cv=cv, wv=wv,
@@ -759,7 +759,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         )
 
         tv = gas_model.transport.transport_vars(
-            cv=cv, dv=dv, wv=wv, eos=gas_model.eos, wall_model=gas_model.wall_model)
+            cv=cv, dv=dv, wv=wv, eos=gas_model.eos, wall_eos=gas_model.wall_eos)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 

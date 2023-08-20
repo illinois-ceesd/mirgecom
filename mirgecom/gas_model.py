@@ -399,7 +399,7 @@ def make_fluid_state(cv, gas_model,
     elif isinstance(gas_model, PorousFlowModel):
 
         # FIXME per previous review, think of a way to de-couple wall and fluid.
-        # ~~~ we need to squeeze wall_model in gas_model because this is easily
+        # ~~~ we need to squeeze wall_eos in gas_model because this is easily
         # accessible everywhere in the code
 
         tau = gas_model.decomposition_progress(material_densities)
@@ -407,10 +407,10 @@ def make_fluid_state(cv, gas_model,
             material_densities=material_densities,
             tau=tau,
             density=gas_model.solid_density(material_densities),
-            void_fraction=gas_model.wall_model.void_fraction(tau),
-            emissivity=gas_model.wall_model.emissivity(tau),
-            permeability=gas_model.wall_model.permeability(tau),
-            tortuosity=gas_model.wall_model.tortuosity(tau)
+            void_fraction=gas_model.wall_eos.void_fraction(tau),
+            emissivity=gas_model.wall_eos.emissivity(tau),
+            permeability=gas_model.wall_eos.permeability(tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau)
         )
 
         temperature = gas_model.get_temperature(cv=cv, wv=wv,
@@ -433,7 +433,7 @@ def make_fluid_state(cv, gas_model,
         )
 
         tv = gas_model.transport.transport_vars(cv=cv, dv=dv, wv=wv,
-            eos=gas_model.eos, wall_model=gas_model.wall_model)
+            eos=gas_model.eos, wall_eos=gas_model.wall_eos)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 

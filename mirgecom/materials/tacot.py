@@ -5,7 +5,7 @@
     Ablator) proposed as an open-source material for the Ablation Workshop.
 
 .. autoclass:: Pyrolysis
-.. autoclass:: TACOTProperties
+.. autoclass:: TacotEOS
 """
 
 __copyright__ = """
@@ -35,7 +35,7 @@ THE SOFTWARE.
 import numpy as np
 from meshmode.dof_array import DOFArray
 from pytools.obj_array import make_obj_array
-from mirgecom.wall_model import PorousWallProperties
+from mirgecom.wall_model import PorousWallEOS
 
 
 # TODO generalize? define only abstract class and keep this in the driver?
@@ -99,7 +99,7 @@ class Pyrolysis:
             actx.np.zeros_like(temperature)])
 
 
-class TACOTProperties(PorousWallProperties):
+class TacotEOS(PorousWallEOS):
     """Evaluate the properties of the solid state containing resin and fibers.
 
     A linear weighting between the virgin and chared states is applied to
