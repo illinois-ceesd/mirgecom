@@ -96,7 +96,8 @@ class PorousWallInitializer:
             eps_rho_gas = eps_gas*density
 
         # internal energy (kinetic energy is neglected)
-        eps_rho_solid = sum(wall_density)
+        eps_rho_solid = gas_model.solid_density(wall_density)
+
         bulk_energy = (
             eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
             + eps_rho_gas*gas_model.eos.get_internal_energy(temperature,
