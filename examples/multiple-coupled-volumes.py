@@ -51,7 +51,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import IsothermalWallBoundary, AdiabaticSlipBoundary
 from mirgecom.fluid import make_conserved
-from mirgecom.transport import SimpleTransport, PorousWallTransport
+from mirgecom.transport import SimpleTransport
 import cantera
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import (
@@ -460,6 +460,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
     fluid_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.1,
         species_diffusivity=np.zeros(nspecies,) + 0.001)
 
+    from mirgecom.wall_model import PorousWallTransport
     base_transport = SimpleTransport(viscosity=0.0, thermal_conductivity=0.2,
         species_diffusivity=np.zeros(nspecies,) + 0.001)
     sample_transport = PorousWallTransport(base_transport=base_transport)
@@ -472,7 +473,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
     import mirgecom.materials.carbon_fiber as my_material
     sample_density = 0.1*1600.0 + sample_zeros
-    fiber = my_material.FiberProperties(char_mass=0.0, virgin_mass=160.0)
+    fiber = my_material.FiberEOS(char_mass=0.0, virgin_mass=160.0)
 
     # }}}
 
@@ -508,8 +509,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
     gas_model_fluid = GasModel(eos=eos, transport=fluid_transport)
 
     from mirgecom.wall_model import PorousFlowModel
-    gas_model_sample = PorousFlowModel(eos=eos,
-                                       wall_model=fiber,
+    gas_model_sample = PorousFlowModel(eos=eos, wall_eos=fiber,
                                        transport=sample_transport)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -585,7 +585,7 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
         # compute solid energy
         energy_solid = \
-            wv.density*gas_model_sample.wall_model.enthalpy(temperature, wv.tau)
+            wv.density*gas_model_sample.wall_eos.enthalpy(temperature, wv.tau)
 
         # the total energy is a composition of both solid and gas
         energy = energy_gas + energy_solid

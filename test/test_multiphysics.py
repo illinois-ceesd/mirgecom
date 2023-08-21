@@ -67,10 +67,9 @@ from mirgecom.multiphysics.multiphysics_coupled_fluid_wall import (
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-from mirgecom.transport import PorousWallTransport
-from mirgecom.wall_model import PorousFlowModel
+from mirgecom.wall_model import PorousFlowModel, PorousWallTransport
 from mirgecom.materials.initializer import PorousWallInitializer
-from mirgecom.materials.prescribed_porous_material import PrescribedProperties
+from mirgecom.materials.prescribed_porous_material import PrescribedMaterialEOS
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
@@ -614,7 +613,7 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
         actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface with radiation.
 
-    Analytic solution prescribedas initial condition, then the RHS is assessed
+    Analytic solution prescribed as initial condition, then the RHS is assessed
     to ensure that it is nearly zero.
     """
     actx = actx_factory()
@@ -668,7 +667,7 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
 
     virgin_mass = 10.0
 
-    my_material = PrescribedProperties(enthalpy_func, heat_capacity_func,
+    my_material = PrescribedMaterialEOS(enthalpy_func, heat_capacity_func,
         thermal_conductivity_func, volume_fraction_func, permeability_func,
         emissivity_func, tortuosity_func, decomposition_progress_func)
     wall_density = virgin_mass + solid_nodes[0]*0.0
@@ -677,7 +676,7 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
         species_diffusivity=np.zeros(nspecies,))
     solid_transport = PorousWallTransport(base_transport=base_transport)
     gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,
-        wall_model=my_material)
+        wall_eos=my_material)
 
     # Fluid cv
 
@@ -812,7 +811,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
 
     """Check the thermally-coupled fluid/wall interface with radiation.
 
-    Analytic solution prescribedas initial condition, then the RHS is assessed
+    Analytic solution prescribed as initial condition, then the RHS is assessed
     to ensure that it is nearly zero.
     """
     actx = actx_factory()
@@ -868,7 +867,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
 
     virgin_mass = 10.0
 
-    my_material = PrescribedProperties(enthalpy_func, heat_capacity_func,
+    my_material = PrescribedMaterialEOS(enthalpy_func, heat_capacity_func,
         thermal_conductivity_func, volume_fraction_func, permeability_func,
         emissivity_func, tortuosity_func, decomposition_progress_func)
     wall_density = virgin_mass + solid_nodes[0]*0.0
@@ -877,7 +876,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
         species_diffusivity=np.zeros(nspecies,) + 0.001)
     solid_transport = PorousWallTransport(base_transport=base_transport)
     gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,
-        wall_model=my_material)
+        wall_eos=my_material)
 
     fluid_diffusivity = 0.003
     solid_diffusivity = 0.001/tortuosity_func()
