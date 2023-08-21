@@ -67,6 +67,7 @@ from mirgecom.eos import (
     MixtureDependentVars,
     MixtureEOS
 )
+from mirgecom.transport import TransportModel
 from mirgecom.gas_model import PorousFlowFluidState
 from mirgecom.wall_model import (
     PorousWallVars,
@@ -247,7 +248,7 @@ class BprimeTable:
                 scipy.interpolate.CubicSpline(self.T_bounds, self.Hw[i, :]).c
 
 
-class GasTabulatedTransport:
+class GasTabulatedTransport(TransportModel):
     """Evaluate tabulated transport data for TACOT."""
 
     def __init__(self, prandtl=1.0, lewis=1.0):
@@ -342,14 +343,6 @@ class TabulatedGasEOS(MixtureEOS):
     The table was extracted from the suplementar material from the
     ablation workshop. Some lines were removed to reduce the number of spline
     interpolation segments.
-
-    .. automethod:: molar_mass
-    .. automethod:: enthalpy
-    .. automethod:: gamma
-    .. automethod:: get_internal_energy
-    .. automethod:: heat_capacity_cp
-    .. automethod:: heat_capacity_cv
-    .. automethod:: pressure
     """
 
     def __init__(self):
