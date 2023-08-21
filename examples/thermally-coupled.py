@@ -25,6 +25,7 @@ THE SOFTWARE.
 """
 
 import logging
+import os
 from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
@@ -132,6 +133,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
+    local_path = os.path.dirname(os.path.abspath(__file__))
+
     if rst_filename:  # read the grid from restart data
         rst_filename = f"{rst_filename}-{rank:04d}.pkl"
         from mirgecom.restart import read_restart_data
@@ -143,7 +146,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         def get_mesh_data():
             from meshmode.mesh.io import read_gmsh
             mesh, tag_to_elements = read_gmsh(
-                "multivolume.msh", force_ambient_dim=2,
+                f"{local_path}/multivolume.msh", force_ambient_dim=2,
                 return_tag_to_elements_map=True)
             volume_to_tags = {
                 "Fluid": ["Upper"],
