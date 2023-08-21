@@ -44,7 +44,6 @@ from mirgecom.simutil import (
     check_step, distribute_mesh, write_visfile,
     check_naninf_local, global_reduce
 )
-from mirgecom.array_context import get_reasonable_array_context_class
 from mirgecom.restart import write_restart_file
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
@@ -1184,6 +1183,10 @@ if __name__ == "__main__":
         help="enable logging profiling [ON]")
     parser.add_argument("--lazy", action="store_true", default=False,
         help="enable lazy evaluation [OFF]")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
 
     args = parser.parse_args()
 
@@ -1193,8 +1196,9 @@ if __name__ == "__main__":
         if lazy:
             raise ValueError("Can't use lazy and profiling together.")
 
+    from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=lazy, distributed=True, profiling=args.profiling)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
     # for writing output
     casename = "coupled_volumes"
