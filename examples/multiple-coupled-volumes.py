@@ -572,9 +572,6 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
             pressure=pressure, temperature=temperature,
             species_mass_fractions=spec_lim)
 
-#        print(temperature)
-#        print(pressure)
-
         # recompute gas energy
         energy_gas = mass_lim*(
             gas_model_sample.eos.get_internal_energy(
