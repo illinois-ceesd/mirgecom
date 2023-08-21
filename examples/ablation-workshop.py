@@ -65,7 +65,9 @@ from mirgecom.logging_quantities import (
 )
 from mirgecom.eos import (
     MixtureDependentVars,
-    MixtureEOS
+    MixtureEOS,
+    GasEOS,
+    GasDependentVars
 )
 from mirgecom.transport import TransportModel
 from mirgecom.gas_model import PorousFlowFluidState
@@ -303,22 +305,26 @@ class GasTabulatedTransport(TransportModel):
 
         self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 1]*1e-4)
 
-    def bulk_viscosity(self, cv, dv, eos) -> DOFArray:
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         actx = cv.mass.array_context
         return actx.np.zeros_like(cv.mass)
 
-    def volume_viscosity(self, cv, dv, eos) -> DOFArray:
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$."""
         return (self.bulk_viscosity(cv, dv, eos) - 2./3.)*self.viscosity(cv, dv, eos)
 
-    def viscosity(self, cv, dv, eos) -> DOFArray:
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Return the gas viscosity $\mu$."""
         coeffs = self._cs_viscosity.c
         bnds = self._cs_viscosity.x
         return eval_spline(dv.temperature, bnds, coeffs)
 
-    def thermal_conductivity(self, cv, dv, eos) -> DOFArray:
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Return the gas thermal conductivity $\kappa_g$.
 
         .. math::
@@ -331,7 +337,8 @@ class GasTabulatedTransport(TransportModel):
         mu = self.viscosity(cv, dv, eos)
         return mu*cp/self._prandtl
 
-    def species_diffusivity(self, cv, dv, eos) -> DOFArray:
+    def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         return cv.species_mass  # empty array
 
 
