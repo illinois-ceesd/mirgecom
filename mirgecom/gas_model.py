@@ -49,10 +49,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np  # noqa
 from functools import partial
 from dataclasses import dataclass
 from typing import Optional
+import numpy as np  # noqa
 from arraycontext import dataclass_array_container
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -358,12 +358,6 @@ def make_fluid_state(cv, gas_model,
     smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
 
-    if (not isinstance(gas_model, GasModel)
-            and not isinstance(gas_model, PorousFlowModel)):
-        print(not isinstance(gas_model, GasModel))
-        print(not isinstance(gas_model, PorousFlowModel))
-        raise TypeError("Invalid type for gas_model")
-
     if isinstance(gas_model, GasModel):
         temperature = gas_model.eos.temperature(cv=cv,
                                                 temperature_seed=temperature_seed)
@@ -402,10 +396,10 @@ def make_fluid_state(cv, gas_model,
 
     # TODO ideally, we want to avoid using "gas model" because the name contradicts
     # its usage with solid+fluid.
-    if isinstance(gas_model, PorousFlowModel):
+    elif isinstance(gas_model, PorousFlowModel):
 
         # FIXME per previous review, think of a way to de-couple wall and fluid.
-        # ~~~ we need to squeeze wall_model in gas_model because this is easily
+        # ~~~ we need to squeeze wall_eos in gas_model because this is easily
         # accessible everywhere in the code
 
         tau = gas_model.decomposition_progress(material_densities)
@@ -413,10 +407,10 @@ def make_fluid_state(cv, gas_model,
             material_densities=material_densities,
             tau=tau,
             density=gas_model.solid_density(material_densities),
-            void_fraction=gas_model.wall_model.void_fraction(tau),
-            emissivity=gas_model.wall_model.emissivity(tau),
-            permeability=gas_model.wall_model.permeability(tau),
-            tortuosity=gas_model.wall_model.tortuosity(tau)
+            void_fraction=gas_model.wall_eos.void_fraction(tau),
+            emissivity=gas_model.wall_eos.emissivity(tau),
+            permeability=gas_model.wall_eos.permeability(tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau)
         )
 
         temperature = gas_model.get_temperature(cv=cv, wv=wv,
@@ -438,11 +432,13 @@ def make_fluid_state(cv, gas_model,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
         )
 
-        # FIXME I have to pass "gas_model" but this class is internal to "gas_model"
-        # Seems dumb to me but I dont know to access the other classes...
-        tv = gas_model.transport.transport_vars(cv, dv, wv, gas_model)
+        tv = gas_model.transport.transport_vars(cv=cv, dv=dv, wv=wv,
+            eos=gas_model.eos, wall_eos=gas_model.wall_eos)
 
         return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
+
+    else:
+        raise TypeError("Invalid type for gas_model")
 
 
 def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,

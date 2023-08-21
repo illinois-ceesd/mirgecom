@@ -63,10 +63,10 @@ Carbon Fiber Oxidation
     :attr:`~mirgecom.eos.GasDependentVars.temperature`
     is evaluated using Newton iteration based on both
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
-    :attr:`~mirgecom.wall_model.PorousWallProperties.enthalpy`,
+    :attr:`~mirgecom.wall_model.PorousWallEOS.enthalpy`,
     as well as their respective derivatives, namely
     :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
-    :attr:`~mirgecom.wall_model.PorousWallProperties.heat_capacity`.
+    :attr:`~mirgecom.wall_model.PorousWallEOS.heat_capacity`.
     Note that :mod:`pyrometheus` is used to handle the species properties.
 
 Composite Materials
@@ -141,10 +141,10 @@ Composite Materials
     :attr:`~mirgecom.eos.GasDependentVars.temperature`.
     It is evaluated using Newton iteration based on
     :attr:`~mirgecom.eos.PyrometheusMixture.get_internal_energy` and
-    :attr:`~mirgecom.wall_model.PorousWallProperties.enthalpy`,
+    :attr:`~mirgecom.wall_model.PorousWallEOS.enthalpy`,
     as well as their respective derivatives
     :attr:`~mirgecom.eos.PyrometheusMixture.heat_capacity_cv` and
-    :attr:`~mirgecom.wall_model.PorousWallProperties.heat_capacity`.
+    :attr:`~mirgecom.wall_model.PorousWallEOS.heat_capacity`.
 
     In *MIRGE-Com*, the solid properties are obtained by fitting polynomials
     to tabulated data for easy evaluation of the properties based on the

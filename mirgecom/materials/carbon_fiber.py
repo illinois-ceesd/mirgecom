@@ -1,7 +1,7 @@
 r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
 
 .. autoclass:: Oxidation
-.. autoclass:: FiberProperties
+.. autoclass:: FiberEOS
 """
 
 __copyright__ = """
@@ -32,7 +32,7 @@ from typing import Optional
 from abc import abstractmethod
 import numpy as np
 from meshmode.dof_array import DOFArray
-from mirgecom.wall_model import PorousWallProperties
+from mirgecom.wall_model import PorousWallEOS
 
 
 class Oxidation:
@@ -171,7 +171,7 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
         return m_dot_c, m_dot_o2, m_dot_co2
 
 
-class FiberProperties(PorousWallProperties):
+class FiberEOS(PorousWallEOS):
     """Evaluate the properties of the solid state containing only fibers.
 
     .. automethod:: void_fraction

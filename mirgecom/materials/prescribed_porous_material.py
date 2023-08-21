@@ -2,7 +2,7 @@
 
 The user can create any material with driver-oriented functions.
 
-.. autoclass:: PrescribedProperties
+.. autoclass:: PrescribedMaterialEOS
 """
 
 __copyright__ = """
@@ -31,10 +31,10 @@ THE SOFTWARE.
 
 from typing import Optional
 from meshmode.dof_array import DOFArray
-from mirgecom.wall_model import PorousWallProperties
+from mirgecom.wall_model import PorousWallEOS
 
 
-class PrescribedProperties(PorousWallProperties):
+class PrescribedMaterialEOS(PorousWallEOS):
     """Evaluate the properties of a user-defined material.
 
     .. automethod:: void_fraction
