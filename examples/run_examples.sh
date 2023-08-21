@@ -16,8 +16,8 @@ function endgroup {
 
 # }}}
 
-origin="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-examples_dir=${1-$origin}
+run_path=$(pwd)
+examples_dir=${1:-"./"}
 shift
 
 if [[ ! -d "${examples_dir}" ]]; then
@@ -36,6 +36,7 @@ if [[ ! -d "${examples_dir}" ]]; then
 fi
 
 cd $examples_dir
+examples_dir=$(pwd)
 
 # This bit will let the user specify which
 # examples to run, default to run them all.
@@ -55,10 +56,11 @@ succeeded_tests=""
 failed_tests=""
 
 date
-echo "*** Running examples in $examples_dir ..."
+
+echo "*** Running examples from $examples_dir in ${run_path}..."
 
 if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
-    source scripts/mirge-testing-env.sh
+    source scripts/mirge-testing-env.sh ${examples_dir}/..
 fi
 
 mpi_exec="${MIRGE_MPI_EXEC}"
@@ -67,13 +69,17 @@ mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
 export OMPI_ALLOW_RUN_AS_ROOT=1
 export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 
+# Actually run at the user's path
+cd ${run_path}
+
 for example in "${example_list[@]}"
 do
     example_name="${example%.py}"
     example_filename="${example_name}.py"
+    example_path=${examples_dir}/${example_filename}
 
-    if [[ ! -f "${example_filename}" ]]; then
-        printf "Example file \"${example_filename}\" does not exist, skipping.\n"
+    if [[ ! -f "${example_path}" ]]; then
+        printf "Example file \"${example_path}\" does not exist, skipping.\n"
         continue
     fi
 
@@ -117,7 +123,7 @@ do
         rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
         set +x
 
-        basic_command="python -m mpi4py ${example_filename} --casename ${test_name}"
+        basic_command="python -m mpi4py ${example_path} --casename ${test_name}"
         [[ $actx != "eager" ]] && basic_command+=" --$actx"
         set -x
         if [[ "$nompi" -gt 0 ]]; then
@@ -232,7 +238,6 @@ do
 
 done
 num_examples=$((num_successful_examples + num_failed_examples))
-cd ${origin}
 date
 echo "*** Done running ${num_examples} examples!"
 if [[ $num_failed_examples -eq 0 ]]
