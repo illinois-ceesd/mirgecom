@@ -50,6 +50,7 @@ from typing import Optional
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
 import numpy as np
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS, GasDependentVars
