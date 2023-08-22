@@ -84,7 +84,7 @@ from mirgecom.eos import (
     MixtureEOS,
     GasDependentVars
 )
-from mirgecom.transport import GasTransportVars
+from mirgecom.transport import GasTransportVars, TransportModel
 
 
 @with_container_arithmetic(bcast_obj_array=False,
@@ -301,7 +301,7 @@ class PorousWallTransport:
     .. automethod:: species_diffusivity
     """
 
-    def __init__(self, base_transport):
+    def __init__(self, base_transport: TransportModel):
         """Initialize transport model."""
         self.base_transport = base_transport
 
@@ -395,7 +395,7 @@ class PorousFlowModel:
     eos: MixtureEOS
     wall_eos: PorousWallEOS
     transport: PorousWallTransport
-    temperature_iteration = 3
+    temperature_iteration: int = 3
 
     def solid_density(self, material_densities) -> DOFArray:
         r"""Return the solid density $\epsilon_s \rho_s$.
@@ -421,7 +421,7 @@ class PorousFlowModel:
         return self.wall_eos.decomposition_progress(mass)
 
     def get_temperature(self, cv: ConservedVars, wv: PorousWallVars,
-                        tseed: DOFArray, niter=temperature_iteration) -> DOFArray:
+                        tseed: DOFArray) -> DOFArray:
         r"""Evaluate the temperature based on solid+gas properties.
 
         It uses the assumption of thermal equilibrium between solid and fluid.
@@ -443,7 +443,7 @@ class PorousFlowModel:
 
         internal_energy = cv.energy - 0.5/cv.mass*np.dot(cv.momentum, cv.momentum)
 
-        for _ in range(0, niter):
+        for _ in range(0, self.temperature_iteration):
             eps_rho_e = self.internal_energy(cv, wv, temp)
             bulk_cp = self.heat_capacity(cv, wv, temp)
             temp = temp - (eps_rho_e - internal_energy)/bulk_cp
