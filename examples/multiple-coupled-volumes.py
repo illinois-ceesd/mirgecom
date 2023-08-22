@@ -27,6 +27,7 @@ THE SOFTWARE.
 import logging
 import sys
 import gc
+import os
 from dataclasses import dataclass
 from warnings import warn
 import numpy as np
@@ -325,18 +326,23 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         print(f"\tTime integration = {integrator}")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    local_path = os.path.dirname(os.path.abspath(__file__)) + "/"
+    mesh_filename = "mult_coupled_vols-v2.msh"
+    geo_filename = "mult_coupled_vols.geo"
+    omesh_filename = "mult_coupled_vols.msh"
+
+    mesh_path = local_path + mesh_filename
+    geo_path = local_path + geo_filename
+    omesh_path = local_path + omesh_filename
 
     restart_step = None
     if restart_file is None:
 
-        mesh_filename = "mult_coupled_vols-v2.msh"
-
-        import os
+        
         if rank == 0:
-            local_path = os.path.dirname(os.path.abspath(__file__))
-            os.system("rm -rf mult_coupled_vols.msh mult_coupled_vols-v2.msh")
-            os.system("gmsh " + local_path + "/mult_coupled_vols.geo -2 mult_coupled_vols.msh")  # noqa E501
-            os.system("gmsh mult_coupled_vols.msh -save -format msh2 -o mult_coupled_vols-v2.msh")  # noqa E501
+            os.system(f"rm -rf {omesh_path} {mesh_path}")
+            os.system(f"gmsh {geo_path} -2 {omesh_path}")
+            os.system(f"gmsh {omesh_path} -save -format msh2 -o {mesh_path}")  # noqa E501
 
         comm.Barrier()
 
@@ -345,12 +351,12 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         current_t = 0.0
 
         if rank == 0:
-            print(f"Reading mesh from {mesh_filename}")
+            print(f"Reading mesh from {mesh_path}")
 
         def get_mesh_data():
             from meshmode.mesh.io import read_gmsh
             mesh, tag_to_elements = read_gmsh(
-                mesh_filename, force_ambient_dim=dim,
+                mesh_path, force_ambient_dim=dim,
                 return_tag_to_elements_map=True)
             volume_to_tags = {
                 "fluid": ["Fluid"],
