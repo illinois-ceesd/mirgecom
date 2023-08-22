@@ -332,13 +332,13 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
         mesh_filename = "mult_coupled_vols-v2.msh"
 
         import os
-        os.system('ls')
         if rank == 0:
+            local_path = os.path.dirname(os.path.abspath(__file__))
             os.system("rm -rf mult_coupled_vols.msh mult_coupled_vols-v2.msh")
-            os.system("gmsh mult_coupled_vols.geo -2 mult_coupled_vols.msh")
+            os.system("gmsh " + local_path + "/mult_coupled_vols.geo -2 mult_coupled_vols.msh")  # noqa E501
             os.system("gmsh mult_coupled_vols.msh -save -format msh2 -o mult_coupled_vols-v2.msh")  # noqa E501
-        else:
-            os.system("sleep 2s")
+
+        comm.Barrier()
 
         current_step = 0
         first_step = current_step + 0
