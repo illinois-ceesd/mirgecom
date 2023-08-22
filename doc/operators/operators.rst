@@ -9,4 +9,3 @@ Operators
    artificial_viscosity
    gas-dynamics
    thermally_coupled
-   composite_materials

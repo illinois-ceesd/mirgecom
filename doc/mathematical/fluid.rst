@@ -1,6 +1,5 @@
-================================
-Mathematical Model of Fluid Flow
-================================
+Fluid Flow
+==========
 
 .. raw:: latex
 
