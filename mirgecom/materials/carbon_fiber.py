@@ -1,7 +1,7 @@
 r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
 
 .. autoclass:: Oxidation
-.. autoclass:: SolidProperties
+.. autoclass:: FiberEOS
 """
 
 __copyright__ = """
@@ -29,11 +29,28 @@ THE SOFTWARE.
 """
 
 from typing import Optional
+from abc import abstractmethod
 import numpy as np
 from meshmode.dof_array import DOFArray
+from mirgecom.wall_model import PorousWallEOS
 
 
 class Oxidation:
+    """Abstract interface for wall oxidation model.
+
+    .. automethod:: get_source_terms
+    """
+
+    @abstractmethod
+    def get_source_terms(self, temperature: DOFArray,
+            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+        r"""Source terms of fiber oxidation."""
+        raise NotImplementedError()
+
+
+# TODO per MTC review, can we generalize the oxidation model?
+# should we keep this in the driver?
+class Y2_Oxidation_Model(Oxidation):  # noqa N801
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
     .. automethod:: puma_effective_surface_area
@@ -62,7 +79,7 @@ class Oxidation:
         """
         return self.puma_effective_surface_area(progress)
 
-    def get_source_terms(self, temperature, tau, ox_mass) -> DOFArray:
+    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:  # noqa N803
         """Return the effective source terms for the oxidation.
 
         Parameters
@@ -86,14 +103,13 @@ class Oxidation:
             / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
         k = alpha*actx.np.sqrt(
             (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
-        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*ox_mass*k*eff_surf_area
+        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
 
 
-class SolidProperties:
+class FiberEOS(PorousWallEOS):
     """Evaluate the properties of the solid state containing only fibers.
 
     .. automethod:: void_fraction
-    .. automethod:: decomposition_progress
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
     .. automethod:: thermal_conductivity
@@ -101,12 +117,13 @@ class SolidProperties:
     .. automethod:: permeability
     .. automethod:: emissivity
     .. automethod:: tortuosity
+    .. automethod:: decomposition_progress
     """
 
-    def __init__(self):
-        """Solid volumetric density considering all resin constituents."""
-        self._char_mass = 0.0
-        self._virgin_mass = 160.0
+    def __init__(self, char_mass, virgin_mass):
+        """Bulk density considering the porosity and intrinsic density."""
+        self._char_mass = char_mass
+        self._virgin_mass = virgin_mass
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -116,10 +133,6 @@ class SolidProperties:
         progress ratio $\tau$.
         """
         return 1.0 - self.volume_fraction(tau)
-
-    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation."""
-        return 1.0 - (self._virgin_mass - mass)/self._virgin_mass
 
     def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
@@ -166,20 +179,32 @@ class SolidProperties:
 
     # ~~~~~~~~ other properties
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
-        r"""Void fraction $\epsilon$ filled by gas around the fibers."""
+        r"""Fraction $\phi$ occupied by the solid."""
         # FIXME Should this be a quadratic function?
         return 0.10*tau
 
     def permeability(self, tau: DOFArray) -> DOFArray:
-        r"""Permeability $K$ of the composite material."""
+        r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
-        return 6.0e-11 + tau*0.0
+        actx = tau.array_context
+        return 6.0e-11 + actx.np.zeros_like(tau)
 
     def emissivity(self, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
-        return 0.9 + tau*0.0
+        actx = tau.array_context
+        return 0.9 + actx.np.zeros_like(tau)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
         # FIXME find a relation to make it change as a function of "tau"
-        return 1.1 + tau*0.0
+        actx = tau.array_context
+        return 1.1 + actx.np.zeros_like(tau)
+
+    def decomposition_progress(self, mass: DOFArray) -> DOFArray:
+        r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation.
+
+        Where $\tau=1$, the material is locally virgin. On the other hand, if
+        $\tau=0$, then the oxidation is locally complete and the fibers were
+        all consumed.
+        """
+        return 1.0 - (self._virgin_mass - mass)/self._virgin_mass

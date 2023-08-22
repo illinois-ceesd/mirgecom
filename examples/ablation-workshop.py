@@ -1,6 +1,6 @@
 r"""Demonstrate Ablation Workshop case \#2.1."""
 
-__copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
+__copyright__ = "Copyright (C) 2023 University of Illinois Board of Trustees"
 
 __license__ = """
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,7 +25,10 @@ THE SOFTWARE.
 import logging
 import gc
 import numpy as np
+import scipy  # type: ignore[import]
+from scipy.interpolate import CubicSpline  # type: ignore[import]
 
+from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 
 from grudge.trace_pair import (
@@ -60,13 +63,22 @@ from mirgecom.logging_quantities import (
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage
 )
-from mirgecom.gas_model import ViscousFluidState
-from mirgecom.wall_model import PorousFlowDependentVars
+from mirgecom.eos import (
+    MixtureDependentVars,
+    MixtureEOS,
+    GasEOS,
+    GasDependentVars
+)
+from mirgecom.transport import TransportModel
+from mirgecom.gas_model import PorousFlowFluidState
+from mirgecom.wall_model import (
+    PorousWallVars,
+    PorousFlowModel as BasePorousFlowModel,
+    PorousWallTransport
+)
 from mirgecom.fluid import ConservedVars
-from mirgecom.transport import GasTransportVars
-
 from logpyle import IntervalTimer, set_dt
-
+from typing import Optional, Union
 from pytools.obj_array import make_obj_array
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -77,6 +89,7 @@ logger.setLevel(logging.DEBUG)
 
 class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
+
     pass
 
 
@@ -96,6 +109,460 @@ class _TempDiffTag:
     pass
 
 
+def initializer(dim, gas_model, material_densities, temperature,
+                gas_density=None, pressure=None):
+    """Initialize state of composite material.
+
+    Parameters
+    ----------
+    gas_model
+        :class:`mirgecom.gas_model.GasModel`
+
+    material_densities: numpy.ndarray
+        The initial bulk density of each one of the resin constituents.
+        It has shape ``(nphase,)``
+
+    temperature: :class:`~meshmode.dof_array.DOFArray`
+        The initial temperature of the gas+solid
+
+    gas_density: :class:`~meshmode.dof_array.DOFArray`
+        Optional argument with the gas density. If not provided, the pressure
+        will be used to evaluate the density.
+
+    pressure: :class:`~meshmode.dof_array.DOFArray`
+        Optional argument with the gas pressure. It will be used to evaluate
+        the gas density.
+
+    Returns
+    -------
+    cv: :class:`mirgecom.fluid.ConservedVars`
+        The conserved variables of the fluid permeating the porous wall.
+    """
+    if gas_density is None and pressure is None:
+        raise ValueError("Must specify one of 'gas_density' or 'pressure'")
+
+    if not isinstance(temperature, DOFArray):
+        raise TypeError("Temperature does not have the proper shape")
+
+    actx = temperature.array_context
+
+    tau = gas_model.decomposition_progress(material_densities)
+
+    gas_const = gas_model.eos.gas_const(cv=None, temperature=temperature)
+
+    if gas_density is None:
+        eps_gas = gas_model.wall_eos.void_fraction(tau)
+        eps_rho_gas = eps_gas*pressure/(gas_const*temperature)
+
+    # internal energy (kinetic energy is neglected)
+    eps_rho_solid = sum(material_densities)
+    bulk_energy = (
+        eps_rho_gas*gas_model.eos.get_internal_energy(temperature=temperature)
+        + eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
+    )
+
+    zeros = actx.np.zeros_like(tau)
+    momentum = make_obj_array([zeros for i in range(dim)])
+
+    return ConservedVars(mass=eps_rho_gas, energy=bulk_energy, momentum=momentum)
+
+
+def eval_spline(x, x_bnds, coeffs) -> DOFArray:
+    r"""Evaluate spline $a(x-x_i)^3 + b(x-x_i)^2 + c(x-x_i) + d$.
+
+    Parameters
+    ----------
+    x: :class:`~meshmode.dof_array.DOFArray`
+        The value where $f(x)$ will be evaluated.
+    x_bnds: :class:`numpy.ndarray` with shape ``(m,)``
+        The $m$ nodes $x_i$ for the different segments of the spline.
+    coeffs: :class:`numpy.ndarray` with shape ``(4,m)``
+        The 4 coefficients for each segment $i$ of the spline.
+    """
+    actx = x.array_context
+
+    val = actx.np.zeros_like(x)
+    for i in range(0, len(x_bnds)-1):
+        val = (
+            actx.np.where(actx.np.less(x, x_bnds[i+1]),
+            actx.np.where(actx.np.greater_equal(x, x_bnds[i]),
+                coeffs[0, i]*(x-x_bnds[i])**3 + coeffs[1, i]*(x-x_bnds[i])**2
+                + coeffs[2, i]*(x-x_bnds[i]) + coeffs[3, i], 0.0), 0.0)) + val
+
+    return val
+
+
+def eval_spline_derivative(x, x_bnds, coeffs) -> DOFArray:
+    """Evaluate analytical derivative of a spline $3a(x-x_i)^2 + 2b(x-x_i) + c$.
+
+    Parameters
+    ----------
+    x: :class:`~meshmode.dof_array.DOFArray`
+        The value where $f(x)$ will be evaluatead.
+    x_bnds: :class:`numpy.ndarray` with shape ``(m,)``
+        The $m$ nodes $x_i$ for the different segments of the spline.
+    coeffs: :class:`numpy.ndarray` with shape ``(4,m)``
+        The 4 coefficients for each segment $i$ of the spline.
+    """
+    actx = x.array_context
+
+    val = actx.np.zeros_like(x)
+    for i in range(0, len(x_bnds)-1):
+        val = (
+            actx.np.where(actx.np.less(x, x_bnds[i+1]),
+            actx.np.where(actx.np.greater_equal(x, x_bnds[i]),
+                3.0*coeffs[0, i]*(x-x_bnds[i])**2 + 2.0*coeffs[1, i]*(x-x_bnds[i])
+                + coeffs[2, i], 0.0), 0.0)) + val
+
+    return val
+
+
+class BprimeTable:
+    """Class containing the table for energy balance at the surface.
+
+    This class is only required for uncoupled cases, where only the wall
+    portion is evaluated. This is NOT used for fully-coupled cases.
+    """
+
+    T_bounds: np.ndarray
+    B_bounds: np.ndarray
+    Bc: np.ndarray
+    Hw: np.ndarray
+    Hw_cs: np.ndarray
+
+    def __init__(self):
+
+        import mirgecom
+        path = mirgecom.__path__[0] + "/materials/aw_Bprime.dat"
+        bprime_table = \
+            (np.genfromtxt(path, skip_header=1)[:, 2:6]).reshape((25, 151, 4))
+
+        # bprime contains: B_g, B_c, Temperature T, Wall enthalpy H_W
+        self.T_bounds = bprime_table[0, :-1:6, 2]
+        self.B_bounds = bprime_table[::-1, 0, 0]
+        self.Bc = bprime_table[::-1, :, 1]
+        self.Hw = bprime_table[::-1, :-1:6, 3]
+
+        # create spline to interpolate the wall enthalpy
+        self.Hw_cs = np.zeros((25, 4, 24))
+        for i in range(0, 25):
+            self.Hw_cs[i, :, :] = \
+                scipy.interpolate.CubicSpline(self.T_bounds, self.Hw[i, :]).c
+
+
+class GasTabulatedTransport(TransportModel):
+    """Evaluate tabulated transport data for TACOT."""
+
+    def __init__(self, prandtl=1.0, lewis=1.0):
+        """Return gas tabulated data and interpolating functions.
+
+        Parameters
+        ----------
+        prandtl: float
+            the Prandtl number of the mixture. Defaults to 1.
+        lewis: float
+            the Lewis number of the mixture. Defaults to 1.
+        """
+        self._prandtl = prandtl
+        self._lewis = lewis
+
+        #    T     ,  viscosity
+        gas_data = np.array([
+            [200.00,  0.086881],
+            [350.00,  0.144380],
+            [500.00,  0.196150],
+            [650.00,  0.243230],
+            [700.00,  0.258610],
+            [750.00,  0.274430],
+            [800.00,  0.290920],
+            [850.00,  0.307610],
+            [900.00,  0.323490],
+            [975.00,  0.344350],
+            [1025.0,  0.356630],
+            [1100.0,  0.373980],
+            [1150.0,  0.385360],
+            [1175.0,  0.391330],
+            [1200.0,  0.397930],
+            [1275.0,  0.421190],
+            [1400.0,  0.458870],
+            [1525.0,  0.483230],
+            [1575.0,  0.487980],
+            [1625.0,  0.491950],
+            [1700.0,  0.502120],
+            [1775.0,  0.516020],
+            [1925.0,  0.545280],
+            [2000.0,  0.559860],
+            [2150.0,  0.588820],
+            [2300.0,  0.617610],
+            [2450.0,  0.646380],
+            [2600.0,  0.675410],
+            [2750.0,  0.705000],
+            [2900.0,  0.735570],
+            [3050.0,  0.767590],
+            [3200.0,  0.801520],
+            [3350.0,  0.837430],
+        ])
+
+        self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 1]*1e-4)
+
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
+        actx = cv.mass.array_context
+        return actx.np.zeros_like(cv.mass)
+
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$."""
+        return (self.bulk_viscosity(cv, dv, eos) - 2./3.)*self.viscosity(cv, dv, eos)
+
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        r"""Return the gas viscosity $\mu$."""
+        coeffs = self._cs_viscosity.c
+        bnds = self._cs_viscosity.x
+        return eval_spline(dv.temperature, bnds, coeffs)
+
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        r"""Return the gas thermal conductivity $\kappa_g$.
+
+        .. math::
+            \kappa = \frac{\mu C_p}{Pr}
+
+        with gas viscosity $\mu$, heat capacity at constant pressure $C_p$
+        and the Prandtl number $Pr$ (default to 1).
+        """
+        cp = eos.heat_capacity_cp(cv, dv.temperature)
+        mu = self.viscosity(cv, dv, eos)
+        return mu*cp/self._prandtl
+
+    def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
+            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        return cv.species_mass  # empty array
+
+
+class TabulatedGasEOS(MixtureEOS):
+    """Simplified model of the pyrolysis gas using tabulated data.
+
+    This section is to be used when species conservation is not employed and
+    the output gas is assumed to be in chemical equilibrium.
+    The table was extracted from the suplementar material from the
+    ablation workshop. Some lines were removed to reduce the number of spline
+    interpolation segments.
+    """
+
+    def __init__(self):
+        """Return gas tabulated data and interpolating functions."""
+
+        #    T     , M      ,  Cp    , gamma  ,  enthalpy
+        gas_data = np.array([
+            [200.00,  21.996,  1.5119,  1.3334,  -7246.50],
+            [350.00,  21.995,  1.7259,  1.2807,  -7006.30],
+            [500.00,  21.948,  2.2411,  1.2133,  -6715.20],
+            [650.00,  21.418,  4.3012,  1.1440,  -6265.70],
+            [700.00,  20.890,  6.3506,  1.1242,  -6004.60],
+            [750.00,  19.990,  9.7476,  1.1131,  -5607.70],
+            [800.00,  18.644,  14.029,  1.1116,  -5014.40],
+            [850.00,  17.004,  17.437,  1.1171,  -4218.50],
+            [900.00,  15.457,  17.009,  1.1283,  -3335.30],
+            [975.00,  14.119,  8.5576,  1.1620,  -2352.90],
+            [1025.0,  13.854,  4.7840,  1.1992,  -2034.20],
+            [1100.0,  13.763,  3.5092,  1.2240,  -1741.20],
+            [1150.0,  13.737,  3.9008,  1.2087,  -1560.90],
+            [1175.0,  13.706,  4.8067,  1.1899,  -1453.50],
+            [1200.0,  13.639,  6.2353,  1.1737,  -1315.90],
+            [1275.0,  13.256,  8.4790,  1.1633,  -739.700],
+            [1400.0,  12.580,  9.0239,  1.1583,  353.3100],
+            [1525.0,  11.982,  11.516,  1.1377,  1608.400],
+            [1575.0,  11.732,  12.531,  1.1349,  2214.000],
+            [1625.0,  11.495,  11.514,  1.1444,  2826.800],
+            [1700.0,  11.255,  7.3383,  1.1849,  3529.400],
+            [1775.0,  11.139,  5.3118,  1.2195,  3991.000],
+            [1925.0,  11.046,  4.2004,  1.2453,  4681.800],
+            [2000.0,  11.024,  4.0784,  1.2467,  4991.300],
+            [2150.0,  10.995,  4.1688,  1.2382,  5605.400],
+            [2300.0,  10.963,  4.5727,  1.2214,  6257.300],
+            [2450.0,  10.914,  5.3049,  1.2012,  6993.500],
+            [2600.0,  10.832,  6.4546,  1.1815,  7869.600],
+            [2750.0,  10.701,  8.1450,  1.1650,  8956.900],
+            [2900.0,  10.503,  10.524,  1.1528,  10347.00],
+            [3050.0,  10.221,  13.755,  1.1449,  12157.00],
+            [3200.0,  9.8394,  17.957,  1.1408,  14523.00],
+            [3350.0,  9.3574,  22.944,  1.1401,  17584.00],
+        ])
+
+        self._cs_molar_mass = CubicSpline(gas_data[:, 0], gas_data[:, 1])
+        self._cs_gamma = CubicSpline(gas_data[:, 0], gas_data[:, 3])
+        self._cs_enthalpy = CubicSpline(gas_data[:, 0], gas_data[:, 4]*1000.0)
+
+    def enthalpy(self, temperature: DOFArray) -> DOFArray:
+        r"""Return the gas enthalpy $h_g$."""
+        coeffs = self._cs_enthalpy.c
+        bnds = self._cs_enthalpy.x
+        return eval_spline(temperature, bnds, coeffs)
+
+    def get_internal_energy(self, temperature: DOFArray,
+                            species_mass_fractions=None) -> DOFArray:
+        r"""Evaluate the gas internal energy $e$.
+
+        It is evaluated based on the tabulated enthalpy and molar mass as
+
+        .. math::
+            e(T) = h(T) - \frac{R}{M} T
+        """
+        gas_const = self.gas_const(cv=None, temperature=temperature)
+        return self.enthalpy(temperature) - gas_const*temperature
+
+    def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
+        r"""Return the gas heat capacity at constant pressure $C_{p_g}$.
+
+        The heat capacity is the derivative of the enthalpy. Thus, to improve
+        accuracy and avoid issues with Newton iteration, this is computed
+        exactly as the analytical derivative of the spline for the enthalpy.
+        """
+        coeffs = self._cs_enthalpy.c
+        bnds = self._cs_enthalpy.x
+        return eval_spline_derivative(temperature, bnds, coeffs)
+
+    def heat_capacity_cv(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
+        r"""Return the gas heat capacity at constant volume $C_{v_g}$."""
+        return self.heat_capacity_cp(cv, temperature)/self.gamma(cv, temperature)
+
+    def gamma(self, cv: ConservedVars,
+              temperature: Optional[DOFArray] = None) -> DOFArray:
+        r"""Return the heat of capacity ratios $\gamma$."""
+        coeffs = self._cs_gamma.c
+        bnds = self._cs_gamma.x
+        return eval_spline(temperature, bnds, coeffs)
+
+    def pressure(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
+        r"""Return the gas pressure.
+
+        .. math::
+            P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
+        """
+        gas_const = self.gas_const(cv, temperature)
+        return cv.mass*gas_const*temperature
+
+    def gas_const(self, cv: Optional[ConservedVars] = None,
+                  temperature: Optional[DOFArray] = None) -> DOFArray:
+        coeffs = self._cs_molar_mass.c
+        bnds = self._cs_molar_mass.x
+        molar_mass = eval_spline(temperature, bnds, coeffs)
+        return 8314.46261815324/molar_mass
+
+    def temperature(self, cv: ConservedVars, temperature_seed=None):
+        raise NotImplementedError
+
+    def sound_speed(self, cv: ConservedVars, temperature: DOFArray):
+        raise NotImplementedError
+
+    def internal_energy(self, cv: ConservedVars):
+        raise NotImplementedError
+
+    def total_energy(self, cv: ConservedVars, pressure: DOFArray,
+                     temperature: DOFArray):
+        raise NotImplementedError
+
+    def kinetic_energy(self, cv: ConservedVars):
+        raise NotImplementedError
+
+    def get_temperature_seed(self, cv: ConservedVars,
+            temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
+        raise NotImplementedError
+
+    def get_density(self, pressure, temperature, species_mass_fractions):
+        raise NotImplementedError
+
+    def get_species_molecular_weights(self):
+        raise NotImplementedError
+
+    def species_enthalpies(self, cv: ConservedVars, temperature: DOFArray):
+        raise NotImplementedError
+
+    def get_production_rates(self, cv: ConservedVars, temperature: DOFArray):
+        raise NotImplementedError
+
+    def get_species_source_terms(self, cv: ConservedVars, temperature: DOFArray):
+        raise NotImplementedError
+
+    def dependent_vars(self, cv: ConservedVars, temperature_seed=None,
+            smoothness_mu=None, smoothness_kappa=None, smoothness_beta=None):
+        raise NotImplementedError
+
+
+class PorousFlowModel(BasePorousFlowModel):
+    """EOS for wall using tabulated data.
+
+    Inherits :mod:`~mirgecom.wall_model.PorousFlowModel` and add an
+    temperature-evaluation function exclusive for TACOT-tabulated data.
+    """
+
+    def get_temperature(self, cv, wv, tseed, niter=3):
+        r"""Evaluate the temperature based on solid+gas properties.
+
+        It uses the assumption of thermal equilibrium between solid and fluid.
+        Newton iteration is used to get the temperature based on the internal
+        energy/enthalpy and heat capacity for the bulk (solid+gas) material:
+
+        .. math::
+            T^{n+1} = T^n -
+                \frac
+                {\epsilon_g \rho_g e_g + \rho_s h_s - \rho e}
+                {\epsilon_g \rho_g C_{v_g} + \epsilon_s \rho_s C_{p_s}}
+
+        Note that kinetic energy is neglected is this case.
+
+        Parameters
+        ----------
+        cv: ConservedVars
+
+            The fluid conserved variables
+
+        wv: PorousWallVars
+
+            Wall properties as a function of decomposition progress
+
+        tseed:
+
+            Temperature to use as a seed for Netwon iteration
+
+        Returns
+        -------
+        temperature: meshmode.dof_array.DOFArray
+
+            The temperature of the gas+solid
+
+        """
+        if isinstance(tseed, DOFArray) is False:
+            actx = cv.array_context
+            temp = tseed + actx.np.zeros_like(cv.mass)
+        else:
+            temp = tseed
+
+        for _ in range(0, niter):
+            eps_rho_e = (cv.mass*self.eos.get_internal_energy(temperature=temp)
+                         + wv.density*self.wall_eos.enthalpy(temp, wv.tau))
+            bulk_cp = (cv.mass*self.eos.heat_capacity_cv(cv=cv, temperature=temp)
+                       + wv.density*self.wall_eos.heat_capacity(temp, wv.tau))
+            temp = temp - (eps_rho_e - cv.energy)/bulk_cp
+
+        return temp
+
+    def pressure_diffusivity(self, cv: ConservedVars, wv: PorousWallVars,
+                             viscosity: DOFArray) -> DOFArray:
+        r"""Return the pressure diffusivity for Darcy flow.
+
+        .. math::
+            d_{P} = \epsilon_g \rho_g \frac{\mathbf{K}}{\mu \epsilon_g}
+
+        where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
+        and $\mathbf{K}$ is the permeability matrix.
+        """
+        return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
+
+
 def binary_sum(ary):
     """Sum the elements of an array, creating a log-depth DAG instead of linear."""
     n = len(ary)
@@ -107,7 +574,6 @@ def binary_sum(ary):
 @mpi_entry_point
 def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     """Demonstrate the ablation workshop test case 2.1."""
-
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -124,13 +590,13 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     viz_path = "viz_data/"
     vizname = viz_path+casename
 
-    t_final = 1.0e-7
+    t_final = 4.0e-6
 
     dim = 1
 
     order = 2
-    dt = 1.0e-8
-    pressure_scaling_factor = 1.0  # noqa N806
+    dt = 4.0e-8
+    pressure_scaling_factor = 0.1  # noqa N806
 
     nviz = 200
     ngarbage = 50
@@ -206,23 +672,21 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    # {{{ Initialize wall model
+    # {{{ Initialize flow model
 
-    from mirgecom.materials.tacot import WallTabulatedEOS
     import mirgecom.materials.tacot as my_composite
 
-    my_material = my_composite.SolidProperties()
-    my_gas = my_composite.GasProperties()
+    my_gas = TabulatedGasEOS()
+    bprime_class = BprimeTable()
+    my_material = my_composite.TacotEOS(char_mass=220.0, virgin_mass=280.0)
     pyrolysis = my_composite.Pyrolysis()
 
-    bprime_class = my_composite.BprimeTable()
-
-    wall_model = WallTabulatedEOS(wall_material=my_material)
+    base_transport = GasTabulatedTransport()
+    sample_transport = PorousWallTransport(base_transport=base_transport)
+    gas_model = PorousFlowModel(eos=my_gas, wall_eos=my_material,
+                                transport=sample_transport)
 
     # }}}
-
-    from mirgecom.gas_model import GasModel
-    gas_model = GasModel(eos=my_gas, wall=wall_model)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -252,9 +716,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         current_t = 0.0
         istep = 0
         first_step = 0
-        import mirgecom.multiphysics.phenolics as phenolics
-        cv = phenolics.initializer(
-            dcoll=dcoll, gas_model=gas_model,
+        cv = initializer(dim=dim, gas_model=gas_model,
             material_densities=material_densities,
             pressure=pressure, temperature=temperature)
 
@@ -270,49 +732,36 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         """
         zeros = actx.np.zeros_like(cv.mass)
 
-        tau = gas_model.wall.decomposition_progress(material_densities)
-        epsilon = gas_model.wall.void_fraction(tau)
-        temperature = gas_model.wall.get_temperature(
-            cv=cv, material_densities=material_densities,
-            tseed=temperature_seed, tau=tau, eos=my_gas)
+        tau = gas_model.decomposition_progress(material_densities)
+        wv = PorousWallVars(
+            material_densities=material_densities,
+            tau=tau,
+            density=gas_model.solid_density(material_densities),
+            void_fraction=gas_model.wall_eos.void_fraction(tau),
+            emissivity=gas_model.wall_eos.emissivity(tau),
+            permeability=gas_model.wall_eos.permeability(tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau)
+        )
 
-        pressure = 1.0/epsilon*gas_model.eos.pressure(cv=cv,
-                                                      temperature=temperature)
+        temperature = gas_model.get_temperature(cv=cv, wv=wv,
+                                                tseed=temperature_seed)
 
-        dv = PorousFlowDependentVars(
+        pressure = gas_model.get_pressure(cv=cv, wv=wv, temperature=temperature)
+
+        dv = MixtureDependentVars(
             temperature=temperature,
             pressure=pressure,
             speed_of_sound=zeros,
             smoothness_mu=zeros,
             smoothness_kappa=zeros,
             smoothness_beta=zeros,
-            species_enthalpies=cv.species_mass,
-            material_densities=material_densities
+            species_enthalpies=cv.species_mass,  # empty array
         )
 
-        # gas only transport vars
-        gas_tv = GasTransportVars(
-            bulk_viscosity=zeros,
-            viscosity=my_gas.viscosity(temperature),
-            thermal_conductivity=my_gas.thermal_conductivity(temperature),
-            species_diffusivity=cv.species_mass)
+        tv = gas_model.transport.transport_vars(
+            cv=cv, dv=dv, wv=wv, eos=gas_model.eos, wall_eos=gas_model.wall_eos)
 
-        # coupled solid-gas thermal conductivity
-        kappa = wall_model.thermal_conductivity(
-            cv, material_densities, temperature, tau, gas_tv)
-
-        # coupled solid-gas viscosity
-        viscosity = wall_model.viscosity(temperature, tau, gas_tv)
-
-        # return modified transport vars
-        tv = GasTransportVars(
-            bulk_viscosity=zeros,
-            viscosity=viscosity,
-            thermal_conductivity=kappa,
-            species_diffusivity=cv.species_mass
-        )
-
-        return ViscousFluidState(cv=cv, dv=dv, tv=tv)
+        return PorousFlowFluidState(cv=cv, dv=dv, tv=tv, wv=wv)
 
     compiled_make_state = actx.compile(make_state)
 
@@ -432,8 +881,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         """
         cv = state.cv
         dv = state.dv
-
-        wdv = gas_model.wall.dependent_vars(dv.material_densities)
+        wv = state.wv
 
         actx = cv.mass.array_context
 
@@ -445,7 +893,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, dv.temperature)
         m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity)
-        emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wdv.emissivity)
+        emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wv.emissivity)
 
         m_dot_g = np.dot(m_dot_g, normal_vec)
 
@@ -472,8 +920,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         # ~~~~
         # get the wall enthalpy using spline interpolation
-        bnds_T = bprime_class._bounds_T  # noqa N806
-        bnds_B = bprime_class._bounds_B  # noqa N806
+        bnds_T = bprime_class.T_bounds  # noqa N806
+        bnds_B = bprime_class.B_bounds  # noqa N806
 
         # using spline for temperature interpolation
         # while using "nearest neighbor" for the "B" parameter
@@ -486,10 +934,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                     actx.np.where(actx.np.less(temperature_bc, bnds_T[j+1]),
                     actx.np.where(actx.np.greater_equal(Bsurf, bnds_B[k]),
                     actx.np.where(actx.np.less(Bsurf, bnds_B[k+1]),
-                          bprime_class._cs_Hw[k, 0, j]*(temperature_bc-bnds_T[j])**3
-                        + bprime_class._cs_Hw[k, 1, j]*(temperature_bc-bnds_T[j])**2
-                        + bprime_class._cs_Hw[k, 2, j]*(temperature_bc-bnds_T[j])
-                        + bprime_class._cs_Hw[k, 3, j], 0.0), 0.0), 0.0), 0.0)
+                          bprime_class.Hw_cs[k, 0, j]*(temperature_bc-bnds_T[j])**3
+                        + bprime_class.Hw_cs[k, 1, j]*(temperature_bc-bnds_T[j])**2
+                        + bprime_class.Hw_cs[k, 2, j]*(temperature_bc-bnds_T[j])
+                        + bprime_class.Hw_cs[k, 3, j], 0.0), 0.0), 0.0), 0.0)
                 i += 1
 
         h_w = binary_sum(h_w_comps)
@@ -508,21 +956,18 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                            bprime_class=None, pressure_scaling_factor=1.0,
                            penalty_amount=1.0):
         """Return the RHS of the composite wall."""
-
         cv = fluid_state.cv
         dv = fluid_state.dv
         tv = fluid_state.tv
-
-        wdv = gas_model.wall.dependent_vars(dv.material_densities)
+        wv = fluid_state.wv
 
         actx = cv.array_context
-        zeros = actx.np.zeros_like(wdv.tau)
+        zeros = actx.np.zeros_like(wv.tau)
 
         pressure_boundaries, velocity_boundaries = boundaries
 
         # pressure diffusivity for Darcy flow
-        pressure_diffusivity = gas_model.wall.pressure_diffusivity(
-            cv, wdv, tv.viscosity)
+        pressure_diffusivity = gas_model.pressure_diffusivity(cv, wv, tv.viscosity)
 
         # ~~~~~
         # viscous RHS
@@ -553,7 +998,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             mass=pressure_scaling_factor*pressure_viscous_rhs,
             momentum=cv.momentum*0.0,
             energy=energy_viscous_rhs,
-            species_mass=cv.species_mass)
+            species_mass=cv.species_mass)  # this should be empty in this case
 
         # ~~~~~
         # inviscid RHS, energy equation only
@@ -565,19 +1010,19 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             mass=zeros,
             momentum=cv.momentum*0.0,
             energy=-energy_inviscid_rhs,
-            species_mass=cv.species_mass)
+            species_mass=cv.species_mass)  # this should be empty in this case
 
         # ~~~~~
         # decomposition for each component of the resin
         resin_pyrolysis = pyrolysis.get_source_terms(temperature=dv.temperature,
-                                                     chi=dv.material_densities)
+                                                     chi=wv.material_densities)
 
         # flip sign due to mass conservation
         gas_source_term = -pressure_scaling_factor*sum(resin_pyrolysis)
 
         # viscous dissipation due to friction inside the porous
-        visc_diss_energy = tv.viscosity*wdv.void_fraction**2*(
-            (1.0/wdv.permeability)*np.dot(velocity, velocity))
+        visc_diss_energy = tv.viscosity*wv.void_fraction**2*(
+            (1.0/wv.permeability)*np.dot(velocity, velocity))
 
         source_terms = ConservedVars(
             mass=gas_source_term,
@@ -595,16 +1040,21 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         cv = state.cv
         dv = state.dv
-        wdv = gas_model.wall.dependent_vars(dv.material_densities)
+        wv = state.wv
 
         viz_fields = [("CV_density", cv.mass),
                       ("CV_energy", cv.energy),
                       ("DV_T", dv.temperature),
                       ("DV_P", dv.pressure),
-                      ("WV_phase_1", dv.material_densities[0]),
-                      ("WV_phase_2", dv.material_densities[1]),
-                      ("WV_phase_3", dv.material_densities[2]),
-                      ("WDV", wdv)
+                      ("WV_phase_1", wv.material_densities[0]),
+                      ("WV_phase_2", wv.material_densities[1]),
+                      ("WV_phase_3", wv.material_densities[2]),
+                      ("WV_tau", wv.tau),
+                      ("WV_void_fraction", wv.void_fraction),
+                      ("WV_emissivity", wv.emissivity),
+                      ("WV_permeability", wv.permeability),
+                      ("WV_tortuosity", wv.tortuosity),
+                      ("WV_density", wv.density),
                       ]
 
         # depending on the version, paraview may complain without this
@@ -616,12 +1066,13 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     def my_write_restart(step, t, state):
         cv = state.cv
         dv = state.dv
+        wv = state.wv
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != restart_file:
             rst_data = {
                 "local_mesh": local_mesh,
                 "cv": cv,
-                "material_densities": dv.material_densities,
+                "material_densities": wv.material_densities,
                 "tseed": dv.temperature,
                 "t": t,
                 "step": step,
@@ -696,7 +1147,6 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         if step == first_step + 1:
             with gc_timer:
-                import gc
                 gc.collect()
                 # Freeze the objects that are still alive so they will not
                 # be considered in future gc collections.
@@ -716,7 +1166,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                       post_step_callback=my_post_step, dt=current_dt,
                       state=make_obj_array([fluid_state.cv, material_densities,
                                             fluid_state.temperature]),
-                      t=current_t, t_final=t_final, force_eval=True)
+                      t=current_t, t_final=t_final, istep=istep,
+                      force_eval=True)
 
     # Dump the final data
     if rank == 0:
