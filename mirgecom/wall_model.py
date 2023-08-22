@@ -345,7 +345,9 @@ class PorousWallTransport:
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
             wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         """Mass diffusivity of gaseous species through the porous wall."""
-        return 1.0/wv.tortuosity*(
+        # TODO Improve docs: epsilon added here to cancel the "epsilon rho"
+        # such that it yeilds the proper results now
+        return 1.0/(wv.void_fraction*wv.tortuosity)*(
             self.base_transport.species_diffusivity(cv, dv, eos))
 
     def transport_vars(self, cv: ConservedVars, dv: GasDependentVars,

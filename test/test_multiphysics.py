@@ -611,7 +611,7 @@ def decomposition_progress_func(mass):
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_multiphysics_coupled_fluid_wall_with_radiation(
         actx_factory, order, use_overintegration, visualize=False):
-    """Check the thermally-coupled fluid/wall interface with radiation.
+    """Check the NS-coupled fluid/wall interface with radiation.
 
     Analytic solution prescribed as initial condition, then the RHS is assessed
     to ensure that it is nearly zero.
@@ -649,10 +649,10 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
 
     # Use Cantera for initialization
     cantera_soln = cantera.Solution(name="gas",
-                                    yaml=get_mechanism_input("inert"))
+                                    yaml=get_mechanism_input("air_3sp"))
     nspecies = cantera_soln.n_species
     y_species = np.zeros(nspecies)
-    y_species[cantera_soln.species_index("Ar")] = 1.0
+    y_species[cantera_soln.species_index("N2")] = 1.0
 
     pyrometheus_mechanism = get_pyrometheus_wrapper_class_from_cantera(
         cantera_soln, temperature_niter=3)(actx.np)
@@ -712,16 +712,16 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
     base_solid_temp = 1500.0
 
     fluid_boundaries = {
-        dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+0").domain_tag:
+        dd_vol_fluid.trace("-2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+1").domain_tag:
             IsothermalWallBoundary(wall_temperature=base_fluid_temp),
     }
 
     solid_boundaries = {
-        dd_vol_solid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_solid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_solid.trace("-0").domain_tag:
+        dd_vol_solid.trace("-2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("+2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("-1").domain_tag:
             IsothermalWallBoundary(wall_temperature=base_solid_temp),
     }
 
@@ -808,8 +808,7 @@ def test_multiphysics_coupled_fluid_wall_with_radiation(
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
         actx_factory, order, use_overintegration, visualize=False):
-
-    """Check the thermally-coupled fluid/wall interface with radiation.
+    """Check the NS-coupled fluid/wall interface for species diffusion.
 
     Analytic solution prescribed as initial condition, then the RHS is assessed
     to ensure that it is nearly zero.
@@ -850,7 +849,7 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
     from mirgecom.mechanisms import get_mechanism_input
     from mirgecom.thermochemistry import \
         get_pyrometheus_wrapper_class_from_cantera
-    mech_input = get_mechanism_input("inert")
+    mech_input = get_mechanism_input("air_3sp")
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
         cantera_soln, temperature_niter=3)(actx.np)
@@ -922,15 +921,15 @@ def test_multiphysics_coupled_fluid_wall_for_species_diffusion(
     # Setup boundaries and interface
 
     fluid_boundaries = {
-        dd_vol_fluid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_fluid.trace("+0").domain_tag: DummyBoundary(),
+        dd_vol_fluid.trace("-2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+1").domain_tag: DummyBoundary(),
     }
 
     solid_boundaries = {
-        dd_vol_solid.trace("-1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_solid.trace("+1").domain_tag: AdiabaticNoslipWallBoundary(),
-        dd_vol_solid.trace("-0").domain_tag: DummyBoundary(),
+        dd_vol_solid.trace("-2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("+2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_solid.trace("-1").domain_tag: DummyBoundary(),
     }
 
     fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
