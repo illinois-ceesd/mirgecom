@@ -331,6 +331,8 @@ def main(actx_class, use_logmgr=True, casename=None, restart_filename=None):
 
         mesh_filename = "mult_coupled_vols-v2.msh"
 
+        os.system('ls') 
+
         import os
         if rank == 0:
             os.system("rm -rf mult_coupled_vols.msh mult_coupled_vols-v2.msh")
