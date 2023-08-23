@@ -613,8 +613,30 @@ def diffusion_operator(
     kappa_tpairs = interior_trace_pairs(
         dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag(), comm_tag))
 
+    from mpi4py import MPI
+    from meshmode.dof_array import DOFArray
+    from meshmode.mesh import BTAG_PARTITION
+#     from pytato.visualization import write_dot_graph
+
+    if MPI.COMM_WORLD.rank == 0:
+        if isinstance(kappa, DOFArray):
+            for kappa_tpair in kappa_tpairs:
+                print(f"diffusion_operator: {kappa_tpair.dd=}")
+                print(f"diffusion_operator: {hash(kappa_tpair.int[0])=}")
+                print(f"diffusion_operator: {hash(kappa_tpair.ext[0])=}")
+                print(f"diffusion_operator: {kappa_tpair.ext[0]=}")
+#                 if isinstance(kappa_tpair.dd.domain_tag.tag, BTAG_PARTITION):
+#                     write_dot_graph(kappa_tpair.ext[0], "kappa_ext" + str(hash(kappa_tpair.ext[0])) + ".svg")
+
     u_tpairs = interior_trace_pairs(
         dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag(), comm_tag))
+
+    if MPI.COMM_WORLD.rank == 0:
+        for u_tpair in u_tpairs:
+            print(f"diffusion_operator: {u_tpair.dd=}")
+            print(f"diffusion_operator: {hash(u_tpair.int[0])=}")
+            print(f"diffusion_operator: {hash(u_tpair.ext[0])=}")
+            print(f"diffusion_operator: {u_tpair.ext[0]=}")
 
     if grad_u is None:
         grad_u = grad_operator(
@@ -623,19 +645,44 @@ def diffusion_operator(
             quadrature_tag=quadrature_tag, dd=dd_vol, comm_tag=comm_tag,
             kappa_tpairs=kappa_tpairs, u_tpairs=u_tpairs)
 
+    if MPI.COMM_WORLD.rank == 0:
+        for idim, grad_u_i in enumerate(grad_u):
+            print(f"diffusion_operator: {idim=}, {hash(grad_u_i[0])=}")
+
     grad_u_tpairs = interior_trace_pairs(
         dcoll, grad_u, volume_dd=dd_vol,
         comm_tag=(_DiffusionGradTag(), comm_tag))
 
+    if MPI.COMM_WORLD.rank == 0:
+        for grad_u_tpair in grad_u_tpairs:
+            for idim, (grad_u_int_i, grad_u_ext_i) in enumerate(
+                    zip(grad_u_tpair.int, grad_u_tpair.ext)):
+                print(f"diffusion_operator: {idim=}, {hash(grad_u_int_i[0])=}")
+                print(f"diffusion_operator: {idim=}, {hash(grad_u_ext_i[0])=}")
+
     kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
     grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
+
+    if MPI.COMM_WORLD.rank == 0:
+        if isinstance(kappa_quad, DOFArray):
+            print(f"diffusion_operator: {hash(kappa_quad[0])=}")
+        for idim, grad_u_quad_i in enumerate(grad_u_quad):
+            print(f"diffusion_operator: {idim=}, {hash(grad_u_quad_i[0])=}")
 
     from grudge.dt_utils import characteristic_lengthscales
     lengthscales = characteristic_lengthscales(actx, dcoll, dd=dd_vol)*(0*u+1)
 
+    if MPI.COMM_WORLD.rank == 0:
+        print(f"diffusion_operator: {hash(lengthscales[0])=}")
+
     lengthscales_tpairs = interior_trace_pairs(
         dcoll, lengthscales, volume_dd=dd_vol,
         comm_tag=(_DiffusionLengthscalesTag(), comm_tag))
+
+    if MPI.COMM_WORLD.rank == 0:
+        for lengthscales_tpair in lengthscales_tpairs:
+            print(f"diffusion_operator: {hash(lengthscales_tpair.int[0])=}")
+            print(f"diffusion_operator: {hash(lengthscales_tpair.ext[0])=}")
 
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
@@ -668,21 +715,37 @@ def diffusion_operator(
                 penalty_amount=penalty_amount,
                 numerical_flux_func=diffusion_numerical_flux_func))
 
-    diff_u = op.inverse_mass(
-        dcoll, dd_vol,
-        op.weak_local_div(dcoll, dd_vol_quad, -kappa_quad*grad_u_quad)
-        -  # noqa: W504
-        op.face_mass(
-            dcoll, dd_allfaces_quad,
-            sum(
-                interior_flux(kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair)
-                for kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair in zip(
-                    kappa_tpairs, u_tpairs, grad_u_tpairs, lengthscales_tpairs))
-            + sum(
-                boundary_flux(bdtag, bdry)
-                for bdtag, bdry in boundaries.items())
-            )
-        )
+    vol_term = op.weak_local_div(dcoll, dd_vol_quad, -kappa_quad*grad_u_quad)
+
+    if MPI.COMM_WORLD.rank == 0:
+        print(f"diffusion_operator: {hash(vol_term[0])=}")
+
+    interior_fluxes = sum(
+        interior_flux(kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair)
+        for kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair in zip(
+            kappa_tpairs, u_tpairs, grad_u_tpairs, lengthscales_tpairs))
+
+    if MPI.COMM_WORLD.rank == 0:
+        print(f"diffusion_operator: {hash(interior_fluxes[0])=}")
+
+    boundary_fluxes = sum(
+        boundary_flux(bdtag, bdry)
+        for bdtag, bdry in boundaries.items())
+
+    if MPI.COMM_WORLD.rank == 0:
+        print(f"diffusion_operator: {hash(boundary_fluxes[0])=}")
+
+    face_term = -op.face_mass(
+        dcoll, dd_allfaces_quad,
+        interior_fluxes + boundary_fluxes)
+
+    if MPI.COMM_WORLD.rank == 0:
+        print(f"diffusion_operator: {hash(face_term[0])=}")
+
+    diff_u = op.inverse_mass(dcoll, dd_vol, vol_term + face_term)
+
+    if MPI.COMM_WORLD.rank == 0:
+        print(f"diffusion_operator: {hash(diff_u[0])=}")
 
     if return_grad_u:
         return diff_u, grad_u
