@@ -56,7 +56,7 @@ from grudge.trace_pair import (
 )
 import grudge.op as op
 from mirgecom.math import harmonic_mean
-from mirgecom.utils import normalize_boundaries
+from mirgecom.utils import normalize_boundaries, HashableTag
 
 
 def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
@@ -391,19 +391,19 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
         return actx.np.zeros_like(u_minus) + self.value
 
 
-class _DiffusionKappaTag:
+class _DiffusionKappaTag(HashableTag):
     pass
 
 
-class _DiffusionStateTag:
+class _DiffusionStateTag(HashableTag):
     pass
 
 
-class _DiffusionGradTag:
+class _DiffusionGradTag(HashableTag):
     pass
 
 
-class _DiffusionLengthscalesTag:
+class _DiffusionLengthscalesTag(HashableTag):
     pass
 
 
@@ -477,11 +477,12 @@ def grad_operator(
 
     if kappa_tpairs is None:
         kappa_tpairs = interior_trace_pairs(
-            dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag, comm_tag))
+            dcoll, kappa, volume_dd=dd_vol,
+            comm_tag=(_DiffusionKappaTag(), comm_tag))
 
     if u_tpairs is None:
         u_tpairs = interior_trace_pairs(
-            dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag, comm_tag))
+            dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag(), comm_tag))
 
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 
@@ -610,10 +611,10 @@ def diffusion_operator(
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     kappa_tpairs = interior_trace_pairs(
-        dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag, comm_tag))
+        dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag(), comm_tag))
 
     u_tpairs = interior_trace_pairs(
-        dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag, comm_tag))
+        dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag(), comm_tag))
 
     if grad_u is None:
         grad_u = grad_operator(
@@ -624,7 +625,7 @@ def diffusion_operator(
 
     grad_u_tpairs = interior_trace_pairs(
         dcoll, grad_u, volume_dd=dd_vol,
-        comm_tag=(_DiffusionGradTag, comm_tag))
+        comm_tag=(_DiffusionGradTag(), comm_tag))
 
     kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
     grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
@@ -634,7 +635,7 @@ def diffusion_operator(
 
     lengthscales_tpairs = interior_trace_pairs(
         dcoll, lengthscales, volume_dd=dd_vol,
-        comm_tag=(_DiffusionLengthscalesTag, comm_tag))
+        comm_tag=(_DiffusionLengthscalesTag(), comm_tag))
 
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 

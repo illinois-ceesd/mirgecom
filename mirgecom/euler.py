@@ -74,7 +74,7 @@ from mirgecom.inviscid import (  # noqa
 )
 
 from mirgecom.operators import div_operator
-from mirgecom.utils import normalize_boundaries
+from mirgecom.utils import normalize_boundaries, HashableTag
 from arraycontext import map_array_container
 from mirgecom.gas_model import (
     project_fluid_state,
@@ -99,11 +99,11 @@ from grudge.flux_differencing import volume_flux_differencing
 import grudge.op as op
 
 
-class _ESFluidCVTag():
+class _ESFluidCVTag(HashableTag):
     pass
 
 
-class _ESFluidTemperatureTag():
+class _ESFluidTemperatureTag(HashableTag):
     pass
 
 
@@ -226,7 +226,7 @@ def entropy_stable_euler_operator(
             interp_to_surf_quad(tpair)
             for tpair in interior_trace_pairs(dcoll, state.temperature,
                                               volume_dd=dd_vol,
-                                              comm_tag=(_ESFluidTemperatureTag,
+                                              comm_tag=(_ESFluidTemperatureTag(),
                                                         comm_tag))
         ]
 
@@ -255,7 +255,7 @@ def entropy_stable_euler_operator(
         # (obtaining state from projected entropy variables)
         _interp_to_surf_modified_conservedvars(gamma_base, tpair)
         for tpair in interior_trace_pairs(dcoll, entropy_vars, volume_dd=dd_vol,
-                                          comm_tag=(_ESFluidCVTag, comm_tag))]
+                                          comm_tag=(_ESFluidCVTag(), comm_tag))]
 
     boundary_states = {
         # TODO: Use modified conserved vars as the input state?

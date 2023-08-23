@@ -147,7 +147,7 @@ from grudge.dof_desc import (
     DISCR_TAG_MODAL,
 )
 
-from mirgecom.utils import normalize_boundaries
+from mirgecom.utils import normalize_boundaries, HashableTag
 from arraycontext import get_container_context_recursively
 from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
@@ -160,7 +160,7 @@ from mirgecom.boundary import (
 )
 
 
-class _AVRTag:
+class _AVRTag(HashableTag):
     pass
 
 
@@ -397,7 +397,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
         sum(
             central_flux_div(interp_to_surf_quad(tpair=tpair))
             for tpair in interior_trace_pairs(
-                dcoll, r, volume_dd=dd_vol, comm_tag=(_AVRTag, comm_tag)))
+                dcoll, r, volume_dd=dd_vol, comm_tag=(_AVRTag(), comm_tag)))
 
         # Contributions from boundary fluxes
         + sum(

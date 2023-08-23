@@ -109,38 +109,38 @@ from mirgecom.diffusion import (
     diffusion_operator,
 )
 from mirgecom.multiphysics import make_interface_boundaries
-from mirgecom.utils import project_from_base
+from mirgecom.utils import project_from_base, HashableTag
 
 
-class _ThermalDataNoGradInterVolTag:
+class _ThermalDataNoGradInterVolTag(HashableTag):
     pass
 
 
-class _ThermalDataInterVolTag:
+class _ThermalDataInterVolTag(HashableTag):
     pass
 
 
-class _GradTemperatureInterVolTag:
+class _GradTemperatureInterVolTag(HashableTag):
     pass
 
 
-class _FluidOpStatesTag:
+class _FluidOpStatesTag(HashableTag):
     pass
 
 
-class _FluidGradTag:
+class _FluidGradTag(HashableTag):
     pass
 
 
-class _FluidOperatorTag:
+class _FluidOperatorTag(HashableTag):
     pass
 
 
-class _WallGradTag:
+class _WallGradTag(HashableTag):
     pass
 
 
-class _WallOperatorTag:
+class _WallOperatorTag(HashableTag):
     pass
 
 
@@ -771,7 +771,7 @@ def _get_interface_trace_pairs_no_grad(
             _make_thermal_data(wall_kappa, wall_temperature))}
     return inter_volume_trace_pairs(
         dcoll, pairwise_thermal_data,
-        comm_tag=(_ThermalDataNoGradInterVolTag, comm_tag))
+        comm_tag=(_ThermalDataNoGradInterVolTag(), comm_tag))
 
 
 def _get_interface_trace_pairs(
@@ -795,7 +795,7 @@ def _get_interface_trace_pairs(
 
     return inter_volume_trace_pairs(
         dcoll, pairwise_thermal_data,
-        comm_tag=(_ThermalDataInterVolTag, comm_tag))
+        comm_tag=(_ThermalDataInterVolTag(), comm_tag))
 
 
 def _get_interface_boundaries_no_grad(
@@ -1354,10 +1354,10 @@ def coupled_grad_t_operator(
             time=time, quadrature_tag=quadrature_tag,
             numerical_flux_func=fluid_numerical_flux_func, dd=fluid_dd,
             operator_states_quad=_fluid_operator_states_quad,
-            comm_tag=_FluidGradTag),
+            comm_tag=_FluidGradTag()),
         wall_grad_t_operator(
             dcoll, wall_kappa, wall_all_boundaries_no_grad, wall_temperature,
-            quadrature_tag=quadrature_tag, dd=wall_dd, comm_tag=_WallGradTag))
+            quadrature_tag=quadrature_tag, dd=wall_dd, comm_tag=_WallGradTag()))
 
 
 def coupled_ns_heat_operator(
@@ -1523,7 +1523,7 @@ def coupled_ns_heat_operator(
     # Get the operator fluid states
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
-        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag,
+        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag(),
         limiter_func=limiter_func)
 
     # Compute the temperature gradient for both subdomains
@@ -1561,13 +1561,13 @@ def coupled_ns_heat_operator(
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
-        grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
+        grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag())
 
     diffusion_result = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
         return_grad_u=return_gradients, dd=wall_dd, grad_u=wall_grad_temperature,
-        comm_tag=_WallOperatorTag)
+        comm_tag=_WallOperatorTag())
 
     if return_gradients:
         fluid_rhs, fluid_grad_cv, fluid_grad_temperature = ns_result
@@ -1741,7 +1741,7 @@ def basic_coupled_ns_heat_operator(
     # Get the operator fluid states
     fluid_operator_states_quad = make_operator_fluid_states(
         dcoll, fluid_state, gas_model, fluid_all_boundaries_no_grad,
-        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag,
+        quadrature_tag, dd=fluid_dd, comm_tag=_FluidOpStatesTag(),
         limiter_func=limiter_func)
 
     # Compute the temperature gradient for both subdomains
@@ -1749,10 +1749,10 @@ def basic_coupled_ns_heat_operator(
         dcoll, gas_model, fluid_all_boundaries_no_grad, fluid_state,
         time=time, quadrature_tag=quadrature_tag,
         dd=fluid_dd, operator_states_quad=fluid_operator_states_quad,
-        comm_tag=_FluidGradTag)
+        comm_tag=_FluidGradTag())
     wall_grad_temperature = wall_grad_t_operator(
         dcoll, wall_kappa, wall_all_boundaries_no_grad, wall_temperature,
-        quadrature_tag=quadrature_tag, dd=wall_dd, comm_tag=_WallGradTag)
+        quadrature_tag=quadrature_tag, dd=wall_dd, comm_tag=_WallGradTag())
 
     # Include boundaries for the fluid-wall interface, now with the temperature
     # gradient
@@ -1782,12 +1782,12 @@ def basic_coupled_ns_heat_operator(
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
         return_gradients=return_gradients,
         operator_states_quad=fluid_operator_states_quad,
-        grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag)
+        grad_t=fluid_grad_temperature, comm_tag=_FluidOperatorTag())
 
     wall_rhs = diffusion_operator(
         dcoll, wall_kappa, wall_all_boundaries, wall_temperature,
         penalty_amount=wall_penalty_amount, quadrature_tag=quadrature_tag,
-        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_WallOperatorTag)
+        dd=wall_dd, grad_u=wall_grad_temperature, comm_tag=_WallOperatorTag())
 
     if return_gradients:
         # Ignore fluid_grad_temperature result here because we already have it

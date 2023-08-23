@@ -75,7 +75,7 @@ from mirgecom.transport import (
     TransportModel,
     GasTransportVars
 )
-from mirgecom.utils import normalize_boundaries
+from mirgecom.utils import normalize_boundaries, HashableTag
 from mirgecom.wall_model import PorousWallVars, PorousFlowModel
 
 
@@ -612,27 +612,27 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
                 smoothness_beta_pairs, material_densities_pairs)]
 
 
-class _FluidCVTag:
+class _FluidCVTag(HashableTag):
     pass
 
 
-class _FluidTemperatureTag:
+class _FluidTemperatureTag(HashableTag):
     pass
 
 
-class _FluidSmoothnessMuTag:
+class _FluidSmoothnessMuTag(HashableTag):
     pass
 
 
-class _FluidSmoothnessKappaTag:
+class _FluidSmoothnessKappaTag(HashableTag):
     pass
 
 
-class _FluidSmoothnessBetaTag:
+class _FluidSmoothnessBetaTag(HashableTag):
     pass
 
 
-class _WallDensityTag:
+class _WallDensityTag(HashableTag):
     pass
 
 
@@ -725,7 +725,7 @@ def make_operator_fluid_states(
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
             dcoll, volume_state.cv, volume_dd=dd_vol,
-            comm_tag=(_FluidCVTag, comm_tag))
+            comm_tag=(_FluidCVTag(), comm_tag))
     ]
 
     tseed_interior_pairs = None
@@ -740,7 +740,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.temperature, volume_dd=dd_vol,
-                comm_tag=(_FluidTemperatureTag, comm_tag))]
+                comm_tag=(_FluidTemperatureTag(), comm_tag))]
 
     smoothness_mu_interior_pairs = None
     if volume_state.smoothness_mu is not None:
@@ -748,7 +748,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_mu, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessMuTag, comm_tag))]
+                tag=(_FluidSmoothnessMuTag(), comm_tag))]
 
     smoothness_kappa_interior_pairs = None
     if volume_state.smoothness_kappa is not None:
@@ -756,7 +756,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_kappa, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessKappaTag, comm_tag))]
+                tag=(_FluidSmoothnessKappaTag(), comm_tag))]
 
     smoothness_beta_interior_pairs = None
     if volume_state.smoothness_beta is not None:
@@ -764,7 +764,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_beta, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessBetaTag, comm_tag))]
+                tag=(_FluidSmoothnessBetaTag(), comm_tag))]
 
     material_densities_interior_pairs = None
     if isinstance(gas_model, PorousFlowModel):
@@ -772,7 +772,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.wv.material_densities, volume_dd=dd_vol,
-                tag=(_WallDensityTag, comm_tag))]
+                tag=(_WallDensityTag(), comm_tag))]
 
     interior_boundary_states_quad = make_fluid_state_trace_pairs(
         cv_pairs=cv_interior_pairs,

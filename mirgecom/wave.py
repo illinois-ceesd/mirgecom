@@ -33,6 +33,7 @@ from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair, interior_trace_pairs
 import grudge.op as op
+from mirgecom.utils import HashableTag
 
 
 def _flux(dcoll, c, w_tpair):
@@ -56,7 +57,7 @@ def _flux(dcoll, c, w_tpair):
     return op.project(dcoll, w_tpair.dd, "all_faces", c*flux_weak)
 
 
-class _WaveTag:
+class _WaveTag(HashableTag):
     pass
 
 

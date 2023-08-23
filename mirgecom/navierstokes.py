@@ -95,22 +95,22 @@ from mirgecom.operators import (
     div_operator, grad_operator
 )
 from mirgecom.gas_model import make_operator_fluid_states
-from mirgecom.utils import normalize_boundaries
+from mirgecom.utils import normalize_boundaries, HashableTag
 
 
-class _NSGradCVTag:
+class _NSGradCVTag(HashableTag):
     pass
 
 
-class _NSGradTemperatureTag:
+class _NSGradTemperatureTag(HashableTag):
     pass
 
 
-class _ESFluidCVTag():
+class _ESFluidCVTag(HashableTag):
     pass
 
 
-class _ESFluidTemperatureTag():
+class _ESFluidTemperatureTag(HashableTag):
     pass
 
 
@@ -500,7 +500,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         # discretization (if any)
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
-            dcoll, grad_cv, volume_dd=dd_vol, comm_tag=(_NSGradCVTag, comm_tag))
+            dcoll, grad_cv, volume_dd=dd_vol, comm_tag=(_NSGradCVTag(), comm_tag))
     ]
 
     # }}} Compute grad(CV)
@@ -521,7 +521,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
             dcoll, grad_t, volume_dd=dd_vol,
-            comm_tag=(_NSGradTemperatureTag, comm_tag))
+            comm_tag=(_NSGradTemperatureTag(), comm_tag))
     ]
 
     # }}} compute grad(temperature)

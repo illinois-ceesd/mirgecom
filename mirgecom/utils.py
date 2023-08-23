@@ -1,6 +1,7 @@
 """Useful bits and bobs.
 
 .. autoclass:: StatisticsAccumulator
+.. autoclass:: HashableTag
 .. autofunction:: asdict_shallow
 .. autofunction:: force_evaluation
 .. autofunction:: normalize_boundaries
@@ -118,6 +119,13 @@ class StatisticsAccumulator:
             return None
 
         return self._min * self.scale_factor
+
+
+class HashableTag:
+    def __hash__(self):
+        return hash(str(type(self)))
+    def __eq__(self, other):
+        return isinstance(other, type(self))
 
 
 def force_evaluation(actx, x):
