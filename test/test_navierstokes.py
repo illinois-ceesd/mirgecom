@@ -93,8 +93,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
     for nel_1d in [2, 4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+            periodic=(True,)*dim
         )
+
+        boundaries = {}
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
@@ -142,8 +145,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
                                       species_diffusivity=spec_diffusivity))
         state = make_fluid_state(gas_model=gas_model, cv=cv)
 
-        boundaries = {BTAG_ALL: DummyBoundary()}
-
         ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
                              state=state, time=0.0, quadrature_tag=quadrature_tag)
 
@@ -184,9 +185,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
             species_mass=species_mass_input)
 
         state = make_fluid_state(gas_model=gas_model, cv=cv)
-        boundaries = {BTAG_ALL: DummyBoundary()}
         ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
-                             state=state, time=0.0)
+                             state=state, time=0.0, quadrature_tag=quadrature_tag)
 
         rhs_resid = ns_rhs - expected_rhs
 
