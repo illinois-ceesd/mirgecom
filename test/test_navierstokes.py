@@ -47,6 +47,7 @@ from mirgecom.boundary import (
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.discretization import create_discretization_collection
+from grudge.dof_desc import DISCR_TAG_QUAD
 import grudge.op as op
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -75,10 +76,11 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_uniform_rhs(actx_factory, nspecies, dim, order):
+@pytest.mark.parametrize("use_overintegration", [True, False])
+def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
     """Test the Navier-Stokes operator using a trivial constant/uniform state.
 
-    This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
+    This state should yield rhs = 0 to FP. The test is performed for 1, 2,
     and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
     """
     actx = actx_factory()
@@ -88,7 +90,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
     from pytools.convergence import EOCRecorder
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
-    # for nel_1d in [4, 8, 12]:
     for nel_1d in [2, 4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
@@ -99,7 +100,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        dcoll = create_discretization_collection(actx, mesh, order=order)
+        dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+
+        if use_overintegration:
+            quadrature_tag = DISCR_TAG_QUAD
+        else:
+            quadrature_tag = None
 
         zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
@@ -138,7 +145,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order):
         boundaries = {BTAG_ALL: DummyBoundary()}
 
         ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
-                             state=state, time=0.0)
+                             state=state, time=0.0, quadrature_tag=quadrature_tag)
 
         rhs_resid = ns_rhs - expected_rhs
         rho_resid = rhs_resid.mass
