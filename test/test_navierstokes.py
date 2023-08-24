@@ -131,10 +131,16 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        expected_rhs = make_conserved(
-            dim, q=make_obj_array([dcoll.zeros(actx)
-                                   for i in range(num_equations)])
-        )
+        zeros = actx.np.zeros_like(cv.mass)
+        expected_rhs = make_conserved(dim,
+            mass=zeros,
+            energy=zeros,
+            momentum=make_obj_array([zeros for i in range(dim)]),
+            species_mass=make_obj_array([zeros for i in range(nspecies)]))
+
+        assert actx.to_numpy(op.norm(dcoll, cv.mass - 1.0, np.inf)) < tolerance
+        assert actx.to_numpy(op.norm(dcoll, expected_rhs.mass, np.inf)) < tolerance
+
         mu = 1.0
         kappa = 1.0
         spec_diffusivity = .5 * np.ones(nspecies)
@@ -144,9 +150,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
             transport=SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
                                       species_diffusivity=spec_diffusivity))
         state = make_fluid_state(gas_model=gas_model, cv=cv)
+        assert actx.to_numpy(op.norm(dcoll, state.mass_density, np.inf)) == 1.0
+        assert actx.to_numpy(op.norm(dcoll, state.energy_density, np.inf)) == 2.5
 
         ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
                              state=state, time=0.0, quadrature_tag=quadrature_tag)
+
+        assert actx.to_numpy(op.norm(dcoll, ns_rhs.mass, np.inf)) < 3.5e-11
 
         rhs_resid = ns_rhs - expected_rhs
         rho_resid = rhs_resid.mass
