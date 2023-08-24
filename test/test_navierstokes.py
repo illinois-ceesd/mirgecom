@@ -40,7 +40,10 @@ from pytools.obj_array import (
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
-from mirgecom.fluid import make_conserved
+from mirgecom.fluid import (
+    make_conserved,
+    velocity_gradient
+)
 from mirgecom.utils import force_evaluation
 from mirgecom.boundary import (
     DummyBoundary,
@@ -218,6 +221,97 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
             or eoc_rec0.max_error() < tolerance)
     assert (eoc_rec1.order_estimate() >= order - 0.5
             or eoc_rec1.max_error() < tolerance)
+
+
+@pytest.mark.parametrize("nspecies", [0, 3])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 4])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
+    """Test the gradients from the Navier-Stokes operator with non-uniform profiles.
+
+    This state should yield ...
+    """
+    actx = actx_factory()
+
+    tolerance = 1e-9
+
+    eoc_rec0 = EOCRecorder()
+    eoc_rec1 = EOCRecorder()
+    for nel_1d in [2, 4, 8]:
+        mesh = generate_regular_rect_mesh(
+            a=(-0.5,)*dim, b=(0.5,)*dim, nelements_per_axis=(nel_1d,)*dim)
+
+        boundaries = {BTAG_ALL: DummyBoundary()}
+
+        logger.info(f"Number of {dim}d elements: {mesh.nelements}")
+
+        dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+        quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+        nodes = force_evaluation(actx, dcoll.nodes())
+
+        zeros = actx.np.zeros_like(nodes[0])
+        ones = zeros + 1.0
+
+        mu = 1.0
+        kappa = 1.0
+        spec_diffusivity = .5 * np.ones(nspecies)
+
+        gas_model = GasModel(
+            eos=IdealSingleGas(gamma=1.4, gas_const=1.0),
+            transport=SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
+                                      species_diffusivity=spec_diffusivity))
+
+        mass_input = 1.0 + nodes[0]
+        temperature_input = 1.0 + nodes[0]
+
+        # set a non-zero, but uniform velocity component
+        mom_input = make_obj_array([zeros for i in range(dim)])
+        for i in range(dim):
+            mom_input[i] = ones + float(i+1)*nodes[i]
+
+        mass_frac_input = flat_obj_array(
+            [ones / ((i + 1) * 10) for i in range(nspecies)]
+        )
+        species_mass_input = mass_input * mass_frac_input
+        num_equations = dim + 2 + len(species_mass_input)
+
+        energy_input = mass_input*(
+            gas_model.eos.get_internal_energy(temperature=temperature_input))
+
+        cv = make_conserved(dim, mass=mass_input, momentum=mom_input,
+            energy=energy_input + 0.5*np.dot(mom_input, mom_input)/mass_input,
+            species_mass=species_mass_input)
+
+        state = make_fluid_state(gas_model=gas_model, cv=cv)
+        ns_rhs, grad_cv, grad_t = \
+            ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
+                        state=state, time=0.0, quadrature_tag=quadrature_tag,
+                        return_gradients=True)
+
+        grad_vel = velocity_gradient(cv, grad_cv)
+        v = cv.velocity        
+
+        check_grad_t = grad_t[0] - 1.0
+        assert actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf)) < tolerance
+        for i in range(1, dim):
+            assert actx.to_numpy(op.norm(dcoll, grad_t[i], np.inf)) < tolerance
+
+        for i in range(dim):
+            check_grad_mom = grad_cv.momentum[i][i] - float(i+1)
+            assert actx.to_numpy(
+                    op.norm(dcoll, check_grad_mom, np.inf)) < tolerance
+
+        for i in range(dim):
+            if i > 0:
+                ref_grad_vel = mom_input[i]*(-1.0)/(1.0 + nodes[0])**2
+            else:
+                ref_grad_vel = 0.0
+
+            check_dvdx = grad_vel[i][0] - ref_grad_vel
+            assert actx.to_numpy(
+                    op.norm(dcoll, check_dvdx, np.inf)) < tolerance
 
 
 class FluidCase(metaclass=ABCMeta):
