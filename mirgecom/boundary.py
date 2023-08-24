@@ -59,7 +59,6 @@ from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
 import grudge.op as op
 from mirgecom.viscous import viscous_facial_flux_central
-from mirgecom.flux import num_flux_central
 from mirgecom.gas_model import make_fluid_state, replace_fluid_state
 from pytools.obj_array import make_obj_array
 from mirgecom.utils import project_from_base
@@ -857,7 +856,8 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._bnd_temperature_func:
             self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
-            self._grad_num_flux_func = num_flux_central
+            self._grad_num_flux_func = _ldg_bnd_flux_for_grad
+
         if not self._cv_gradient_flux_func:
             self._cv_gradient_flux_func = self._gradient_flux_for_prescribed_cv
         if not self._temperature_grad_flux_func:
