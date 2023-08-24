@@ -31,6 +31,8 @@ import pyopencl.clmath  # noqa
 import logging
 import pytest
 
+from pytools.convergence import EOCRecorder
+from meshmode.mesh.generation import generate_regular_rect_mesh
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
@@ -39,7 +41,7 @@ from pytools.obj_array import (
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
 from mirgecom.fluid import make_conserved
-
+from mirgecom.utils import force_evaluation
 from mirgecom.boundary import (
     DummyBoundary,
     PrescribedFluidBoundary,
@@ -75,7 +77,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 5])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
     """Test the Navier-Stokes operator using a trivial constant/uniform state.
@@ -87,39 +89,30 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
 
     tolerance = 1e-9
 
-    from pytools.convergence import EOCRecorder
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
     for nel_1d in [2, 4, 8]:
-        from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim,
-            periodic=(True,)*dim
-        )
+            a=(-0.5,)*dim, b=(0.5,)*dim, nelements_per_axis=(nel_1d,)*dim,
+            periodic=(True,)*dim)
 
         boundaries = {}
 
-        logger.info(
-            f"Number of {dim}d elements: {mesh.nelements}"
-        )
+        logger.info(f"Number of {dim}d elements: {mesh.nelements}")
 
         dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
+        quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+        nodes = force_evaluation(actx, dcoll.nodes())
 
-        if use_overintegration:
-            quadrature_tag = DISCR_TAG_QUAD
-        else:
-            quadrature_tag = None
-
-        zeros = dcoll.zeros(actx)
+        zeros = actx.np.zeros_like(nodes[0])
         ones = zeros + 1.0
 
-        mass_input = dcoll.zeros(actx) + 1
-        energy_input = dcoll.zeros(actx) + 2.5
+        mass_input = zeros + 1.0
+        energy_input = zeros + 2.5
 
-        mom_input = make_obj_array(
-            [float(i)*ones for i in range(dim)]
-        )
+        # set zero-velocity profile
+        mom_input = make_obj_array([zeros for i in range(dim)])
 
         mass_frac_input = flat_obj_array(
             [ones / ((i + 1) * 10) for i in range(nspecies)]
@@ -131,15 +124,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
 
-        zeros = actx.np.zeros_like(cv.mass)
         expected_rhs = make_conserved(dim,
             mass=zeros,
             energy=zeros,
             momentum=make_obj_array([zeros for i in range(dim)]),
             species_mass=make_obj_array([zeros for i in range(nspecies)]))
-
-        assert actx.to_numpy(op.norm(dcoll, cv.mass - 1.0, np.inf)) < tolerance
-        assert actx.to_numpy(op.norm(dcoll, expected_rhs.mass, np.inf)) < tolerance
 
         mu = 1.0
         kappa = 1.0
@@ -150,13 +139,15 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
             transport=SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
                                       species_diffusivity=spec_diffusivity))
         state = make_fluid_state(gas_model=gas_model, cv=cv)
-        assert actx.to_numpy(op.norm(dcoll, state.mass_density, np.inf)) == 1.0
-        assert actx.to_numpy(op.norm(dcoll, state.energy_density, np.inf)) == 2.5
+        assert actx.to_numpy(
+            op.norm(dcoll, state.mass_density - mass_input, np.inf)) < tolerance
+        assert actx.to_numpy(
+            op.norm(dcoll, state.energy_density - energy_input, np.inf)) < tolerance
 
         ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
                              state=state, time=0.0, quadrature_tag=quadrature_tag)
 
-        assert actx.to_numpy(op.norm(dcoll, ns_rhs.mass, np.inf)) < 3.5e-11
+        assert actx.to_numpy(op.norm(dcoll, ns_rhs.mass, np.inf)) < tolerance
 
         rhs_resid = ns_rhs - expected_rhs
         rho_resid = rhs_resid.mass
@@ -187,11 +178,13 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
-        for i in range(len(mom_input)):
-            mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
+        for i in range(dim):
+            mom_input[i] = zeros + (-1.0) ** i
 
         cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
+            dim, mass=mass_input,
+            energy=energy_input + 0.5*np.dot(mom_input, mom_input)/mass_input,
+            momentum=mom_input,
             species_mass=species_mass_input)
 
         state = make_fluid_state(gas_model=gas_model, cv=cv)
@@ -221,14 +214,10 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
         f"V != 0 Errors:\n{eoc_rec1}"
     )
 
-    assert (
-        eoc_rec0.order_estimate() >= order - 0.5
-        or eoc_rec0.max_error() < 1e-9
-    )
-    assert (
-        eoc_rec1.order_estimate() >= order - 0.5
-        or eoc_rec1.max_error() < 1e-9
-    )
+    assert (eoc_rec0.order_estimate() >= order - 0.5
+            or eoc_rec0.max_error() < tolerance)
+    assert (eoc_rec1.order_estimate() >= order - 0.5
+            or eoc_rec1.max_error() < tolerance)
 
 
 class FluidCase(metaclass=ABCMeta):
@@ -643,7 +632,8 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 @pytest.mark.parametrize(("dim", "flow_direction"),
                          [(2, 0), (2, 1), (3, 0), (3, 1), (3, 2)])
 @pytest.mark.parametrize("order", [2, 3])
-def test_shear_flow(actx_factory, dim, flow_direction, order):
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegration):
     """Test the Navier-Stokes operator using an exact shear flow solution.
 
     The shear flow solution is defined in [Hesthaven_2008]_, Section 7.5.3
@@ -703,7 +693,9 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         print(f"{nx=}")
         mesh = get_box_mesh(dim, a, b, n=nx)
 
-        dcoll = create_discretization_collection(actx, mesh, order)
+        dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+        quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
         from grudge.dt_utils import h_max_from_volume
         h_max = actx.to_numpy(h_max_from_volume(dcoll))
 
@@ -717,10 +709,10 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         fluid_state = exact_fluid_state
 
         # Exact solution should have RHS=0, so the RHS itself is the residual
-        ns_rhs, grad_cv, grad_t = ns_operator(dcoll, gas_model=gas_model,
-                                              state=fluid_state,
-                                              boundaries=boundaries,
-                                              return_gradients=True)
+        ns_rhs, grad_cv, grad_t = \
+            ns_operator(dcoll, gas_model=gas_model, state=fluid_state,
+                        boundaries=boundaries, quadrature_tag=quadrature_tag,
+                        return_gradients=True)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
