@@ -857,7 +857,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._bnd_temperature_func:
             self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
-            # Default sends BC value for gradient flux 
+            # Default sends BC value for gradient flux
             self._grad_num_flux_func = _ldg_bnd_flux_for_grad
 
         if not self._cv_gradient_flux_func:
