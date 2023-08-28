@@ -1,5 +1,5 @@
 islpy
-mpi4py
+git+https://github.com/mpi4py/mpi4py
 numpy
 pytest
 pytest-cov
