@@ -69,6 +69,7 @@ from abc import ABCMeta, abstractmethod
 
 
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
+    # Default for prescribed boundary; sends (+) bnd value for gradient flux
     return external_quantity
 
 
@@ -856,6 +857,7 @@ class PrescribedFluidBoundary(FluidBoundary):
         if not self._bnd_temperature_func:
             self._bnd_temperature_func = self._temperature_for_prescribed_state
         if not self._grad_num_flux_func:
+            # Default sends BC value for gradient flux
             self._grad_num_flux_func = _ldg_bnd_flux_for_grad
 
         if not self._cv_gradient_flux_func:
@@ -1041,6 +1043,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
     """
 
     def __init__(self):
+        """Initialize the BC object."""
         self._slip = _SlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
         self._adiabatic = _AdiabaticBoundaryComponent()
@@ -1794,6 +1797,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
     """
 
     def __init__(self):
+        """Initialize the BC object."""
         self._no_slip = _NoSlipBoundaryComponent()
         self._impermeable = _ImpermeableBoundaryComponent()
         self._adiabatic = _AdiabaticBoundaryComponent()
