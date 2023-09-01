@@ -1043,7 +1043,6 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
         else:
             local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
 
-
     else:
         global_nelements = comm_wrapper.bcast(None, root=0)
 
