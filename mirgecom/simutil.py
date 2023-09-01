@@ -1034,6 +1034,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                     for vol in volumes}
                 for rank in range(num_ranks)]
 
+        global_nelements = comm_wrapper.bcast(mesh.nelements, root=0)
+
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
@@ -1041,17 +1043,16 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
         else:
             local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
 
-        global_nelements = comm_wrapper.bcast(mesh.nelements, root=0)
 
     else:
+        global_nelements = comm_wrapper.bcast(None, root=0)
+
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
                 local_mesh_data = comm_wrapper.scatter(None, root=0)
         else:
             local_mesh_data = comm_wrapper.scatter(None, root=0)
-
-        global_nelements = comm_wrapper.bcast(None, root=0)
 
     return local_mesh_data, global_nelements
 
