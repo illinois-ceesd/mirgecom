@@ -74,6 +74,7 @@ import logging
 import sys
 from functools import partial
 from typing import TYPE_CHECKING, Dict, List, Optional
+from logpyle import IntervalTimer
 
 import grudge.op as op
 import numpy as np
@@ -887,7 +888,7 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     return distribute_mesh(comm, generate_mesh)
 
 
-def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
+def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=None):
     r"""Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -927,6 +928,9 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     comm_wrapper = pkl5.Intracomm(comm)
 
     num_ranks = comm_wrapper.Get_size()
+    t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh data.")
+    t_mesh_data = IntervalTimer("t_mesh_data", "Time spent getting mesh data.")
+    t_mesh_part = IntervalTimer("t_mesh_part", "Time spent partitioning the mesh.")
 
     if partition_generator_func is None:
         def partition_generator_func(mesh, tag_to_elements, num_ranks):
@@ -934,7 +938,12 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             return get_partition_by_pymetis(mesh, num_ranks)
 
     if comm_wrapper.Get_rank() == 0:
-        global_data = get_mesh_data()
+        if logmgr:
+            logmgr.add_quantity(t_mesh_data)
+            with t_mesh_data.get_sub_timer():
+                global_data = get_mesh_data()
+        else:
+            global_data = get_mesh_data()
 
         from meshmode.mesh import Mesh
         if isinstance(global_data, Mesh):
@@ -947,8 +956,14 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             raise TypeError("Unexpected result from get_mesh_data")
 
         from meshmode.mesh.processing import partition_mesh
-
-        rank_per_element = partition_generator_func(mesh, tag_to_elements, num_ranks)
+        if logmgr:
+            logmgr.add_quantity(t_mesh_part)
+            with t_mesh_part.get_sub_timer():
+                rank_per_element = partition_generator_func(mesh, tag_to_elements,
+                                                            num_ranks)
+        else:
+            rank_per_element = partition_generator_func(mesh, tag_to_elements,
+                                                        num_ranks)
 
         if tag_to_elements is None:
             rank_to_elements = {
@@ -1019,12 +1034,22 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                     for vol in volumes}
                 for rank in range(num_ranks)]
 
-        local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
+        if logmgr:
+            logmgr.add_quantity(t_mesh_dist)
+            with t_mesh_dist.get_sub_timer():
+                local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
+        else:
+            local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
 
         global_nelements = comm_wrapper.bcast(mesh.nelements, root=0)
 
     else:
-        local_mesh_data = comm_wrapper.scatter(None, root=0)
+        if logmgr:
+            logmgr.add_quantity(t_mesh_dist)
+            with t_mesh_dist.get_sub_timer():
+                local_mesh_data = comm_wrapper.scatter(None, root=0)
+        else:
+            local_mesh_data = comm_wrapper.scatter(None, root=0)
 
         global_nelements = comm_wrapper.bcast(None, root=0)
 
