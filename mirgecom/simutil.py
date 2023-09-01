@@ -923,14 +923,17 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     global_nelements: :class:`int`
         The number of elements in the global mesh
     """
-    num_ranks = comm.Get_size()
+    from mpi4py.util import pkl5
+    comm_wrapper = pkl5.Intracomm(comm)
+
+    num_ranks = comm_wrapper.Get_size()
 
     if partition_generator_func is None:
         def partition_generator_func(mesh, tag_to_elements, num_ranks):
             from meshmode.distributed import get_partition_by_pymetis
             return get_partition_by_pymetis(mesh, num_ranks)
 
-    if comm.Get_rank() == 0:
+    if comm_wrapper.Get_rank() == 0:
         global_data = get_mesh_data()
 
         from meshmode.mesh import Mesh
@@ -1016,14 +1019,14 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                     for vol in volumes}
                 for rank in range(num_ranks)]
 
-        local_mesh_data = comm.scatter(rank_to_mesh_data, root=0)
+        local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
 
-        global_nelements = comm.bcast(mesh.nelements, root=0)
+        global_nelements = comm_wrapper.bcast(mesh.nelements, root=0)
 
     else:
-        local_mesh_data = comm.scatter(None, root=0)
+        local_mesh_data = comm_wrapper.scatter(None, root=0)
 
-        global_nelements = comm.bcast(None, root=0)
+        global_nelements = comm_wrapper.bcast(None, root=0)
 
     return local_mesh_data, global_nelements
 
