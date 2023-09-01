@@ -887,7 +887,7 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     return distribute_mesh(comm, generate_mesh)
 
 
-def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
+def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=None):
     r"""Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -931,7 +931,11 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
             return get_partition_by_pymetis(mesh, num_ranks)
 
     if comm.Get_rank() == 0:
-        global_data = get_mesh_data()
+        t_mesh_data = IntervalTimer("t_mesh_data", "Time spent reading mesh")
+        logmgr.add_quantity(t_mesh_data)
+
+        with t_mesh_data.get_sub_timer():
+            global_data = get_mesh_data()
 
         from meshmode.mesh import Mesh
         if isinstance(global_data, Mesh):
@@ -1016,12 +1020,19 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
                     for vol in volumes}
                 for rank in range(num_ranks)]
 
-        local_mesh_data = comm.scatter(rank_to_mesh_data, root=0)
+        t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh")
+        logmgr.add_quantity(t_mesh_dist)
+
+        with t_mesh_dist.get_sub_timer():
+            local_mesh_data = comm.scatter(rank_to_mesh_data, root=0)
 
         global_nelements = comm.bcast(mesh.nelements, root=0)
 
     else:
-        local_mesh_data = comm.scatter(None, root=0)
+        t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh")
+        logmgr.add_quantity(t_mesh_dist)
+        with t_mesh_dist.get_sub_timer():
+            local_mesh_data = comm.scatter(None, root=0)
 
         global_nelements = comm.bcast(None, root=0)
 
