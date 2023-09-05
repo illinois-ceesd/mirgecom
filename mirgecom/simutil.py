@@ -992,7 +992,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                         tag_to_volume[tag])
 
                 if np.any(volume_index_per_element < 0):
-                    raise ValueError("Missing volume specification for some elements.")
+                    raise ValueError("Missing volume specification "
+                                     "for some elements.")
 
                 part_id_to_elements = {
                     PartID(volumes[vol_idx], rank):
@@ -1002,7 +1003,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                     for vol_idx in range(len(volumes))
                     for rank in range(num_ranks)}
 
-                # TODO: Add a public function to meshmode to accomplish this? So we're
+                # TODO: Add a public meshmode function to accomplish this? So we're
                 # not depending on meshmode internals
                 part_id_to_part_index = {
                     part_id: part_index
