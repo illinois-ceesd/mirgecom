@@ -924,17 +924,21 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
     global_nelements: :class:`int`
         The number of elements in the global mesh
     """
-    num_ranks = comm.Get_size()
+    from mpi4py.util import pkl5
+    comm_wrapper = pkl5.Intracomm(comm)
+
+    num_ranks = comm_wrapper.Get_size()
     t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh data.")
     t_mesh_data = IntervalTimer("t_mesh_data", "Time spent getting mesh data.")
     t_mesh_part = IntervalTimer("t_mesh_part", "Time spent partitioning the mesh.")
+    t_mesh_split = IntervalTimer("t_mesh_split", "Time spent splitting mesh parts.")
 
     if partition_generator_func is None:
         def partition_generator_func(mesh, tag_to_elements, num_ranks):
             from meshmode.distributed import get_partition_by_pymetis
             return get_partition_by_pymetis(mesh, num_ranks)
 
-    if comm.Get_rank() == 0:
+    if comm_wrapper.Get_rank() == 0:
         if logmgr:
             logmgr.add_quantity(t_mesh_data)
             with t_mesh_data.get_sub_timer():
@@ -952,7 +956,6 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
         else:
             raise TypeError("Unexpected result from get_mesh_data")
 
-        from meshmode.mesh.processing import partition_mesh
         if logmgr:
             logmgr.add_quantity(t_mesh_part)
             with t_mesh_part.get_sub_timer():
@@ -962,93 +965,105 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
             rank_per_element = partition_generator_func(mesh, tag_to_elements,
                                                         num_ranks)
 
-        if tag_to_elements is None:
-            rank_to_elements = {
-                rank: np.where(rank_per_element == rank)[0]
-                for rank in range(num_ranks)}
+        def get_rank_to_mesh_data():
+            from meshmode.mesh.processing import partition_mesh
+            if tag_to_elements is None:
+                rank_to_elements = {
+                    rank: np.where(rank_per_element == rank)[0]
+                    for rank in range(num_ranks)}
 
-            rank_to_mesh_data_dict = partition_mesh(mesh, rank_to_elements)
+                rank_to_mesh_data_dict = partition_mesh(mesh, rank_to_elements)
 
-            rank_to_mesh_data = [
-                rank_to_mesh_data_dict[rank]
-                for rank in range(num_ranks)]
+                rank_to_mesh_data = [
+                    rank_to_mesh_data_dict[rank]
+                    for rank in range(num_ranks)]
 
-        else:
-            tag_to_volume = {
-                tag: vol
-                for vol, tags in volume_to_tags.items()
-                for tag in tags}
+            else:
+                tag_to_volume = {
+                    tag: vol
+                    for vol, tags in volume_to_tags.items()
+                    for tag in tags}
 
-            volumes = list(volume_to_tags.keys())
+                volumes = list(volume_to_tags.keys())
 
-            volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
-            for tag, elements in tag_to_elements.items():
-                volume_index_per_element[elements] = volumes.index(
-                    tag_to_volume[tag])
+                volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
+                for tag, elements in tag_to_elements.items():
+                    volume_index_per_element[elements] = volumes.index(
+                        tag_to_volume[tag])
 
-            if np.any(volume_index_per_element < 0):
-                raise ValueError("Missing volume specification for some elements.")
+                if np.any(volume_index_per_element < 0):
+                    raise ValueError("Missing volume specification "
+                                     "for some elements.")
 
-            part_id_to_elements = {
-                PartID(volumes[vol_idx], rank):
+                part_id_to_elements = {
+                    PartID(volumes[vol_idx], rank):
                     np.where(
                         (volume_index_per_element == vol_idx)
                         & (rank_per_element == rank))[0]
-                for vol_idx in range(len(volumes))
-                for rank in range(num_ranks)}
+                    for vol_idx in range(len(volumes))
+                    for rank in range(num_ranks)}
 
-            # TODO: Add a public function to meshmode to accomplish this? So we're
-            # not depending on meshmode internals
-            part_id_to_part_index = {
-                part_id: part_index
-                for part_index, part_id in enumerate(part_id_to_elements.keys())}
-            from meshmode.mesh.processing import \
-                _compute_global_elem_to_part_elem
-            global_elem_to_part_elem = _compute_global_elem_to_part_elem(
-                mesh.nelements, part_id_to_elements, part_id_to_part_index,
-                mesh.element_id_dtype)
+                # TODO: Add a public meshmode function to accomplish this? So we're
+                # not depending on meshmode internals
+                part_id_to_part_index = {
+                    part_id: part_index
+                    for part_index, part_id in enumerate(part_id_to_elements.keys())}
+                from meshmode.mesh.processing import \
+                    _compute_global_elem_to_part_elem
+                global_elem_to_part_elem = _compute_global_elem_to_part_elem(
+                    mesh.nelements, part_id_to_elements, part_id_to_part_index,
+                    mesh.element_id_dtype)
 
-            tag_to_global_to_part = {
-                tag: global_elem_to_part_elem[elements, :]
-                for tag, elements in tag_to_elements.items()}
+                tag_to_global_to_part = {
+                    tag: global_elem_to_part_elem[elements, :]
+                    for tag, elements in tag_to_elements.items()}
 
-            part_id_to_tag_to_elements = {}
-            for part_id in part_id_to_elements.keys():
-                part_idx = part_id_to_part_index[part_id]
-                part_tag_to_elements = {}
-                for tag, global_to_part in tag_to_global_to_part.items():
-                    part_tag_to_elements[tag] = global_to_part[
-                        global_to_part[:, 0] == part_idx, 1]
-                part_id_to_tag_to_elements[part_id] = part_tag_to_elements
+                part_id_to_tag_to_elements = {}
+                for part_id in part_id_to_elements.keys():
+                    part_idx = part_id_to_part_index[part_id]
+                    part_tag_to_elements = {}
+                    for tag, global_to_part in tag_to_global_to_part.items():
+                        part_tag_to_elements[tag] = global_to_part[
+                            global_to_part[:, 0] == part_idx, 1]
+                        part_id_to_tag_to_elements[part_id] = part_tag_to_elements
 
-            part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
+                part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
 
-            rank_to_mesh_data = [
-                {
-                    vol: (
-                        part_id_to_mesh[PartID(vol, rank)],
-                        part_id_to_tag_to_elements[PartID(vol, rank)])
-                    for vol in volumes}
-                for rank in range(num_ranks)]
+                rank_to_mesh_data = [
+                    {
+                        vol: (
+                            part_id_to_mesh[PartID(vol, rank)],
+                            part_id_to_tag_to_elements[PartID(vol, rank)])
+                        for vol in volumes}
+                    for rank in range(num_ranks)]
+
+            return rank_to_mesh_data
+
+        if logmgr:
+            logmgr.add_quantity(t_mesh_split)
+            with t_mesh_split.get_sub_timer():
+                rank_to_mesh_data = get_rank_to_mesh_data()
+        else:
+            rank_to_mesh_data = get_rank_to_mesh_data()
+
+        global_nelements = comm_wrapper.bcast(mesh.nelements, root=0)
 
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
-                local_mesh_data = comm.scatter(rank_to_mesh_data, root=0)
+                local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
         else:
-            local_mesh_data = comm.scatter(rank_to_mesh_data, root=0)
-
-        global_nelements = comm.bcast(mesh.nelements, root=0)
+            local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
 
     else:
+        global_nelements = comm_wrapper.bcast(None, root=0)
+
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
-                local_mesh_data = comm.scatter(None, root=0)
+                local_mesh_data = comm_wrapper.scatter(None, root=0)
         else:
-            local_mesh_data = comm.scatter(None, root=0)
-
-        global_nelements = comm.bcast(None, root=0)
+            local_mesh_data = comm_wrapper.scatter(None, root=0)
 
     return local_mesh_data, global_nelements
 
