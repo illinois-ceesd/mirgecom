@@ -67,6 +67,8 @@ def initialize_logmgr(enable_logmgr: bool,
 
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
 
+    logmgr.add_quantity(PythonInitTime())
+
     add_run_info(logmgr)
     add_package_versions(logmgr)
     add_general_quantities(logmgr)
@@ -456,5 +458,34 @@ class MempoolMemoryUsage(MultiPostLogQuantity):
         """Return the memory pool usage in MByte."""
         return (self.pool.managed_bytes/1024/1024,
                 self.pool.active_bytes/1024/1024)
+
+
+class PythonInitTime(PostLogQuantity):
+    """Stores the Python startup time.
+
+    Measures the time from process start to when this quantity is initialized.
+    """
+
+    def __init__(self, name: str = "t_python_init") -> None:
+        LogQuantity.__init__(self, name, "s", "Python init time")
+
+        try:
+            import psutil
+        except ModuleNotFoundError:
+            from warnings import warn
+            warn("Measuring the Python init time requires the 'psutil' module.")
+            self.done = True
+        else:
+            from time import time
+            self.python_init_time = time() - psutil.Process().create_time()
+            self.done = False
+
+    def __call__(self) -> Optional[float]:
+        """Return the Python init time in seconds."""
+        if self.done:
+            return None
+
+        self.done = True
+        return self.python_init_time
 
 # }}}
