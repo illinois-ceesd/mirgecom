@@ -93,5 +93,5 @@ def div_operator(dcoll, dd_vol, dd_allfaces, v, flux):
     # pylint: disable=invalid-unary-operand-type
     return -op.inverse_mass(
         dcoll, dd_vol.with_discr_tag(DISCR_TAG_BASE),
-        op.weak_local_div(dcoll, dd_vol, v)
+        # op.weak_local_div(dcoll, dd_vol, v)
         - op.face_mass(dcoll, dd_allfaces, flux))

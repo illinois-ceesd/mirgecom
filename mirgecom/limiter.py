@@ -151,4 +151,5 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                                   1.0)
         )
 
-    return _theta*(field - cell_avgs) + cell_avgs
+    # return _theta*(field - cell_avgs) + cell_avgs
+    return field - 0.*cell_avgs
