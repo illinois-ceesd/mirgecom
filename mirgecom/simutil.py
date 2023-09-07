@@ -1015,9 +1015,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
         The number of elements in the global mesh
     """
     from mpi4py import MPI
-    from mpi4py.util import pkl5
     from meshmode.distributed import mpi_distribute
-    # pkl5_comm = pkl5.Intracomm(comm)
 
     num_ranks = comm.Get_size()
     t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh data.")
@@ -1033,9 +1031,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
     with _manage_mpi_comm(
             comm.Split_type(MPI.COMM_TYPE_SHARED, comm.Get_rank(), MPI.INFO_NULL)
             ) as node_comm:
-        node_comm_wrapper = pkl5.Intracomm(node_comm)
-        node_ranks = node_comm_wrapper.gather(comm.Get_rank(), root=0)
-        my_node_rank = node_comm_wrapper.Get_rank()
+        node_ranks = node_comm.gather(comm.Get_rank(), root=0)
+        my_node_rank = node_comm.Get_rank()
 
         if my_node_rank == 0:
             if logmgr:
@@ -1092,29 +1089,29 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
             else:
                 node_rank_to_mesh_data = get_rank_to_mesh_data()
 
-            global_nelements = node_comm_wrapper.bcast(mesh.nelements, root=0)
+            global_nelements = node_comm.bcast(mesh.nelements, root=0)
 
             if logmgr:
                 logmgr.add_quantity(t_mesh_dist)
                 with t_mesh_dist.get_sub_timer():
                     local_mesh_data = mpi_distribute(
-                        node_comm_wrapper, source_rank=0,
+                        node_comm, source_rank=0,
                         source_data=node_rank_to_mesh_data)
             else:
                 local_mesh_data = mpi_distribute(
-                    node_comm_wrapper, source_rank=0,
+                    node_comm, source_rank=0,
                     source_data=node_rank_to_mesh_data)
 
         else:  # my_node_rank > 0, get mesh part from MPI
-            global_nelements = node_comm_wrapper.bcast(None, root=0)
+            global_nelements = node_comm.bcast(None, root=0)
 
             if logmgr:
                 logmgr.add_quantity(t_mesh_dist)
                 with t_mesh_dist.get_sub_timer():
                     local_mesh_data = \
-                        mpi_distribute(node_comm_wrapper, source_rank=0)
+                        mpi_distribute(node_comm, source_rank=0)
             else:
-                local_mesh_data = mpi_distribute(node_comm_wrapper, source_rank=0)
+                local_mesh_data = mpi_distribute(node_comm, source_rank=0)
 
     return local_mesh_data, global_nelements
 
