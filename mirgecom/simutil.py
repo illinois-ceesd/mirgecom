@@ -890,6 +890,94 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     return distribute_mesh(comm, generate_mesh)
 
 
+def _partition_single_volume_mesh(
+        mesh, num_ranks, rank_per_element, *, return_ranks=None):
+    rank_to_elements = {
+        rank: np.where(rank_per_element == rank)[0]
+        for rank in range(num_ranks)}
+
+    from meshmode.mesh.processing import partition_mesh
+    return partition_mesh(
+        mesh, rank_to_elements, return_parts=return_ranks)
+
+
+def _partition_multi_volume_mesh(
+        mesh, num_ranks, rank_per_element, tag_to_elements, volume_to_tags, *,
+        return_ranks=None):
+    if return_ranks is None:
+        return_ranks = [i for i in range(num_ranks)]
+
+    tag_to_volume = {
+        tag: vol
+        for vol, tags in volume_to_tags.items()
+        for tag in tags}
+
+    volumes = list(volume_to_tags.keys())
+
+    volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
+    for tag, elements in tag_to_elements.items():
+        volume_index_per_element[elements] = volumes.index(
+            tag_to_volume[tag])
+
+    if np.any(volume_index_per_element < 0):
+        raise ValueError("Missing volume specification for some elements.")
+
+    part_id_to_elements = {
+        PartID(volumes[vol_idx], rank):
+            np.where(
+                (volume_index_per_element == vol_idx)
+                & (rank_per_element == rank))[0]
+        for vol_idx in range(len(volumes))
+        for rank in range(num_ranks)}
+
+    # FIXME: Find a better way to do this
+    part_id_to_part_index = {
+        part_id: part_index
+        for part_index, part_id in enumerate(part_id_to_elements.keys())}
+    from meshmode.mesh.processing import _compute_global_elem_to_part_elem
+    global_elem_to_part_elem = _compute_global_elem_to_part_elem(
+        mesh.nelements, part_id_to_elements, part_id_to_part_index,
+        mesh.element_id_dtype)
+
+    tag_to_global_to_part = {
+        tag: global_elem_to_part_elem[elements, :]
+        for tag, elements in tag_to_elements.items()}
+
+    part_id_to_tag_to_elements = {}
+    for part_id in part_id_to_elements.keys():
+        part_idx = part_id_to_part_index[part_id]
+        part_tag_to_elements = {}
+        for tag, global_to_part in tag_to_global_to_part.items():
+            part_tag_to_elements[tag] = global_to_part[
+                global_to_part[:, 0] == part_idx, 1]
+        part_id_to_tag_to_elements[part_id] = part_tag_to_elements
+
+    return_parts = {
+        PartID(vol, rank)
+        for vol in volumes
+        for rank in return_ranks}
+
+    from meshmode.mesh.processing import partition_mesh
+    part_id_to_mesh = partition_mesh(
+        mesh, part_id_to_elements, return_parts=return_parts)
+
+    return {
+        rank: {
+            vol: (
+                part_id_to_mesh[PartID(vol, rank)],
+                part_id_to_tag_to_elements[PartID(vol, rank)])
+            for vol in volumes}
+        for rank in return_ranks}
+
+
+@contextmanager
+def _manage_mpi_comm(comm):
+    try:
+        yield comm
+    finally:
+        comm.Free()
+
+
 def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=None):
     r"""Distribute a mesh among all ranks in *comm*.
 
