@@ -74,6 +74,8 @@ import logging
 import sys
 from functools import partial
 from typing import TYPE_CHECKING, Dict, List, Optional
+from contextlib import contextmanager
+
 from logpyle import IntervalTimer
 
 import grudge.op as op
