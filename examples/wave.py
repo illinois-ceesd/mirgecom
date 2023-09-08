@@ -1,4 +1,4 @@
-"""Demonstrate wave MPI example."""
+"""Demonstrate wave example."""
 
 __copyright__ = "Copyright (C) 2020 University of Illinois Board of Trustees"
 
@@ -23,9 +23,9 @@ THE SOFTWARE.
 """
 import logging
 
+import sys
 import grudge.op as op
 import numpy as np
-import numpy.linalg as la  # noqa
 from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
@@ -63,13 +63,20 @@ def bump(actx, nodes, t=0):
 
 @mpi_entry_point
 def main(actx_class, casename="wave",
-         restart_step=None, use_logmgr: bool = False) -> None:
+         restart_step=None, use_logmgr: bool = False, mpi: bool = True) -> None:
     """Drive the example."""
 
-    from mpi4py import MPI
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    num_parts = comm.Get_size()
+    if mpi:
+        assert "mpi4py" in sys.modules
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        num_parts = comm.Get_size()
+    else:
+        assert "mpi4py" not in sys.modules
+        comm = None
+        rank = 0
+        num_parts = 1
 
     snapshot_pattern = casename + "-{step:04d}-{rank:04d}.pkl"
     vizfile_pattern = casename + "-%03d-%04d.vtu"
@@ -85,27 +92,38 @@ def main(actx_class, casename="wave",
 
     if restart_step is None:
 
-        from meshmode.distributed import (MPIMeshDistributor,
-                                          get_partition_by_pymetis)
-        mesh_dist = MPIMeshDistributor(comm)
-
         dim = 2
         nel_1d = 16
 
-        if mesh_dist.is_mananger_rank():
+        if comm:
+            from meshmode.distributed import MPIMeshDistributor
+            mesh_dist = MPIMeshDistributor(comm)
+
+        # Generate mesh
+        if not comm or mesh_dist.is_mananger_rank():
             from meshmode.mesh.generation import generate_regular_rect_mesh
             mesh = generate_regular_rect_mesh(
                 a=(-0.5,)*dim, b=(0.5,)*dim,
                 nelements_per_axis=(nel_1d,)*dim)
 
             print("%d elements" % mesh.nelements)
-            part_per_element = get_partition_by_pymetis(mesh, num_parts)
-            local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
 
-            del mesh
+        # Distribute mesh
+        if comm:
+            if mesh_dist.is_mananger_rank():
+                from meshmode.distributed import get_partition_by_pymetis
+                part_per_element = get_partition_by_pymetis(mesh, num_parts)
 
+                local_mesh = mesh_dist.send_mesh_parts(
+                    mesh, part_per_element, num_parts)
+
+                del mesh
+
+            else:
+                local_mesh = mesh_dist.receive_mesh_part()
         else:
-            local_mesh = mesh_dist.receive_mesh_part()
+            local_mesh = mesh
+            del mesh
 
         fields = None
 
@@ -116,7 +134,7 @@ def main(actx_class, casename="wave",
         )
         local_mesh = restart_data["local_mesh"]
         nel_1d = restart_data["nel_1d"]
-        assert comm.Get_size() == restart_data["num_parts"]
+        assert num_parts == restart_data["num_parts"]
 
     order = 3
 
@@ -189,8 +207,9 @@ def main(actx_class, casename="wave",
 
     def rhs(t, w):
         return wave_operator(dcoll, c=wave_speed, w=w)
-    fields = force_evaluation(actx, fields)
+
     compiled_rhs = actx.compile(rhs)
+    fields = force_evaluation(actx, fields)
 
     while t < t_final:
         if logmgr:
@@ -246,7 +265,7 @@ if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     import argparse
-    parser = argparse.ArgumentParser(description="Wave (MPI version)")
+    parser = argparse.ArgumentParser(description="Wave")
     parser.add_argument("--profiling", action="store_true",
         help="enable kernel profiling")
     parser.add_argument("--log", action="store_true",
@@ -256,14 +275,23 @@ if __name__ == "__main__":
     parser.add_argument("--casename", help="casename to use for i/o")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
+    parser.add_argument("--nompi", action="store_true", help="Disable MPI")
     args = parser.parse_args()
     casename = args.casename or "wave"
+
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
-                                                    distributed=True,
+                                                    distributed=not args.nompi,
                                                     profiling=args.profiling,
                                                     numpy=args.numpy)
 
-    main(actx_class, use_logmgr=args.log, casename=casename)
+    if args.nompi:
+        import inspect
+        # run main without the mpi_entry_point wrapper
+        inspect.unwrap(main)(
+            actx_class, use_logmgr=args.log, casename=casename,
+            mpi=not args.nompi)
+    else:
+        main(actx_class, use_logmgr=args.log, casename=casename, mpi=not args.nompi)
 
 # vim: foldmethod=marker

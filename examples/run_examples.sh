@@ -83,12 +83,6 @@ do
         continue
     fi
 
-    nompi=0
-    if [[ $example_name == *"nompi"* ]]; then
-        nompi=1
-    fi
-
-
     # FIXME: The tolerances are really high
 
     # Should be this:
@@ -126,11 +120,7 @@ do
         basic_command="python -m mpi4py ${example_path} --casename ${test_name}"
         [[ $actx != "eager" ]] && basic_command+=" --$actx"
         set -x
-        if [[ "$nompi" -gt 0 ]]; then
-            ${basic_command}
-        else
-            ${mpi_exec} -n 2 $mpi_launcher $basic_command
-        fi
+        ${mpi_exec} -n 2 $mpi_launcher $basic_command
         test_return_code=$?
         set +x
         test_results+=("${test_name}:$test_return_code")
