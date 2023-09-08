@@ -930,7 +930,8 @@ def _partition_multi_volume_mesh(
         for vol_idx in range(len(volumes))
         for rank in range(num_ranks)}
 
-    # FIXME: Find a better way to do this
+    # TODO: Add a public meshmode function to accomplish this? So we're
+    # not depending on meshmode internals
     part_id_to_part_index = {
         part_id: part_index
         for part_index, part_id in enumerate(part_id_to_elements.keys())}
