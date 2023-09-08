@@ -1019,6 +1019,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
     from meshmode.distributed import mpi_distribute
 
     num_ranks = comm.Get_size()
+    my_global_rank = comm.Get_rank()
+
     t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh data.")
     t_mesh_data = IntervalTimer("t_mesh_data", "Time spent getting mesh data.")
     t_mesh_part = IntervalTimer("t_mesh_part", "Time spent partitioning the mesh.")
@@ -1031,9 +1033,12 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
 
     with _manage_mpi_comm(
             comm.Split_type(MPI.COMM_TYPE_SHARED, comm.Get_rank(), MPI.INFO_NULL)
-            ) as node_comm:
+    ) as node_comm:
         node_ranks = node_comm.gather(comm.Get_rank(), root=0)
         my_node_rank = node_comm.Get_rank()
+        reader_color = 0 if my_node_rank == 0 else 1
+        reader_comm = comm.Split(reader_color, my_global_rank)
+        my_reader_rank = reader_comm.Get_rank()
 
         if my_node_rank == 0:
             if logmgr:
@@ -1042,6 +1047,10 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                     global_data = get_mesh_data()
             else:
                 global_data = get_mesh_data()
+
+            reader_comm.Barrier()
+            if my_reader_rank == 0:
+                print("Mesh reading done on all nodes.")
 
             from meshmode.mesh import Mesh
             if isinstance(global_data, Mesh):
@@ -1060,8 +1069,13 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                         partition_generator_func(mesh, tag_to_elements,
                                                  num_ranks)
             else:
-                rank_per_element = partition_generator_func(mesh, tag_to_elements,
-                                                            num_ranks)
+                rank_per_element = \
+                    partition_generator_func(mesh, tag_to_elements,
+                                             num_ranks)
+
+            reader_comm.Barrier()
+            if my_reader_rank == 0:
+                print("Mesh partitioning done on each node.")
 
             def get_rank_to_mesh_data():
                 if tag_to_elements is None:
@@ -1089,6 +1103,10 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                     node_rank_to_mesh_data = get_rank_to_mesh_data()
             else:
                 node_rank_to_mesh_data = get_rank_to_mesh_data()
+
+            reader_comm.Barrier()
+            if my_reader_rank == 0:
+                print("Rank-to-mesh data done on each node, distributing.")
 
             global_nelements = node_comm.bcast(mesh.nelements, root=0)
 
