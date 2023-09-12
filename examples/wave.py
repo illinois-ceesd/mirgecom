@@ -94,35 +94,22 @@ def main(actx_class, casename="wave",
         dim = 2
         nel_1d = 16
 
+        from functools import partial
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+
+        generate_mesh = partial(generate_regular_rect_mesh,
+            a=(-0.5,)*dim, b=(0.5,)*dim,
+            nelements_per_axis=(nel_1d,)*dim)
+
         if comm:
-            from meshmode.distributed import MPIMeshDistributor
-            mesh_dist = MPIMeshDistributor(comm)
-
-        # Generate mesh
-        if not comm or mesh_dist.is_mananger_rank():
-            from meshmode.mesh.generation import generate_regular_rect_mesh
-            mesh = generate_regular_rect_mesh(
-                a=(-0.5,)*dim, b=(0.5,)*dim,
-                nelements_per_axis=(nel_1d,)*dim)
-
-            print("%d elements" % mesh.nelements)
-
-        # Distribute mesh
-        if comm:
-            if mesh_dist.is_mananger_rank():
-                from meshmode.distributed import get_partition_by_pymetis
-                part_per_element = get_partition_by_pymetis(mesh, num_parts)
-
-                local_mesh = mesh_dist.send_mesh_parts(
-                    mesh, part_per_element, num_parts)
-
-                del mesh
-
-            else:
-                local_mesh = mesh_dist.receive_mesh_part()
+            from mirgecom.simutil import distribute_mesh
+            local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         else:
-            local_mesh = mesh
-            del mesh
+            local_mesh = generate_mesh()
+            global_nelements = local_mesh.nelements
+
+        if rank == 0:
+            print(f"{global_nelements} elements")
 
         fields = None
 
