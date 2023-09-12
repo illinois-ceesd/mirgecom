@@ -275,7 +275,8 @@ if __name__ == "__main__":
     parser.add_argument("--casename", help="casename to use for i/o")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
-    parser.add_argument("--nompi", action="store_true", help="Disable MPI")
+    parser.add_argument("--mpi", default=True, action=argparse.BooleanOptionalAction,
+        help="use MPI")
     args = parser.parse_args()
     casename = args.casename or "wave"
 
