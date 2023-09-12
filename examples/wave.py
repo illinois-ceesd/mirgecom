@@ -61,6 +61,7 @@ def bump(actx, nodes, t=0):
             / source_width**2))
 
 
+@mpi_entry_point
 def main(actx_class, casename="wave",
          restart_step=None, use_logmgr: bool = False, mpi: bool = True) -> None:
     """Drive the example."""
@@ -278,9 +279,11 @@ if __name__ == "__main__":
                                                     numpy=args.numpy)
 
     if args.mpi:
-        main_func = mpi_entry_point(main)
-    else:
         main_func = main
+    else:
+        import inspect
+        # run main without the mpi_entry_point wrapper
+        main_func = inspect.unwrap(main)
 
     main_func(actx_class, use_logmgr=args.log, casename=casename, mpi=args.mpi)
 
