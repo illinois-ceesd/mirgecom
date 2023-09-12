@@ -259,6 +259,11 @@ def main(actx_class, casename="wave",
     final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
     assert np.abs(final_soln - 0.04409852463947439) < 1e-14  # type: ignore[operator]
 
+    if mpi:
+        assert "mpi4py" in sys.modules
+    else:
+        assert "mpi4py" not in sys.modules
+
 
 if __name__ == "__main__":
     logging.basicConfig(format="%(message)s", level=logging.INFO)
