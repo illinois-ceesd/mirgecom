@@ -286,13 +286,11 @@ if __name__ == "__main__":
                                                     profiling=args.profiling,
                                                     numpy=args.numpy)
 
-    if args.nompi:
-        import inspect
-        # run main without the mpi_entry_point wrapper
-        inspect.unwrap(main)(
-            actx_class, use_logmgr=args.log, casename=casename,
-            mpi=not args.nompi)
+    if args.mpi:
+        main_func = mpi_entry_point(main)
     else:
-        main(actx_class, use_logmgr=args.log, casename=casename, mpi=not args.nompi)
+        main_func = main
+
+    main_func(actx_class, use_logmgr=args.log, casename=casename, mpi=args.mpi)
 
 # vim: foldmethod=marker
