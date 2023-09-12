@@ -61,7 +61,6 @@ def bump(actx, nodes, t=0):
             / source_width**2))
 
 
-@mpi_entry_point
 def main(actx_class, casename="wave",
          restart_step=None, use_logmgr: bool = False, mpi: bool = True) -> None:
     """Drive the example."""
@@ -282,7 +281,7 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
-                                                    distributed=not args.nompi,
+                                                    distributed=args.mpi,
                                                     profiling=args.profiling,
                                                     numpy=args.numpy)
 
