@@ -25,9 +25,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
 import pytest
 import math
@@ -38,7 +35,6 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
@@ -53,15 +49,7 @@ from mirgecom.gas_model import (
 )
 import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
-from grudge.dof_desc import DISCR_TAG_QUAD
-
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-
 from mirgecom.simutil import max_component_norm
-
-from grudge.shortcuts import make_visualizer
 from mirgecom.inviscid import (
     get_inviscid_timestep,
     inviscid_facial_flux_rusanov,
@@ -69,6 +57,12 @@ from mirgecom.inviscid import (
 )
 
 from mirgecom.integrators import rk4_step
+
+from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.shortcuts import make_visualizer
+
+from meshmode.mesh import BTAG_ALL
+
 
 logger = logging.getLogger(__name__)
 

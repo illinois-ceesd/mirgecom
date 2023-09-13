@@ -121,7 +121,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
             [ones / ((i + 1) * 10) for i in range(nspecies)]
         )
         species_mass_input = mass_input * mass_frac_input
-        num_equations = dim + 2 + len(species_mass_input)
 
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
@@ -236,8 +235,8 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration)
 
     tolerance = 1e-9
 
-    eoc_rec0 = EOCRecorder()
-    eoc_rec1 = EOCRecorder()
+    # eoc_rec0 = EOCRecorder()
+    # eoc_rec1 = EOCRecorder()
     for nel_1d in [2, 4, 8]:
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*dim, b=(0.5,)*dim, nelements_per_axis=(nel_1d,)*dim)
@@ -275,7 +274,6 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration)
             [ones / ((i + 1) * 10) for i in range(nspecies)]
         )
         species_mass_input = mass_input * mass_frac_input
-        num_equations = dim + 2 + len(species_mass_input)
 
         energy_input = mass_input*(
             gas_model.eos.get_internal_energy(temperature=temperature_input))
@@ -291,7 +289,6 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration)
                         return_gradients=True)
 
         grad_vel = velocity_gradient(cv, grad_cv)
-        v = cv.velocity        
 
         check_grad_t = grad_t[0] - 1.0
         assert actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf)) < tolerance
@@ -300,8 +297,7 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration)
 
         for i in range(dim):
             check_grad_mom = grad_cv.momentum[i][i] - float(i+1)
-            assert actx.to_numpy(
-                    op.norm(dcoll, check_grad_mom, np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(dcoll, check_grad_mom, np.inf)) < tolerance
 
         for i in range(dim):
             if i > 0:
@@ -310,8 +306,7 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration)
                 ref_grad_vel = 0.0
 
             check_dvdx = grad_vel[i][0] - ref_grad_vel
-            assert actx.to_numpy(
-                    op.norm(dcoll, check_dvdx, np.inf)) < tolerance
+            assert actx.to_numpy(op.norm(dcoll, check_dvdx, np.inf)) < tolerance
 
 
 class FluidCase(metaclass=ABCMeta):
