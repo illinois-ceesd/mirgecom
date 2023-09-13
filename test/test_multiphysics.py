@@ -224,8 +224,8 @@ def test_thermally_coupled_fluid_wall_fluxes(
                 DirichletDiffusionBoundary(base_wall_temp),
         }
 
-        interface_temp = mm.harmonic_averaging(base_fluid_temp, base_wall_temp,
-                                               fluid_kappa, wall_kappa)
+        interface_temp = mm.weighted_arithmetic_mean(base_fluid_temp, base_wall_temp,
+                                                     fluid_kappa, wall_kappa)
         interface_kappa = mm.harmonic_mean(fluid_kappa, wall_kappa)
         interface_flux = - interface_kappa * 0.5 * (base_fluid_temp - base_wall_temp)
         fluid_alpha = fluid_kappa/(fluid_density * fluid_heat_capacity)

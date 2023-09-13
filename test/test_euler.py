@@ -55,12 +55,15 @@ from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
     inviscid_facial_flux_hll
 )
-
 from mirgecom.integrators import rk4_step
 
 from grudge.dof_desc import DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 
+from meshmode.dof_array import DOFArray
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
 from meshmode.mesh import BTAG_ALL
 
 
@@ -87,8 +90,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
     from pytools.convergence import EOCRecorder
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
-    # for nel_1d in [4, 8, 12]:
-    for nel_1d in [4, 8]:
+    for nel_1d in [4, 8, 12]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
@@ -223,7 +225,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
 def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
-    """Test the inviscid rhs using a trivial constant/uniform state.
+    """Test the inviscid rhs with ESDG using a trivial constant/uniform state.
 
     This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
     and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
@@ -236,8 +238,7 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
 
-    # for nel_1d in [4, 8, 12]:
-    for nel_1d in [4, 8]:
+    for nel_1d in [4, 8, 12]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
@@ -249,7 +250,7 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
 
         dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
-        # quadrature_tag = DISCR_TAG_QUAD
+        quadrature_tag = DISCR_TAG_QUAD
 
         zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
@@ -271,7 +272,7 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
         gas_model = GasModel(eos=IdealSingleGas())
-        # fluid_state = make_fluid_state(cv, gas_model)
+        fluid_state = make_fluid_state(cv, gas_model)
 
         from mirgecom.gas_model import (
             conservative_to_entropy_vars,
@@ -279,29 +280,22 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
         )
         temp_state = make_fluid_state(cv, gas_model)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        # if isinstance(gamma, DOFArray):
-        #    gamma = op.project(dcoll, src, tgt, gamma)
+        if isinstance(gamma, DOFArray):
+           gamma = op.project(dcoll, src, tgt, gamma)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
         cv_resid = cv - cv_sd
-
-        # expected_cv_diff = make_conserved(
-        #     dim, q=make_obj_array([dcoll.zeros(actx)
-        #                            for i in range(num_equations)])
-        # )
 
         expected_rhs = make_conserved(  # noqa
             dim, q=make_obj_array([dcoll.zeros(actx)
                                    for i in range(num_equations)])
         )
 
-        # boundaries = {BTAG_ALL: DummyBoundary()}
-        # inviscid_rhs = \
-        #    euler_operator(dcoll, state=fluid_state, gas_model=gas_model,
-        #                   boundaries=boundaries, time=0.0,
-        #                   quadrature_tag=quadrature_tag, use_esdg=True)
-
-        # rhs_resid = inviscid_rhs - expected_rhs
+        boundaries = {BTAG_ALL: DummyBoundary()}
+        inviscid_rhs = euler_operator(
+            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, quadrature_tag=quadrature_tag, use_esdg=True)
+        rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = cv_resid.mass
         rhoe_resid = cv_resid.energy
@@ -330,8 +324,18 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
         for i in range(nspecies):
             assert inf_norm(rhoy_resid[i]) < tolerance
 
+        rhs_rho_resid = rhs_resid.mass
+        rhs_rhoe_resid = rhs_resid.energy
+        rhs_mom_resid = rhs_resid.momentum
+        rhs_rhoy_resid = rhs_resid.species_mass
+
+        assert inf_norm(rhs_rho_resid) < tolerance
+        assert inf_norm(rhs_rhoe_resid) < tolerance
+
         err_max = inf_norm(rho_resid)
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
+
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
         # set a non-zero, but uniform velocity component
         for i in range(len(mom_input)):
@@ -341,22 +345,21 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
         gas_model = GasModel(eos=IdealSingleGas())
-        # fluid_state = make_fluid_state(cv, gas_model)
+        fluid_state = make_fluid_state(cv, gas_model)
 
         temp_state = make_fluid_state(cv, gas_model)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        # if isinstance(gamma, DOFArray):
-        #    gamma = op.project(dcoll, src, tgt, gamma)
+        if isinstance(gamma, DOFArray):
+           gamma = op.project(dcoll, src, tgt, gamma)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
         cv_resid = cv - cv_sd
 
-        # boundaries = {BTAG_ALL: DummyBoundary()}
-        # inviscid_rhs = 0
-        # inviscid_rhs = euler_operator(
-        #    dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-        #    time=0.0, inviscid_numerical_flux_func=numerical_flux_func)
-        # rhs_resid = inviscid_rhs - expected_rhs
+        boundaries = {BTAG_ALL: DummyBoundary()}
+        inviscid_rhs = euler_operator(
+            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+            time=0.0, quadrature_tag=quadrature_tag, use_esdg=True)
+        rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = cv_resid.mass
         rhoe_resid = cv_resid.energy
@@ -365,11 +368,23 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
-
         for i in range(dim):
             assert inf_norm(mom_resid[i]) < tolerance
         for i in range(nspecies):
             assert inf_norm(rhoy_resid[i]) < tolerance
+
+
+        rhs_rho_resid = rhs_resid.mass
+        rhs_rhoe_resid = rhs_resid.energy
+        rhs_mom_resid = rhs_resid.momentum
+        rhs_rhoy_resid = rhs_resid.species_mass
+
+        assert inf_norm(rhs_rho_resid) < tolerance
+        assert inf_norm(rhs_rhoe_resid) < tolerance
+        for i in range(dim):
+            assert inf_norm(rhs_mom_resid[i]) < tolerance
+        for i in range(nspecies):
+            assert inf_norm(rhs_rhoy_resid[i]) < tolerance
 
         err_max = inf_norm(rho_resid)
         eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
