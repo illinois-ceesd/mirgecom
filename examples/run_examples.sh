@@ -2,8 +2,22 @@
 
 set -o nounset
 
-origin=$(pwd)
-examples_dir=${1-$origin}
+# {{{ Provide log grouping for GitHub actions
+
+function startgroup {
+    # Start a foldable group of log lines
+    # Pass a single argument, quoted
+    echo "::group::$1"
+}
+
+function endgroup {
+    echo "::endgroup::"
+}
+
+# }}}
+
+run_path=$(pwd)
+examples_dir=${1:-"./"}
 shift
 
 if [[ ! -d "${examples_dir}" ]]; then
@@ -22,6 +36,7 @@ if [[ ! -d "${examples_dir}" ]]; then
 fi
 
 cd $examples_dir
+examples_dir=$(pwd)
 
 # This bit will let the user specify which
 # examples to run, default to run them all.
@@ -41,10 +56,11 @@ succeeded_tests=""
 failed_tests=""
 
 date
-echo "*** Running examples in $examples_dir ..."
+
+echo "*** Running examples from $examples_dir in ${run_path}..."
 
 if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
-    . ${examples_dir}/scripts/mirge-testing-env.sh ${examples_dir}/..
+    source scripts/mirge-testing-env.sh ${examples_dir}/..
 fi
 
 mpi_exec="${MIRGE_MPI_EXEC}"
@@ -53,21 +69,19 @@ mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
 export OMPI_ALLOW_RUN_AS_ROOT=1
 export OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1
 
+# Actually run at the user's path
+cd ${run_path}
+
 for example in "${example_list[@]}"
 do
     example_name="${example%.py}"
     example_filename="${example_name}.py"
+    example_path=${examples_dir}/${example_filename}
 
-    if [[ ! -f "${example_filename}" ]]; then
-        printf "Example file \"${example_filename}\" does not exist, skipping.\n"
+    if [[ ! -f "${example_path}" ]]; then
+        printf "Example file \"${example_path}\" does not exist, skipping.\n"
         continue
     fi
-
-    nompi=0
-    if [[ $example_name == *"nompi"* ]]; then
-        nompi=1
-    fi
-
 
     # FIXME: The tolerances are really high
 
@@ -95,63 +109,27 @@ do
     # The format of each array item is: "test_name:test_result"
     test_results=()
 
-    # Run Eager, Lazy, and Numpy contexts
-    test_name="${example_name}_eager"
-    echo "**** Running $test_name"
-    set -x
-    rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
-    set +x
+    # Run example with Eager, Lazy, and Numpy arraycontexts
+    for actx in eager lazy numpy; do
+        test_name="${example_name}_$actx"
+        startgroup "**** Running $test_name"
+        set -x
+        rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
+        set +x
 
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name}"
-    set -x
-    if [[ "$nompi" -gt 0 ]]; then
-        ${basic_command}
-    else
+        basic_command="python -m mpi4py ${example_path} --casename ${test_name}"
+        [[ $actx != "eager" ]] && basic_command+=" --$actx"
+        set -x
         ${mpi_exec} -n 2 $mpi_launcher $basic_command
-    fi
-    test_return_code=$?
-    set +x
-    test_results+=("${test_name}:$test_return_code")
-    date
+        test_return_code=$?
+        set +x
+        test_results+=("${test_name}:$test_return_code")
+        date
 
-    test_name="${example_name}_lazy"
-    echo "**** Running $test_name"
-    set -x
-    rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
-    set +x
+        endgroup
+    done
 
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --lazy"
-    set -x
-    if [[ "$nompi" -gt 0 ]]; then
-        ${basic_command}
-    else
-        ${mpi_exec} -n 2 $mpi_launcher $basic_command
-    fi
-    test_return_code=$?
-    set +x
-    test_results+=("${test_name}:$test_return_code")
-    date
-
-    test_name="${example_name}_numpy"
-    echo "**** Running $test_name"
-
-    basic_command="python -m mpi4py ${example_filename} --casename ${test_name} --numpy"
-    set -x
-    rm -rf ${test_name}*vtu viz_data/${test_name}*vtu
-    set +x
-
-    set -x
-    if [[ "$nompi" -gt 0 ]]; then
-        ${basic_command}
-    else
-        ${mpi_exec} -n 2 $mpi_launcher $basic_command
-    fi
-    test_return_code=$?
-    set +x
-    test_results+=("${test_name}:$test_return_code")
-    date
-
-    echo "**** Accuracy comparison for $example_name."
+    startgroup "**** Accuracy comparison for $example_name."
     lazy_comparison_result=0
     numpy_comparison_result=0
     lazy_numpy_comparison_result=0
@@ -188,6 +166,8 @@ do
         fi
     done
 
+    endgroup
+
     # Save any comparison results (if they were done)
     if [[ "$nlazy_compare" -gt 0 ]]; then
         test_results+=("${example_name}_lazy_comparison:$lazy_comparison_result")
@@ -208,7 +188,7 @@ do
     example_failed_tests=""
 
     # Track/report the suite of tests for each example
-    echo "${example_name} testing results:"
+    echo "**** ${example_name} testing results:"
     for test_name_result in "${test_results[@]}"; do
         _test_name=${test_name_result%%:*}
         _test_result=${test_name_result#*:}
@@ -248,7 +228,6 @@ do
 
 done
 num_examples=$((num_successful_examples + num_failed_examples))
-cd ${origin}
 date
 echo "*** Done running ${num_examples} examples!"
 if [[ $num_failed_examples -eq 0 ]]
