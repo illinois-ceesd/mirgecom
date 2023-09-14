@@ -32,6 +32,7 @@ __doc__ = """
 .. autoclass:: DeviceMemoryUsage
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_cl_device_info
+.. autofunction:: logmgr_add_simulation_info
 .. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: logmgr_add_mempool_usage
@@ -99,6 +100,12 @@ def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> Non
         logmgr.set_constant("cl_device_name", str(dev))
         logmgr.set_constant("cl_device_version", dev.version)
         logmgr.set_constant("cl_platform_version", dev.platform.version)
+
+
+def logmgr_add_simulation_info(logmgr: LogManager, sim_info) -> None:
+    """Add some user-defined information to the logpyle output."""
+    for field_name in sim_info:
+        logmgr.set_constant(field_name, sim_info[field_name])
 
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
