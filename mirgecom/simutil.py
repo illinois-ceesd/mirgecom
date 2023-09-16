@@ -72,6 +72,8 @@ THE SOFTWARE.
 """
 import logging
 import sys
+import os
+import pickle
 from functools import partial
 from typing import TYPE_CHECKING, Dict, List, Optional
 from contextlib import contextmanager
@@ -1053,7 +1055,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
             num_reading_batches = max(int(num_reading_ranks / num_per_batch), 1)
             read_batch = int(my_reader_rank / num_per_batch)
 
-            print(f"Reading(rank, batch): ({my_reader_rank}, "
+            print(f"Read(rank, batch): Dist({my_reader_rank}, "
                   f"{read_batch}) on {hostname}.")
 
             if logmgr:
@@ -1236,7 +1238,8 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         my_ending_rank = my_starting_rank + num_ranks_this_reader - 1
         ranks_to_write = list(range(my_starting_rank, my_ending_rank+1))
 
-        print(f"R({my_rank},{reader_rank}): W({my_starting_rank},{my_ending_rank})")
+        print(f"R({my_rank},{reader_rank}): "
+              f"W({my_starting_rank},{my_ending_rank})")
 
         if partition_generator_func is None:
             def partition_generator_func(mesh, tag_to_elements, num_target_ranks):
@@ -1287,26 +1290,20 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             rank_to_mesh_data = get_rank_to_mesh_data()
 
-        import os
-        import pickle
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
-                for rank in ranks_to_write:
-                    local_rank_index = rank - my_starting_rank
-                    rank_mesh_data = rank_to_mesh_data[local_rank_index]
-                    mesh_data_to_pickle = (mesh.nelements, rank_mesh_data)
-                    pkl_filename = filename + f"_rank{rank}.pkl"
+                for part_rank, part_mesh in rank_to_mesh_data.items():
+                    pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                    mesh_data_to_pickle = (mesh.nelements, part_mesh)
                     if os.path.exists(pkl_filename):
                         os.remove(pkl_filename)
                     with open(pkl_filename, "wb") as pkl_file:
                         pickle.dump(mesh_data_to_pickle, pkl_file)
         else:
-            for rank in ranks_to_write:
-                local_rank_index = rank - my_starting_rank
-                rank_mesh_data = rank_to_mesh_data[local_rank_index]
-                mesh_data_to_pickle = (mesh.nelements, rank_mesh_data)
-                pkl_filename = filename + f"_rank{rank}.pkl"
+            for part_rank, part_mesh in rank_to_mesh_data.items():
+                pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                mesh_data_to_pickle = (mesh.nelements, part_mesh)
                 if os.path.exists(pkl_filename):
                     os.remove(pkl_filename)
                 with open(pkl_filename, "wb") as pkl_file:

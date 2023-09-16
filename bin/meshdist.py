@@ -117,11 +117,11 @@ def main(actx_class, mesh_source=None, ndist=None,
         ndist = nparts
 
     if casename is None:
-        casename = f"mirgecom_np{nparts}"
+        casename = f"mirgecom_np{ndist}"
     casename.strip("'")
 
     if rank == 0:
-        print(f"Running mesh distribution on {nparts} MPI ranks.")
+        print(f"Distributing on {nparts} ranks into {ndist} parts.")
         print(f"Casename: {casename}")
         print(f"Mesh source file: {mesh_source}")
 
@@ -220,7 +220,9 @@ def main(actx_class, mesh_source=None, ndist=None,
     comm.Barrier()
     
     logmgr_set_time(logmgr, 0, 0)
+    logmgr
     logmgr.tick_before()
+    set_dt(logmgr, 0.)
     logmgr.tick_after()
     logmgr.close()
 
