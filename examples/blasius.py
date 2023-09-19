@@ -336,37 +336,16 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
 
 #####################################################################
 
-    def my_write_viz(step, t, dt, state, ns_rhs=None, grad_cv=None, grad_t=None,
-                     sources=None, plot_gradients=False):
-
+    def my_write_viz(step, t, dt, state):
         cv = state.cv
         dv = state.dv
-
         viz_fields = [("CV", cv),
                       ("dt", dt),
                       ("DV_U", cv.momentum[0]/cv.mass),
                       ("DV_V", cv.momentum[1]/cv.mass),
                       ("DV_Ma", cv.velocity[0]/dv.speed_of_sound),
                       ("DV_P", dv.pressure),
-                      ("DV_T", dv.temperature)
-                      ]
-
-        if plot_gradients:
-
-            grad_v = velocity_gradient(state.cv, grad_cv)
-
-            grad_p = (cv.mass*eos.gas_const()*grad_t
-                     + dv.temperature*eos.gas_const()*grad_cv.mass)
-
-            viz_fields.extend([
-                ("grad_T", grad_t),
-                ("grad_P", grad_p),
-                ("grad_rho", grad_cv.mass),
-                ("grad_rhoE", grad_cv.energy),
-                ("grad_rhoU", grad_cv.momentum[0]),
-                ("grad_rhoV", grad_cv.momentum[1]),
-                ("grad_U", grad_v[0]),
-                ("grad_V", grad_v[1])])
+                      ("DV_T", dv.temperature)]
 
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
                       step=step, t=t, overwrite=True)
@@ -442,15 +421,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
                 my_write_restart(step=step, t=t, cv=cv)
 
             if do_viz:
-                cv_rhs, grad_cv, grad_t = ns_operator(
-                    dcoll, state=fluid_state, time=t,
-                    boundaries=boundaries, gas_model=gas_model,
-                    return_gradients=True, quadrature_tag=quadrature_tag)
-
-                my_write_viz(step=step, t=t, dt=dt, state=fluid_state,
-                     ns_rhs=cv_rhs, grad_cv=grad_cv,
-                     grad_t=grad_t, sources=None,
-                     plot_gradients=plot_gradients)
+                my_write_viz(step=step, t=t, dt=dt, state=fluid_state)
 
         except MyRuntimeError:
             if rank == 0:

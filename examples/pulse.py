@@ -183,7 +183,7 @@ def main(actx_class, use_esdg=False,
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 0.1
     orig = np.zeros(shape=(dim,))
-    initializer = Uniform(dim=dim, velocity=velocity)
+    initializer = Uniform(dim=dim, velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
     # Riemann inflow boundary
