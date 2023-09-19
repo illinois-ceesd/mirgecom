@@ -46,7 +46,7 @@ from mirgecom.boundary import (
     PrescribedFluidBoundary,
     AdiabaticSlipBoundary
 )
-from mirgecom.initializers import MixtureInitializer
+from mirgecom.initializers import Uniform
 from mirgecom.eos import PyrometheusMixture
 
 import cantera
@@ -195,8 +195,8 @@ def main(actx_class, use_esdg=False,
 
     # Mixture defaults to STP (p, T) = (1atm, 300K)
     velocity = np.zeros(shape=(dim,)) + 1.0
-    initializer = MixtureInitializer(dim=dim, species_mass_fractions=y0s,
-                                     velocity=velocity)
+    initializer = Uniform(dim=dim, species_mass_fractions=y0s, velocity=velocity,
+                          pressure=101325.0, temperature=300.0)
 
     def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context

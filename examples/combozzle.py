@@ -56,10 +56,7 @@ from mirgecom.integrators import (
 )
 from grudge.shortcuts import compiled_lsrk45_step
 from mirgecom.steppers import advance_state
-from mirgecom.initializers import (
-    MixtureInitializer,
-    Uniform
-)
+from mirgecom.initializers import Uniform
 from mirgecom.eos import (
     PyrometheusMixture,
     IdealSingleGas
@@ -829,7 +826,7 @@ def main(actx_class, rst_filename=None,
         initializer = Uniform(dim=dim, pressure=init_pressure, rho=init_density,
                               velocity=velocity, nspecies=nspecies)
     else:
-        initializer = MixtureInitializer(
+        initializer = Uniform(
             dim=dim, pressure=init_pressure, velocity=velocity,
             temperature=init_temperature, species_mass_fractions=init_y)
 

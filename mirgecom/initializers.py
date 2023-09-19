@@ -69,7 +69,7 @@ def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
         raise ValueError("Must provide 1 of (gas_model, eos).")
     if eos is None:
         eos = gas_model.eos
-    if make_fluid_state and gas_model is None:
+    if return_fluid_state and gas_model is None:
         raise ValueError("Must provide gas_model to create a fluid state.")
 
     state_spec = [pressure is None, temperature is None, density is None]
@@ -104,8 +104,13 @@ def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
     momentum = density*velocity
     energy = density*(eos.get_internal_energy(temperature, species_mass_fractions)
                       + 0.5*np.dot(velocity, velocity))
-    species_mass = None if species_mass_fractions is None \
-        else (density + zeros)*species_mass_fractions
+
+    if species_mass_fractions is None:
+        species_mass = None
+    else:
+        nspecies = len(species_mass_fractions)
+        species_mass = make_obj_array([density*species_mass_fractions[i] + zeros
+                                       for i in range(nspecies)])
 
     cv = make_conserved(dim=dim, mass=density + zeros,
                         energy=energy + zeros,
@@ -1023,8 +1028,8 @@ class Uniform:
     .. automethod:: exact_rhs
     """
 
-    def __init__(self, *, dim=1, nspecies=0, rho=1.0, pressure=1.0, energy=2.5,
-                 velocity=None, species_mass_fractions=None):
+    def __init__(self, *, dim=1, nspecies=0, rho=None, pressure=None, energy=None,
+                 velocity=None, temperature=None, species_mass_fractions=None):
         r"""Initialize uniform flow parameters.
 
         Parameters
@@ -1065,6 +1070,7 @@ class Uniform:
         if self._velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional inputs.")
 
+        self._temp = temperature
         self._p = pressure
         self._rho = rho
         self._e = energy
@@ -1079,11 +1085,17 @@ class Uniform:
             Nodal coordinates
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
+
+        Returns
+        -------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Fluid solution
         """
         actx = x_vec[0].array_context
         return initialize_flow_solution(
             actx, nodes=x_vec, dim=self._dim, eos=eos, pressure=self._p,
-            velocity=self._velocity, density=self._rho)
+            velocity=self._velocity, density=self._rho, temperature=self._temp,
+            species_mass_fractions=self._mass_fracs)
 
     def exact_rhs(self, dcoll, cv, time=0.0):
         """Create the RHS for the uniform solution. (Hint - it should be all zero).
@@ -1143,6 +1155,10 @@ class MixtureInitializer:
         self._pressure = pressure
         self._temperature = temperature
         self._massfracs = species_mass_fractions
+
+        from warnings import warn
+        warn("MixtureInitializer is deprecated and will disappear in Q4 2023.",
+             DeprecationWarning, stacklevel=2)
 
     def __call__(self, x_vec, eos, **kwargs):
         """Create the mixture state at locations *x_vec* (t is ignored).
