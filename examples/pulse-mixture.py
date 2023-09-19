@@ -331,7 +331,7 @@ def main(actx_class, use_esdg=False,
 #        free_stream_cv = initialize_flow_solution(
 #            actx, dcoll=dcoll, dd_bdry=BoundaryDomainTag("inlet"),
 #            gas_model=gas_model, pressure=101325.0, temperature=300.0,
-#            velocity=velocity, mass_fractions=y_inlet)
+#            velocity=velocity, species_mass_fractions=y_inlet)
 #        free_stream_cv = force_evaluation(actx, free_stream_cv)
 
 #        riemann_inflow_bnd = RiemannInflowBoundary(cv=free_stream_cv,

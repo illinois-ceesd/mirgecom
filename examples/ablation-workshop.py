@@ -446,7 +446,8 @@ class TabulatedGasEOS(MixtureEOS):
         return cv.mass*gas_const*temperature
 
     def gas_const(self, cv: Optional[ConservedVars] = None,
-                  temperature: Optional[DOFArray] = None) -> DOFArray:
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         molar_mass = eval_spline(temperature, bnds, coeffs)

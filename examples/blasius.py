@@ -66,6 +66,7 @@ from mirgecom.logging_quantities import (
 
 logger = logging.getLogger(__name__)
 
+
 class Initializer():
 
     def __init__(self, dim, pressure, velocity, species_mass_fractions):
