@@ -405,7 +405,6 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
                                       t_final, constant_cfl, local_dt)
 
         try:
-
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
