@@ -25,21 +25,20 @@ THE SOFTWARE.
 """
 
 import logging
+from functools import partial
 import numpy as np
 import cantera
-from functools import partial
 
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD, DD_VOLUME_ALL
 from grudge import op
 
+from logpyle import IntervalTimer, set_dt
+
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
-from mirgecom.simutil import (
-    get_sim_timestep,
-    generate_and_distribute_mesh
-)
+from mirgecom.simutil import generate_and_distribute_mesh
 from mirgecom.io import make_init_message
 from mirgecom.utils import force_evaluation
 from mirgecom.integrators import rk4_step
@@ -47,7 +46,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     LinearizedOutflowBoundary,
     LinearizedInflowBoundary,
-    RiemannInflowBoundary,
+    # RiemannInflowBoundary,
     PressureOutflowBoundary,
     AdiabaticSlipBoundary
 )
@@ -60,7 +59,6 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,

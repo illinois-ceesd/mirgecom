@@ -23,40 +23,23 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import yaml
+
+import os
 import logging
-import sys
 import numpy as np
-import pyopencl as cl
-import numpy.linalg as la  # noqa
-import pyopencl.array as cla  # noqa
-import pyopencl.tools as cl_tools
-from functools import partial
 
-from arraycontext import thaw
-
-from meshmode.array_context import (
-    PyOpenCLArrayContext,
-    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
-)
 from logpyle import IntervalTimer, set_dt
 
-from pytools.obj_array import make_obj_array
-
-from grudge.eager import EagerDGDiscretization
 from grudge.shortcuts import make_visualizer, compiled_lsrk45_step
-from grudge.dof_desc import BoundaryDomainTag, DD_VOLUME_ALL
+from grudge.dof_desc import DISCR_TAG_QUAD, DD_VOLUME_ALL
 
-from mirgecom.profiling import PyOpenCLProfilingArrayContext
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.navierstokes import ns_operator
-from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     check_step,
     get_sim_timestep,
-    generate_and_distribute_mesh,
     write_visfile,
     check_naninf_local,
-    check_range_local,
     distribute_mesh,
     global_reduce
 )
@@ -72,17 +55,14 @@ from mirgecom.boundary import (
     LinearizedOutflowBoundary,
 )
 from mirgecom.utils import force_evaluation
-from mirgecom.fluid import make_conserved
+from mirgecom.fluid import make_conserved, velocity_gradient
 from mirgecom.eos import IdealSingleGas
 from mirgecom.gas_model import GasModel, make_fluid_state
-from mirgecom.viscous import get_viscous_timestep, get_viscous_cfl
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info, logmgr_set_time,
 )
-from mirgecom.utils import force_evaluation
 
-############################################################################
 
 class SingleLevelFilter(logging.Filter):
     def __init__(self, passlevel, reject):
@@ -96,26 +76,18 @@ class SingleLevelFilter(logging.Filter):
             return (record.levelno == self.passlevel)
 
 
-#h1 = logging.StreamHandler(sys.stdout)
-#f1 = SingleLevelFilter(logging.INFO, False)
-#h1.addFilter(f1)
-#root_logger = logging.getLogger()
-#root_logger.addHandler(h1)
-#h2 = logging.StreamHandler(sys.stderr)
-#f2 = SingleLevelFilter(logging.INFO, True)
-#h2.addFilter(f2)
-#root_logger.addHandler(h2)
+# h1 = logging.StreamHandler(sys.stdout)
+# f1 = SingleLevelFilter(logging.INFO, False)
+# h1.addFilter(f1)
+# root_logger = logging.getLogger()
+# root_logger.addHandler(h1)
+# h2 = logging.StreamHandler(sys.stderr)
+# f2 = SingleLevelFilter(logging.INFO, True)
+# h2.addFilter(f2)
+# root_logger.addHandler(h2)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
-
-
-from grudge.trace_pair import TracePair
-from mirgecom.inviscid import inviscid_flux, inviscid_facial_flux_rusanov
-from mirgecom.flux import num_flux_central
-from mirgecom.viscous import viscous_facial_flux_central
-from mirgecom.viscous import viscous_flux
 
 
 class Initializer():
@@ -150,9 +122,7 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
-         use_leap=False, use_profiling=False, casename=None, lazy=False,
-         restart_filename=None):
+def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -160,12 +130,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     rank = comm.Get_rank()
     nparts = comm.Get_size()
 
-    logmgr = initialize_logmgr(use_logmgr, filename=(f'{casename}.sqlite'),
-                               mode='wo', mpi_comm=comm)
+    logmgr = initialize_logmgr(True, filename=(f"{casename}.sqlite"),
+                               mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
-    queue = getattr(actx, 'queue', None)
+    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # ~~~~~~~~~~~~~~~~~~
@@ -182,33 +152,34 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nviz = 1000
     nrestart = 1000
     nhealth = 1
-    nstatus = 100 
+    nstatus = 100
 
     # default timestepping control
     integrator = "compiled_lsrk45"
-    
+
     use_overintegration = False
     local_dt = True
     constant_cfl = True
     plot_gradients = True
-        
+
     current_dt = 1e-1
     niter = 10
-    
+
     t_final = 0.0
 
     dim = 2
     current_cfl = 0.08
     current_t = 0
     current_step = 0
-    
+
+############################################################
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
         return compiled_lsrk45_step(actx, state, t, dt, rhs)
-        
+
     if integrator == "compiled_lsrk45":
         timestepper = _compiled_stepper_wrapper
-        force_eval = False
+        # force_eval = False
 
     if rank == 0:
         print("\n#### Simulation control data: ####")
@@ -221,31 +192,32 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         print(f"\torder = {order}")
         print(f"\tTime integration = {integrator}")
 
+    if rank == 0:
+        print("\n#### Simulation fluid properties: ####")
+        print(f"\tmu = {mu}")
+        if (kappa is not None):
+            print(f"\tkappa = {kappa}")
+        if (Pr is not None):
+            print(f"\tPrandtl Number  = {Pr}")
+
     eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
 
     from mirgecom.transport import SimpleTransport
     mu = 1.02e-4
-    Pr = 0.71
+    Pr = 0.71  # noqa N806
     kappa = mu*eos.heat_capacity_cp()/Pr
     transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa)
-    
-    if rank == 0:
-        print("\n#### Simulation material properties: ####")
-        print(f"\tmu = {mu}")
-        if (kappa is not None): print(f"\tkappa = {kappa}")
-        if (Pr is not None): print(f"\tPrandtl Number  = {Pr}")   
     gas_model = GasModel(eos=eos, transport=transport_model)
 
 ############################################################
 
-    import os
     local_path = os.path.dirname(os.path.abspath(__file__)) + "/"
     mesh_path = local_path + "blasius.msh"
     omesh_path = local_path + "blasius-v1.msh"
     geo_path = local_path + "blasius.geo"
 
     restart_step = None
-    if restart_file is None:
+    if rst_filename is None:
 
         if rank == 0:
             os.system(f"rm -rf {omesh_path} {mesh_path}")
@@ -273,51 +245,28 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
     else:  # Restart
         from mirgecom.restart import read_restart_data
-        restart_data = read_restart_data(actx, restart_file)
+        restart_data = read_restart_data(actx, rst_filename)
         restart_step = restart_data["step"]
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        restart_order = int(restart_data["order"])
 
         assert comm.Get_size() == restart_data["num_parts"]
 
 ############################################################
 
-    #overintegration
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
     if rank == 0:
-        print('Making discretization')
         logging.info("Making discretization")
-    
-    dcoll = EagerDGDiscretization(
-    actx, local_mesh,
-    discr_tag_to_group_factory={
-         DISCR_TAG_BASE: default_simplex_group_factory(
-             base_dim=local_mesh.dim, order=order),
-         DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-    },
-    mpi_communicator=comm
-    )
 
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-
-    dd_vol = DD_VOLUME_ALL
-
     zeros = nodes[0]*0.0
-    ones = nodes[0]*0.0 + 1.0
-    
-    if use_overintegration:
-        quadrature_tag = DISCR_TAG_QUAD
-    else:
-        quadrature_tag = None 
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+    dd_vol = DD_VOLUME_ALL
 
 ############################################################
 
     velocity = np.zeros(shape=(dim,))
-    orig = np.zeros(shape=(dim,))
     velocity[0] = 0.3*np.sqrt(1.4*1.0*2.0)
     flow_init = Initializer(dim=2, pressure=1.0, velocity=velocity,
                             species_mass_fractions=None)
@@ -329,23 +278,28 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         free_stream_pressure=1.0, free_stream_velocity=velocity)
 
     boundaries = {
-        dd_vol.trace('inlet').domain_tag: linear_inflow_bnd,
-        dd_vol.trace("farfield").domain_tag: linear_outflow_bnd,
-        dd_vol.trace("outlet").domain_tag: PressureOutflowBoundary(boundary_pressure=1.0),
-        dd_vol.trace("slip").domain_tag: AdiabaticSlipBoundary(),
-        dd_vol.trace("wall").domain_tag: IsothermalWallBoundary(wall_temperature=1.0)
+        dd_vol.trace("inlet").domain_tag:
+            linear_inflow_bnd,
+        dd_vol.trace("farfield").domain_tag:
+            linear_outflow_bnd,
+        dd_vol.trace("outlet").domain_tag:
+            PressureOutflowBoundary(boundary_pressure=1.0),
+        dd_vol.trace("slip").domain_tag:
+            AdiabaticSlipBoundary(),
+        dd_vol.trace("wall").domain_tag:
+            IsothermalWallBoundary(wall_temperature=1.0)
     }
-  
-#################################################################
+
+#####################################################################
 
     def _get_fluid_state(cv):
         return make_fluid_state(cv=cv, gas_model=gas_model)
 
     get_fluid_state = actx.compile(_get_fluid_state)
-        
-#################################################################
 
-    if restart_file is None:
+#####################################################################
+
+    if rst_filename is None:
         if rank == 0:
             logging.info("Initializing soln.")
         current_cv = flow_init(x_vec=nodes, eos=eos)
@@ -355,28 +309,14 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         if (np.isscalar(current_t) is False):
             current_t = np.min(actx.to_numpy(current_t))
 
-        if restart_order != order:
-            restart_discr = EagerDGDiscretization(
-                actx,
-                local_mesh,
-                order=restart_order,
-                mpi_communicator=comm)
-            from meshmode.discretization.connection import make_same_mesh_connection
-            connection = make_same_mesh_connection(
-                actx,
-                dcoll.discr_from_dd("vol"),
-                restart_discr.discr_from_dd("vol"))
-
-            current_cv = connection(restart_data["state"])
-        else:
-            current_cv = restart_data["state"]
+        current_cv = restart_data["state"]
 
         if logmgr:
             logmgr_set_time(logmgr, current_step, current_t)
 
     current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
-    ##################################################
+#####################################################################
 
     vis_timer = None
 
@@ -417,22 +357,11 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     if rank == 0:
         logger.info(init_message)
 
-################################################################################################
+#####################################################################
 
-    def vol_min(x):
-        from grudge.op import nodal_min
-        return actx.to_numpy(nodal_min(dcoll, "vol", x))[()]
-
-    def vol_max(x):
-        from grudge.op import nodal_max
-        return actx.to_numpy(nodal_max(dcoll, "vol", x))[()]
-
-################################################################################################
-
-    from mirgecom.fluid import velocity_gradient
     def my_write_viz(step, t, dt, state, ns_rhs=None, grad_cv=None, grad_t=None,
-                     sources=None, plot_gradients=False):      
-        
+                     sources=None, plot_gradients=False):
+
         cv = state.cv
         dv = state.dv
 
@@ -449,27 +378,25 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
             grad_v = velocity_gradient(state.cv, grad_cv)
 
-            R = eos.gas_const()
-            grad_P = cv.mass*R*grad_t + dv.temperature*R*grad_cv.mass
+            grad_p = (cv.mass*eos.gas_const()*grad_t
+                     + dv.temperature*eos.gas_const()*grad_cv.mass)
 
             viz_fields.extend([
                 ("grad_T", grad_t),
-                ("grad_P", grad_P),
+                ("grad_P", grad_p),
                 ("grad_rho", grad_cv.mass),
                 ("grad_rhoE", grad_cv.energy),
                 ("grad_rhoU", grad_cv.momentum[0]),
                 ("grad_rhoV", grad_cv.momentum[1]),
                 ("grad_U", grad_v[0]),
-                ("grad_V", grad_v[1]),
-                ])
-                      
-        from mirgecom.simutil import write_visfile
+                ("grad_V", grad_v[1])])
+
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
-                      step=step, t=t, overwrite=True)                      
+                      step=step, t=t, overwrite=True)
 
     def my_write_restart(step, t, cv):
         rst_fname = snapshot_pattern.format(cname=casename, step=step, rank=rank)
-        if rst_fname != restart_file:
+        if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
                 "state": cv,
@@ -481,7 +408,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
             }
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-################################################################################################
+#####################################################################
 
     def my_health_check(cv, dv):
         health_error = False
@@ -498,9 +425,9 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return health_error
 
-################################################################################################
+#####################################################################
 
-    def my_pre_step(step, t, dt, state):       
+    def my_pre_step(step, t, dt, state):
 
         if logmgr:
             logmgr.tick_before()
@@ -542,49 +469,42 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                     dcoll, state=fluid_state, time=t,
                     boundaries=boundaries, gas_model=gas_model,
                     return_gradients=True, quadrature_tag=quadrature_tag)
-                
+
                 my_write_viz(step=step, t=t, dt=dt, state=fluid_state,
                      ns_rhs=cv_rhs, grad_cv=grad_cv,
                      grad_t=grad_t, sources=None,
                      plot_gradients=plot_gradients)
-                
+
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
             my_write_viz(step=step, t=t, dt=dt, state=fluid_state)
             raise
 
-        return state, dt   
-
+        return state, dt
 
     def my_rhs(t, state):
         fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-     
-        cv_rhs = (
-            ns_operator(dcoll, state=fluid_state, time=t,
-                 boundaries=boundaries, gas_model=gas_model,
-                 quadrature_tag=quadrature_tag) 
-            )
-
-        return cv_rhs
+        return ns_operator(dcoll, state=fluid_state, time=t,
+                           boundaries=boundaries, gas_model=gas_model,
+                           quadrature_tag=quadrature_tag)
 
     def my_post_step(step, t, dt, state):
         min_dt = np.min(actx.to_numpy(dt)) if local_dt else dt
         if logmgr:
-            set_dt(logmgr, min_dt)         
+            set_dt(logmgr, min_dt)
             logmgr.tick_after()
 
         return state, dt
 
-##################################################################### 
+#####################################################################
 
-    if local_dt == True:
+    if local_dt:
         dt = force_evaluation(actx, actx.np.minimum(
-             current_dt,
-             get_sim_timestep(dcoll, current_state, current_t,
-                     current_dt, current_cfl, gas_model,
-                     constant_cfl=constant_cfl, local_dt=local_dt))
-        )
+            current_dt,
+            get_sim_timestep(dcoll, current_state, current_t,
+                             current_dt, current_cfl, gas_model,
+                             constant_cfl=constant_cfl, local_dt=local_dt)))
         t = force_evaluation(actx, current_t + zeros)
     else:
         dt = 1.0*current_dt
@@ -598,7 +518,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step,
                       state=current_state.cv,
-                      dt=dt, t_final=t_final, t=current_t,
+                      dt=dt, t_final=t_final, t=t,
                       max_steps=niter, local_dt=local_dt,
                       istep=current_step)
     final_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
@@ -622,67 +542,67 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     exit()
 
 
-if __name__ == '__main__':
-    import sys
-    logging.basicConfig(format='%(message)s', level=logging.INFO)
+if __name__ == "__main__":
+
+    casename = "blasius"
+
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     import argparse
-    parser = argparse.ArgumentParser(description='MIRGE-Com 1D Flame Driver')
-    parser.add_argument('-r', '--restart_file',  type=ascii,
-                        dest='restart_file', nargs='?', action='store',
-                        help='simulation restart file')
-    parser.add_argument('-i', '--input_file',  type=ascii,
-                        dest='input_file', nargs='?', action='store',
-                        help='simulation config file')
-    parser.add_argument('-c', '--casename',  type=ascii,
-                        dest='casename', nargs='?', action='store',
-                        help='simulation case name')
-    parser.add_argument('--profiling', action='store_true', default=False,
-        help='enable kernel profiling [OFF]')
-    parser.add_argument('--log', action='store_true', default=True,
-        help='enable logging profiling [ON]')
-    parser.add_argument("--esdg", action='store_true',
-        help='use flux-differencing/entropy stable DG for inviscid computations.')
-    parser.add_argument('--lazy', action='store_true', default=False,
-        help='enable lazy evaluation [OFF]')
-    parser.add_argument('--numpy', action='store_true',
-        help='use numpy-based eager actx.')
+    parser = argparse.ArgumentParser(description="MIRGE-Com 1D Flame Driver")
+    parser.add_argument("-r", "--restart_file",  type=ascii,
+                        dest="restart_file", nargs="?", action="store",
+                        help="simulation restart file")
+    parser.add_argument("-i", "--input_file",  type=ascii,
+                        dest="input_file", nargs="?", action="store",
+                        help="simulation config file")
+    parser.add_argument("-c", "--casename",  type=ascii,
+                        dest="casename", nargs="?", action="store",
+                        help="simulation case name")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
+    parser.add_argument("--profiling", action="store_true", default=False,
+        help="enable kernel profiling [OFF]")
+    parser.add_argument("--log", action="store_true", default=True,
+        help="enable logging profiling [ON]")
+    parser.add_argument("--esdg", action="store_true",
+        help="use flux-differencing/entropy stable DG for inviscid computations.")
+    parser.add_argument("--lazy", action="store_true", default=False,
+        help="enable lazy evaluation [OFF]")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
 
     args = parser.parse_args()
 
-    # for writing output
-    casename = 'blasius'
-    if(args.casename):
-        print(f'Custom casename {args.casename}')
-        casename = (args.casename).replace("'", '')
-    else:
-        print(f'Default casename {casename}')
-
-    restart_file = None
-    if args.restart_file:
-        restart_file = (args.restart_file).replace("'", '')
-        print(f'Restarting from file: {restart_file}')
-
-    input_file = None
-    if(args.input_file):
-        input_file = (args.input_file).replace("'", '')
-        print(f'Reading user input from {args.input_file}')
-    else:
-        print('No user input file, using default values')
-
-    print(f'Running {sys.argv[0]}\n')
-
     from warnings import warn
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
+
     from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
         if not args.lazy and not args.numpy:
-            raise ApplicationOptionsError('ESDG requires lazy or numpy context.')
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
         if not args.overintegration:
-            warn('ESDG requires overintegration, enabling --overintegration.')
+            warn("ESDG requires overintegration, enabling --overintegration.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
         lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
-    main(actx_class, use_logmgr=args.log, casename=casename, 
-         restart_filename=restart_file)
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    if args.casename:
+        casename = args.casename
+    rst_filename = None
+    if args.restart_file:
+        rst_filename = args.restart_file
+
+    input_file = None
+    if args.input_file:
+        input_file = args.input_file.replace("'", "")
+        print(f"Reading user input from file: {input_file}")
+    else:
+        print("No user input file, using default values")
+
+    main(actx_class, use_overintegration=args.overintegration or args.esdg,
+         casename=casename, rst_filename=rst_filename, use_esdg=args.esdg)
+
+# vim: foldmethod=marker

@@ -25,14 +25,15 @@ THE SOFTWARE.
 """
 
 import logging
-from mirgecom.mpi import mpi_entry_point
-import numpy as np
 from functools import partial
+import numpy as np
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
 
+from logpyle import IntervalTimer, set_dt
+
+from mirgecom.mpi import mpi_entry_point
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
@@ -57,7 +58,6 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -186,15 +186,11 @@ def main(actx_class, use_esdg=False,
     initializer = Uniform(dim=dim, velocity=velocity)
     uniform_state = initializer(nodes, eos=eos)
 
-    # Riemann inflow
+    # Riemann inflow boundary
     from mirgecom.initializers import initialize_flow_solution
-    from mirgecom.utils import force_evaluation
-
     free_stream_cv = initialize_flow_solution(
         actx, dcoll=dcoll, gas_model=gas_model, dd_bdry=BoundaryDomainTag("inlet"),
         pressure=1.0, temperature=1.0, velocity=velocity)
-
-    # Riemann inflow boundary
     riemann_inflow_bnd = RiemannInflowBoundary(cv=free_stream_cv,
                                                temperature=1.0)
 
