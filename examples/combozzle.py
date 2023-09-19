@@ -826,13 +826,12 @@ def main(actx_class, rst_filename=None,
     # (density, pressure, temperature, mass_fractions)
     velocity = np.zeros(shape=(dim,))
     if single_gas_only or inert_only:
-        initializer = Uniform(dim=dim, p=init_pressure, rho=init_density,
+        initializer = Uniform(dim=dim, pressure=init_pressure, rho=init_density,
                               velocity=velocity, nspecies=nspecies)
     else:
-        initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
-                                         pressure=init_pressure,
-                                         temperature=init_temperature,
-                                         massfractions=init_y, velocity=velocity)
+        initializer = MixtureInitializer(
+            dim=dim, pressure=init_pressure, velocity=velocity,
+            temperature=init_temperature, species_mass_fractions=init_y)
 
     from mirgecom.boundary import (
         AdiabaticNoslipWallBoundary,

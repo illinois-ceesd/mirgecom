@@ -135,8 +135,9 @@ class GasEOS(metaclass=ABCMeta):
         """Get the gas sound speed."""
 
     @abstractmethod
-    def gas_const(self, cv: Optional[ConservedVars],
-                  temperature: Optional[DOFArray] = None):
+    def gas_const(self, cv: Optional[ConservedVars] = None,
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         r"""Get the specific gas constant ($R_s$)."""
 
     @abstractmethod
@@ -347,7 +348,8 @@ class IdealSingleGas(GasEOS):
         return self._gas_const / (self._gamma - 1)
 
     def gas_const(self, cv: Optional[ConservedVars] = None,
-            temperature: Optional[DOFArray] = None) -> DOFArray:
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         """Get specific gas constant R."""
         return self._gas_const
 
@@ -675,7 +677,7 @@ class PyrometheusMixture(MixtureEOS):
 
     def gas_const(self, cv: ConservedVars,  # type: ignore[override]
                   temperature: Optional[DOFArray] = None,
-                  species_mass_fractions: np.ndarray = None) -> DOFArray:
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         r"""Get specific gas constant $R_s$.
 
         The mixture specific gas constant is calculated as

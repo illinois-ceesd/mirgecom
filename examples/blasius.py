@@ -64,31 +64,7 @@ from mirgecom.logging_quantities import (
 )
 
 
-class SingleLevelFilter(logging.Filter):
-    def __init__(self, passlevel, reject):
-        self.passlevel = passlevel
-        self.reject = reject
-
-    def filter(self, record):
-        if self.reject:
-            return (record.levelno != self.passlevel)
-        else:
-            return (record.levelno == self.passlevel)
-
-
-# h1 = logging.StreamHandler(sys.stdout)
-# f1 = SingleLevelFilter(logging.INFO, False)
-# h1.addFilter(f1)
-# root_logger = logging.getLogger()
-# root_logger.addHandler(h1)
-# h2 = logging.StreamHandler(sys.stderr)
-# f2 = SingleLevelFilter(logging.INFO, True)
-# h2.addFilter(f2)
-# root_logger.addHandler(h2)
-
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
 
 class Initializer():
 
@@ -192,14 +168,6 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
         print(f"\torder = {order}")
         print(f"\tTime integration = {integrator}")
 
-    if rank == 0:
-        print("\n#### Simulation fluid properties: ####")
-        print(f"\tmu = {mu}")
-        if (kappa is not None):
-            print(f"\tkappa = {kappa}")
-        if (Pr is not None):
-            print(f"\tPrandtl Number  = {Pr}")
-
     eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
 
     from mirgecom.transport import SimpleTransport
@@ -208,6 +176,14 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     kappa = mu*eos.heat_capacity_cp()/Pr
     transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa)
     gas_model = GasModel(eos=eos, transport=transport_model)
+
+    if rank == 0:
+        print("\n#### Simulation fluid properties: ####")
+        print(f"\tmu = {mu}")
+        if kappa is not None:
+            print(f"\tkappa = {kappa}")
+        if Pr is not None:
+            print(f"\tPrandtl Number  = {Pr}")
 
 ############################################################
 
@@ -306,7 +282,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     else:
         current_t = restart_data["t"]
         current_step = restart_step
-        if (np.isscalar(current_t) is False):
+        if np.isscalar(current_t) is False:
             current_t = np.min(actx.to_numpy(current_t))
 
         current_cv = restart_data["state"]
