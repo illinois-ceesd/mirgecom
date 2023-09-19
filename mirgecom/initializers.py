@@ -59,8 +59,8 @@ from mirgecom.gas_model import make_fluid_state
 
 def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
         gas_model=None, eos=None, dd_bdry=None, pressure=None,
-        temperature=None, density=None,
-        velocity=None, mass_fractions=None, make_fluid_state=False):
+        temperature=None, density=None, velocity=None,
+        species_mass_fractions=None, return_fluid_state=False):
     """Create a fluid CV/state from a set of minimal input data."""
     if dcoll is None and dim is None:
         raise ValueError("Must provide 1 of (dcoll, dim).")
@@ -92,28 +92,29 @@ def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
         velocity = np.zeros(dim)
 
     if pressure is None:
-        pressure = eos.get_pressure(density, temperature, mass_fractions)
+        pressure = eos.get_pressure(density, temperature, species_mass_fractions)
 
     if temperature is None:
-        temperature = pressure/(density*eos.gas_const())
+        gas_const = eos.gas_const(species_mass_fractions=species_mass_fractions)
+        temperature = pressure/(density*gas_const)
 
     if density is None:
-        density = eos.get_density(pressure, temperature, mass_fractions)
+        density = eos.get_density(pressure, temperature, species_mass_fractions)
 
     momentum = density*velocity
-    energy = density*(eos.get_internal_energy(temperature, mass_fractions)
-                            + 0.5*np.dot(velocity, velocity))
-    species_mass = None if mass_fractions is None \
-        else (density + zeros)*mass_fractions
+    energy = density*(eos.get_internal_energy(temperature, species_mass_fractions)
+                      + 0.5*np.dot(velocity, velocity))
+    species_mass = None if species_mass_fractions is None \
+        else (density + zeros)*species_mass_fractions
 
     cv = make_conserved(dim=dim, mass=density + zeros,
                         energy=energy + zeros,
                         momentum=momentum + zeros,
                         species_mass=species_mass)
 
-    if make_fluid_state:
+    if return_fluid_state:
         return make_fluid_state(cv=cv, gas_model=gas_model,
-            temperature_seed=temperature)
+                                temperature_seed=temperature)
 
     return cv
 
@@ -1164,7 +1165,7 @@ class MixtureInitializer:
         return initialize_flow_solution(
             actx, dim=self._dim, nodes=x_vec, eos=eos, pressure=self._pressure,
             temperature=self._temperature, velocity=self._velocity,
-            mass_fractions=self._massfracs)
+            species_mass_fractions=self._massfracs)
 
 
 class PlanarDiscontinuity:
