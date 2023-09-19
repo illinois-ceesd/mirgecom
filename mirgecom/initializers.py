@@ -56,7 +56,7 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
-def initialize_flow_solution(actx, nodes=None, dim=None, dcoll=None,
+def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
         gas_model=None, eos=None, dd_bdry=None, pressure=None,
         temperature=None, density=None,
         velocity=None, mass_fractions=None, make_fluid_state=False):
@@ -65,6 +65,8 @@ def initialize_flow_solution(actx, nodes=None, dim=None, dcoll=None,
         raise ValueError("Must provide 1 of (dcoll, dim).")
 
     if gas_model is None and eos is None:
+        print(gas_model)
+        print(eos)
         raise ValueError("Must provide 1 of (gas_model, eos).")
     if eos is None:
         eos = gas_model.eos
