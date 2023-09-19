@@ -1246,7 +1246,12 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         T^+ = \frac{P^+}{R_{mix} \rho^+}
 
     .. automethod:: __init__
-    .. automethod:: outflow_state
+
+    .. automethod:: state_bc
+    .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
+    .. automethod:: state_plus
     """
 
     def __init__(self, boundary_pressure=101325):
