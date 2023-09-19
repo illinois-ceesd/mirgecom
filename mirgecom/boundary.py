@@ -24,6 +24,7 @@ Boundary Conditions
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
 .. autoclass:: LinearizedOutflowBoundary
+.. autoclass:: LinearizedInflowBoundary
 """
 
 __copyright__ = """
@@ -1867,6 +1868,9 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
             vel_shape = self._ref_velocity.shape[0]
             raise ValueError(f"Expected 2-dimensional inputs, got {vel_shape}.")
 
+        if free_stream_species_mass_fractions is None:
+            self._spec_mass_fracs = np.empty((0,), dtype=object)
+
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.outflow_state
         )
@@ -1927,7 +1931,7 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
 class LinearizedInflowBoundary(PrescribedFluidBoundary):
     r"""Characteristics outflow BCs for linearized Euler equations."""
 
-    def __init__(self, dim, free_stream_state=None,
+    def __init__(self, free_stream_state=None,
                  free_stream_density=None,
                  free_stream_velocity=None,
                  free_stream_pressure=None,
@@ -1944,6 +1948,9 @@ class LinearizedInflowBoundary(PrescribedFluidBoundary):
             self._ref_velocity = free_stream_state.velocity
             self._ref_pressure = free_stream_state.pressure
             self._spec_mass_fracs = free_stream_state.cv.species_mass_fractions
+
+        if free_stream_species_mass_fractions is None:
+            self._spec_mass_fracs = np.empty((0,), dtype=object)
 
         if self._ref_velocity.shape[0] != 2:
             vel_shape = self._ref_velocity.shape[0]
