@@ -55,7 +55,7 @@ from mirgecom.boundary import (
     LinearizedOutflowBoundary,
 )
 from mirgecom.utils import force_evaluation
-from mirgecom.fluid import make_conserved, velocity_gradient
+from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.logging_quantities import (
@@ -137,7 +137,6 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     use_overintegration = False
     local_dt = True
     constant_cfl = True
-    plot_gradients = True
 
     current_dt = 1e-1
     niter = 10
