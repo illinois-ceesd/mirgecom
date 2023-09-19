@@ -50,22 +50,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from abc import ABCMeta, abstractmethod
 import numpy as np
-from arraycontext import get_container_context_recursively
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+import grudge.op as op
+from arraycontext import outer, get_container_context_recursively
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import as_dofdesc
-from mirgecom.fluid import make_conserved
 from grudge.trace_pair import TracePair
-import grudge.op as op
+from pytools.obj_array import make_obj_array
+from mirgecom.fluid import make_conserved
 from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.gas_model import make_fluid_state, replace_fluid_state
-from pytools.obj_array import make_obj_array
 from mirgecom.utils import project_from_base
-
 from mirgecom.inviscid import inviscid_facial_flux_rusanov
-
-from abc import ABCMeta, abstractmethod
 
 
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
@@ -81,7 +78,7 @@ def _get_normal_axes(seed_vector):
     seed_vector = seed_vector / vec_mag
 
     if vec_dim == 1:
-        return seed_vector,
+        return seed_vector,  # XXX is this comma right?
 
     if vec_dim == 2:
         vector_2 = 0*seed_vector
@@ -681,10 +678,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
         numerical_flux_func:
 
-            Function should return the numerical flux corresponding to
-            the divergence of the viscous transport flux. This function
-            is typically backed by a helper, such as
-            :func:`~mirgecom.viscous.viscous_facial_flux_central`.
+            Unused!
 
         Returns
         -------
@@ -752,7 +746,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         state_bc = self.state_bc(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-        from arraycontext import outer
+
         return outer(state_bc.cv, nhat)
 
     def temperature_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus,
@@ -794,7 +788,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         temperature_bc = self.temperature_bc(dcoll, dd_bdry, state_minus, **kwargs)
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-        from arraycontext import outer
+
         return outer(temperature_bc, nhat)
 
 
@@ -917,7 +911,7 @@ class PrescribedFluidBoundary(FluidBoundary):
 
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-        from arraycontext import outer
+
         return outer(self._grad_num_flux_func(cv_pair.int, cv_pair.ext), nhat)
 
     # Returns the flux to be used by the gradient operator when computing the
@@ -932,7 +926,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                               exterior=self._bnd_temperature_func(
                                   dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
                                   state_minus=state_minus, **kwargs))
-        from arraycontext import outer
+
         return outer(self._grad_num_flux_func(bnd_tpair.int, bnd_tpair.ext), nhat)
 
     # Returns the flux to be used by the divergence operator when computing the
@@ -1085,8 +1079,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         return state_minus.temperature
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
-        """
-        Compute temperature gradient on the plus state.
+        """Compute temperature gradient on the plus state.
 
         Impose the opposite normal component to enforce zero energy flux
         from conduction.
@@ -1129,7 +1122,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     r"""Farfield boundary treatment.
 
     This class implements a farfield boundary as described by
-    [Mengaldo_2014]_ eqn. 30 and eqn. 42.  The boundary condition is implemented
+    [Mengaldo_2014]_ eqn. 30 and eqn. 42. The boundary condition is implemented
     as:
 
     .. math::
@@ -1145,11 +1138,10 @@ class FarfieldBoundary(PrescribedFluidBoundary):
     .. automethod:: temperature_bc
     """
 
-    def __init__(self, numdim, free_stream_pressure,
-                 free_stream_velocity, free_stream_temperature,
-                 free_stream_mass_fractions=None):
+    def __init__(self, dim, free_stream_pressure, free_stream_velocity,
+                 free_stream_temperature, free_stream_mass_fractions=None):
         """Initialize the boundary condition object."""
-        if len(free_stream_velocity) != numdim:
+        if len(free_stream_velocity) != dim:
             raise ValueError("Free-stream velocity must be of ambient dimension.")
 
         self._temperature = free_stream_temperature
@@ -1188,8 +1180,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
             state_minus.dim, mass=free_stream_density,
             energy=free_stream_total_energy,
             momentum=free_stream_density*free_stream_velocity,
-            species_mass=free_stream_spec_mass
-        )
+            species_mass=free_stream_spec_mass)
 
         return make_fluid_state(cv=cv_infinity, gas_model=gas_model,
                                 temperature_seed=free_stream_temperature,
@@ -1207,7 +1198,7 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
     r"""Outflow boundary treatment with prescribed pressure.
 
     This class implements an outflow boundary as described by
-    [Mengaldo_2014]_.  The boundary condition is implemented as:
+    [Mengaldo_2014]_. The boundary condition is implemented as:
 
     .. math::
 
@@ -1297,17 +1288,16 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
             gas_const = gas_model.eos.gas_const(state_minus.cv)
             temp_plus = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
-                state_minus.temperature,
-                pressure_plus/(state_minus.cv.mass*gas_const))
-            )
+                              state_minus.temperature,
+                              pressure_plus/(state_minus.cv.mass*gas_const)))
 
             internal_energy = state_minus.cv.mass*(
                 gas_model.eos.get_internal_energy(temp_plus,
                                             state_minus.species_mass_fractions))
         else:
-            boundary_pressure = actx.np.where(actx.np.greater(boundary_speed,
-                                                              speed_of_sound),
-                                              state_minus.pressure, pressure_plus)
+            boundary_pressure = (
+                actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
+                              state_minus.pressure, pressure_plus))
             internal_energy = boundary_pressure/(gamma - 1.0)
 
         total_energy = internal_energy + kinetic_energy
@@ -1341,27 +1331,24 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
             gas_const = gas_model.eos.gas_const(state_minus.cv)
             temp_plus = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
-                state_minus.temperature,
-                pressure_plus/(state_minus.cv.mass*gas_const))
-            )
+                              state_minus.temperature,
+                              pressure_plus/(state_minus.cv.mass*gas_const)))
 
             internal_energy = state_minus.cv.mass*(
                 gas_model.eos.get_internal_energy(
-                    temp_plus, state_minus.species_mass_fractions)
-            )
+                    temp_plus, state_minus.species_mass_fractions))
         else:
             boundary_pressure = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
-                              state_minus.pressure, pressure_plus)
-            )
-            internal_energy = (boundary_pressure / (gamma - 1.0))
+                              state_minus.pressure, pressure_plus))
+            internal_energy = boundary_pressure / (gamma - 1.0)
 
         cv_plus = make_conserved(
             state_minus.dim, mass=state_minus.mass_density,
             energy=kinetic_energy + internal_energy,
             momentum=state_minus.momentum_density,
-            species_mass=state_minus.species_mass_density
-        )
+            species_mass=state_minus.species_mass_density)
+
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness_mu=state_minus.smoothness_mu,
@@ -1370,7 +1357,7 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
 
     def inviscid_boundary_flux(self, dcoll, dd_bdry, gas_model, state_minus,
             numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
-        """."""
+        """Return the fluxes for inviscid terms."""
         outflow_state = self.outflow_state(
             dcoll, dd_bdry, gas_model, state_minus)
         state_pair = TracePair(dd_bdry, interior=state_minus, exterior=outflow_state)
@@ -1393,9 +1380,9 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
         return grad_t_minus
 
     def viscous_boundary_flux(self, dcoll, dd_bdry, gas_model, state_minus,
-                          grad_cv_minus, grad_t_minus,
-                          numerical_flux_func=viscous_facial_flux_central,
-                                           **kwargs):
+                              grad_cv_minus, grad_t_minus,
+                              numerical_flux_func=viscous_facial_flux_central,
+                              **kwargs):
         """Return the boundary flux for the divergence of the viscous flux."""
         from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
@@ -1429,13 +1416,13 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
     .. automethod:: inflow_state
     """
 
-    def __init__(self, free_stream_state_func):
+    def __init__(self, cv, temperature):
         """Initialize the boundary condition object."""
-        self.free_stream_state_func = free_stream_state_func
+        self._cv_plus = cv
+        self._t_plus = temperature
 
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.inflow_state
-        )
+        PrescribedFluidBoundary.__init__(self,
+                                         boundary_state_func=self.inflow_state)
 
     def inflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
@@ -1446,22 +1433,16 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
 
-        ones = actx.np.zeros_like(state_minus.temperature) + 1.
-
-        free_stream_state = self.free_stream_state_func(
-            dcoll, dd_bdry, gas_model, state_minus, **kwargs)
-
-        v_plus = np.dot(free_stream_state.velocity, nhat)
-        rho_plus = free_stream_state.mass_density
-        c_plus = free_stream_state.speed_of_sound
-        gamma_plus = gas_model.eos.gamma(free_stream_state.cv,
-                                         free_stream_state.temperature)
+        v_plus = np.dot(self._cv_plus.velocity, nhat)
+        rho_plus = self._cv_plus.mass
+        c_plus = gas_model.eos.sound_speed(self._cv_plus, self._t_plus)
+        gamma_plus = gas_model.eos.gamma(self._cv_plus, self._t_plus)
 
         v_minus = np.dot(state_minus.velocity, nhat)
         gamma_minus = gas_model.eos.gamma(state_minus.cv,
                                           temperature=state_minus.temperature)
         c_minus = state_minus.speed_of_sound
-        r_minus = v_plus - 2*c_plus/(gamma_plus - 1)*ones
+        r_minus = v_plus - 2*c_plus/(gamma_plus - 1)
 
         # eqs. 17 and 19
         r_plus_subsonic = v_minus + 2*c_minus/(gamma_minus - 1)
@@ -1471,7 +1452,7 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
 
         velocity_boundary = (r_minus + r_plus)/2
         velocity_boundary = (
-            free_stream_state.velocity + (velocity_boundary - v_plus)*nhat
+            self._cv_plus.velocity + (velocity_boundary - v_plus)*nhat
         )
 
         c_boundary = (gamma_plus - 1)*(r_plus - r_minus)/4
@@ -1486,21 +1467,18 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
         pressure_boundary = rho_boundary * c_boundary**2 / gamma_boundary
 
         species_mass_boundary = None
-        if free_stream_state.is_mixture:
+        if state_minus.is_mixture:
+            y_plus = self._cv_plus.species_mass_fractions
             energy_boundary = rho_boundary * (
-                gas_model.eos.get_internal_energy(
-                    temperature=free_stream_state.temperature,
-                    species_mass_fractions=free_stream_state.species_mass_fractions)
-            ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+                gas_model.eos.get_internal_energy(temperature=self._t_plus,
+                                                  species_mass_fractions=y_plus)
+                + 0.5*np.dot(velocity_boundary, velocity_boundary))
 
-            species_mass_boundary = (
-                rho_boundary * free_stream_state.species_mass_fractions
-            )
+            species_mass_boundary = rho_boundary * y_plus
         else:
             energy_boundary = (
                 pressure_boundary / (gamma_boundary - 1)
-                + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
-            )
+                + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary))
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
                                      energy=energy_boundary,
@@ -1529,9 +1507,12 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
     .. automethod:: outflow_state
     """
 
-    def __init__(self, dim, free_stream_state_func):
+    # XXX I am seeing weird behavior with this boundary. Not recommended.
+
+    def __init__(self, cv, temperature):
         """Initialize the boundary condition object."""
-        self.free_stream_state_func = free_stream_state_func
+        self._cv_plus = cv
+        self._t_plus = temperature
 
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.outflow_state
@@ -1545,15 +1526,10 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
         """
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-        ones = actx.np.zeros_like(state_minus.temperature) + 1.
 
-        free_stream_state = self.free_stream_state_func(
-            dcoll, dd_bdry, gas_model, state_minus, **kwargs)
-
-        v_plus = np.dot(free_stream_state.velocity*ones, nhat)
-        c_plus = free_stream_state.speed_of_sound
-        gamma_plus = gas_model.eos.gamma(free_stream_state.cv,
-                                         free_stream_state.temperature)
+        v_plus = np.dot(self._cv_plus.velocity, nhat)
+        c_plus = gas_model.eos.sound_speed(self._cv_plus, self._t_plus)
+        gamma_plus = gas_model.eos.gamma(self._cv_plus, self._t_plus)
 
         rho_minus = state_minus.mass_density
         v_minus = np.dot(state_minus.velocity, nhat)
@@ -1584,8 +1560,7 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
         )**(1.0/(gamma_minus-1.0))  # in the reference, Eq. 24 lacks the exponent.
         pressure_boundary = rho_boundary*c_boundary**2/gamma_boundary
 
-        species_mass_boundary = None
-        if free_stream_state.is_mixture:
+        if state_minus.is_mixture:
 
             # using gas constant based on state_minus species
             gas_const = gas_model.eos.gas_const(state_minus.cv)
@@ -1593,18 +1568,16 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
 
             energy_boundary = rho_boundary * (
                 gas_model.eos.get_internal_energy(
-                    temperature_boundary, free_stream_state.species_mass_fractions)
-            ) + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
+                    temperature_boundary, self._cv_plus.species_mass_fractions)
+                + 0.5*np.dot(velocity_boundary, velocity_boundary))
 
             # extrapolate species
-            species_mass_boundary = (
-                rho_boundary * state_minus.species_mass_fractions
-            )
+            species_mass_boundary = rho_boundary * state_minus.species_mass_fractions
         else:
+            species_mass_boundary = None
             energy_boundary = (
                 pressure_boundary / (gamma_boundary - 1)
-                + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary)
-            )
+                + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary))
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
                                      energy=energy_boundary,
@@ -1669,8 +1642,7 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
 
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
                    normal, **kwargs):
-        """
-        Return grad(CV) used in the boundary calculation of viscous flux.
+        """Return grad(CV) used in the boundary calculation of viscous flux.
 
         Specify the velocity gradients on the external state to ensure zero
         energy and momentum flux due to shear stresses.
@@ -1698,7 +1670,7 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
             momentum=grad_mom_bc,
             species_mass=grad_species_mass_bc)
 
-    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, **kwargs):
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         """Return BC on grad(temperature)."""
         # Mengaldo Eqns (50-51)
         return grad_t_minus
@@ -1771,7 +1743,7 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
 
         return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
-    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, **kwargs):
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         """Return BC on grad(temperature)."""
         # Mengaldo Eqns (50-51)
         return grad_t_minus
@@ -1891,6 +1863,10 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
             self._ref_pressure = free_stream_state.pressure
             self._spec_mass_fracs = free_stream_state.cv.species_mass_fractions
 
+        if self._ref_velocity.shape[0] != 2:
+            vel_shape = self._ref_velocity.shape[0]
+            raise ValueError(f"Expected 2-dimensional inputs, got {vel_shape}.")
+
         PrescribedFluidBoundary.__init__(
             self, boundary_state_func=self.outflow_state
         )
@@ -1910,10 +1886,94 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
 
         a = state_minus.speed_of_sound
 
+        # zero-out the last, out-going characteristic variable
         c1 = -rtilde*a**2 + ptilde
         c2 = self._ref_mass*a*ut_tilde
         c3 = self._ref_mass*a*un_tilde + ptilde
-        c4 = 0.0  # zero-out the last characteristic variable
+        c4 = 0.0  # -self._ref_mass*a*un_tilde + ptilde
+
+        r_tilde_bnd = 1.0/(a**2)*(-c1 + 0.5*c3 + 0.5*c4)
+        un_tilde_bnd = 1.0/(self._ref_mass*a)*(0.5*c3 - 0.5*c4)
+        ut_tilde_bnd = 1.0/(self._ref_mass*a)*c2
+        p_tilde_bnd = 0.5*c3 + 0.5*c4
+
+        mass = r_tilde_bnd + self._ref_mass
+        u_x = self._ref_velocity[0] + (nhat[0]*un_tilde_bnd - nhat[1]*ut_tilde_bnd)
+        u_y = self._ref_velocity[1] + (nhat[1]*un_tilde_bnd + nhat[0]*ut_tilde_bnd)
+        pressure = p_tilde_bnd + self._ref_pressure
+
+        kin_energy = 0.5*mass*(u_x**2 + u_y**2)
+        if state_minus.is_mixture:
+            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            temperature = self._ref_pressure/(self._ref_mass*gas_const)
+            int_energy = mass*gas_model.eos.get_internal_energy(
+                temperature, self._spec_mass_fracs)  # XXX use state_minus?
+        else:
+            int_energy = pressure/(gas_model.eos.gamma() - 1.0)
+
+        boundary_cv = make_conserved(dim=2,
+                                     mass=mass,
+                                     energy=kin_energy + int_energy,
+                                     momentum=make_obj_array([u_x*mass, u_y*mass]),
+                                     species_mass=mass*self._spec_mass_fracs)
+
+        return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
+                                temperature_seed=state_minus.temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta)
+
+
+class LinearizedInflowBoundary(PrescribedFluidBoundary):
+    r"""Characteristics outflow BCs for linearized Euler equations."""
+
+    def __init__(self, dim, free_stream_state=None,
+                 free_stream_density=None,
+                 free_stream_velocity=None,
+                 free_stream_pressure=None,
+                 free_stream_temperature=None,
+                 free_stream_species_mass_fractions=None):
+        """Initialize the boundary condition object."""
+        if free_stream_state is None:
+            self._ref_mass = free_stream_density
+            self._ref_velocity = free_stream_velocity
+            self._ref_pressure = free_stream_pressure
+            self._spec_mass_fracs = free_stream_species_mass_fractions
+        else:
+            self._ref_mass = free_stream_state.cv.mass
+            self._ref_velocity = free_stream_state.velocity
+            self._ref_pressure = free_stream_state.pressure
+            self._spec_mass_fracs = free_stream_state.cv.species_mass_fractions
+
+        if self._ref_velocity.shape[0] != 2:
+            vel_shape = self._ref_velocity.shape[0]
+            raise ValueError(f"Expected 2-dimensional inputs, got {vel_shape}.")
+
+        PrescribedFluidBoundary.__init__(
+            self, boundary_state_func=self.inflow_state
+        )
+
+    def inflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Non-reflecting inflow."""
+        actx = state_minus.array_context
+        nhat = -1.0*actx.thaw(dcoll.normal(dd_bdry))
+
+        # rtilde = state_minus.cv.mass - self._ref_mass
+        utilde = state_minus.velocity[0] - self._ref_velocity[0]
+        vtilde = state_minus.velocity[1] - self._ref_velocity[1]
+        ptilde = state_minus.dv.pressure - self._ref_pressure
+
+        un_tilde = +utilde*nhat[0] + vtilde*nhat[1]
+        # ut_tilde = -utilde*nhat[1] + vtilde*nhat[0]
+
+        a = state_minus.speed_of_sound
+
+        # zero-out the first three, incoming characteristics
+        c1 = 0.0  # -rtilde*a**2 + ptilde
+        c2 = 0.0  # self._ref_mass*a*ut_tilde
+        c3 = 0.0  # self._ref_mass*a*un_tilde + ptilde
+        c4 = -1.0*self._ref_mass*a*un_tilde + ptilde
+
         r_tilde_bnd = 1.0/(a**2)*(-c1 + 0.5*c3 + 0.5*c4)
         un_tilde_bnd = 1.0/(self._ref_mass*a)*(0.5*c3 - 0.5*c4)
         ut_tilde_bnd = 1.0/(self._ref_mass*a)*c2
@@ -1933,15 +1993,11 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
         else:
             int_energy = pressure/(gas_model.eos.gamma() - 1.0)
 
-        boundary_cv = (
-            make_conserved(dim=state_minus.dim, mass=mass,
-                           energy=kin_energy + int_energy,
-                           momentum=make_obj_array([u_x*mass, u_y*mass]),
-                           species_mass=state_minus.cv.species_mass)
-        )
+        boundary_cv = make_conserved(dim=2,
+                                     mass=mass,
+                                     energy=kin_energy + int_energy,
+                                     momentum=make_obj_array([u_x*mass, u_y*mass]),
+                                     species_mass=mass*self._spec_mass_fracs)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature,
-                                smoothness_mu=state_minus.smoothness_mu,
-                                smoothness_kappa=state_minus.smoothness_kappa,
-                                smoothness_beta=state_minus.smoothness_beta)
+                                temperature_seed=state_minus.temperature)

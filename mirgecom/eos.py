@@ -670,17 +670,23 @@ class PyrometheusMixture(MixtureEOS):
         """
         y = cv.species_mass_fractions
         cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
-        rspec = self.gas_const(cv)
+        rspec = self.gas_const(cv=cv)
         return cp / (cp - rspec)
 
     def gas_const(self, cv: ConservedVars,  # type: ignore[override]
-                  temperature: Optional[DOFArray] = None) -> DOFArray:
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: np.ndarray = None) -> DOFArray:
         r"""Get specific gas constant $R_s$.
 
-        The mixture specific gas constant is calculated
-        as $R_s = \frac{R}{\sum{\frac{{Y}_\alpha}{{M}_\alpha}}}$ by the
-        :mod:`pyrometheus` mechanism provided by the user. ${M}_\alpha$ are the
-        species molar masses.
+        The mixture specific gas constant is calculated as
+
+        .. math::
+
+            R_s = \frac{R}{\sum{\frac{{Y}_\alpha}{{M}_\alpha}}}
+
+        by the :mod:`pyrometheus` mechanism provided by the user. In this
+        equation, ${M}_\alpha$ are the species molar masses and R is the
+        universal gas constant.
 
         Parameters
         ----------
@@ -689,7 +695,7 @@ class PyrometheusMixture(MixtureEOS):
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
         """
-        y = cv.species_mass_fractions
+        y = species_mass_fractions if cv is None else cv.species_mass_fractions
         return self._pyrometheus_mech.get_specific_gas_constant(y)
 
     def kinetic_energy(self, cv: ConservedVars):
