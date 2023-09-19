@@ -1195,7 +1195,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         return actx.np.zeros_like(state_minus.temperature) + self._temperature
 
 
-class PressureOutflowBoundary(PrescribedFluidBoundary):
+class PressureOutflowBoundary(MengaldoBoundaryCondition):
     r"""Outflow boundary treatment with prescribed pressure.
 
     This class implements an outflow boundary as described by
@@ -1252,15 +1252,8 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
     def __init__(self, boundary_pressure=101325):
         """Initialize the boundary condition object."""
         self._pressure = boundary_pressure
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.outflow_state,
-            inviscid_flux_func=self.inviscid_boundary_flux,
-            viscous_flux_func=self.viscous_boundary_flux,
-            boundary_temperature_func=self.temperature_bc,
-            boundary_gradient_cv_func=self.grad_cv_bc
-        )
 
-    def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
         This is the partially non-reflective boundary state described by
@@ -1313,8 +1306,7 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
                                 smoothness_kappa=state_minus.smoothness_kappa,
                                 smoothness_beta=state_minus.smoothness_beta)
 
-    def outflow_state_for_diffusion(self, dcoll, dd_bdry, gas_model,
-                                           state_minus, **kwargs):
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state."""
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
@@ -1356,17 +1348,6 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
                                 smoothness_kappa=state_minus.smoothness_kappa,
                                 smoothness_beta=state_minus.smoothness_beta)
 
-    def inviscid_boundary_flux(self, dcoll, dd_bdry, gas_model, state_minus,
-            numerical_flux_func=inviscid_facial_flux_rusanov, **kwargs):
-        """Return the fluxes for inviscid terms."""
-        outflow_state = self.outflow_state(
-            dcoll, dd_bdry, gas_model, state_minus)
-        state_pair = TracePair(dd_bdry, interior=state_minus, exterior=outflow_state)
-
-        actx = state_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        return numerical_flux_func(state_pair, gas_model, normal)
-
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
         return state_minus.temperature
@@ -1379,32 +1360,6 @@ class PressureOutflowBoundary(PrescribedFluidBoundary):
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
         return grad_t_minus
-
-    def viscous_boundary_flux(self, dcoll, dd_bdry, gas_model, state_minus,
-                              grad_cv_minus, grad_t_minus,
-                              numerical_flux_func=viscous_facial_flux_central,
-                              **kwargs):
-        """Return the boundary flux for the divergence of the viscous flux."""
-        from mirgecom.viscous import viscous_flux
-        actx = state_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-
-        state_plus = self.outflow_state_for_diffusion(dcoll=dcoll,
-            dd_bdry=dd_bdry, gas_model=gas_model, state_minus=state_minus)
-
-        grad_cv_plus = self.grad_cv_bc(dcoll, dd_bdry, gas_model,
-                                       state_minus=state_minus,
-                                       grad_cv_minus=grad_cv_minus,
-                                       normal=normal, **kwargs)
-
-        grad_t_plus = self.grad_temperature_bc(dcoll, dd_bdry, grad_t_minus, normal)
-
-        # Note that [Mengaldo_2014]_ uses F_v(Q_bc, dQ_bc) here and
-        # *not* the numerical viscous flux as advised by [Bassi_1997]_.
-        f_ext = viscous_flux(state=state_plus, grad_cv=grad_cv_plus,
-                             grad_t=grad_t_plus)
-
-        return f_ext@normal
 
 
 class RiemannInflowBoundary(PrescribedFluidBoundary):
@@ -1935,7 +1890,6 @@ class LinearizedInflowBoundary(PrescribedFluidBoundary):
                  free_stream_density=None,
                  free_stream_velocity=None,
                  free_stream_pressure=None,
-                 free_stream_temperature=None,
                  free_stream_species_mass_fractions=None):
         """Initialize the boundary condition object."""
         if free_stream_state is None:

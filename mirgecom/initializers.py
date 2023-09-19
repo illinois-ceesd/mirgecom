@@ -54,6 +54,7 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import make_fluid_state
 
 
 def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
@@ -65,8 +66,6 @@ def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
         raise ValueError("Must provide 1 of (dcoll, dim).")
 
     if gas_model is None and eos is None:
-        print(gas_model)
-        print(eos)
         raise ValueError("Must provide 1 of (gas_model, eos).")
     if eos is None:
         eos = gas_model.eos
@@ -113,11 +112,10 @@ def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
                         species_mass=species_mass)
 
     if make_fluid_state:
-        from mirgecom.gas_model import make_fluid_state
         return make_fluid_state(cv=cv, gas_model=gas_model,
             temperature_seed=temperature)
-    else:
-        return cv
+
+    return cv
 
 
 def make_pulse(amp, r0, w, r):
