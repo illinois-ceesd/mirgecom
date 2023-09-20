@@ -76,12 +76,15 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
+    eos = IdealSingleGas()
+
     velocity = np.ones(shape=(dim,))
     from mirgecom.initializers import Uniform
     mass_fracs = np.array([float(ispec+1) for ispec in range(nspecies)])
 
-    initializer = Uniform(dim=dim, mass_fracs=mass_fracs, velocity=velocity)
-    cv = initializer(nodes)
+    initializer = Uniform(dim=dim, species_mass_fractions=mass_fracs,
+                          velocity=velocity, pressure=1.0, rho=1.0)
+    cv = initializer(x_vec=nodes, eos=eos)
 
     def inf_norm(data):
         if len(data) > 0:
@@ -251,9 +254,11 @@ def test_uniform(ctx_factory, dim):
     print(f"DIM = {dim}, {len(nodes)}")
     print(f"Nodes={nodes}")
 
+    eos = IdealSingleGas()
+
     from mirgecom.initializers import Uniform
-    initr = Uniform(dim=dim)
-    initsoln = initr(time=0.0, x_vec=nodes)
+    initr = Uniform(dim=dim, pressure=1.0, rho=1.0)
+    initsoln = initr(time=0.0, x_vec=nodes, eos=eos)
     tol = 1e-15
 
     def inf_norm(x):
@@ -263,7 +268,6 @@ def test_uniform(ctx_factory, dim):
     assert inf_norm(initsoln.energy - 2.5) < tol
 
     print(f"Uniform Soln:{initsoln}")
-    eos = IdealSingleGas()
     p = eos.pressure(initsoln)
     print(f"Press:{p}")
 
