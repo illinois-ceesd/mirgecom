@@ -148,7 +148,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
     ff_energy = ff_press/(gamma-1) + ff_ke
 
     from mirgecom.initializers import Uniform
-    ff_init = Uniform(dim=dim, rho=ff_dens, p=ff_press,
+    ff_init = Uniform(dim=dim, rho=ff_dens, pressure=ff_press,
                       velocity=ff_vel)
     ff_momentum = ff_dens*ff_vel
 
@@ -157,7 +157,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
-    bndry = FarfieldBoundary(numdim=dim,
+    bndry = FarfieldBoundary(dim=dim,
                              free_stream_velocity=ff_vel,
                              free_stream_pressure=ff_press,
                              free_stream_temperature=ff_temp)
@@ -198,7 +198,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
         # for velocity directions +1, and -1
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -356,7 +356,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
 
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -369,7 +369,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             print(f"Volume state: {temper=}")
             print(f"Volume state: {speed_of_sound=}")
 
-            flowbnd_bndry_state = bndry.outflow_state(
+            flowbnd_bndry_state = bndry.state_plus(
                 dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                 state_minus=state_minus)
             print(f"{flowbnd_bndry_state=}")
@@ -394,7 +394,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
 
             vel = 1.5*vel
 
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
 
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
@@ -407,7 +407,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             print(f"Volume state: {temper=}")
             print(f"Volume state: {speed_of_sound=}")
 
-            flowbnd_bndry_state = bndry.outflow_state(
+            flowbnd_bndry_state = bndry.state_plus(
                 dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                 state_minus=state_minus)
             print(f"{flowbnd_bndry_state=}")
@@ -481,7 +481,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -648,7 +648,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -830,7 +830,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -1058,7 +1058,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
 
     from mirgecom.boundary import AdiabaticSlipBoundary
     wall = AdiabaticSlipBoundary()
-    gas_model = GasModel(eos=IdealSingleGas())
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos)
 
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
@@ -1088,8 +1089,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
             for parity in [1.0, -1.0]:
                 vel[vdir] = parity
                 from mirgecom.initializers import Uniform
-                initializer = Uniform(dim=dim, velocity=vel)
-                uniform_state = initializer(nodes)
+                initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
+                uniform_state = initializer(nodes, eos)
                 fluid_state = make_fluid_state(uniform_state, gas_model)
 
                 interior_soln = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -1253,7 +1254,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             cv = initializer(nodes, eos=gas_model.eos)
             state = make_fluid_state(cv, gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,

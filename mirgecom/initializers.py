@@ -1405,7 +1405,7 @@ class PlanarPoiseuille:
         x = x_vec[0]
         y = x_vec[1]
 
-        actx = x.array_context()
+        actx = x.array_context
         zeros = actx.np.zeros_like(x)
 
         p_x = self.p_hi + self.dpdx*x
@@ -1425,10 +1425,11 @@ class PlanarPoiseuille:
 
     def exact_grad(self, x_vec, eos, cv_exact):
         """Return the exact gradient of the Poiseuille state."""
-        actx = x_vec.array_context()
 
         x = x_vec[0]
         y = x_vec[1]
+
+        actx = x.array_context
 
         # FIXME: Symbolic infrastructure could perhaps do this better
         zeros = actx.np.zeros_like(x)
