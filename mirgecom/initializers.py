@@ -1425,7 +1425,6 @@ class PlanarPoiseuille:
 
     def exact_grad(self, x_vec, eos, cv_exact):
         """Return the exact gradient of the Poiseuille state."""
-
         x = x_vec[0]
         y = x_vec[1]
 
