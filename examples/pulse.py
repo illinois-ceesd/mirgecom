@@ -217,14 +217,15 @@ def main(actx_class, use_esdg=False,
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
-        if logmgr:
-            from mirgecom.logging_quantities import logmgr_set_time
-            logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
         current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     current_state = make_fluid_state(current_cv, gas_model)
+
+    if logmgr:
+        from mirgecom.logging_quantities import logmgr_set_time
+        logmgr_set_time(logmgr, current_step, current_t)
 
     visualizer = make_visualizer(dcoll)
 

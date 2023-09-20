@@ -50,10 +50,7 @@ from mirgecom.boundary import (
     PressureOutflowBoundary,
     AdiabaticSlipBoundary
 )
-from mirgecom.initializers import (
-    AcousticPulse,
-    MixtureInitializer
-)
+from mirgecom.initializers import AcousticPulse, initialize_flow_solution
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import (
     GasModel,
@@ -200,26 +197,29 @@ def main(actx_class, use_esdg=False,
 #    aux = 1.0 + 0.0*nodes[0]
     y = make_obj_array([aux, 1.0 - aux, aux*0.0])
     orig = np.zeros(shape=(dim,))
-    initializer = MixtureInitializer(dim=dim, pressure=101325.0,
-        temperature=300.0, species_mass_fractions=y, velocity=velocity)
-    uniform_cv = initializer(nodes, eos=eos)
-    uniform_cv = force_evaluation(actx, uniform_cv)
-
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=1000.0, width=.1, center=orig)
+    initial_cv = initialize_flow_solution(actx, dim=dim, nodes=nodes,
+            eos=eos, pressure=101325.0,
+            temperature=300.0, velocity=velocity,
+            species_mass_fractions=y)
+    initial_cv = force_evaluation(actx, initial_cv)  
 
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
-        if logmgr:
-            from mirgecom.logging_quantities import logmgr_set_time
-            logmgr_set_time(logmgr, current_step, current_t)
+
     else:
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
+        acoustic_pulse = AcousticPulse(dim=dim, amplitude=1000.0,
+                                       width=.1, center=orig)
+        current_cv = acoustic_pulse(x_vec=nodes, cv=initial_cv, eos=eos,
                                     tseed=300.0)
 
     current_cv = force_evaluation(actx, current_cv)
     current_state = get_fluid_state(current_cv, 300.0)
+
+    if logmgr:
+        from mirgecom.logging_quantities import logmgr_set_time
+        logmgr_set_time(logmgr, current_step, current_t)
 
     # ~~~~
     visualizer = make_visualizer(dcoll)
