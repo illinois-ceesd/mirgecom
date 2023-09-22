@@ -613,7 +613,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
 
     # Create geometrically even partitions
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
-    
+
     if debug:
         print(f"{elem_to_rank=}")
 
@@ -973,6 +973,7 @@ def _partition_multi_volume_mesh(
             for vol in volumes}
         for rank in return_ranks}
 
+
 @contextmanager
 def _manage_mpi_comm(comm):
     try:
@@ -1049,7 +1050,6 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
         my_reader_rank = reader_comm.Get_rank()
 
         if my_node_rank == 0:
-            
             num_reading_ranks = reader_comm.Get_size()
             num_per_batch = num_per_batch or num_reading_ranks
             num_reading_batches = max(int(num_reading_ranks / num_per_batch), 1)
@@ -1272,6 +1272,14 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             rank_per_element = partition_generator_func(mesh, tag_to_elements,
                                                         num_target_ranks)
 
+        # Save this little puppy for later (m-to-n restart support)
+        if reader_rank == 0:
+            part_table_fname = filename + f"_decomp_np{num_target_ranks}.pkl"
+            if os.path.exists(part_table_fname):
+                os.remove(part_table_fname)
+            with open(part_table_fname, "wb") as pkl_file:
+                pickle.dump(rank_per_element, pkl_file)
+
         def get_rank_to_mesh_data():
             if tag_to_elements is None:
                 rank_to_mesh_data = _partition_single_volume_mesh(
@@ -1294,7 +1302,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
                 for part_rank, part_mesh in rank_to_mesh_data.items():
-                    pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                    pkl_filename = filename + f"_rank{part_rank}.pkl"
                     mesh_data_to_pickle = (mesh.nelements, part_mesh)
                     if os.path.exists(pkl_filename):
                         os.remove(pkl_filename)
@@ -1302,7 +1310,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                         pickle.dump(mesh_data_to_pickle, pkl_file)
         else:
             for part_rank, part_mesh in rank_to_mesh_data.items():
-                pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                pkl_filename = filename + f"_rank{part_rank}.pkl"
                 mesh_data_to_pickle = (mesh.nelements, part_mesh)
                 if os.path.exists(pkl_filename):
                     os.remove(pkl_filename)
@@ -1379,9 +1387,84 @@ def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
     return in_mesh, tag_to_in_elements
 
 
+def interpart_mapping(target_decomp, source_decomp):
+    """Return a mapping of which partitions to source for the target decomp."""
+    from collections import defaultdict
+
+    interpart_map = defaultdict(set)
+
+    for elemid, part in enumerate(target_decomp):
+        interpart_map[part].add(source_decomp[elemid])
+
+    for part in interpart_map:
+        interpart_map[part] = list(interpart_map[part])
+
+    return interpart_map
+
+
+def global_element_list_for_decomp(decomp_map):
+    """Return a list of global elements for each partition."""
+    from collections import defaultdict
+    global_elements_per_part = defaultdict(list)
+
+    for elemid, part in enumerate(decomp_map):
+        global_elements_per_part[part].append(elemid)
+
+    return global_elements_per_part
+
+
+# Need a function to determine which of my local elements overlap
+# with a disparate decomp part. Optionally restrict attention to
+# selected parts.
+# For each (or selected) new part
+#   Make a dict/map to hold element mapping (key: old_part, val: dict[elid]->[elid])
+#   For each local element in the new part
+#     1. find the global el id
+#     2. grab the old part for that global el
+#     3. find the old part-local id (i.e. index) for that global el
+#     4. Append local and remote el id lists for old-part-specific dict entry
+def interdecomposition_overlap(target_decomp_map, source_decomp_map,
+                               return_parts=None):
+    """Map element indices for overlapping, disparate decompositions.
+
+    For each (or optionally selected) target parts, this routine
+    returns a dictionary keyed by overlapping remote partitions from
+    the source decomposition, the value of which is a map from the
+    target-part-specific local indexes to the source-part-specific local
+    index of for the corresponding element.
+
+    { targ_part_1 : { src_part_1 : { local_el_index : remote_el_index, ... },
+                      src_part_2 : { local_el_index : remote_el_index, ... },
+                      ...
+                    },
+      targ_part_2 : { ... },
+      ...
+    }
+
+    This data structure is useful for mapping the solution data from
+    the old decomp pkl restart files to the new decomp solution arrays.
+    """
+    src_part_to_els = global_element_list_for_decomp(source_decomp_map)
+    trg_part_to_els = global_element_list_for_decomp(target_decomp_map)
+    ntrg_parts = len(trg_part_to_els)
+    if return_parts is None:
+        return_parts = list(range[ntrg_parts])
+    overlap_maps = {}
+    for trg_part in return_parts:
+        part_el_map = {{}}
+        trg_els = trg_part_to_els[trg_part]
+        for glb_el in trg_els:
+            src_part = source_decomp_map[glb_el]
+            src_el_index = src_part_to_els[src_part].index(glb_el)
+            loc_el_index = trg_els.index(glb_el)
+            part_el_map[src_part][loc_el_index] = src_el_index
+        overlap_maps[trg_part] = part_el_map
+    return overlap_maps
+
+
 def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
                     mesh=None):
-    """Generate a report of the grid boundaries."""
+    """Generate a report of the mesh boundaries."""
     boundaries = normalize_boundaries(boundaries)
 
     comm = dcoll.mpi_communicator
@@ -1729,7 +1812,7 @@ class _XdmfReader:
                 connectivity = a
 
         if connectivity is None:
-            raise ValueError("File is missing grid connectivity data")
+            raise ValueError("File is missing mesh connectivity data")
 
         return connectivity
 
@@ -1741,7 +1824,7 @@ class _XdmfReader:
                 geometry = a
 
         if geometry is None:
-            raise ValueError("File is missing grid node location data")
+            raise ValueError("File is missing mesh node location data")
 
         return geometry
 
