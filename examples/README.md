@@ -19,4 +19,3 @@ The examples and the unique features they exercise are as follows:
 - `combozzle.py`: Prediction-relevant testing, kitchen sink, many options
 - `heat-source.py`: Diffusion operator
 - `thermally-coupled`: Fluid-solid interaction for heat transfer
-- `multiple-coupled-volumes`: Fluid-porous solid interaction
