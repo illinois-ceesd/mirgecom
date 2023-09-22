@@ -9,6 +9,6 @@ Heat conduction coupling
 ^^^^^^^^^^^^^^^^^^^^^^^^
 .. automodule:: mirgecom.multiphysics.thermally_coupled_fluid_wall
 
-Porous flow coupling
-^^^^^^^^^^^^^^^^^^^^
+Phenolics coupling
+^^^^^^^^^^^^^^^^^^
 .. automodule:: mirgecom.multiphysics.phenolics_coupled_fluid_wall
