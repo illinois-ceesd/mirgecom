@@ -246,27 +246,6 @@ def test_wallmodel(
 
     # }}}
 
-    fluid_all_boundaries, solid_all_boundaries = \
-        add_multiphysics_interface_bdries(
-            dcoll, dd_vol_fluid, dd_vol_solid, gas_model_fluid, gas_model_solid,
-            fluid_state, solid_state, fluid_grad_cv, solid_grad_cv,
-            fluid_grad_t, solid_grad_t, fluid_boundaries, solid_boundaries,
-            interface_noslip=True, interface_radiation=True,
-            wall_emissivity=1.0, sigma=5.67e-8,
-            ambient_temperature=300.0)
-
-    fluid_rhs = ns_operator(
-        dcoll, gas_model_fluid, fluid_state, fluid_all_boundaries,
-        quadrature_tag=quadrature_tag, dd=dd_vol_fluid,
-        grad_cv=fluid_grad_cv, grad_t=fluid_grad_t,
-        inviscid_terms_on=False)
-
-    solid_rhs = ns_operator(
-        dcoll, gas_model_solid, solid_state, solid_all_boundaries,
-        quadrature_tag=quadrature_tag, dd=dd_vol_solid,
-        grad_cv=solid_grad_cv, grad_t=solid_grad_t,
-        inviscid_terms_on=False)
-
     def blowing_velocity(cv, source):
 
         # volume integral of the source terms
@@ -325,7 +304,6 @@ def test_wallmodel(
                 ("Y_N2", fluid_state.cv.species_mass_fractions[i_N2]),
                 ("dv", fluid_state.dv),
                 ("grad_T", fluid_grad_t),
-                ("rhs", fluid_rhs),
                 ], overwrite=True)
         viz_solid.write_vtk_file(
             f"multiphysics_coupled_species_{viz_suffix}_solid.vtu", [
@@ -336,5 +314,4 @@ def test_wallmodel(
                 ("Y_N2", solid_state.cv.species_mass_fractions[i_N2]),
                 ("dv", solid_state.dv),
                 ("grad_T", solid_grad_t),
-                ("rhs", solid_rhs),
                 ], overwrite=True)
