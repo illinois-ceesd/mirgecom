@@ -36,8 +36,9 @@ from mirgecom.wall_model import SolidWallConservedVars
 class SolidWallInitializer:
     """Initializer for heat conduction only materials."""
 
-    def __init__(self, temperature):
+    def __init__(self, temperature, material_densities):
         self._temp = temperature
+        self._mass = material_densities
 
     def __call__(self, x_vec, wall_model):
         """Evaluate the wall+gas properties for porous materials.
@@ -50,8 +51,14 @@ class SolidWallInitializer:
             Equation of state class
         """
         actx = x_vec[0].array_context
-        mass = wall_model.density() + actx.np.zeros_like(x_vec[0])
-        energy = mass * wall_model.enthalpy(self._temp)
+
+        mass = self._mass + actx.np.zeros_like(x_vec[0])
+        solid_mass = wall_model.solid_density(mass)
+        tau = wall_model.decomposition_progress(mass)
+
+        temperature = self._temp + actx.np.zeros_like(x_vec[0])
+        energy = solid_mass * wall_model.enthalpy(temperature=temperature,
+                                                  tau=tau)
         return SolidWallConservedVars(mass=mass, energy=energy)
 
 
@@ -104,7 +111,7 @@ class PorousWallInitializer:
                                                             species_mass_frac)
         )
 
-        momentum = make_obj_array([zeros, zeros])
+        momentum = make_obj_array([zeros for i in range(dim)])
 
         species_mass = eps_rho_gas*species_mass_frac
 
