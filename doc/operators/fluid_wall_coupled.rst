@@ -5,10 +5,16 @@ Coupled Fluid-Wall Operators
 
 2) :class:`~mirgecom.multiphysics.phenolics_coupled_fluid_wall`.
 
+3) :class:`~mirgecom.multiphysics.multiphysics_coupled_fluid_wall`.
+
 Heat conduction coupling
 ^^^^^^^^^^^^^^^^^^^^^^^^
 .. automodule:: mirgecom.multiphysics.thermally_coupled_fluid_wall
 
+Phenolics coupling
+^^^^^^^^^^^^^^^^^^
+.. automodule:: mirgecom.multiphysics.phenolics_coupled_fluid_wall
+
 Porous flow coupling
 ^^^^^^^^^^^^^^^^^^^^
-.. automodule:: mirgecom.multiphysics.phenolics_coupled_fluid_wall
+.. automodule:: mirgecom.multiphysics.multiphysics_coupled_fluid_wall
