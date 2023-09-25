@@ -194,14 +194,12 @@ def main(actx_class, use_esdg=False,
     velocity[0] = 10.0
     from pytools.obj_array import make_obj_array
     aux = 0.5*(1.0 - actx.np.tanh(1.0/0.05*nodes[0]))
-#    aux = 1.0 + 0.0*nodes[0]
     y = make_obj_array([aux, 1.0 - aux, aux*0.0])
     orig = np.zeros(shape=(dim,))
-    initial_cv = initialize_flow_solution(actx, dim=dim, nodes=nodes,
-            eos=eos, pressure=101325.0,
-            temperature=300.0, velocity=velocity,
-            species_mass_fractions=y)
-    initial_cv = force_evaluation(actx, initial_cv)  
+    initial_cv = initialize_flow_solution(
+        actx, dim=dim, nodes=nodes, eos=eos, pressure=101325.0,
+        temperature=300.0, velocity=velocity, species_mass_fractions=y)
+    initial_cv = force_evaluation(actx, initial_cv)
 
     if rst_filename:
         current_t = restart_data["t"]
