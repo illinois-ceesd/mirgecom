@@ -16,9 +16,9 @@ Boundary Conditions
 
 .. autoclass:: DummyBoundary
 .. autoclass:: FarfieldBoundary
+.. autoclass:: PressureOutflowBoundary
 .. autoclass:: RiemannInflowBoundary
 .. autoclass:: RiemannOutflowBoundary
-.. autoclass:: PressureOutflowBoundary
 .. autoclass:: IsothermalSlipWallBoundary
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticSlipBoundary
@@ -1015,12 +1015,42 @@ class PrescribedFluidBoundary(FluidBoundary):
                                        **kwargs)
 
 
-class DummyBoundary(PrescribedFluidBoundary):
-    """Boundary type that assigns boundary-adjacent solution to the boundary."""
+class DummyBoundary(MengaldoBoundaryCondition):
+    """Boundary type that assigns boundary-adjacent solution to the boundary.
+
+    .. automethod:: __init__
+    .. automethod:: state_plus
+    .. automethod:: state_bc
+    .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
+    """
 
     def __init__(self):
-        """Initialize the DummyBoundary boundary type."""
-        PrescribedFluidBoundary.__init__(self)
+        """Initialize the boundary condition object."""
+        from warnings import warn
+        warn("Using dummy boundary: copies interior solution.", stacklevel=2)
+
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Get the exterior solution on the boundary."""
+        return state_minus
+
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return BC fluid state."""
+        return state_minus
+
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        return state_minus.temperature
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        return grad_cv_minus
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Return grad(temperature) to be used in viscous flux at wall."""
+        return grad_t_minus
 
 
 class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
@@ -1119,7 +1149,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
             species_mass=grad_species_mass_bc)
 
 
-class FarfieldBoundary(PrescribedFluidBoundary):
+class FarfieldBoundary(MengaldoBoundaryCondition):
     r"""Farfield boundary treatment.
 
     This class implements a farfield boundary as described by
@@ -1135,8 +1165,11 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         \nabla q_{bc} = \nabla q^{-}
 
     .. automethod:: __init__
-    .. automethod:: farfield_state
+    .. automethod:: state_bc
     .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
+    .. automethod:: state_plus
     """
 
     def __init__(self, dim, free_stream_pressure, free_stream_velocity,
@@ -1150,11 +1183,7 @@ class FarfieldBoundary(PrescribedFluidBoundary):
         self._species_mass_fractions = free_stream_mass_fractions
         self._velocity = free_stream_velocity
 
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.farfield_state
-        )
-
-    def farfield_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary."""
         free_stream_mass_fractions = (0.*state_minus.species_mass_fractions
                                       + self._species_mass_fractions)
@@ -1189,10 +1218,23 @@ class FarfieldBoundary(PrescribedFluidBoundary):
                                 smoothness_kappa=state_minus.smoothness_kappa,
                                 smoothness_beta=state_minus.smoothness_beta)
 
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return BC fluid state."""
+        return self.state_plus(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Return farfield temperature for use in grad(temperature)."""
         actx = state_minus.array_context
         return actx.np.zeros_like(state_minus.temperature) + self._temperature
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        return grad_cv_minus
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Return grad(temperature) to be used in viscous flux at wall."""
+        return grad_t_minus
 
 
 class PressureOutflowBoundary(MengaldoBoundaryCondition):
@@ -1246,7 +1288,6 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         T^+ = \frac{P^+}{R_{mix} \rho^+}
 
     .. automethod:: __init__
-
     .. automethod:: state_bc
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
@@ -1367,14 +1408,18 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         return grad_t_minus
 
 
-class RiemannInflowBoundary(PrescribedFluidBoundary):
+class RiemannInflowBoundary(MengaldoBoundaryCondition):
     r"""Inflow boundary treatment.
 
-    This class implements an Riemann invariant for inflow boundary as described by
-    [Mengaldo_2014]_.
+    This class implements an Riemann invariant inflow boundary condition
+    as described by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-    .. automethod:: inflow_state
+    .. automethod:: state_plus
+    .. automethod:: state_bc
+    .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
     """
 
     def __init__(self, cv, temperature):
@@ -1382,10 +1427,7 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
         self._cv_plus = cv
         self._t_plus = temperature
 
-        PrescribedFluidBoundary.__init__(self,
-                                         boundary_state_func=self.inflow_state)
-
-    def inflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
         This is the partially non-reflective boundary state described by
@@ -1452,8 +1494,25 @@ class RiemannInflowBoundary(PrescribedFluidBoundary):
                                 smoothness_kappa=state_minus.smoothness_kappa,
                                 smoothness_beta=state_minus.smoothness_beta)
 
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return BC fluid state."""
+        return self.state_plus(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
 
-class RiemannOutflowBoundary(PrescribedFluidBoundary):
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        return state_minus.temperature
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        return grad_cv_minus
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Return grad(temperature) to be used in viscous flux at wall."""
+        return grad_t_minus
+
+
+class RiemannOutflowBoundary(MengaldoBoundaryCondition):
     r"""Outflow boundary treatment.
 
     This class implements an Riemann invariant for outflow boundary as described
@@ -1465,21 +1524,22 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
     viscous-dominated regions of the flow (such as a boundary layer).
 
     .. automethod:: __init__
-    .. automethod:: outflow_state
+    .. automethod:: state_bc
+    .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
+    .. automethod:: state_plus
     """
-
-    # XXX I am seeing weird behavior with this boundary. Not recommended.
 
     def __init__(self, cv, temperature):
         """Initialize the boundary condition object."""
         self._cv_plus = cv
         self._t_plus = temperature
 
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.outflow_state
-        )
+        from warnings import warn
+        warn("Using RiemannOutflowBoundary is not recommended.", stacklevel=2)
 
-    def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
 
         This is the Riemann Invariant Boundary Condition described by
@@ -1551,15 +1611,31 @@ class RiemannOutflowBoundary(PrescribedFluidBoundary):
                                 smoothness_kappa=state_minus.smoothness_kappa,
                                 smoothness_beta=state_minus.smoothness_beta)
 
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return BC fluid state."""
+        return self.state_plus(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """Get temperature value used in grad(T)."""
+        return state_minus.temperature
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        return grad_cv_minus
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Return grad(temperature) to be used in viscous flux at wall."""
+        return grad_t_minus
+
 
 class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
     r"""Isothermal viscous slip wall boundary.
 
-    This class implements an isothermal slip wall consistent with the prescriptions
-    in [Mengaldo_2014]_.
+    This class implements an isothermal slip wall consistent with the prescription
+    by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-
     .. automethod:: state_bc
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
@@ -1655,7 +1731,6 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
     by [Mengaldo_2014]_.
 
     .. automethod:: __init__
-
     .. automethod:: state_bc
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
@@ -1722,6 +1797,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
     This class implements an adiabatic no-slip wall consistent with the prescription
     by [Mengaldo_2014]_.
 
+    .. automethod:: __init__
     .. automethod:: grad_cv_bc
     .. automethod:: temperature_bc
     .. automethod:: state_plus
@@ -1781,7 +1857,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
 
-class LinearizedOutflowBoundary(PrescribedFluidBoundary):
+class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
     r"""Characteristics outflow BCs for linearized Euler equations.
 
     Implement non-reflecting outflow based on characteristic variables for
@@ -1804,7 +1880,16 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
     of propagations and enable the creation of non-reflecting outflow boundaries.
 
     This can also be applied for Navier-Stokes equations in regions where
-    viscous effects are not dominant, such as the far-field.
+    viscous effects are not dominant, such as the far-field. Thus, the normal
+    gradients of velocity, temperature and species are forced to be null in
+    order to recover the inviscid behavior.
+
+    .. automethod:: __init__
+    .. automethod:: state_plus
+    .. automethod:: state_bc
+    .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
     """
 
     def __init__(self, free_stream_state=None,
@@ -1812,7 +1897,11 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
                  free_stream_velocity=None,
                  free_stream_pressure=None,
                  free_stream_species_mass_fractions=None):
-        """Initialize the boundary condition object."""
+        """Initialize the BC object."""
+        self._slip = _SlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
+        self._adiabatic = _AdiabaticBoundaryComponent()
+
         if free_stream_state is None:
             self._ref_mass = free_stream_density
             self._ref_velocity = free_stream_velocity
@@ -1831,11 +1920,7 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
         if free_stream_species_mass_fractions is None:
             self._spec_mass_fracs = np.empty((0,), dtype=object)
 
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.outflow_state
-        )
-
-    def outflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Non-reflecting outflow."""
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
@@ -1887,16 +1972,71 @@ class LinearizedOutflowBoundary(PrescribedFluidBoundary):
                                 smoothness_kappa=state_minus.smoothness_kappa,
                                 smoothness_beta=state_minus.smoothness_beta)
 
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return BC fluid state."""
+        return self.state_plus(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
 
-class LinearizedInflowBoundary(PrescribedFluidBoundary):
-    r"""Characteristics outflow BCs for linearized Euler equations."""
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """Return temperature for use in grad(temperature)."""
+        return state_minus.temperature
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Compute temperature gradient on the plus state.
+
+        Impose the opposite normal component to enforce zero energy flux
+        from conduction.
+        """
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
+        """Return external grad(CV) used in the boundary calculation of viscous flux.
+
+        The normal gradients of velocity, temperature and species are forced
+        to zero in order to recover the inviscid equations.
+        """
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        state_bc = self.state_bc(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, **kwargs)
+
+        grad_v_bc = self._slip.grad_velocity_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
+
+        grad_mom_bc = (
+            state_bc.mass_density * grad_v_bc
+            + np.outer(state_bc.velocity, grad_cv_minus.mass))
+
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
+
+        return grad_cv_minus.replace(
+            momentum=grad_mom_bc,
+            species_mass=grad_species_mass_bc)
+
+
+class LinearizedInflowBoundary(MengaldoBoundaryCondition):
+    r"""Characteristics inflow BCs for linearized Euler equations.
+
+    .. automethod:: __init__
+    .. automethod:: state_plus
+    .. automethod:: state_bc
+    .. automethod:: temperature_bc
+    .. automethod:: grad_cv_bc
+    .. automethod:: grad_temperature_bc
+    """
 
     def __init__(self, free_stream_state=None,
                  free_stream_density=None,
                  free_stream_velocity=None,
                  free_stream_pressure=None,
                  free_stream_species_mass_fractions=None):
-        """Initialize the boundary condition object."""
+        """Initialize the BC object."""
+        self._slip = _SlipBoundaryComponent()
+        self._impermeable = _ImpermeableBoundaryComponent()
+        self._adiabatic = _AdiabaticBoundaryComponent()
+
         if free_stream_state is None:
             self._ref_mass = free_stream_density
             self._ref_velocity = free_stream_velocity
@@ -1915,11 +2055,10 @@ class LinearizedInflowBoundary(PrescribedFluidBoundary):
             vel_shape = self._ref_velocity.shape[0]
             raise ValueError(f"Expected 2-dimensional inputs, got {vel_shape}.")
 
-        PrescribedFluidBoundary.__init__(
-            self, boundary_state_func=self.inflow_state
-        )
+        if free_stream_species_mass_fractions is None:
+            self._spec_mass_fracs = np.empty((0,), dtype=object)
 
-    def inflow_state(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Non-reflecting inflow."""
         actx = state_minus.array_context
         nhat = -1.0*actx.thaw(dcoll.normal(dd_bdry))
@@ -1967,3 +2106,49 @@ class LinearizedInflowBoundary(PrescribedFluidBoundary):
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)
+
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Return BC fluid state."""
+        return self.state_plus(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
+
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+        """Return temperature for use in grad(temperature)."""
+        return state_minus.temperature
+
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+        """Compute temperature gradient on the plus state.
+
+        Impose the opposite normal component to enforce zero energy flux
+        from conduction.
+        """
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
+
+    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+                   normal, **kwargs):
+        """Return external grad(CV) used in the boundary calculation of viscous flux.
+
+        Specify the velocity gradients on the external state to ensure zero
+        energy and momentum flux due to shear stresses.
+
+        Gradients of species mass fractions are set to zero in the normal direction
+        to ensure zero flux of species across the boundary.
+        """
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        state_bc = self.state_bc(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, **kwargs)
+
+        grad_v_bc = self._slip.grad_velocity_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
+
+        grad_mom_bc = (
+            state_bc.mass_density * grad_v_bc
+            + np.outer(state_bc.velocity, grad_cv_minus.mass))
+
+        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
+            state_minus, grad_cv_minus, normal)
+
+        return grad_cv_minus.replace(
+            momentum=grad_mom_bc,
+            species_mass=grad_species_mass_bc)

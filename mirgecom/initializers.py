@@ -8,13 +8,13 @@ Solution Initializers
 .. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
 .. autoclass:: MulticomponentLump
-.. autoclass:: Uniform
+.. autoclass:: MulticomponentTrig
 .. autoclass:: AcousticPulse
+.. autoclass:: Uniform
 .. autoclass:: MixtureInitializer
+.. autoclass:: PlanarDiscontinuity
 .. autoclass:: PlanarPoiseuille
 .. autoclass:: ShearFlow
-.. autoclass:: PlanarDiscontinuity
-.. autoclass:: MulticomponentTrig
 .. autoclass:: InviscidTaylorGreenVortex
 
 State Initializers
