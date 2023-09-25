@@ -54,3 +54,47 @@ def write_restart_file(actx, restart_data, filename, comm=None):
     with array_context_for_pickling(actx):
         with open(filename, "wb") as f:
             pickle.dump(restart_data, f)
+
+
+def redist_restart_data(actx, src_data=None, rst_filename=None, mesh_filename=None,
+                        get_mesh_data=None, partition_generator_func=None,
+                        comm=None, logmgr=None):
+    """Redistribute the restart data."""
+    # rank = 0
+    nparts = 1
+    nparts_old = src_data["num_parts"]
+    if comm:
+        nparts = comm.Get_size()
+        # rank = comm.Get_rank()
+        comm.Broadcast
+    if nparts == nparts_old:
+        return src_data
+
+    # temporarily
+    return src_data
+
+
+def perform_restart(actx, restart_filename, mesh_filename=None,
+                    get_mesh_data=None, partition_generator_func=None,
+                    comm=None, logmgr=None):
+    """Restart solution even if decomp changes."""
+    import os
+    nparts = 1
+
+    if comm:
+        nparts = comm.Get_size()
+
+    rst_data = {}
+    if os.path.exists(restart_filename):
+        with array_context_for_pickling(actx):
+            with open(restart_filename, "rb") as f:
+                rst_data = pickle.load(f)
+                if rst_data["num_parts"] == nparts:
+                    return rst_data
+
+    return redist_restart_data(actx, src_data=rst_data,
+                               rst_filename=restart_filename, comm=comm,
+                               mesh_filename=mesh_filename,
+                               get_mesh_data=get_mesh_data,
+                               partition_generator_func=partition_generator_func,
+                               logmgr=logmgr)
