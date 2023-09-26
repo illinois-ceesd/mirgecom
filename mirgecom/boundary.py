@@ -60,10 +60,10 @@ from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import make_conserved
-from mirgecom.viscous import viscous_facial_flux_central
 from mirgecom.gas_model import make_fluid_state, replace_fluid_state
 from mirgecom.utils import project_from_base
-from mirgecom.inviscid import inviscid_facial_flux_rusanov
+from mirgecom.viscous import viscous_facial_flux_central, viscous_flux
+from mirgecom.inviscid import inviscid_facial_flux_rusanov, inviscid_flux
 
 
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
@@ -79,7 +79,7 @@ def _get_normal_axes(seed_vector):
     seed_vector = seed_vector / vec_mag
 
     if vec_dim == 1:
-        return seed_vector,  # XXX is this comma right?
+        return seed_vector,  # pylint: disable=trailing-comma-tuple
 
     if vec_dim == 2:
         vector_2 = 0*seed_vector
@@ -687,7 +687,6 @@ class MengaldoBoundaryCondition(FluidBoundary):
         """
         dd_bdry = as_dofdesc(dd_bdry)
 
-        from mirgecom.viscous import viscous_flux
         actx = state_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
@@ -793,11 +792,6 @@ class MengaldoBoundaryCondition(FluidBoundary):
         return outer(temperature_bc, nhat)
 
 
-# This class is a FluidBoundary that provides default implementations of
-# the abstract methods in FluidBoundary. This class will be eliminated
-# by resolution of https://github.com/illinois-ceesd/mirgecom/issues/576.
-# TODO: Don't do this. Make every boundary condition implement its own
-# version of the FluidBoundary methods.
 class PrescribedFluidBoundary(FluidBoundary):
     r"""Abstract interface to a prescribed fluid boundary treatment.
 
@@ -882,9 +876,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                        state_minus=state_minus,
                                                        **kwargs))
     # The following methods provide default implementations of the fluid
-    # boundary functions and helpers in an effort to eliminate much
-    # repeated code. They will be eliminated by the resolution of
-    # https://github.com/illinois-ceesd/mirgecom/issues/576.
+    # boundary functions and helpers.
 
     # {{{ Default boundary helpers
 
@@ -956,20 +948,21 @@ class PrescribedFluidBoundary(FluidBoundary):
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
             state_minus=state_minus, **kwargs)
 
-        grad_cv_pair = \
-            TracePair(dd_bdry, interior=grad_cv_minus,
-                      exterior=self._bnd_grad_cv_func(
-                          dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-                          state_minus=state_minus, grad_cv_minus=grad_cv_minus,
-                          grad_t_minus=grad_t_minus))
+        grad_cv_pair = TracePair(
+            dd_bdry,
+            interior=grad_cv_minus,
+            exterior=self._bnd_grad_cv_func(
+                dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+                state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+                grad_t_minus=grad_t_minus))
 
-        grad_t_pair = \
-            TracePair(
-                dd_bdry, interior=grad_t_minus,
-                exterior=self._bnd_grad_temperature_func(
-                    dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-                    state_minus=state_minus, grad_cv_minus=grad_cv_minus,
-                    grad_t_minus=grad_t_minus))
+        grad_t_pair = TracePair(
+            dd_bdry,
+            interior=grad_t_minus,
+            exterior=self._bnd_grad_temperature_func(
+                dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+                state_minus=state_minus, grad_cv_minus=grad_cv_minus,
+                grad_t_minus=grad_t_minus))
 
         return numerical_flux_func(
             dcoll=dcoll, gas_model=gas_model, state_pair=state_pair,
@@ -1015,42 +1008,44 @@ class PrescribedFluidBoundary(FluidBoundary):
                                        **kwargs)
 
 
-class DummyBoundary(MengaldoBoundaryCondition):
+class DummyBoundary(FluidBoundary):
     """Boundary type that assigns boundary-adjacent solution to the boundary.
 
-    .. automethod:: __init__
-    .. automethod:: state_plus
-    .. automethod:: state_bc
-    .. automethod:: temperature_bc
-    .. automethod:: grad_cv_bc
-    .. automethod:: grad_temperature_bc
+    .. automethod:: inviscid_divergence_flux
+    .. automethod:: viscous_divergence_flux
+    .. automethod:: cv_gradient_flux
+    .. automethod:: temperature_gradient_flux
     """
 
     def __init__(self):
-        """Initialize the boundary condition object."""
         from warnings import warn
         warn("Using dummy boundary: copies interior solution.", stacklevel=2)
 
-    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Get the exterior solution on the boundary."""
-        return state_minus
+    def inviscid_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                                 numerical_flux_func=inviscid_facial_flux_rusanov,
+                                 **kwargs):
+        """Get the inviscid boundary flux for the divergence operator."""
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        return inviscid_flux(state_minus)@normal
 
-    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """Return BC fluid state."""
-        return state_minus
+    def cv_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        """Get the cv flux for *dd_bdry* for use in the gradient operator."""
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        return outer(state_minus.cv, normal)
 
-    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
-        """Get temperature value used in grad(T)."""
-        return state_minus.temperature
+    def temperature_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                                  **kwargs):
+        """Get the T flux for *dd_bdry* for use in the gradient operator."""
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        return state_minus.temperature*normal
 
-    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-                   normal, **kwargs):
-        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        return grad_cv_minus
-
-    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
-        """Return grad(temperature) to be used in viscous flux at wall."""
-        return grad_t_minus
+    def viscous_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+                                grad_cv_minus, grad_t_minus,
+                                numerical_flux_func=viscous_facial_flux_central,
+                                **kwargs):
+        """Get the viscous flux for *dd_bdry* for use in the divergence operator."""
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        return viscous_flux(state_minus, grad_cv_minus, grad_t_minus)@normal
 
 
 class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
@@ -1073,8 +1068,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         self._impermeable = _ImpermeableBoundaryComponent()
         self._adiabatic = _AdiabaticBoundaryComponent()
 
-    def state_plus(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state with reflected normal-component velocity."""
         actx = state_minus.array_context
 
@@ -1085,8 +1079,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, nhat)
         return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
-    def state_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state with zero normal-component velocity."""
         actx = state_minus.array_context
 
@@ -1165,11 +1158,11 @@ class FarfieldBoundary(MengaldoBoundaryCondition):
         \nabla q_{bc} = \nabla q^{-}
 
     .. automethod:: __init__
+    .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
     .. automethod:: grad_temperature_bc
-    .. automethod:: state_plus
     """
 
     def __init__(self, dim, free_stream_pressure, free_stream_velocity,
@@ -1288,11 +1281,11 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         T^+ = \frac{P^+}{R_{mix} \rho^+}
 
     .. automethod:: __init__
+    .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
     .. automethod:: grad_temperature_bc
-    .. automethod:: state_plus
     """
 
     def __init__(self, boundary_pressure=101325):
@@ -1524,11 +1517,11 @@ class RiemannOutflowBoundary(MengaldoBoundaryCondition):
     viscous-dominated regions of the flow (such as a boundary layer).
 
     .. automethod:: __init__
+    .. automethod:: state_plus
     .. automethod:: state_bc
     .. automethod:: temperature_bc
     .. automethod:: grad_cv_bc
     .. automethod:: grad_temperature_bc
-    .. automethod:: state_plus
     """
 
     def __init__(self, cv, temperature):
