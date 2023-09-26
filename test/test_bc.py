@@ -217,7 +217,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
             cv_flux_int = gradient_flux_interior(cv_int_tpair)
             print(f"{cv_flux_int=}")
 
-            ff_bndry_state = bndry.farfield_state(
+            ff_bndry_state = bndry.state_plus(
                 dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                 state_minus=state_minus)
             print(f"{ff_bndry_state=}")
@@ -1333,3 +1333,109 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
                 domain_boundary._boundary_state_pair(dcoll, BTAG_ALL, gas_model,
                                                      state_minus=state_minus).ext.cv
             assert actx.np.equal(bc_soln, expected_boundary_solution)
+
+
+@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
+                                       inviscid_facial_flux_hll])
+def test_dummy_boundary(actx_factory, order, flux_func):
+    """Check dummy boundary treatment."""
+    actx = actx_factory()
+    dim = 2
+
+    kappa = 1.0
+    sigma = 1.0
+
+    from mirgecom.transport import SimpleTransport
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=transport_model)
+
+    a = -1.0
+    b = 1.0
+
+    from pytools.convergence import EOCRecorder
+    eoc_ux = EOCRecorder()
+    eoc_vy = EOCRecorder()
+    eoc_tx = EOCRecorder()
+    eoc_ty = EOCRecorder()
+    eoc_rhox = EOCRecorder()
+    eoc_rhoy = EOCRecorder()
+
+    for nel_1d in [8, 16, 32, 64]:
+        mesh = get_box_mesh(dim=dim, a=a, b=b, n=nel_1d)
+        h = 1.0 / nel_1d
+
+        dcoll = create_discretization_collection(actx, mesh, order=order)
+        nodes = actx.thaw(dcoll.nodes())
+
+        temperature = 1000.0 + 500.0*nodes[0] + 250.0*nodes[1]
+        velocity = make_obj_array([10. + 5.0*nodes[0], 5.0 + 2.5*nodes[1]])
+        pressure = 100000.0 + actx.np.zeros_like(nodes[0])
+        mass = eos.get_density(pressure=pressure, temperature=temperature)
+        mom = mass*velocity
+        energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
+
+        cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+        fluid_state = make_fluid_state(cv, gas_model)
+
+        grad_u_x = 5.0 + nodes[0]*0.0
+        grad_v_y = 2.5 + nodes[0]*0.0
+        grad_t_x = 500. + nodes[0]*0.0
+        grad_t_y = 250. + nodes[0]*0.0
+        grad_rho_x = -cv.mass/fluid_state.temperature*grad_t_x
+        grad_rho_y = -cv.mass/fluid_state.temperature*grad_t_y
+
+        from mirgecom.boundary import DummyBoundary
+        boundaries = {BTAG_ALL: DummyBoundary()}
+
+        from mirgecom.navierstokes import grad_cv_operator, grad_t_operator
+        grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state)
+        grad_t = grad_t_operator(dcoll, gas_model, boundaries, fluid_state)
+
+        from mirgecom.fluid import velocity_gradient
+        grad_u = velocity_gradient(cv, grad_cv)
+
+        def vec_norm(vec1, vec2):
+            return actx.to_numpy(op.norm(dcoll, vec1 - vec2, p=2)) # noqa
+
+        eoc_ux.add_data_point(h, vec_norm(grad_u_x, grad_u[0][0]))
+        eoc_vy.add_data_point(h, vec_norm(grad_v_y, grad_u[1][1]))
+        eoc_tx.add_data_point(h, vec_norm(grad_t_x, grad_t[0]))
+        eoc_ty.add_data_point(h, vec_norm(grad_t_y, grad_t[1]))
+        eoc_rhox.add_data_point(h, vec_norm(grad_rho_x, grad_cv.mass[0]))
+        eoc_rhoy.add_data_point(h, vec_norm(grad_rho_y, grad_cv.mass[1]))
+
+    print(eoc_ux)
+    print(eoc_vy)
+    print(eoc_tx)
+    print(eoc_ty)
+    print(eoc_rhox)
+    print(eoc_rhoy)
+
+    assert (eoc_ux.order_estimate() >= order - 0.1
+            or eoc_ux.max_error() < 1e-9)
+    assert (eoc_vy.order_estimate() >= order - 0.1
+            or eoc_vy.max_error() < 1e-9)
+    assert (eoc_tx.order_estimate() >= order - 0.1
+            or eoc_tx.max_error() < 1e-7)
+    assert (eoc_ty.order_estimate() >= order - 0.1
+            or eoc_ty.max_error() < 1e-7)
+    assert (eoc_rhox.order_estimate() >= order - 0.1
+            or eoc_rhox.max_error() < 1e-9)
+    assert (eoc_rhoy.order_estimate() >= order - 0.1
+            or eoc_rhoy.max_error() < 1e-9)
+
+#        print(vec_norm(grad_u_x), vec_norm(grad_u[0][0]))
+#        print(vec_norm(grad_v_y), vec_norm(grad_u[1][1]))
+#        print(vec_norm(grad_t_x), vec_norm(grad_t[0]))
+#        print(vec_norm(grad_t_y), vec_norm(grad_t[1]))
+#        print(vec_norm(grad_rho_x), vec_norm(grad_cv.mass[0]))
+#        print(vec_norm(grad_rho_y), vec_norm(grad_cv.mass[1]))
+
+#        assert actx.np.equal(vec_norm(grad_u_x), vec_norm(grad_u[0][0]))
+#        assert actx.np.equal(vec_norm(grad_v_y), vec_norm(grad_u[1][1]))
+#        assert actx.np.equal(vec_norm(grad_t_x), vec_norm(grad_t[0]))
+#        assert actx.np.equal(vec_norm(grad_t_y), vec_norm(grad_t[1]))
+#        assert actx.np.equal(vec_norm(grad_rho_x), vec_norm(grad_cv.mass[0]))
+#        assert actx.np.equal(vec_norm(grad_rho_y), vec_norm(grad_cv.mass[1]))
