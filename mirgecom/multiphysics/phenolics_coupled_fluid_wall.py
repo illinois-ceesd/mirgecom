@@ -1,4 +1,4 @@
-r"""."""
+r"""TODO."""
 
 __copyright__ = """
 Copyright (C) 2022 University of Illinois Board of Trustees
@@ -173,8 +173,7 @@ def _replace_kappa(state, kappa):
 
 
 class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
-    """
-    No-slip boundary for the fluid side of the fluid-wall interface.
+    """No-slip boundary for the fluid side of the fluid-wall interface.
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -260,30 +259,6 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
                                 smoothness_kappa=state_minus.smoothness_kappa,
                                 smoothness_beta=state_minus.smoothness_beta)
 
-#        mom_bc = self.momentum_bc(dcoll, dd_bdry, state_minus, **kwargs)
-#        momentum_plus =
-
-#        mass_plus =
-
-#        int_energy_plus =
-#        kin_energy_plus =
-#        energy_plus = int_energy_plus + kin_energy_plus
-
-#        species_plus =
-
-#        from mirgecom.fluid import make_conserved
-#        cv_plus = make_conserved(dim=state_minus.dim,
-#                                 mass=mass_plus,
-#                                 energy=energy_plus,
-#                                 momentum=momentum_plus,
-#                                 species_mass=species_plus)
-
-#        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-#                                temperature_seed=self._t_plus,
-#                                smoothness_mu=state_minus.smoothness_mu,
-#                                smoothness_kappa=state_minus.smoothness_kappa,
-#                                smoothness_beta=state_minus.smoothness_beta)
-
     def momentum_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Enforce the velocity due to outgasing."""
         actx = state_minus.cv.mass.array_context
@@ -297,7 +272,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
         return actx.np.zeros_like(state_minus.temperature) + wall_temp
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        """XXX."""
+        """Return boundary state."""
         dd_bdry = as_dofdesc(dd_bdry)
 
         kappa_minus = (
@@ -326,23 +301,8 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
                    normal, **kwargs):
-        """XXX."""
-        nspecies = len(state_minus.species_mass_density)
-
-        grad_species_mass_bc = 1.*grad_cv_minus.species_mass
-
-        from mirgecom.fluid import species_mass_fraction_gradient
-        grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-                                                      grad_cv_minus)
-        grad_y_bc = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        grad_species_mass_bc = 0.*grad_y_bc
-
-        for i in range(nspecies):
-            grad_species_mass_bc[i] = \
-                (state_minus.mass_density*grad_y_bc[i]
-                 + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-
-        return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
+        """Return BC on grad(CV)."""
+        return grad_cv_minus
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, **kwargs):
         """Return BC on grad(temperature)."""
@@ -365,10 +325,11 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 
         base_flux = numerical_flux_func(boundary_state_pair, gas_model, normal)
 
-        mass_flux = self._boundary_momentum*normal@normal
+        presc_flux = self._boundary_momentum*normal@normal
+        mass_flux = 0.5*(presc_flux + base_flux.mass)
 
-        species_flux = base_flux.species_mass*0.0
-        species_flux[-1] = mass_flux
+        species_flux = base_flux.species_mass*1.0
+        species_flux[-1] = 0.5*(mass_flux + base_flux.species_mass[-1])
 
         return base_flux.replace(mass=mass_flux, species_mass=species_flux)
 
@@ -465,6 +426,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
 
         # Note: numerical_flux_func is ignored
         return (
+            # FIXME add species diffusion flux
             np.dot(diffusion_flux(kappa_plus, grad_u_plus), normal)
             + emissivity * self.sigma * (u_minus**4 - u_ambient**4))
 
