@@ -60,7 +60,6 @@ from mirgecom.integrators import rk4_step
 from grudge.dof_desc import DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 
-from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
@@ -280,8 +279,9 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
         )
         temp_state = make_fluid_state(cv, gas_model)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        if isinstance(gamma, DOFArray):
-           gamma = op.project(dcoll, src, tgt, gamma)
+        # from meshmode.dof_array import DOFArray
+        # if isinstance(gamma, DOFArray):
+        #    gamma = op.project(dcoll, src, tgt, gamma)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
         cv_resid = cv - cv_sd
@@ -349,8 +349,8 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
 
         temp_state = make_fluid_state(cv, gas_model)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        if isinstance(gamma, DOFArray):
-           gamma = op.project(dcoll, src, tgt, gamma)
+        # if isinstance(gamma, DOFArray):
+        #    gamma = op.project(dcoll, src, tgt, gamma)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
         cv_resid = cv - cv_sd
@@ -372,7 +372,6 @@ def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
             assert inf_norm(mom_resid[i]) < tolerance
         for i in range(nspecies):
             assert inf_norm(rhoy_resid[i]) < tolerance
-
 
         rhs_rho_resid = rhs_resid.mass
         rhs_rhoe_resid = rhs_resid.energy

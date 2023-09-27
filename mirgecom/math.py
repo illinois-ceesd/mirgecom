@@ -86,52 +86,10 @@ def harmonic_mean(x, y):
             if actx is not None:
                 break
         if actx is not None:
-            zeros = actx.np.zeros_like(x)
-            x_plus_y = actx.np.where(actx.np.greater(x + y, zeros), x + y, zeros+1)
+            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
         else:
             x_plus_y = x + y if x + y > 0 else 1
         return 2*x*y/x_plus_y
-
-
-def weighted_arithmetic_mean(qx, qy, x, y):
-    r"""Return the weighted arithmetic mean.
-
-    Given two quantities qx and qy and their respective weights x and y, the
-    weighted arithmetic mean is given by
-
-    .. math::
-        \bar{q} = frac{qx x + qy y}{x + y}
-
-    Parameters
-    ----------
-    qx:
-        A number, array type, or symbolic expression.
-
-    qy:
-        A number, array type, or symbolic expression.
-
-    x:
-        A number, array type, or symbolic expression. Represents the weight
-        of quantity qx
-
-    y:
-        A number, array type, or symbolic expression. Represents the weight
-        of quantity qy
-    """
-    if any(isinstance(arg, Expression) for arg in (x, y)):
-        x_plus_y = x_plus_y = x + y if x + y > 0 else 1
-        return (qx * x + qy * y)/x_plus_y
-    else:
-        for arg in (x, y):
-            actx = get_container_context_recursively_opt(arg)
-            if actx is not None:
-                break
-        if actx is not None:
-            zeros = actx.np.zeros_like(x)
-            x_plus_y = actx.np.where(actx.np.greater(x + y, zeros), x + y, zeros + 1)
-        else:
-            x_plus_y = x + y if x + y > 0 else 1
-        return (qx * x + qy * y)/x_plus_y
 
 
 def __getattr__(name):
