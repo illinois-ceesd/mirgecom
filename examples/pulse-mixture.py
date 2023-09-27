@@ -44,8 +44,8 @@ from mirgecom.utils import force_evaluation
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    LinearizedOutflowBoundary,
-    LinearizedInflowBoundary,
+    LinearizedOutflow2DBoundary,
+    LinearizedInflow2DBoundary,
     # RiemannInflowBoundary,
     PressureOutflowBoundary,
     AdiabaticSlipBoundary
@@ -197,8 +197,8 @@ def main(actx_class, use_esdg=False,
     y = make_obj_array([aux, 1.0 - aux, aux*0.0])
     orig = np.zeros(shape=(dim,))
     initial_cv = initialize_flow_solution(
-        actx, dim=dim, nodes=nodes, eos=eos, pressure=101325.0,
-        temperature=300.0, velocity=velocity, species_mass_fractions=y)
+        actx, nodes=nodes, eos=eos, pressure=101325.0, temperature=300.0,
+        velocity=velocity, species_mass_fractions=y)
     initial_cv = force_evaluation(actx, initial_cv)
 
     if rst_filename:
@@ -326,10 +326,11 @@ def main(actx_class, use_esdg=False,
 #        # Riemann inflow
 #        y_inlet = np.zeros((3,))
 #        y_inlet[0] = 1.0
+#        bnd_discr = dcoll.discr_from_dd(BoundaryDomainTag("inlet"))
+#        bnd_nodes = actx.thaw(bnd_discr.nodes())
 #        free_stream_cv = initialize_flow_solution(
-#            actx, dcoll=dcoll, dd_bdry=BoundaryDomainTag("inlet"),
-#            gas_model=gas_model, pressure=101325.0, temperature=300.0,
-#            velocity=velocity, species_mass_fractions=y_inlet)
+#            actx, nodes=bnd_nodes, gas_model=gas_model, pressure=101325.0,
+#            temperature=300.0, velocity=velocity, species_mass_fractions=y_inlet)
 #        free_stream_cv = force_evaluation(actx, free_stream_cv)
 
 #        riemann_inflow_bnd = RiemannInflowBoundary(cv=free_stream_cv,
@@ -340,7 +341,7 @@ def main(actx_class, use_esdg=False,
         y_inlet[0] = 1.0
         mass = eos.get_density(pressure=101325.0, temperature=300.0,
                                species_mass_fractions=y_inlet)
-        linear_inflow_bnd = LinearizedInflowBoundary(free_stream_density=mass,
+        linear_inflow_bnd = LinearizedInflow2DBoundary(free_stream_density=mass,
             free_stream_velocity=velocity, free_stream_pressure=101325.0,
             free_stream_species_mass_fractions=y_inlet)
 
@@ -350,7 +351,7 @@ def main(actx_class, use_esdg=False,
                                     fluid_state.cv.species_mass_fractions)
         mass = eos.get_density(pressure=101325.0, temperature=300.0,
                                species_mass_fractions=y_outlet_right)
-        linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=mass,
+        linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=mass,
             free_stream_velocity=velocity, free_stream_pressure=101325.0,
             free_stream_species_mass_fractions=y_outlet_right)
 
