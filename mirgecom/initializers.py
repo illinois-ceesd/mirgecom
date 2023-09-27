@@ -57,14 +57,10 @@ from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import make_fluid_state
 
 
-def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
-        gas_model=None, eos=None, dd_bdry=None, pressure=None,
-        temperature=None, density=None, velocity=None,
+def initialize_flow_solution(actx, nodes=None, gas_model=None, eos=None,
+        pressure=None, temperature=None, density=None, velocity=None,
         species_mass_fractions=None, return_fluid_state=False):
     """Create a fluid CV/state from a set of minimal input data."""
-    if dcoll is None and dim is None:
-        raise ValueError("Must provide 1 of (dcoll, dim).")
-
     if gas_model is None and eos is None:
         raise ValueError("Must provide 1 of (gas_model, eos).")
     if eos is None:
@@ -76,20 +72,12 @@ def initialize_flow_solution(actx, dim=None, dcoll=None, nodes=None,
     if sum(state_spec) != 1:
         raise ValueError("Must provide 2 of (pressure, temperature, density).")
 
-    if dcoll is not None:
-        dim = dcoll.dim
-
-    if nodes is None:
-        if dd_bdry is None:
-            nodes = actx.thaw(dcoll.nodes())
-        else:
-            data_discr = dcoll.discr_from_dd(dd_bdry)
-            nodes = actx.thaw(data_discr.nodes())
+    dim = nodes.shape[0]
 
     zeros = nodes[0]*0.0
 
     if velocity is None:
-        velocity = np.zeros(dim)
+        velocity = np.zeros(dim,)
 
     if pressure is None:
         pressure = eos.get_pressure(density, temperature, species_mass_fractions)
@@ -635,11 +623,9 @@ class MulticomponentLump:
     .. automethod:: exact_rhs
     """
 
-    def __init__(self, *, dim=1, nspecies=0,
-                 rho0=1.0, p0=1.0,
-                 center=None, velocity=None,
-                 spec_y0s=None, spec_amplitudes=None,
-                 spec_centers=None, sigma=1.0):
+    def __init__(
+            self, *, dim=1, nspecies=0, rho0=1.0, p0=1.0, center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None, spec_centers=None, sigma=1.0):
         r"""Initialize MulticomponentLump parameters.
 
         Parameters
@@ -990,7 +976,7 @@ class AcousticPulse:
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        if isinstance(eos, IdealSingleGas) is False:
+        if not isinstance(eos, IdealSingleGas):
             temperature = eos.temperature(cv, tseed)
             gamma = eos.gamma(cv=cv, temperature=temperature)
         else:
@@ -1093,8 +1079,8 @@ class Uniform:
         """
         actx = x_vec[0].array_context
         return initialize_flow_solution(
-            actx, nodes=x_vec, dim=self._dim, eos=eos, pressure=self._p,
-            velocity=self._velocity, density=self._rho, temperature=self._temp,
+            actx, nodes=x_vec, eos=eos, pressure=self._p, density=self._rho,
+            velocity=self._velocity, temperature=self._temp,
             species_mass_fractions=self._mass_fracs)
 
     def exact_rhs(self, dcoll, cv, time=0.0):
@@ -1179,7 +1165,7 @@ class MixtureInitializer:
 
         actx = x_vec[0].array_context
         return initialize_flow_solution(
-            actx, dim=self._dim, nodes=x_vec, eos=eos, pressure=self._pressure,
+            actx, nodes=x_vec, eos=eos, pressure=self._pressure,
             temperature=self._temperature, velocity=self._velocity,
             species_mass_fractions=self._massfracs)
 

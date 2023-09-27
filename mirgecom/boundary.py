@@ -1850,7 +1850,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
 
-class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
+class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
     r"""Characteristics outflow BCs for linearized Euler equations.
 
     Implement non-reflecting outflow based on characteristic variables for
@@ -2009,7 +2009,7 @@ class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
             species_mass=grad_species_mass_bc)
 
 
-class LinearizedInflowBoundary(MengaldoBoundaryCondition):
+class LinearizedInflow2DBoundary(MengaldoBoundaryCondition):
     r"""Characteristics inflow BCs for linearized Euler equations.
 
     .. automethod:: __init__
