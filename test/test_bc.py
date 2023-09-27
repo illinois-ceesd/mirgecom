@@ -1425,17 +1425,3 @@ def test_dummy_boundary(actx_factory, order, flux_func):
             or eoc_rhox.max_error() < 1e-9)
     assert (eoc_rhoy.order_estimate() >= order - 0.1
             or eoc_rhoy.max_error() < 1e-9)
-
-#        print(vec_norm(grad_u_x), vec_norm(grad_u[0][0]))
-#        print(vec_norm(grad_v_y), vec_norm(grad_u[1][1]))
-#        print(vec_norm(grad_t_x), vec_norm(grad_t[0]))
-#        print(vec_norm(grad_t_y), vec_norm(grad_t[1]))
-#        print(vec_norm(grad_rho_x), vec_norm(grad_cv.mass[0]))
-#        print(vec_norm(grad_rho_y), vec_norm(grad_cv.mass[1]))
-
-#        assert actx.np.equal(vec_norm(grad_u_x), vec_norm(grad_u[0][0]))
-#        assert actx.np.equal(vec_norm(grad_v_y), vec_norm(grad_u[1][1]))
-#        assert actx.np.equal(vec_norm(grad_t_x), vec_norm(grad_t[0]))
-#        assert actx.np.equal(vec_norm(grad_t_y), vec_norm(grad_t[1]))
-#        assert actx.np.equal(vec_norm(grad_rho_x), vec_norm(grad_cv.mass[0]))
-#        assert actx.np.equal(vec_norm(grad_rho_y), vec_norm(grad_cv.mass[1]))
