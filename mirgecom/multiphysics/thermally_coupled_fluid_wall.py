@@ -82,7 +82,7 @@ from grudge.dof_desc import (
 )
 import grudge.op as op
 
-from mirgecom.math import harmonic_mean
+from mirgecom.math import harmonic_mean, weighted_arithmetic_mean
 from mirgecom.boundary import (
     MengaldoBoundaryCondition,
     _SlipBoundaryComponent,
@@ -268,13 +268,8 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
 
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
-        actx = t_minus.array_context
         kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
-        kappa_sum = actx.np.where(
-            actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
-            kappa_minus + kappa_plus,
-            0*kappa_minus + 1)
-        return (t_minus * kappa_minus + t_plus * kappa_plus)/kappa_sum
+        return weighted_arithmetic_mean(t_plus, t_minus, kappa_plus, kappa_minus)
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus):
         if self._grad_t_plus is None:
