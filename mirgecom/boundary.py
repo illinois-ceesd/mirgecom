@@ -23,8 +23,8 @@ Boundary Conditions
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
-.. autoclass:: LinearizedOutflowBoundary
-.. autoclass:: LinearizedInflowBoundary
+.. autoclass:: LinearizedOutflow2DBoundary
+.. autoclass:: LinearizedInflow2DBoundary
 """
 
 __copyright__ = """
