@@ -1302,7 +1302,8 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
                 for part_rank, part_mesh in rank_to_mesh_data.items():
-                    pkl_filename = filename + f"_rank{part_rank}.pkl"
+                    pkl_filename = (filename
+                                    + f"_np{num_target_ranks}_rank{part_rank}.pkl")
                     mesh_data_to_pickle = (mesh.nelements, part_mesh)
                     if os.path.exists(pkl_filename):
                         os.remove(pkl_filename)
@@ -1387,22 +1388,45 @@ def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
     return in_mesh, tag_to_in_elements
 
 
-def interpart_mapping(target_decomp, source_decomp):
+def copy_mapped_dof_array_data(trg_dof_array, src_dof_array, index_map):
+    """Copy data between DOFArrays from disparate meshes."""
+    # Assume ONE group (tetrahedra ONLY)
+    actx = trg_dof_array.array_context
+    trg_dof_array_np = actx.to_numpy(trg_dof_array)
+    src_dof_array_np = actx.to_numpy(src_dof_array)
+
+    trg_array = trg_dof_array_np[0]
+    src_array = src_dof_array_np[0]
+    src_nel, src_nnodes = src_array.shape
+    trg_nel, trg_nnodes = trg_array.shape
+
+    if src_nnodes != trg_nnodes:
+        raise ValueError("DOFArray mapped copy must be of same order.")
+
+    # Actual data copy
+    for trg_el, src_el in index_map.items():
+        trg_array[trg_el] = src_array[src_el]
+
+    # trg_dof_array_np[0] = trg_array
+    return actx.from_numpy(trg_dof_array_np)
+
+
+def interdecomposition_mapping(target_decomp, source_decomp):
     """Return a mapping of which partitions to source for the target decomp."""
     from collections import defaultdict
 
-    interpart_map = defaultdict(set)
+    interdecomp_map = defaultdict(set)
 
     for elemid, part in enumerate(target_decomp):
-        interpart_map[part].add(source_decomp[elemid])
+        interdecomp_map[part].add(source_decomp[elemid])
 
-    for part in interpart_map:
-        interpart_map[part] = list(interpart_map[part])
+    for part in interdecomp_map:
+        interdecomp_map[part] = list(interdecomp_map[part])
 
-    return interpart_map
+    return interdecomp_map
 
 
-def global_element_list_for_decomp(decomp_map):
+def invert_decomp(decomp_map):
     """Return a list of global elements for each partition."""
     from collections import defaultdict
     global_elements_per_part = defaultdict(list)
@@ -1444,21 +1468,25 @@ def interdecomposition_overlap(target_decomp_map, source_decomp_map,
     This data structure is useful for mapping the solution data from
     the old decomp pkl restart files to the new decomp solution arrays.
     """
-    src_part_to_els = global_element_list_for_decomp(source_decomp_map)
-    trg_part_to_els = global_element_list_for_decomp(target_decomp_map)
+    src_part_to_els = invert_decomp(source_decomp_map)
+    trg_part_to_els = invert_decomp(target_decomp_map)
+    ipmap = interdecomposition_mapping(target_decomp_map, source_decomp_map)
+
     ntrg_parts = len(trg_part_to_els)
     if return_parts is None:
-        return_parts = list(range[ntrg_parts])
+        return_parts = list(range(ntrg_parts))
     overlap_maps = {}
     for trg_part in return_parts:
-        part_el_map = {{}}
+        overlap_maps[trg_part] = {}
+        for src_part in ipmap[trg_part]:
+            overlap_maps[trg_part][src_part] = {}
+    for trg_part in return_parts:
         trg_els = trg_part_to_els[trg_part]
         for glb_el in trg_els:
             src_part = source_decomp_map[glb_el]
             src_el_index = src_part_to_els[src_part].index(glb_el)
             loc_el_index = trg_els.index(glb_el)
-            part_el_map[src_part][loc_el_index] = src_el_index
-        overlap_maps[trg_part] = part_el_map
+            overlap_maps[trg_part][src_part][loc_el_index] = src_el_index
     return overlap_maps
 
 

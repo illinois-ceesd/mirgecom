@@ -1,4 +1,4 @@
-"""Read gmsh mesh, partition it, and create a pkl file per mesh partition."""
+"""Re-distribute a mirgecom restart dump and create a new restart dataset."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -27,34 +27,41 @@ import logging
 import argparse
 import sys
 import os
+import glob
+import pickle
 
-from pytools.obj_array import make_obj_array
-from functools import partial
+# from pytools.obj_array import make_obj_array
+# from functools import partial
 
-from logpyle import IntervalTimer, set_dt
+from logpyle import (
+    # IntervalTimer,
+    set_dt
+)
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info,
     logmgr_set_time,
-    logmgr_add_simulation_info,
     logmgr_add_device_memory_usage,
     logmgr_add_mempool_usage,
 )
 
 from mirgecom.simutil import (
     ApplicationOptionsError,
-    distribute_mesh,
     distribute_mesh_pkl
 )
 from mirgecom.mpi import mpi_entry_point
 
 
 class SingleLevelFilter(logging.Filter):
+    """Filter the logger."""
+
     def __init__(self, passlevel, reject):
+        """Initialize the filter."""
         self.passlevel = passlevel
         self.reject = reject
 
     def filter(self, record):
+        """Execute the filter."""
         if self.reject:
             return (record.levelno != self.passlevel)
         else:
@@ -68,10 +75,11 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, mesh_source=None, ndist=None,
-         output_path=None, log_path=None,
-         casename=None, use_1d_part=None, use_wall=False):
-    """The main function."""
+def main(actx_class, mesh_source=None, ndist=None, mdist=None,
+         output_path=None, input_path=None, log_path=None,
+         casename=None, use_1d_part=None, use_wall=False,
+         restart_file=None):
+    """Redistribute a mirgecom restart dataset."""
     if mesh_source is None:
         raise ApplicationOptionsError("Missing mesh source file.")
 
@@ -85,6 +93,9 @@ def main(actx_class, mesh_source=None, ndist=None,
     if output_path is None:
         output_path = "."
     output_path.strip("'")
+
+    if input_path is None:
+        raise ApplicationOptionsError("Input path/filename is required.")
 
     # control log messages
     logger = logging.getLogger(__name__)
@@ -110,17 +121,74 @@ def main(actx_class, mesh_source=None, ndist=None,
     comm_world = MPI.COMM_WORLD
     comm = pkl5.Intracomm(comm_world)
     rank = comm.Get_rank()
-    nparts = comm.Get_size()
+    nprocs = comm.Get_size()
 
+    # Default to decomp for one part per process
     if ndist is None:
-        ndist = nparts
+        ndist = nprocs
 
-    if casename is None:
-        casename = f"mirgecom_np{ndist}"
+    if mdist is None:
+        # Try to detect it. If can't then fail.
+        if rank == 0:
+            files = glob.glob(input_path)
+            xps = ["_decomp_", "_mesh_"]
+            ffiles = [f for f in files if not any(xc in f for xc in xps)]
+            mdist = len(ffiles)
+            if mdist <= 0:
+                ffiles = [f for f in files if "_decomp_" not in f]
+                mdist = len(ffiles)
+                if mdist <= 0:
+                    mdist = len(files)
+        mdist = comm.bcast(mdist, root=0)
+        if mdist <= 0:
+            raise ApplicationOptionsError("Cannot detect number of parts "
+                                          "for input data.")
+        else:
+            if rank == 0:
+                print(f"Automatically detected {mdist} input parts.")
+
+    # We need a decomp map for the input data
+    # If can't find, then generate one.
+    input_data_directory = os.path.dirname(input_path)
+    output_filename = os.path.basename(input_path)
+    casename = casename or output_filename
     casename.strip("'")
 
+    if os.path.exists(output_path):
+        if not os.path.isdir(output_path):
+            raise ApplicationOptionsError(
+                "Mesh dist mode requires 'output'"
+                " parameter to be a directory for output.")
     if rank == 0:
-        print(f"Distributing on {nparts} ranks into {ndist} parts.")
+        if not os.path.exists(output_path):
+            os.makedirs(output_path)
+
+    output_directory = output_path
+    output_path = output_directory + "/" + output_filename
+    mesh_filename = output_directory + "/" + casename + "_mesh"
+
+    if output_path == input_data_directory:
+        raise ApplicationOptionsError("Output path must be different than input"
+                                      " location because of filename collisions.")
+
+    decomp_map_file_search_pattern = \
+        input_data_directory + f"/*_decomp_np{mdist}.pkl"
+    input_decomp_map_files = glob.glob(decomp_map_file_search_pattern)
+    source_decomp_map_file = \
+        input_decomp_map_files[0] if input_decomp_map_files else None
+
+    generate_source_decomp = \
+        True if source_decomp_map_file is None else False
+    if source_decomp_map_file is None:
+        source_decomp_map_file = input_path + f"_decomp_np{mdist}.pkl"
+    if generate_source_decomp:
+        print("Unable to find source decomp map, generating from scratch.")
+    else:
+        print("Found existing source decomp map.")
+    print(f"Source decomp map file: {source_decomp_map_file}.")
+
+    if rank == 0:
+        print(f"Redist on {nprocs} procs: {mdist}->{ndist} parts")
         print(f"Casename: {casename}")
         print(f"Mesh source file: {mesh_source}")
 
@@ -137,14 +205,12 @@ def main(actx_class, mesh_source=None, ndist=None,
     logmgr = initialize_logmgr(True,
         filename=logname, mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
-    use_profiling = actx_class_is_profiling(actx_class)
     alloc = getattr(actx, "allocator", None)
 
     monitor_memory = True
-    monitor_performance = 2
 
     logmgr_add_cl_device_info(logmgr, queue)
 
@@ -190,33 +256,61 @@ def main(actx_class, mesh_source=None, ndist=None,
         return mesh, tag_to_elements, volume_to_tags
 
     def my_partitioner(mesh, tag_to_elements, num_ranks):
-        from mirgecom.simutil import geometric_mesh_partitioner
-        return geometric_mesh_partitioner(
-            mesh, num_ranks, auto_balance=True, debug=False)
+        if use_1d_part:
+            from mirgecom.simutil import geometric_mesh_partitioner
+            return geometric_mesh_partitioner(
+                mesh, num_ranks, auto_balance=True, debug=False)
+        else:
+            from meshmode.distributed import get_partition_by_pymetis
+            return get_partition_by_pymetis(mesh, num_ranks)
 
-    part_func = my_partitioner if use_1d_part else None
+    part_func = my_partitioner
 
-    if os.path.exists(output_path):
-        if not os.path.isdir(output_path):
-            raise ApplicationOptionsError(
-                "Mesh dist mode requires 'output'"
-                " parameter to be a directory for output.")
-    if rank == 0:
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
+    # This bit will write the source decomp's (M) partition table if it
+    # didn't already exist.  We need this table to create the
+    # N-parted restart data from the M-parted data.
+    if generate_source_decomp:
+        if rank == 0:
+            print("Generating source decomp...")
+            source_mesh_data = get_mesh_data()
+            from meshmode.mesh import Mesh
+            if isinstance(source_mesh_data, Mesh):
+                source_mesh = source_mesh_data
+                tag_to_elements = None
+                volume_to_tags = None
+            elif isinstance(source_mesh_data, tuple):
+                source_mesh, tag_to_elements, volume_to_tags = source_mesh_data
+            else:
+                raise TypeError("Unexpected result from get_mesh_data")
+            rank_per_element = my_partitioner(source_mesh, tag_to_elements, mdist)
+            with open(source_decomp_map_file, "wb") as pkl_file:
+                pickle.dump(rank_per_element, pkl_file)
+            print("Done generating source decomp.")
 
     comm.Barrier()
-    mesh_filename = output_path + "/" + casename + "_mesh"
 
     if rank == 0:
-        print(f"Writing mesh pkl files to {mesh_filename}.")
+        print(f"Partitioning mesh to {ndist} parts, writing to {mesh_filename}...")
 
+    # This bit creates the N-parted mesh pkl files and partition table
     distribute_mesh_pkl(
         comm, get_mesh_data, filename=mesh_filename,
-        num_target_ranks=ndist,
-        partition_generator_func=part_func, logmgr=logmgr)
+        num_target_ranks=ndist, partition_generator_func=part_func, logmgr=logmgr)
 
     comm.Barrier()
+
+    if rank == 0:
+        print("Done partitioning target mesh, mesh pkl files written.")
+        print(f"Generating the restart data for {ndist} parts...")
+
+    target_decomp_map_file = mesh_filename + f"_decomp_np{ndist}.pkl"
+    from mirgecom.simutil import redistribute_restart_data
+    redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
+                              target_decomp_map_file, output_path, mesh_filename)
+
+    if rank == 0:
+        print("Done generating restart data.")
+        print(f"Restart data for {ndist} parts is in {output_path}")
 
     logmgr_set_time(logmgr, 0, 0)
     logmgr
@@ -241,13 +335,20 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--ndist", type=int, dest="ndist",
                         nargs="?", action="store",
                         help="Number of distributed parts")
+    parser.add_argument("-m", "--mdist", type=int, dest="mdist",
+                        nargs="?", action="store",
+                        help="Number of source data parts")
     parser.add_argument("-s", "--source", type=str, dest="source",
                         nargs="?", action="store", help="Gmsh mesh source file")
     parser.add_argument("-o", "--ouput-path", type=str, dest="output_path",
                         nargs="?", action="store",
-                        help="Output path for distributed mesh pkl files")
+                        help="Output directory for distributed mesh pkl files")
+    parser.add_argument("-i", "--input-path", type=str, dest="input_path",
+                        nargs="?", action="store",
+                        help="Input path/root filename for restart pkl files")
     parser.add_argument("-c", "--casename", type=str, dest="casename", nargs="?",
-                        action="store", help="Root name of distributed mesh pkl files.")
+                        action="store",
+                        help="Root name of distributed mesh pkl files.")
     parser.add_argument("-g", "--logpath", type=str, dest="log_path", nargs="?",
                         action="store", help="simulation case name")
 
@@ -259,5 +360,6 @@ if __name__ == "__main__":
 
     main(actx_class, mesh_source=args.source,
          output_path=args.output_path, ndist=args.ndist,
+         input_path=args.input_path, mdist=args.mdist,
          log_path=args.log_path, casename=args.casename,
          use_1d_part=args.one_d_part, use_wall=args.use_wall)
