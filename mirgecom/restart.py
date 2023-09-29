@@ -32,6 +32,10 @@ import pickle
 from meshmode.dof_array import array_context_for_pickling
 
 
+class PathError(RuntimeError):
+    pass
+
+
 def read_restart_data(actx, filename):
     """Read the raw restart data dictionary from the given pickle restart file."""
     with array_context_for_pickling(actx):
@@ -47,7 +51,9 @@ def write_restart_file(actx, restart_data, filename, comm=None):
     if rank == 0:
         import os
         rst_dir = os.path.dirname(filename)
-        if rst_dir:
+        if os.path.exists(rst_dir) and not os.path.isdir(rst_dir):
+            raise PathError(f"{rst_dir} exists and is not a directory.")
+        if not os.path.exists(rst_dir):
             os.makedirs(rst_dir, exist_ok=True)
     if comm:
         comm.barrier()
