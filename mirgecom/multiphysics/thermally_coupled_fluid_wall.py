@@ -291,8 +291,7 @@ def _replace_kappa(state, kappa):
 
 
 class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
-    """
-    Boundary for the fluid side of the fluid-wall interface, with slip.
+    """Boundary for the fluid side of the fluid-wall interface, with slip.
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -306,8 +305,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
     def __init__(
             self, kappa_plus, t_plus, grad_t_plus=None,
             heat_flux_penalty_amount=None, lengthscales_minus=None):
-        r"""
-        Initialize InterfaceFluidSlipBoundary.
+        r"""Initialize InterfaceFluidSlipBoundary.
 
         Arguments *grad_t_plus*, *heat_flux_penalty_amount*, and
         *lengthscales_minus* are only required if the boundary will be used to
@@ -447,8 +445,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
 
 
 class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
-    """
-    Boundary for the fluid side of the fluid-wall interface, without slip.
+    """Boundary for the fluid side of the fluid-wall interface, without slip.
 
     .. automethod:: __init__
     .. automethod:: state_plus
@@ -462,8 +459,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
     def __init__(
             self, kappa_plus, t_plus, grad_t_plus=None,
             heat_flux_penalty_amount=None, lengthscales_minus=None):
-        r"""
-        Initialize InterfaceFluidNoslipBoundary.
+        r"""Initialize InterfaceFluidNoslipBoundary.
 
         Arguments *grad_t_plus*, *heat_flux_penalty_amount*, and
         *lengthscales_minus* are only required if the boundary will be used to
@@ -577,8 +573,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 # FIXME: Interior penalty should probably use an average of the lengthscales on
 # both sides of the interface
 class InterfaceWallBoundary(DiffusionBoundary):
-    """
-    Boundary for the wall side of the fluid-wall interface.
+    """Boundary for the wall side of the fluid-wall interface.
 
     .. automethod:: __init__
     .. automethod:: get_grad_flux
@@ -586,8 +581,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
     """
 
     def __init__(self, kappa_plus, u_plus, grad_u_plus=None):
-        r"""
-        Initialize InterfaceWallBoundary.
+        r"""Initialize InterfaceWallBoundary.
 
         Argument *grad_u_plus* is only required if the boundary will be used to
         compute the heat flux.
@@ -658,8 +652,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
 
 class InterfaceWallRadiationBoundary(DiffusionBoundary):
-    r"""
-    Boundary for the wall side of the fluid-wall interface (radiating).
+    r"""Boundary for the wall side of the fluid-wall interface (radiating).
 
     Enforces the heat flux to be that entering the fluid side plus a radiation sink
     term:
@@ -680,8 +673,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
     def __init__(
             self, kappa_plus, grad_u_plus=None, emissivity=None, sigma=None,
             u_ambient=None):
-        r"""
-        Initialize InterfaceWallRadiationBoundary.
+        r"""Initialize InterfaceWallRadiationBoundary.
 
         Arguments *grad_u_plus*, *emissivity*, *sigma*, and *u_ambient* are only
         required if the boundary will be used to compute the heat flux.
@@ -738,12 +730,6 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         """
         if self.grad_u_plus is None:
             raise TypeError("External temperature gradient is not specified.")
-        if self.emissivity is None:
-            raise TypeError("Wall emissivity is not specified.")
-        if self.sigma is None:
-            raise TypeError("Stefan-Boltzmann constant value is not specified.")
-        if self.u_ambient is None:
-            raise TypeError("Ambient temperature is not specified.")
 
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
@@ -978,7 +964,7 @@ def _get_interface_boundaries(
 
 def add_interface_boundaries_no_grad(
         dcoll,
-        gas_model,
+        gas_model,  # XXX dummy
         fluid_dd, wall_dd,
         fluid_state, wall_kappa, wall_temperature,
         fluid_boundaries, wall_boundaries,
@@ -1080,7 +1066,7 @@ def add_interface_boundaries_no_grad(
 
 def add_interface_boundaries(
         dcoll,
-        gas_model,
+        gas_model,  # XXX dummy
         fluid_dd, wall_dd,
         fluid_state, wall_kappa, wall_temperature,
         fluid_grad_temperature, wall_grad_temperature,
@@ -1229,7 +1215,6 @@ def coupled_grad_t_operator(**kwargs):
 
 def coupled_ns_heat_operator(**kwargs):
     r"""Compute the RHS of the fluid and wall subdomains."""
-
     from warnings import warn
     warn(
         "coupled_ns_heat_operator was deprecated and disappeared in Q4 2023. "
@@ -1386,7 +1371,7 @@ def basic_coupled_ns_heat_operator(
     fluid_all_boundaries_no_grad, wall_all_boundaries_no_grad = \
         add_interface_boundaries_no_grad(
             dcoll,
-            gas_model,
+            gas_model,  # XXX dummy
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
             fluid_boundaries, wall_boundaries,
@@ -1415,7 +1400,7 @@ def basic_coupled_ns_heat_operator(
     fluid_all_boundaries, wall_all_boundaries = \
         add_interface_boundaries(
             dcoll,
-            gas_model,
+            gas_model,  # XXX dummy
             fluid_dd, wall_dd,
             fluid_state, wall_kappa, wall_temperature,
             fluid_grad_temperature, wall_grad_temperature,

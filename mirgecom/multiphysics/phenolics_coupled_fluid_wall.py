@@ -315,7 +315,7 @@ def _replace_kappa(state, kappa):
 #        mass_flux = 0.5*(presc_flux + base_flux.mass)
 
 #        species_flux = base_flux.species_mass*1.0
-#        species_flux[-1] = 0.5*(mass_flux + base_flux.species_mass[-1])
+#        species_flux[-1] = 0.5*(presc_flux + base_flux.species_mass[-1])
 
 #        return base_flux.replace(mass=mass_flux, species_mass=species_flux)
 
@@ -336,8 +336,7 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
             self, kappa_plus, t_plus, boundary_momentum, grad_t_plus=None,
             heat_flux_penalty_amount=None, lengthscales_minus=None,
             porous_wall=None):
-        r"""
-        Initialize InterfaceFluidNoslipBoundary.
+        r"""Initialize InterfaceFluidNoslipBoundary.
 
         Arguments *grad_t_plus*, *heat_flux_penalty_amount*, and
         *lengthscales_minus* are only required if the boundary will be used to
@@ -369,7 +368,6 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
 
             XXX
         """
-
         self._thermally_coupled = _ThermallyCoupledHarmonicMeanBoundaryComponent(
             kappa_plus=kappa_plus,
             t_plus=t_plus,
@@ -415,7 +413,7 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
         """Enforce the velocity due to outgasing."""
         actx = state_minus.cv.mass.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
-        return self._boundary_momentum*normal
+        return self._boundary_momentum*normal*state_minus.species_mass_fractions[-1]
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -460,14 +458,20 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
         """
         nspecies = len(state_minus.species_mass_density)
 
+        gradient_at_the_porous_material = grad_cv_minus.species_mass
+
         grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
                                                       grad_cv_minus)
         grad_y_bc = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-        grad_species_mass_bc = 0.*grad_y_bc
+        zero_grad_species_mass = 0.*grad_y_bc
         for i in range(nspecies):
-            grad_species_mass_bc[i] = \
+            zero_grad_species_mass[i] = \
                 (state_minus.mass_density*grad_y_bc[i]
                  + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
+        grad_species_mass_bc = (
+            gradient_at_the_porous_material*(self._porous_wall)
+            + zero_grad_species_mass*(1.0 - self._porous_wall))
 
         return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
@@ -490,25 +494,24 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
                                         exterior=state_plus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        base_flux = numerical_flux_func(boundary_state_pair, gas_model, normal)
+        inviscid_flux = numerical_flux_func(boundary_state_pair, gas_model, normal)
 
         presc_flux = self._boundary_momentum*normal@normal
-        mass_flux = 0.5*(presc_flux + base_flux.mass)
+        mass_flux = 0.5*(presc_flux + inviscid_flux.mass)
 
         species_flux = mass_flux*state_minus.cv.species_mass_fractions
 
-        return base_flux.replace(mass=mass_flux, species_mass=species_flux)
+        return inviscid_flux.replace(mass=mass_flux, species_mass=species_flux)
 
 
 class InterfaceWallRadiationBoundary(DiffusionBoundary):
-    r"""
-    Boundary for the wall side of the fluid-wall interface (radiating).
+    r"""Boundary for the wall side of the fluid-wall interface (radiating).
 
-    Enforces the heat flux to be that entering the fluid side plus a radiation sink
-    term:
+    Enforces the heat flux based on the fluid side plus a radiation sink term:
 
     .. math::
         -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n} =
+            -\sum \rho D_i \nabla Y_i h_i
             -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n}
             + \epsilon \sigma (T^4 - T_\text{ambient}^4),
 
@@ -523,8 +526,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
     def __init__(
             self, kappa_plus, grad_u_plus=None, emissivity=None, sigma=None,
             u_ambient=None):
-        r"""
-        Initialize InterfaceWallRadiationBoundary.
+        r"""Initialize InterfaceWallRadiationBoundary.
 
         Arguments *grad_u_plus*, *emissivity*, *sigma*, and *u_ambient* are only
         required if the boundary will be used to compute the heat flux.
@@ -581,12 +583,6 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         """
         if self.grad_u_plus is None:
             raise TypeError("External temperature gradient is not specified.")
-        if self.emissivity is None:
-            raise TypeError("Wall emissivity is not specified.")
-        if self.sigma is None:
-            raise TypeError("Stefan-Boltzmann constant value is not specified.")
-        if self.u_ambient is None:
-            raise TypeError("Ambient temperature is not specified.")
 
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
@@ -707,7 +703,7 @@ def _get_interface_boundaries_no_grad(
         fluid_temperature, wall_temperature,
         boundary_momentum,
         *,
-        quadrature_tag=DISCR_TAG_BASE,
+        quadrature_tag=DISCR_TAG_BASE,  # XXX dummy
         comm_tag=None):
     interface_tpairs = _get_interface_trace_pairs_no_grad(
         dcoll,
@@ -746,15 +742,15 @@ def _get_interface_boundaries(
         fluid_temperature, wall_temperature,
         boundary_momentum,
         fluid_grad_temperature, wall_grad_temperature,
-        interface_radiation,
+        interface_radiation,  # XXX dummy
         porous_wall,
         *,
-        interface_noslip=None,
+        interface_noslip=None,  # XXX dummy
         wall_emissivity=None,
         sigma=None,
         ambient_temperature=None,
         wall_penalty_amount=None,
-        quadrature_tag=DISCR_TAG_BASE,
+        quadrature_tag=DISCR_TAG_BASE,  # XXX dummy
         comm_tag=None):
     if wall_penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -815,7 +811,7 @@ def _get_interface_boundaries(
 
 def add_interface_boundaries_no_grad(
         dcoll,
-        gas_model,
+        gas_model,  # XXX dummy
         fluid_dd, wall_dd,
         fluid_state, wall_kappa, wall_temperature,
         boundary_momentum,
@@ -904,7 +900,7 @@ def add_interface_boundaries_no_grad(
 
 def add_interface_boundaries(
         dcoll,
-        gas_model,
+        gas_model,  # XXX dummy
         fluid_dd, wall_dd,
         fluid_state, wall_kappa, wall_temperature,
         boundary_momentum,
