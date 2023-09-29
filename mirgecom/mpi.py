@@ -36,6 +36,10 @@ import sys
 from contextlib import contextmanager
 from typing import Callable, Any, Generator, TYPE_CHECKING
 
+import logging
+logger = logging.getLogger(__name__)
+
+
 if TYPE_CHECKING:
     from mpi4py.MPI import Comm
 
@@ -181,6 +185,20 @@ def _check_isl_version() -> None:
              "a command such as 'conda install \"isl * imath32_*\"' .")
 
 
+def _check_mpi4py_version() -> None:
+    import mpi4py
+
+    if mpi4py.__version__ < "4":
+        from warnings import warn
+        warn(f"mpi4py version {mpi4py.__version__} does not support pkl5 "
+              "scatter. This may lead to errors when distributing large meshes. "
+              "Please upgrade to the git version of mpi4py.")
+
+    else:
+        logger.info(f"Using mpi4py version {mpi4py.__version__} with pkl5 "
+                     "scatter support.")
+
+
 def mpi_entry_point(func) -> Callable:
     """
     Return a decorator that designates a function as the "main" function for MPI.
@@ -222,6 +240,7 @@ def mpi_entry_point(func) -> Callable:
         _check_gpu_oversubscription()
         _check_cache_dirs()
         _check_isl_version()
+        _check_mpi4py_version()
 
         func(*args, **kwargs)
 
