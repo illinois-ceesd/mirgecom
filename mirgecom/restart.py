@@ -75,6 +75,9 @@ def redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
         zeros_array = actx.zeros((nel, nnodes))
         return DOFArray(actx, (zeros_array,))
 
+    # Traverse the restart_data and copy data from the src
+    # into the target DOFArrays in-place, so that the trg data
+    # is persistent across multiple calls with different src data.
     def _recursive_map_and_copy(trg_item, src_item, elem_map):
         """Recursively map and copy DOFArrays from src_item."""
         if isinstance(src_item, DOFArray):
@@ -94,8 +97,11 @@ def redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
                                            elem_map)
                 for k, v in asdict(src_item).items()})
         else:
-            return src_item
+            return src_item  # dupe non-dof data outright
 
+    # Creates a restart data set w/zeros of (trg=part-specific) size for
+    # all the DOFArray data.  To be updated in-place with data from each
+    # src part.
     def _recursive_init_with_zeros(sample_item, trg_zeros):
         """Recursively initialize data structures with zeros or original data."""
         black_list = ["volume_to_local_mesh_data", "mesh"]
