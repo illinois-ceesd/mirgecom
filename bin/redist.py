@@ -304,7 +304,7 @@ def main(actx_class, mesh_source=None, ndist=None, mdist=None,
         print(f"Generating the restart data for {ndist} parts...")
 
     target_decomp_map_file = mesh_filename + f"_decomp_np{ndist}.pkl"
-    from mirgecom.simutil import redistribute_restart_data
+    from mirgecom.restart import redistribute_restart_data
     redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
                               target_decomp_map_file, output_path, mesh_filename)
 
