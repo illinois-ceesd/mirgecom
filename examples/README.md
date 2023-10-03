@@ -11,6 +11,7 @@ The examples and the unique features they exercise are as follows:
 - `vortex.py`: Isentropic vortex advection: prescribed boundaries, verification
 - `hotplate.py`: Isothermal BC verification (prescribed exact soln)
 - `sod.py`: Sod's shock tube case: Fluid test case with strong shock
+- `blasius.py`: Inflow and outflow BC verification
 - `doublemach.py`: AV test case
 - `poiseuille.py`: Poiseuille flow verification case
 - `poiseuille-multispecies.py`: Poiseuille flow with passive scalars
@@ -19,4 +20,3 @@ The examples and the unique features they exercise are as follows:
 - `combozzle.py`: Prediction-relevant testing, kitchen sink, many options
 - `heat-source.py`: Diffusion operator
 - `thermally-coupled`: Fluid-solid interaction for heat transfer
-- `multiple-coupled-volumes`: Fluid-porous solid interaction
