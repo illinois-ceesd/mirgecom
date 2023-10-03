@@ -133,193 +133,6 @@ def _replace_kappa(state, kappa):
     return replace(state, tv=new_tv)
 
 
-# class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
-#    """No-slip boundary for the fluid side of the fluid-wall interface.
-
-#    .. automethod:: __init__
-#    .. automethod:: state_plus
-#    .. automethod:: state_bc
-#    .. automethod:: grad_cv_bc
-#    .. automethod:: temperature_plus
-#    .. automethod:: temperature_bc
-#    .. automethod:: grad_temperature_bc
-#    """
-
-#    def __init__(
-#            self, kappa_plus, t_plus, boundary_momentum, grad_t_plus=None,
-#            heat_flux_penalty_amount=None, lengthscales_minus=None,
-#            porous_wall=None):
-#        r"""
-#        Initialize InterfaceFluidNoslipBoundary.
-
-#        Arguments *grad_t_plus*, *heat_flux_penalty_amount*, and
-#        *lengthscales_minus* are only required if the boundary will be used to
-#        compute the viscous flux.
-
-#        Parameters
-#        ----------
-#        kappa_plus: float or :class:`meshmode.dof_array.DOFArray`
-
-#            Thermal conductivity from the wall side.
-
-#        t_plus: :class:`meshmode.dof_array.DOFArray`
-
-#            Temperature from the wall side.
-
-#        grad_t_plus: :class:`meshmode.dof_array.DOFArray` or None
-
-#            Temperature gradient from the wall side.
-
-#        heat_flux_penalty_amount: float or None
-
-#            Coefficient $c$ for the interior penalty on the heat flux.
-
-#        lengthscales_minus: :class:`meshmode.dof_array.DOFArray` or None
-
-#            Characteristic mesh spacing $h^-$.
-
-#        porous_wall: :class:`meshmode.dof_array.DOFArray` or None
-
-#            XXX
-#        """
-#        InterfaceFluidBoundary.__init__(
-#            self,
-#            heat_flux_penalty_amount=heat_flux_penalty_amount,
-#            lengthscales_minus=lengthscales_minus)
-
-#        self._thermally_coupled = _ThermallyCoupledHarmonicMeanBoundaryComponent(
-#            kappa_plus=kappa_plus,
-#            t_plus=t_plus,
-#            grad_t_plus=grad_t_plus)
-
-#        self._t_plus = t_plus
-#        self._boundary_momentum = boundary_momentum
-#        self._porous_wall = porous_wall
-
-#    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-#        """Return state to enforce inviscid fluxes."""
-#        dd_bdry = as_dofdesc(dd_bdry)
-
-#        mom_bc = self.momentum_bc(dcoll, dd_bdry, state_minus, **kwargs)
-#        momentum_plus = 2.0*mom_bc - state_minus.cv.momentum
-
-#        mass_plus = state_minus.cv.mass
-
-#        int_energy_plus = mass_plus*gas_model.eos.get_internal_energy(
-#            temperature=self._t_plus,
-#            species_mass_fractions=state_minus.species_mass_fractions)
-#        kin_energy_plus = 0.5*np.dot(momentum_plus, momentum_plus)/mass_plus
-#        energy_plus = int_energy_plus + kin_energy_plus
-
-#        species_plus = state_minus.cv.species_mass*1.0
-
-#        from mirgecom.fluid import make_conserved
-#        cv_plus = make_conserved(dim=state_minus.dim,
-#                                 mass=mass_plus,
-#                                 energy=energy_plus,
-#                                 momentum=momentum_plus,
-#                                 species_mass=species_plus)
-
-#        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
-#                                temperature_seed=self._t_plus,
-#                                smoothness_mu=state_minus.smoothness_mu,
-#                                smoothness_kappa=state_minus.smoothness_kappa,
-#                                smoothness_beta=state_minus.smoothness_beta)
-
-#    def momentum_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
-#        """Enforce the velocity due to outgasing."""
-#        actx = state_minus.cv.mass.array_context
-#        normal = actx.thaw(dcoll.normal(dd_bdry))
-#        return self._boundary_momentum*normal
-
-#    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
-#        """Get temperature value used in grad(T)."""
-#        actx = state_minus.array_context
-#        wall_temp = project_from_base(dcoll, dd_bdry, self._t_plus)
-#        return actx.np.zeros_like(state_minus.temperature) + wall_temp
-
-#    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-#        """Return state to enforce viscous fluxes."""
-#        dd_bdry = as_dofdesc(dd_bdry)
-
-#        kappa_minus = (
-#            # Make sure it has an array context
-#            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
-
-#        momentum_bc = self.momentum_bc(dcoll, dd_bdry, state_minus, **kwargs)
-
-#        t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus, **kwargs)
-
-#        internal_energy_bc = gas_model.eos.get_internal_energy(
-#            temperature=t_bc,
-#            species_mass_fractions=state_minus.species_mass_fractions)
-
-#        total_energy_bc = state_minus.mass_density*internal_energy_bc + \
-#            0.5*np.dot(momentum_bc, momentum_bc)/state_minus.mass_density
-
-#        kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
-
-#        return _replace_kappa(
-#            replace_fluid_state(
-#                state_minus, gas_model,
-#                energy=total_energy_bc,
-#                momentum=momentum_bc),
-#            kappa_bc)
-
-#    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-#                   normal, **kwargs):
-#        """Return BC on grad(CV).
-
-#        Zero gradient on the solid wall region; do nothing in the
-#        porous wall interface."""
-#        actx = state_minus.array_context
-#        nspecies = len(state_minus.species_mass_density)
-
-#        grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
-#                                                      grad_cv_minus)
-#        grad_y_bc = grad_y_minus - np.outer(grad_y_minus@normal, normal)
-#        zero_grad_species_mass = 0.*grad_y_bc
-#        for i in range(nspecies):
-#            zero_grad_species_mass[i] = \
-#                (state_minus.mass_density*grad_y_bc[i]
-#                 + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
-
-#        grad_species_mass_bc = (
-#            grad_cv_minus.species_mass*(self._porous_wall)
-#            + zero_grad_species_mass*(1.0 - self._porous_wall))
-
-#        return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
-
-#    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, **kwargs):
-#        """Return BC on grad(temperature)."""
-#        # Mengaldo Eqns (50-51)
-#        return grad_t_minus
-
-#    def inviscid_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
-#                                 numerical_flux_func=inviscid_facial_flux_rusanov,
-#                                 **kwargs):
-#        """Get the inviscid boundary flux for the divergence operator."""
-#        dd_bdry = as_dofdesc(dd_bdry)
-#        actx = state_minus.array_context
-#        state_plus = self.state_plus(
-#            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-#            state_minus=state_minus, **kwargs)
-#        boundary_state_pair = TracePair(dd=dd_bdry,
-#                                        interior=state_minus,
-#                                        exterior=state_plus)
-#        normal = actx.thaw(dcoll.normal(dd_bdry))
-
-#        base_flux = numerical_flux_func(boundary_state_pair, gas_model, normal)
-
-#        presc_flux = self._boundary_momentum*normal@normal
-#        mass_flux = 0.5*(presc_flux + base_flux.mass)
-
-#        species_flux = base_flux.species_mass*1.0
-#        species_flux[-1] = 0.5*(presc_flux + base_flux.species_mass[-1])
-
-#        return base_flux.replace(mass=mass_flux, species_mass=species_flux)
-
-
 class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
     """No-slip boundary for the fluid side of the fluid-wall interface.
 
@@ -397,6 +210,7 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
 
         species_plus = state_minus.cv.species_mass*1.0
 
+        from mirgecom.fluid import make_conserved
         cv_plus = make_conserved(dim=state_minus.dim,
                                  mass=mass_plus,
                                  energy=energy_plus,
@@ -413,7 +227,7 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
         """Enforce the velocity due to outgasing."""
         actx = state_minus.cv.mass.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
-        return self._boundary_momentum*normal*state_minus.species_mass_fractions[-1]
+        return self._boundary_momentum*normal
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -454,11 +268,9 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
         """Return BC on grad(CV).
 
         Zero gradient on the solid wall region; do nothing in the
-        porous wall interface.
-        """
+        porous wall interface."""
+        actx = state_minus.array_context
         nspecies = len(state_minus.species_mass_density)
-
-        gradient_at_the_porous_material = grad_cv_minus.species_mass
 
         grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
                                                       grad_cv_minus)
@@ -470,12 +282,12 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
                  + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
 
         grad_species_mass_bc = (
-            gradient_at_the_porous_material*(self._porous_wall)
+            grad_cv_minus.species_mass*(self._porous_wall)
             + zero_grad_species_mass*(1.0 - self._porous_wall))
 
         return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
-    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, **kwargs):
         """Return BC on grad(temperature)."""
         # Mengaldo Eqns (50-51)
         return grad_t_minus
@@ -494,14 +306,199 @@ class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
                                         exterior=state_plus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        inviscid_flux = numerical_flux_func(boundary_state_pair, gas_model, normal)
+        base_flux = numerical_flux_func(boundary_state_pair, gas_model, normal)
 
         presc_flux = self._boundary_momentum*normal@normal
-        mass_flux = 0.5*(presc_flux + inviscid_flux.mass)
+        mass_flux = 0.5*(presc_flux + base_flux.mass)
 
-        species_flux = mass_flux*state_minus.cv.species_mass_fractions
+        species_flux = base_flux.species_mass*1.0
+        species_flux[-1] = 0.5*(presc_flux + base_flux.species_mass[-1])
 
-        return inviscid_flux.replace(mass=mass_flux, species_mass=species_flux)
+        return base_flux.replace(mass=mass_flux, species_mass=species_flux)
+
+
+# class InterfaceFluidNoslipBoundary(MengaldoBoundaryCondition):
+#    """No-slip boundary for the fluid side of the fluid-wall interface.
+
+#    .. automethod:: __init__
+#    .. automethod:: state_plus
+#    .. automethod:: state_bc
+#    .. automethod:: grad_cv_bc
+#    .. automethod:: temperature_plus
+#    .. automethod:: temperature_bc
+#    .. automethod:: grad_temperature_bc
+#    """
+
+#    def __init__(
+#            self, kappa_plus, t_plus, boundary_momentum, grad_t_plus=None,
+#            heat_flux_penalty_amount=None, lengthscales_minus=None,
+#            porous_wall=None):
+#        r"""Initialize InterfaceFluidNoslipBoundary.
+
+#        Arguments *grad_t_plus*, *heat_flux_penalty_amount*, and
+#        *lengthscales_minus* are only required if the boundary will be used to
+#        compute the viscous flux.
+
+#        Parameters
+#        ----------
+#        kappa_plus: float or :class:`meshmode.dof_array.DOFArray`
+
+#            Thermal conductivity from the wall side.
+
+#        t_plus: :class:`meshmode.dof_array.DOFArray`
+
+#            Temperature from the wall side.
+
+#        grad_t_plus: :class:`meshmode.dof_array.DOFArray` or None
+
+#            Temperature gradient from the wall side.
+
+#        heat_flux_penalty_amount: float or None
+
+#            Coefficient $c$ for the interior penalty on the heat flux.
+
+#        lengthscales_minus: :class:`meshmode.dof_array.DOFArray` or None
+
+#            Characteristic mesh spacing $h^-$.
+
+#        porous_wall: :class:`meshmode.dof_array.DOFArray` or None
+
+#            XXX
+#        """
+#        self._thermally_coupled = _ThermallyCoupledHarmonicMeanBoundaryComponent(
+#            kappa_plus=kappa_plus,
+#            t_plus=t_plus,
+#            grad_t_plus=grad_t_plus)
+
+#        self._penalty_amount = heat_flux_penalty_amount
+#        self._lengthscales_minus = lengthscales_minus
+
+#        self._t_plus = t_plus
+#        self._boundary_momentum = boundary_momentum
+#        self._porous_wall = porous_wall
+
+#    def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+#        """Return state to enforce inviscid fluxes."""
+#        dd_bdry = as_dofdesc(dd_bdry)
+
+#        mom_bc = self.momentum_bc(dcoll, dd_bdry, state_minus, **kwargs)
+#        momentum_plus = 2.0*mom_bc - state_minus.cv.momentum
+
+#        mass_plus = state_minus.cv.mass
+
+#        int_energy_plus = mass_plus*gas_model.eos.get_internal_energy(
+#            temperature=self._t_plus,
+#            species_mass_fractions=state_minus.species_mass_fractions)
+#        kin_energy_plus = 0.5*np.dot(momentum_plus, momentum_plus)/mass_plus
+#        energy_plus = int_energy_plus + kin_energy_plus
+
+#        species_plus = state_minus.cv.species_mass*1.0
+
+#        cv_plus = make_conserved(dim=state_minus.dim,
+#                                 mass=mass_plus,
+#                                 energy=energy_plus,
+#                                 momentum=momentum_plus,
+#                                 species_mass=species_plus)
+
+#        return make_fluid_state(cv=cv_plus, gas_model=gas_model,
+#                                temperature_seed=self._t_plus,
+#                                smoothness_mu=state_minus.smoothness_mu,
+#                                smoothness_kappa=state_minus.smoothness_kappa,
+#                                smoothness_beta=state_minus.smoothness_beta)
+
+#    def momentum_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+#        """Enforce the velocity due to outgasing."""
+#        actx = state_minus.cv.mass.array_context
+#        normal = actx.thaw(dcoll.normal(dd_bdry))
+#        return self._boundary_momentum*normal#*state_minus.species_mass_fractions[-1]
+
+#    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
+#        """Get temperature value used in grad(T)."""
+#        actx = state_minus.array_context
+#        wall_temp = project_from_base(dcoll, dd_bdry, self._t_plus)
+#        return actx.np.zeros_like(state_minus.temperature) + wall_temp
+
+#    def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+#        """Return state to enforce viscous fluxes."""
+#        dd_bdry = as_dofdesc(dd_bdry)
+
+#        kappa_minus = (
+#            # Make sure it has an array context
+#            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+
+#        momentum_bc = self.momentum_bc(dcoll, dd_bdry, state_minus, **kwargs)
+
+#        t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus, **kwargs)
+
+#        internal_energy_bc = gas_model.eos.get_internal_energy(
+#            temperature=t_bc,
+#            species_mass_fractions=state_minus.species_mass_fractions)
+
+#        total_energy_bc = state_minus.mass_density*internal_energy_bc + \
+#            0.5*np.dot(momentum_bc, momentum_bc)/state_minus.mass_density
+
+#        kappa_bc = self._thermally_coupled.kappa_bc(dcoll, dd_bdry, kappa_minus)
+
+#        return _replace_kappa(
+#            replace_fluid_state(
+#                state_minus, gas_model,
+#                energy=total_energy_bc,
+#                momentum=momentum_bc),
+#            kappa_bc)
+
+#    def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
+#                   normal, **kwargs):
+#        """Return BC on grad(CV).
+
+#        Zero gradient on the solid wall region; do nothing in the
+#        porous wall interface.
+#        """
+#        nspecies = len(state_minus.species_mass_density)
+
+#        gradient_at_the_porous_material = grad_cv_minus.species_mass
+
+#        grad_y_minus = species_mass_fraction_gradient(state_minus.cv,
+#                                                      grad_cv_minus)
+#        grad_y_bc = grad_y_minus - np.outer(grad_y_minus@normal, normal)
+#        zero_grad_species_mass = 0.*grad_y_bc
+#        for i in range(nspecies):
+#            zero_grad_species_mass[i] = \
+#                (state_minus.mass_density*grad_y_bc[i]
+#                 + state_minus.species_mass_fractions[i]*grad_cv_minus.mass)
+
+#        grad_species_mass_bc = (
+#            gradient_at_the_porous_material*(self._porous_wall)
+#            + zero_grad_species_mass*(1.0 - self._porous_wall))
+
+#        return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
+
+#    def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
+#        """Return BC on grad(temperature)."""
+#        # Mengaldo Eqns (50-51)
+#        return grad_t_minus
+
+#    def inviscid_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
+#                                 numerical_flux_func=inviscid_facial_flux_rusanov,
+#                                 **kwargs):
+#        """Get the inviscid boundary flux for the divergence operator."""
+#        dd_bdry = as_dofdesc(dd_bdry)
+#        actx = state_minus.array_context
+#        state_plus = self.state_plus(
+#            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+#            state_minus=state_minus, **kwargs)
+#        boundary_state_pair = TracePair(dd=dd_bdry,
+#                                        interior=state_minus,
+#                                        exterior=state_plus)
+#        normal = actx.thaw(dcoll.normal(dd_bdry))
+
+#        inviscid_flux = numerical_flux_func(boundary_state_pair, gas_model, normal)
+
+#        presc_flux = self._boundary_momentum*normal@normal
+#        mass_flux = 0.5*(presc_flux + inviscid_flux.mass)
+
+#        species_flux = mass_flux*state_minus.cv.species_mass_fractions
+
+#        return inviscid_flux.replace(mass=mass_flux, species_mass=species_flux)
 
 
 class InterfaceWallRadiationBoundary(DiffusionBoundary):
