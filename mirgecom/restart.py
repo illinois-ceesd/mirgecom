@@ -78,7 +78,7 @@ def redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
     def _create_zeros_like_dofarray(actx, nel, ary):
         # Get nnodes from the shape of the sample DOFArray
         _, nnodes = ary[0].shape
-        zeros_array = actx.zeros((nel, nnodes))
+        zeros_array = actx.zeros(shape=(nel, nnodes), dtype=ary[0].dtype)
         return DOFArray(actx, (zeros_array,))
 
     # Traverse the restart_data and copy data from the src
@@ -86,6 +86,14 @@ def redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
     # is persistent across multiple calls with different src data.
     def _recursive_map_and_copy(trg_item, src_item, elem_map):
         """Recursively map and copy DOFArrays from src_item."""
+        if trg_item is None:
+            print(f"{src_item=}")
+            raise ValueError("trg_item is None, but src_item is not.")
+        if src_item is None:
+            print(f"{trg_item=}")
+            raise ValueError("src_item is None, but trg_item is not.")
+        # print(f"{trg_item=}")
+        # print(f"{src_item=}")
         if isinstance(src_item, DOFArray):
             if trg_item is None:
                 raise ValueError("No corresponding target DOFArray found.")
@@ -158,14 +166,16 @@ def redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
 
         # Read one source restart file to get the 'order' and a sample DOFArray
         mesh_data_item = "volume_to_local_mesh_data"
-        sample_restart_file = f"{input_path}={writer_rank:04d}.pkl"
-        with open(sample_restart_file, "rb") as f:
-            sample_data = pickle.load(f)
-            if "mesh" in sample_data:
-                mesh_data_item = "mesh"  # check mesh data return type instead
-            sample_dof_array = \
-                next(val for key, val in
-                     sample_data.items() if isinstance(val, DOFArray))
+        sample_restart_file = f"{input_path}-{writer_rank:04d}.pkl"
+        with array_context_for_pickling(actx):
+            with open(sample_restart_file, "rb") as f:
+                sample_data = pickle.load(f)
+        if "mesh" in sample_data:
+            mesh_data_item = "mesh"  # check mesh data return type instead
+
+        sample_dof_array = \
+                    next(val for key, val in
+                         sample_data.items() if isinstance(val, DOFArray))
 
         for trg_part, olaps in xdo.items():
             # Number of elements in each target partition
@@ -177,26 +187,33 @@ def redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
                 actx, trg_nel, sample_dof_array)
             # Use trg_zeros to reset all dof arrays in the out_rst_data to
             # the current (trg_part) size made of zeros.
-            out_rst_data = _recursive_init_with_zeros(sample_data, trg_zeros)
+            with array_context_for_pickling(actx):
+                out_rst_data = _recursive_init_with_zeros(sample_data, trg_zeros)
 
             # Read and Map DOFArrays from source to target
             for src_part, elem_map in olaps.items():
                 # elem_map={trg-local-index : src-local-index} for trg,src parts
                 src_restart_file = f"{input_path}-{src_part:04d}.pkl"
-                with open(src_restart_file, "rb") as f:
-                    src_rst_data = pickle.load(f)
-                out_rst_data = _recursive_map_and_copy(
-                    out_rst_data, src_rst_data, elem_map)
+                with array_context_for_pickling(actx):
+                    with open(src_restart_file, "rb") as f:
+                        src_rst_data = pickle.load(f)
+                src_rst_data.pop("volume_to_local_mesh_data", None)
+                src_rst_data.pop("mesh", None)
+                with array_context_for_pickling(actx):
+                    out_rst_data = _recursive_map_and_copy(
+                        out_rst_data, src_rst_data, elem_map)
 
             # Read new mesh data and stack it in the restart file
             mesh_pkl_filename = f"{mesh_filename}_np{trg_nparts}_rank{trg_part}.pkl"
-            with open(mesh_pkl_filename, "rb") as pkl_file:
-                global_nelements, volume_to_local_mesh_data = pickle.load(pkl_file)
-            out_rst_data[mesh_data_item] = volume_to_local_mesh_data
+            with array_context_for_pickling(actx):
+                with open(mesh_pkl_filename, "rb") as pkl_file:
+                    global_nelements, volume_to_local_mesh_data = pickle.load(pkl_file)
+                out_rst_data[mesh_data_item] = volume_to_local_mesh_data
 
             # Write out the trg_part-specific redistributed pkl restart file
             output_filename = f"{output_path}-{trg_part:04d}.pkl"
-            with open(output_filename, "wb") as f:
-                pickle.dump(out_rst_data, f)
+            with array_context_for_pickling(actx):
+                with open(output_filename, "wb") as f:
+                    pickle.dump(out_rst_data, f)
 
     return
