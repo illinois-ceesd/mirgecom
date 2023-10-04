@@ -130,7 +130,10 @@ def main(actx_class, mesh_source=None, ndist=None, mdist=None,
     if mdist is None:
         # Try to detect it. If can't then fail.
         if rank == 0:
-            files = glob.glob(input_path)
+            search_pattern = input_path + "*"
+            print(f"Searching input path {search_pattern}.")
+            files = glob.glob(search_pattern)
+            print(f"Found files: {files}")
             xps = ["_decomp_", "_mesh_"]
             ffiles = [f for f in files if not any(xc in f for xc in xps)]
             mdist = len(ffiles)
@@ -304,7 +307,7 @@ def main(actx_class, mesh_source=None, ndist=None, mdist=None,
         print(f"Generating the restart data for {ndist} parts...")
 
     target_decomp_map_file = mesh_filename + f"_decomp_np{ndist}.pkl"
-    from mirgecom.simutil import redistribute_restart_data
+    from mirgecom.restart import redistribute_restart_data
     redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
                               target_decomp_map_file, output_path, mesh_filename)
 
