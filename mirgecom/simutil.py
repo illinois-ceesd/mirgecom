@@ -1207,6 +1207,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         The number of elements in the global mesh
     """
     from mpi4py.util import pkl5
+    from datetime import datetime
     comm_wrapper = pkl5.Intracomm(comm)
 
     num_ranks = comm_wrapper.Get_size()
@@ -1246,12 +1247,21 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                 from meshmode.distributed import get_partition_by_pymetis
                 return get_partition_by_pymetis(mesh, num_target_ranks)
 
-        if logmgr:
-            logmgr.add_quantity(t_mesh_data)
-            with t_mesh_data.get_sub_timer():
+        if reader_rank == 0:
+            if logmgr:
+                logmgr.add_quantity(t_mesh_data)
+                with t_mesh_data.get_sub_timer():
+                    global_data = get_mesh_data()
+            else:
                 global_data = get_mesh_data()
+            global_data = reader_comm_wrapper.bcast(global_data, root=0)
         else:
-            global_data = get_mesh_data()
+            global_data = reader_comm_wrapper.bcast(None, root=0)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done reading source mesh from file."
+                  " Partitioning...")
 
         from meshmode.mesh import Mesh
         if isinstance(global_data, Mesh):
@@ -1271,6 +1281,10 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             rank_per_element = partition_generator_func(mesh, tag_to_elements,
                                                         num_target_ranks)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done partitioning mesh. Splitting...")
 
         # Save this little puppy for later (m-to-n restart support)
         if reader_rank == 0:
@@ -1298,6 +1312,10 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             rank_to_mesh_data = get_rank_to_mesh_data()
 
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done splitting mesh. Writing...")
+
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
@@ -1317,6 +1335,10 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                     os.remove(pkl_filename)
                 with open(pkl_filename, "wb") as pkl_file:
                     pickle.dump(mesh_data_to_pickle, pkl_file)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done writing partitioned mesh.")
 
 
 def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
