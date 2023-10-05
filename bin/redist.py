@@ -78,6 +78,8 @@ class MyRuntimeError(RuntimeError):
 def main(actx_class, mesh_source=None, ndist=None, mdist=None,
          output_path=None, input_path=None, log_path=None,
          casename=None, use_1d_part=None, use_wall=False,
+         source_decomp_map_file=None,
+         target_decomp_map_file=None,
          restart_file=None):
     """Redistribute a mirgecom restart dataset."""
     if mesh_source is None:
@@ -173,6 +175,20 @@ def main(actx_class, mesh_source=None, ndist=None, mdist=None,
     if output_path == input_data_directory:
         raise ApplicationOptionsError("Output path must be different than input"
                                       " location because of filename collisions.")
+
+    # Try to detect whether target mesh is already created, will be when
+    # multiple data transfers are being done.
+    if target_decomp_map_file is None:
+        target_decomp_map_file = \
+            output_directory + "/" + casename + f"_decomp_np{ndist}.pkl"
+        if os.path.exists(target_decomp_map_file):
+            trg_dir, trg_map_file = os.path.split(target_decomp_map_file)
+            # Use regex to extract casename
+            match = re.match(r"(.+)_decomp\.pkl", trg_map_file)
+            if not match:
+                match = re.math(r"(.+).pkl", trg_map_file)
+            mesh_casename = match
+
 
     decomp_map_file_search_pattern = \
         input_data_directory + f"/*_decomp_np{mdist}.pkl"
@@ -292,19 +308,21 @@ def main(actx_class, mesh_source=None, ndist=None, mdist=None,
 
     comm.Barrier()
 
-    if rank == 0:
-        print(f"Partitioning mesh to {ndist} parts, writing to {mesh_filename}...")
+    if generate_target_mesh:
+        if rank == 0:
+            print(f"Partitioning mesh to {ndist} parts, writing to {mesh_filename}...")
 
-    # This bit creates the N-parted mesh pkl files and partition table
-    distribute_mesh_pkl(
-        comm, get_mesh_data, filename=mesh_filename,
-        num_target_ranks=ndist, partition_generator_func=part_func, logmgr=logmgr)
+            # This bit creates the N-parted mesh pkl files and partition table
+            distribute_mesh_pkl(
+                comm, get_mesh_data, filename=mesh_filename,
+                num_target_ranks=ndist, partition_generator_func=part_func, logmgr=logmgr)
+            
+            comm.Barrier()
 
-    comm.Barrier()
+            if rank == 0:
+                print("Done partitioning target mesh, mesh pkl files written.")
 
-    if rank == 0:
-        print("Done partitioning target mesh, mesh pkl files written.")
-        print(f"Generating the restart data for {ndist} parts...")
+    print(f"Generating the restart data for {ndist} parts...")
 
     target_decomp_map_file = mesh_filename + f"_decomp_np{ndist}.pkl"
     from mirgecom.restart import redistribute_restart_data
@@ -341,6 +359,12 @@ if __name__ == "__main__":
     parser.add_argument("-m", "--mdist", type=int, dest="mdist",
                         nargs="?", action="store",
                         help="Number of source data parts")
+    parser.add_argument("-t", "--partition-table-out", dest="npart",
+                        nargs="?", action="store",
+                        help="Target partition table pkl file.")
+    parser.add_argument("-p", "--partition-table-in", dest="mpart",
+                        nargs="?", action="store",
+                        help="Source partition table pkl file.")
     parser.add_argument("-s", "--source", type=str, dest="source",
                         nargs="?", action="store", help="Gmsh mesh source file")
     parser.add_argument("-o", "--ouput-path", type=str, dest="output_path",
@@ -365,4 +389,6 @@ if __name__ == "__main__":
          output_path=args.output_path, ndist=args.ndist,
          input_path=args.input_path, mdist=args.mdist,
          log_path=args.log_path, casename=args.casename,
-         use_1d_part=args.one_d_part, use_wall=args.use_wall)
+         use_1d_part=args.one_d_part,
+         source_decomp_map_file=args.mpart,
+         target_decomp_map_file=args.npart, use_wall=args.use_wall)
