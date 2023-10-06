@@ -904,7 +904,7 @@ def _partition_single_volume_mesh(
         mesh, rank_to_elements, return_parts=return_ranks)
 
 
-def _get_multi_volume_partitions(mesh, num_ranks, elements_to_rank,
+def _get_multi_volume_partitions(mesh, num_ranks, rank_per_element,
                                  tag_to_elements, volume_to_tags):
 
     volumes = list(volume_to_tags.keys())
@@ -926,7 +926,7 @@ def _get_multi_volume_partitions(mesh, num_ranks, elements_to_rank,
         PartID(volumes[vol_idx], rank):
             np.where(
                 (volume_index_per_element == vol_idx)
-                & (elements_to_rank == rank))[0]
+                & (rank_per_element == rank))[0]
         for vol_idx in range(len(volumes))
         for rank in range(num_ranks)}
 
@@ -1323,7 +1323,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             part_id_to_elements = None
         else:
             part_id_to_elements = _get_multi_volume_partitions(
-                mesh, num_ranks, rank_per_element, tag_to_elements,
+                mesh, num_target_ranks, rank_per_element, tag_to_elements,
                 volume_to_tags)
             # Save this little puppy for later (m-to-n restart support)
             if reader_rank == 0:
@@ -1346,7 +1346,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                     return_ranks=ranks_to_write)
             else:
                 rank_to_mesh_data = _partition_multi_volume_mesh(
-                    mesh, num_ranks, rank_per_element, part_id_to_elements,
+                    mesh, num_target_ranks, rank_per_element, part_id_to_elements,
                     tag_to_elements, volume_to_tags, return_ranks=ranks_to_write)
             return rank_to_mesh_data
 
