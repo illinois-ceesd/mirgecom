@@ -904,18 +904,15 @@ def _partition_single_volume_mesh(
         mesh, rank_to_elements, return_parts=return_ranks)
 
 
-def _partition_multi_volume_mesh(
-        mesh, num_ranks, rank_per_element, tag_to_elements, volume_to_tags, *,
-        return_ranks=None):
-    if return_ranks is None:
-        return_ranks = list(range(num_ranks))
+def _get_multi_volume_partitions(mesh, num_ranks, elements_to_rank,
+                                 tag_to_elements, volume_to_tags):
+
+    volumes = list(volume_to_tags.keys())
 
     tag_to_volume = {
         tag: vol
         for vol, tags in volume_to_tags.items()
         for tag in tags}
-
-    volumes = list(volume_to_tags.keys())
 
     volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
     for tag, elements in tag_to_elements.items():
@@ -929,12 +926,28 @@ def _partition_multi_volume_mesh(
         PartID(volumes[vol_idx], rank):
             np.where(
                 (volume_index_per_element == vol_idx)
-                & (rank_per_element == rank))[0]
+                & (elements_to_rank == rank))[0]
         for vol_idx in range(len(volumes))
         for rank in range(num_ranks)}
 
+    return part_id_to_elements
+
+
+def _partition_multi_volume_mesh(
+        mesh, num_ranks, rank_per_element,
+        part_id_to_elements, tag_to_elements, volume_to_tags, *,
+        return_ranks=None):
+    if return_ranks is None:
+        return_ranks = list(range(num_ranks))
+    volumes = list(volume_to_tags.keys())
+
     # TODO: Add a public meshmode function to accomplish this? So we're
     # not depending on meshmode internals
+    # PartID is (rank, vol) pair
+    # part_index is range(len(PartID))
+    # part_id_to_part_index is {PartID: part_index}
+    # global_elem_to_part_elem is ary[global_elem_index] = \
+    #    [part_index, local_element_index]
     part_id_to_part_index = {
         part_id: part_index
         for part_index, part_id in enumerate(part_id_to_elements.keys())}
@@ -943,6 +956,8 @@ def _partition_multi_volume_mesh(
         mesh.nelements, part_id_to_elements, part_id_to_part_index,
         mesh.element_id_dtype)
 
+    # tag_to_global_to_part = \
+    #    {tag: ary[global_elem_index][part_index, local_element_index]}
     tag_to_global_to_part = {
         tag: global_elem_to_part_elem[elements, :]
         for tag, elements in tag_to_elements.items()}
@@ -1112,9 +1127,12 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                         mesh, num_ranks, rank_per_element,
                         return_ranks=node_ranks)
                 else:
-                    rank_to_mesh_data = _partition_multi_volume_mesh(
+                    part_id_to_elements = _get_multi_volume_partitions(
                         mesh, num_ranks, rank_per_element, tag_to_elements,
-                        volume_to_tags, return_ranks=node_ranks)
+                        volume_to_tags)
+                    rank_to_mesh_data = _partition_multi_volume_mesh(
+                        mesh, num_ranks, rank_per_element, part_id_to_elements,
+                        tag_to_elements, volume_to_tags, return_ranks=node_ranks)
 
                 rank_to_node_rank = {
                     rank: node_rank
@@ -1239,8 +1257,13 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         my_ending_rank = my_starting_rank + num_ranks_this_reader - 1
         ranks_to_write = list(range(my_starting_rank, my_ending_rank+1))
 
+        if reader_rank == 0:
+            print("Reading(world_rank,reader_rank): "
+                  "Writing[starting_rank,ending_rank]")
+            print("----------------------------------")
+        reader_comm.Barrier()
         print(f"R({my_rank},{reader_rank}): "
-              f"W({my_starting_rank},{my_ending_rank})")
+              f"W[{my_starting_rank},{my_ending_rank}]")
 
         if partition_generator_func is None:
             def partition_generator_func(mesh, tag_to_elements, num_target_ranks):
@@ -1254,13 +1277,15 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                     global_data = get_mesh_data()
             else:
                 global_data = get_mesh_data()
+            print(f"{datetime.now()}: Done reading source mesh from file. "
+                  "Broadcasting...")
             global_data = reader_comm_wrapper.bcast(global_data, root=0)
         else:
             global_data = reader_comm_wrapper.bcast(None, root=0)
 
         reader_comm.Barrier()
         if reader_rank == 0:
-            print(f"{datetime.now()}: Done reading source mesh from file."
+            print(f"{datetime.now()}: Done distrbuting source mesh data."
                   " Partitioning...")
 
         from meshmode.mesh import Mesh
@@ -1282,10 +1307,6 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             rank_per_element = partition_generator_func(mesh, tag_to_elements,
                                                         num_target_ranks)
 
-        reader_comm.Barrier()
-        if reader_rank == 0:
-            print(f"{datetime.now()}: Done partitioning mesh. Splitting...")
-
         # Save this little puppy for later (m-to-n restart support)
         if reader_rank == 0:
             part_table_fname = filename + f"_decomp_np{num_target_ranks}.pkl"
@@ -1294,6 +1315,30 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             with open(part_table_fname, "wb") as pkl_file:
                 pickle.dump(rank_per_element, pkl_file)
 
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done with global partitioning. Splitting...")
+
+        if tag_to_elements is None:
+            part_id_to_elements = None
+        else:
+            part_id_to_elements = _get_multi_volume_partitions(
+                mesh, num_ranks, rank_per_element, tag_to_elements,
+                volume_to_tags)
+            # Save this little puppy for later (m-to-n restart support)
+            if reader_rank == 0:
+                mv_part_table_fname = \
+                    filename + f"_multivol_decomp_np{num_target_ranks}.pkl"
+                if os.path.exists(mv_part_table_fname):
+                    os.remove(mv_part_table_fname)
+                    with open(mv_part_table_fname, "wb") as pkl_file:
+                        pickle.dump(part_id_to_elements, pkl_file)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: - Got PartID-to-elements. "
+                  "Making mesh data structures...")
+
         def get_rank_to_mesh_data():
             if tag_to_elements is None:
                 rank_to_mesh_data = _partition_single_volume_mesh(
@@ -1301,10 +1346,11 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                     return_ranks=ranks_to_write)
             else:
                 rank_to_mesh_data = _partition_multi_volume_mesh(
-                    mesh, num_target_ranks, rank_per_element, tag_to_elements,
-                    volume_to_tags, return_ranks=ranks_to_write)
+                    mesh, num_ranks, rank_per_element, part_id_to_elements,
+                    tag_to_elements, volume_to_tags, return_ranks=ranks_to_write)
             return rank_to_mesh_data
 
+        reader_comm.Barrier()
         if logmgr:
             logmgr.add_quantity(t_mesh_split)
             with t_mesh_split.get_sub_timer():
