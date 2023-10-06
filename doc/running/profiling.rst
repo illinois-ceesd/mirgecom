@@ -43,6 +43,9 @@ FunctionTrace
 
 - does not run
 
+Austin
+^^^^^^
+
 Profiling memory consumption with :mod:`memray`
 -----------------------------------------------
 
