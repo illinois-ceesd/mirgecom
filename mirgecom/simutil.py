@@ -26,6 +26,11 @@ Mesh and element utilities
 .. autofunction:: distribute_mesh
 .. autofunction:: get_number_of_tetrahedron_nodes
 .. autofunction:: get_box_mesh
+.. autofunction:: interdecomposition_mapping
+.. autofunction:: interdecomposition_overlap
+.. autofunction:: invert_decomp
+.. autofunction:: multivolume_interdecomposition_overlap
+.. autofunction:: copy_mapped_dof_array_data
 
 Simulation support utilities
 ----------------------------
@@ -1475,7 +1480,6 @@ def copy_mapped_dof_array_data(trg_dof_array, src_dof_array, index_map):
     for trg_el, src_el in index_map.items():
         trg_array[trg_el] = src_array[src_el]
 
-    # trg_dof_array_np[0] = trg_array
     return actx.from_numpy(trg_dof_array_np)
 
 
@@ -1555,6 +1559,73 @@ def interdecomposition_overlap(target_decomp_map, source_decomp_map,
             src_el_index = src_part_to_els[src_part].index(glb_el)
             loc_el_index = trg_els.index(glb_el)
             overlap_maps[trg_part][src_part][loc_el_index] = src_el_index
+    return overlap_maps
+
+
+# Interdecomposition overlap utility for multi-volume datasets
+def multivolume_interdecomposition_overlap(target_decomp, source_decomp,
+                                           target_vol_decomp, source_vol_decomp,
+                                           return_ranks=None):
+    """
+    Map element indices for overlapping, disparate decompositions with volumes.
+
+    Parameters
+    ----------
+        target_decomp: Decomposition map of the target {rank: [elements]}
+        source_decomp: Decomposition map of the source {rank: [elements]}
+        target_vol_decomp: Decomposition map of the target with volumes
+            {PartID: [elements]}
+        source_vol_decomp: Decomposition map of the source with volumes
+            {PartID: [elements]}
+        return_ranks: List of ranks for which the overlaps should be computed.
+            If None, all ranks are considered.
+
+    Returns
+    -------
+        A dictionary with structure:
+        {
+            target_rank: {
+                source_rank: {
+                    PartID: {
+                        target_local_index: source_local_index
+                    }
+                }
+            }
+        }
+    """
+    # If no specific ranks are provided, consider all ranks in the target decomp
+    if return_ranks is None:
+        return_ranks = list(target_decomp.keys())
+
+    rank_overlap_map = interdecomposition_mapping(target_decomp, source_decomp)
+
+    overlap_maps = {}
+
+    for trg_rank in return_ranks:
+        # Extract set of unique PartIDs for current trg rank from tgt_vol_decomp
+        targ_partids = [partid for partid in target_vol_decomp.keys()
+                        if partid.rank == trg_rank]
+
+        overlap_maps[trg_rank] = {}
+        for src_rank in rank_overlap_map[trg_rank]:
+            overlap_maps[trg_rank][src_rank] = {}
+
+        for targ_partid in targ_partids:
+            src_partid = PartID(volume_tag=targ_partid.volume_tag, rank=src_rank)
+            overlap_maps[trg_rank][src_rank][targ_partid] = {}
+
+            # Determine element overlaps, set is used for performance considerations
+            target_elements_set = set(target_vol_decomp[targ_partid])
+            source_elements_set = set(source_vol_decomp.get(src_partid, []))
+
+            common_elements_set = \
+                target_elements_set.intersection(source_elements_set)
+
+    for trg_el in common_elements_set:
+        trg_local_idx = target_vol_decomp[targ_partid].index(trg_el)
+        src_local_idx = source_vol_decomp[src_partid].index(trg_el)
+        overlap_maps[trg_rank][src_rank][targ_partid][trg_local_idx] = src_local_idx
+
     return overlap_maps
 
 
