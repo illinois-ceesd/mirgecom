@@ -898,6 +898,17 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     return distribute_mesh(comm, generate_mesh)
 
 
+def invert_decomp(decomp_map):
+    """Return a list of global elements for each partition."""
+    from collections import defaultdict
+    global_elements_per_part = defaultdict(list)
+
+    for elemid, part in enumerate(decomp_map):
+        global_elements_per_part[part].append(elemid)
+
+    return global_elements_per_part
+
+
 def _partition_single_volume_mesh(
         mesh, num_ranks, rank_per_element, *, return_ranks=None):
     rank_to_elements = {
@@ -1319,6 +1330,10 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                 os.remove(part_table_fname)
             with open(part_table_fname, "wb") as pkl_file:
                 pickle.dump(rank_per_element, pkl_file)
+            rank_to_elems = invert_decomp(rank_per_element)
+            part_table_fname = filename + f"_idecomp_np{num_target_ranks}.pkl"
+            with open(part_table_fname, "wb") as pkl_file:
+                pickle.dump(rank_to_elems, pkl_file)
 
         reader_comm.Barrier()
         if reader_rank == 0:
@@ -1333,7 +1348,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             # Save this little puppy for later (m-to-n restart support)
             if reader_rank == 0:
                 mv_part_table_fname = \
-                    filename + f"_multivol_decomp_np{num_target_ranks}.pkl"
+                    filename + f"_multivol_idecomp_np{num_target_ranks}.pkl"
                 if os.path.exists(mv_part_table_fname):
                     os.remove(mv_part_table_fname)
                     with open(mv_part_table_fname, "wb") as pkl_file:
@@ -1483,6 +1498,47 @@ def copy_mapped_dof_array_data(trg_dof_array, src_dof_array, index_map):
     return actx.from_numpy(trg_dof_array_np)
 
 
+def interdecomposition_imapping(target_idecomp, source_idecomp):
+    """
+    Return a mapping of which partitions to source for the target decomp.
+
+    Expects input format: {rank: [elements]}
+
+    Parameters
+    ----------
+    target_idecomp: dict
+        Target decomposition in the format {rank: [elements]}
+    source_idecomp: dict
+        Source decomposition in the format {rank: [elements]}
+
+    Returns
+    -------
+    dict
+        Dictionary like {trg_rank: [src_ranks]}
+    """
+    from collections import defaultdict
+
+    # Convert {rank: [elements]} format into {element: rank} for faster look-up
+    source_elem_to_rank = {}
+    for rank, elements in source_idecomp.items():
+        for elem in elements:
+            source_elem_to_rank[elem] = rank
+
+    interdecomp_map = defaultdict(set)
+
+    for trg_rank, trg_elements in target_idecomp.items():
+        for elem in trg_elements:
+            src_rank = source_elem_to_rank.get(elem)
+            if src_rank is not None:
+                interdecomp_map[trg_rank].add(src_rank)
+
+    # Convert sets to lists for the final output
+    for rank in interdecomp_map:
+        interdecomp_map[rank] = list(interdecomp_map[rank])
+
+    return interdecomp_map
+
+
 def interdecomposition_mapping(target_decomp, source_decomp):
     """Return a mapping of which partitions to source for the target decomp."""
     from collections import defaultdict
@@ -1496,17 +1552,6 @@ def interdecomposition_mapping(target_decomp, source_decomp):
         interdecomp_map[part] = list(interdecomp_map[part])
 
     return interdecomp_map
-
-
-def invert_decomp(decomp_map):
-    """Return a list of global elements for each partition."""
-    from collections import defaultdict
-    global_elements_per_part = defaultdict(list)
-
-    for elemid, part in enumerate(decomp_map):
-        global_elements_per_part[part].append(elemid)
-
-    return global_elements_per_part
 
 
 # Need a function to determine which of my local elements overlap
@@ -1563,7 +1608,7 @@ def interdecomposition_overlap(target_decomp_map, source_decomp_map,
 
 
 # Interdecomposition overlap utility for multi-volume datasets
-def multivolume_interdecomposition_overlap(target_decomp, source_decomp,
+def multivolume_interdecomposition_overlap(target_idecomp, source_idecomp,
                                            target_vol_decomp, source_vol_decomp,
                                            return_ranks=None):
     """
@@ -1571,8 +1616,8 @@ def multivolume_interdecomposition_overlap(target_decomp, source_decomp,
 
     Parameters
     ----------
-        target_decomp: Decomposition map of the target {rank: [elements]}
-        source_decomp: Decomposition map of the source {rank: [elements]}
+        target_idecomp: Decomposition map of the target {rank: [elements]}
+        source_idecomp: Decomposition map of the source {rank: [elements]}
         target_vol_decomp: Decomposition map of the target with volumes
             {PartID: [elements]}
         source_vol_decomp: Decomposition map of the source with volumes
@@ -1595,9 +1640,9 @@ def multivolume_interdecomposition_overlap(target_decomp, source_decomp,
     """
     # If no specific ranks are provided, consider all ranks in the target decomp
     if return_ranks is None:
-        return_ranks = list(target_decomp.keys())
+        return_ranks = list(target_idecomp.keys())
 
-    rank_overlap_map = interdecomposition_mapping(target_decomp, source_decomp)
+    rank_overlap_map = interdecomposition_imapping(target_idecomp, source_idecomp)
 
     overlap_maps = {}
 
