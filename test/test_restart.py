@@ -33,7 +33,7 @@ from mirgecom.discretization import create_discretization_collection
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-
+from grudge.discretization import PartID
 
 logger = logging.getLogger(__name__)
 
@@ -105,11 +105,18 @@ def test_interdecomp_overlap(src_trg_np):
     src_part_els = invert_decomp(src_dcmp)
     trg_part_els = invert_decomp(trg_dcmp)
 
+    trg_decomp_file = f"data/M24k_mesh_idecomp_np{trg_np}_pkl_data"
+    src_decomp_file = f"data/M24k_mesh_idecomp_np{src_np}_pkl_data"
+    with open(src_decomp_file, "wb") as file:
+        pickle.dump(src_part_els, file)
+    with open(trg_decomp_file, "wb") as file:
+        pickle.dump(trg_part_els, file)
+
     nsrc_parts = len(src_part_els)
     ntrg_parts = len(trg_part_els)
 
-    print(f"Numver of source partitions: {nsrc_parts}.")
-    print(f"Numver of target partitions: {ntrg_parts}.")
+    print(f"Number of source partitions: {nsrc_parts}.")
+    print(f"Number of target partitions: {ntrg_parts}.")
 
     idx = interdecomposition_overlap(trg_dcmp, src_dcmp)
     nsrc_els = len(src_dcmp)
@@ -203,3 +210,148 @@ def test_dofarray_mapped_copy(actx_factory):
     resid = test_data_1 - test_data_2
     from mirgecom.simutil import max_component_norm
     assert max_component_norm(dcoll, resid, np.inf) == 0
+
+
+def test_multivolume_interdecomp_overlap_basic():
+    """Test the multivolume_interdecomp_overlap."""
+    # Total elements in the testing mesh
+    total_elements = 100
+
+    # Create test decomps
+    src_np, trg_np = 3, 2
+    elements_per_rank_src = total_elements // src_np
+    src_decomp = {i: list(range(i * elements_per_rank_src,
+                                (i + 1) * elements_per_rank_src))
+                  for i in range(src_np)}
+
+    elements_per_rank_trg = total_elements // trg_np
+    trg_decomp = {i: list(range(i * elements_per_rank_trg,
+                                (i + 1) * elements_per_rank_trg))
+                  for i in range(trg_np)}
+
+    # Adjust the last rank to include any remaining elements
+    src_decomp[src_np - 1].extend(range(src_np * elements_per_rank_src,
+                                        total_elements))
+    trg_decomp[trg_np - 1].extend(range(trg_np * elements_per_rank_trg,
+                                        total_elements))
+
+    # Testing volume decomps
+    # Vol1: even elements, Vol2: odd elements
+    vol1_elements = [i for i in range(total_elements) if i % 2 == 0]
+    vol2_elements = [i for i in range(total_elements) if i % 2 != 0]
+
+    src_vol_decomp = {}
+    trg_vol_decomp = {}
+
+    # Test vol decomps
+    for i in range(src_np):
+        src_vol_decomp[PartID(volume_tag="vol1", rank=i)] = \
+            [el for el in src_decomp[i] if el in vol1_elements]
+        src_vol_decomp[PartID(volume_tag="vol2", rank=i)] = \
+            [el for el in src_decomp[i] if el in vol2_elements]
+
+    for i in range(trg_np):
+        trg_vol_decomp[PartID(volume_tag="vol1", rank=i)] = \
+            [el for el in trg_decomp[i] if el in vol1_elements]
+        trg_vol_decomp[PartID(volume_tag="vol2", rank=i)] = \
+            [el for el in trg_decomp[i] if el in vol2_elements]
+
+    from mirgecom.simutil import multivolume_interdecomposition_overlap
+    # Compute the multivolume interdecomp overlaps
+    mv_idx = multivolume_interdecomposition_overlap(
+        trg_decomp, src_decomp, trg_vol_decomp, src_vol_decomp
+    )
+
+    # Perform some basic checks on the returned data structure
+    # The num trg ranks in the overlap should match the input
+    assert set(mv_idx.keys()) == set(trg_decomp.keys())
+
+    for _trg_rank, src_rank_mappings in mv_idx.items():
+        for src_rank, partid_mappings in src_rank_mappings.items():
+            for partid, element_mappings in partid_mappings.items():
+                for trg_local_idx, src_local_idx in element_mappings.items():
+                    # match element ids for the trg and src at resp index
+                    assert trg_vol_decomp[partid][trg_local_idx] == \
+                        src_vol_decomp[PartID(volume_tag=partid.volume_tag,
+                                              rank=src_rank)][src_local_idx]
+
+
+def _generate_decompositions(total_elements, num_ranks, pattern="chunked"):
+    """Generate testing decomp."""
+    elements_per_rank = total_elements // num_ranks
+    if pattern == "chunked":
+        decomp = {i: list(range(i * elements_per_rank,
+                                (i + 1) * elements_per_rank))
+                  for i in range(num_ranks)}
+        # Toss remaining els into last rank
+        decomp[num_ranks - 1].extend(range(num_ranks * elements_per_rank,
+                                           total_elements))
+    elif pattern == "strided":
+        decomp = {i: list(range(i, total_elements, num_ranks))
+                  for i in range(num_ranks)}
+    elif pattern == "random":
+        all_elements = list(range(total_elements))
+        np.random.shuffle(all_elements)
+        decomp = {i: all_elements[i * elements_per_rank: (i + 1) * elements_per_rank]
+                  for i in range(num_ranks)}
+        decomp[num_ranks - 1].extend(all_elements[num_ranks * elements_per_rank:])
+    return decomp
+
+
+@pytest.mark.parametrize("decomp_pattern", ["chunked", "strided", "random"])
+@pytest.mark.parametrize("vol_pattern", ["front_back", "random_split"])
+@pytest.mark.parametrize("src_trg_ranks", [(3, 4), (4, 4), (5, 4), (1, 4), (4, 1)])
+def test_multivolume_interdecomp_overlap(decomp_pattern, vol_pattern, src_trg_ranks):
+    """Test the multivolume_interdecomp_overlap."""
+    total_elements = 100
+    src_np, trg_np = src_trg_ranks
+
+    # Generate global decomps
+    src_decomp = _generate_decompositions(total_elements, src_np,
+                                          pattern=decomp_pattern)
+    trg_decomp = _generate_decompositions(total_elements, trg_np,
+                                          pattern=decomp_pattern)
+
+    # Volume splitting
+    if vol_pattern == "front_back":
+        mid_point = total_elements // 2
+        vol1_elements = list(range(mid_point))
+        vol2_elements = list(range(mid_point, total_elements))
+    elif vol_pattern == "random_split":
+        all_elements = list(range(total_elements))
+        np.random.shuffle(all_elements)
+        mid_point = total_elements // 2
+        vol1_elements = all_elements[:mid_point]
+        vol2_elements = all_elements[mid_point:]
+
+    src_vol_decomp = {}
+    trg_vol_decomp = {}
+
+    # Form the multivol decomps
+    for i in range(src_np):
+        src_vol_decomp[PartID(volume_tag="vol1", rank=i)] = \
+            [el for el in src_decomp[i] if el in vol1_elements]
+        src_vol_decomp[PartID(volume_tag="vol2", rank=i)] = \
+            [el for el in src_decomp[i] if el in vol2_elements]
+
+    for i in range(trg_np):
+        trg_vol_decomp[PartID(volume_tag="vol1", rank=i)] = \
+            [el for el in trg_decomp[i] if el in vol1_elements]
+        trg_vol_decomp[PartID(volume_tag="vol2", rank=i)] = \
+            [el for el in trg_decomp[i] if el in vol2_elements]
+
+    # Testing the overlap utility
+    from mirgecom.simutil import multivolume_interdecomposition_overlap
+    mv_idx = multivolume_interdecomposition_overlap(
+        trg_decomp, src_decomp, trg_vol_decomp, src_vol_decomp
+    )
+
+    assert set(mv_idx.keys()) == set(trg_decomp.keys())
+
+    for _trg_rank, src_rank_mappings in mv_idx.items():
+        for src_rank, partid_mappings in src_rank_mappings.items():
+            for partid, element_mappings in partid_mappings.items():
+                for trg_local_idx, src_local_idx in element_mappings.items():
+                    assert trg_vol_decomp[partid][trg_local_idx] == \
+                        src_vol_decomp[PartID(volume_tag=partid.volume_tag,
+                                              rank=src_rank)][src_local_idx]
