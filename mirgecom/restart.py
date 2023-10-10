@@ -412,7 +412,7 @@ def _get_restart_data_for_target_rank(
         return out_rst_data
 
 
-def redistribute_multivolume_restart_data_new(
+def redistribute_multivolume_restart_data(
         actx, comm, source_idecomp_map, target_idecomp_map,
         source_multivol_decomp_map, target_multivol_decomp_map,
         src_input_path, output_path, mesh_filename):
