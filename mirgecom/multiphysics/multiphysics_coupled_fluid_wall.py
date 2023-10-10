@@ -1007,8 +1007,8 @@ def add_interface_boundaries(
             boundary_velocity=boundary_velocity,
             grad_cv_plus=grad_cv_tpair.ext,
             grad_t_plus=grad_temperature_tpair.ext,
-            lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
-                                          fluid_lengthscales),
+            # lengthscales_minus=op.project(dcoll, fluid_dd, state_tpair.dd,
+            #                               fluid_lengthscales),
             flux_penalty_amount=wall_penalty_amount)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[wall_dd, fluid_dd],
@@ -1025,8 +1025,8 @@ def add_interface_boundaries(
             u_ambient=ambient_temperature,
             grad_cv_plus=grad_cv_tpair.ext,
             grad_t_plus=grad_temperature_tpair.ext,
-            lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
-                                          wall_lengthscales),
+            # lengthscales_minus=op.project(dcoll, wall_dd, state_tpair.dd,
+            #                               wall_lengthscales),
             flux_penalty_amount=wall_penalty_amount)
         for state_tpair, grad_cv_tpair, grad_temperature_tpair in zip(
             state_inter_volume_trace_pairs[fluid_dd, wall_dd],
