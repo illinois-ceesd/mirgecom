@@ -44,7 +44,7 @@ from mirgecom.io import make_init_message
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    LinearizedOutflowBoundary,
+    LinearizedOutflow2DBoundary,
     RiemannInflowBoundary,
     PressureOutflowBoundary,
     FarfieldBoundary
@@ -183,19 +183,21 @@ def main(actx_class, use_esdg=False,
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 0.1
     orig = np.zeros(shape=(dim,))
-    initializer = Uniform(dim=dim, velocity=velocity, pressure=1.0, rho=1.0)
+    initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
     # Riemann inflow boundary
     from mirgecom.initializers import initialize_flow_solution
+    bnd_discr = dcoll.discr_from_dd(BoundaryDomainTag("inlet"))
+    bnd_nodes = actx.thaw(bnd_discr.nodes())
     free_stream_cv = initialize_flow_solution(
-        actx, dcoll=dcoll, gas_model=gas_model, dd_bdry=BoundaryDomainTag("inlet"),
+        actx, gas_model=gas_model, nodes=bnd_nodes,
         pressure=1.0, temperature=1.0, velocity=velocity)
     riemann_inflow_bnd = RiemannInflowBoundary(cv=free_stream_cv,
                                                temperature=1.0)
 
     # Linearized outflow
-    linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=1.0,
+    linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=1.0,
         free_stream_velocity=velocity, free_stream_pressure=1.0)
 
     # Pressure prescribed outflow boundary
