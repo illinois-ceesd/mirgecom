@@ -251,7 +251,25 @@ def _find_rank_with_all_volumes(multivol_decomp_map):
 # is persistent across multiple calls with different src data.
 def _recursive_map_and_copy(trg_item, src_item, trg_partid_to_index_map,
                             src_volume_sizes):
-    """Recursively map and copy DOFArrays from src_item."""
+    """
+    Recursively map and copy DOFArrays from the source item to the target item.
+
+    Parameters
+    ----------
+    trg_item: object
+        The target item where data will be mapped and copied.
+    src_item: object
+        The source item from which data will be copied.
+    trg_partid_to_index_map: dict
+        A mapping from PartID to index for the target.
+    src_volume_sizes: dict
+        Dictionary of volume sizes for the source.
+
+    Returns
+    -------
+    object:
+        The target item after mapping and copying the data from the source item.
+    """
     if trg_item is None:
         print(f"{src_item=}")
         raise ValueError("trg_item is None, but src_item is not.")
@@ -292,7 +310,6 @@ def _recursive_map_and_copy(trg_item, src_item, trg_partid_to_index_map,
 
 def _ensure_unique_nelems(mesh_data_dict):
     seen_nelems = set()
-
     for volid, mesh_data in mesh_data_dict.items():
         if mesh_data.nelements in seen_nelems:
             raise ValueError(f"Multiple volumes {volid} found with same "
@@ -309,7 +326,28 @@ def _get_volume_sizes_on_each_rank(multivol_decomp_map):
 
 def _recursive_resize_reinit_with_zeros(actx, sample_item, target_volume_sizes,
                                          sample_volume_sizes):
-    """Recursively initialize data structures with zeros or original data."""
+    """
+    Recursively initialize a composite data structure based on a sample.
+
+    DOFArray data items are initialized with zeros of the appropriate
+    target partid size. Non DOFArray items are copied from original sample.
+
+    Parameters
+    ----------
+    actx: :class:`arraycontext.ArrayContext`
+        The array context used for operations.
+    sample_item: object
+        A sample item to base the initialization on.
+    target_volume_sizes: dict
+        Target volume sizes.
+    sample_volume_sizes: dict
+        Sample volume sizes.
+
+    Returns
+    -------
+    object:
+        Initialized data structure.
+    """
     if isinstance(sample_item, DOFArray):
         sample_nel, sample_nnodes = sample_item[0].shape
         volume_tag = next((vol_tag for vol_tag, size in sample_volume_sizes.items()
@@ -378,7 +416,41 @@ def redistribute_multivolume_restart_data_new(
         actx, comm, source_idecomp_map, target_idecomp_map,
         source_multivol_decomp_map, target_multivol_decomp_map,
         src_input_path, output_path, mesh_filename):
-    """Redist a mv ds."""
+    """
+    Redistribute (m-to-n) multi-volume restart data.
+
+    This function takes in src(m) and trg(n) decomps for multi-volume datasets.
+    It then redistributes the restart data from src to match the trg decomposition.
+
+    Parameters
+    ----------
+    actx: :class:`arraycontext.ArrayContext`
+        The array context used for operations
+    comm:
+        Am MPI communicator object
+    source_idecomp_map: dict
+        Decomposition map of the source distribution without volume tags.
+    target_idecomp_map: dict
+        Decomposition map of the target distribution without volume tags.
+    source_multivol_decomp_map: dict
+        Decomposition map of the source with volume tags. It maps from src `PartID`
+        objects to lists of elements.
+    target_multivol_decomp_map: dict
+        Decomposition map of the target with volume tags. It maps from trg 'PartID'
+         objects to lists of elements.
+    src_input_path: str
+        Path to the source restart data files.
+    output_path: str
+        Path to save the redistributed restart data files.
+    mesh_filename: str
+        Base filename of the mesh data for the restart data
+
+    Returns
+    -------
+    None
+        This function doesn't return any value but writes the redistributed
+        restart data to the specified `output_path`.
+    """
     from mpi4py.util import pkl5
 
     comm_wrapper = pkl5.Intracomm(comm)
