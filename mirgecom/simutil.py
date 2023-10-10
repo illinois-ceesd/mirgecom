@@ -1631,7 +1631,7 @@ def multivolume_interdecomposition_overlap(target_idecomp, source_idecomp,
         {
             target_rank: {
                 source_rank: {
-                    PartID: {
+                    (targ)PartID: {
                         target_local_index: source_local_index
                     }
                 }
