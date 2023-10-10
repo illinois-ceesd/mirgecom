@@ -67,7 +67,8 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=[(0.0,), (-5.0,)], b=[(10.0,), (5.0,)], nelements_per_axis=(nel_1d,) * dim
+        a=[(0.0,), (-5.0,), (-10.0,)], b=[(10.0,), (5.0,), (0.0,)],
+        nelements_per_axis=(nel_1d,) * dim
     )
 
     order = 3

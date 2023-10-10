@@ -51,8 +51,8 @@ from mirgecom.boundary import (
     PressureOutflowBoundary,
     AdiabaticSlipBoundary,
     IsothermalWallBoundary,
-    LinearizedInflowBoundary,
-    LinearizedOutflowBoundary,
+    LinearizedInflow2DBoundary,
+    LinearizedOutflow2DBoundary,
 )
 from mirgecom.utils import force_evaluation
 from mirgecom.fluid import make_conserved
@@ -67,14 +67,18 @@ from mirgecom.logging_quantities import (
 logger = logging.getLogger(__name__)
 
 
-class Initializer():
+class Initializer:
+    """Initial condition with uniform velocity and smooth temperature profile.
 
-    def __init__(self, dim, pressure, velocity, species_mass_fractions):
+    The smoothing is only applied around the region with no-slip wall to avoid
+    diverging calculations.
+    """
+
+    def __init__(self, dim, velocity):
         self._dim = dim
         self._velocity = velocity
 
     def __call__(self, x_vec, eos):
-
         actx = x_vec[0].array_context
 
         temp_y = 1.0 + actx.np.tanh(1.0/0.01*x_vec[1])
@@ -83,12 +87,8 @@ class Initializer():
         pressure = 1.0
         mass = pressure/(eos.gas_const()*temperature)
         velocity = self._velocity
-
         energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
-
-        return make_conserved(dim=self._dim,
-                              mass=mass,
-                              energy=energy,
+        return make_conserved(dim=self._dim, mass=mass, energy=energy,
                               momentum=mass*velocity)
 
 
@@ -244,13 +244,12 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
 
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 0.3*np.sqrt(1.4*1.0*2.0)
-    flow_init = Initializer(dim=2, pressure=1.0, velocity=velocity,
-                            species_mass_fractions=None)
+    flow_init = Initializer(dim=2, velocity=velocity)
 
-    linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=0.5,
+    linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=0.5,
         free_stream_pressure=1.0, free_stream_velocity=velocity)
 
-    linear_inflow_bnd = LinearizedInflowBoundary(free_stream_density=0.5,
+    linear_inflow_bnd = LinearizedInflow2DBoundary(free_stream_density=0.5,
         free_stream_pressure=1.0, free_stream_velocity=velocity)
 
     boundaries = {
@@ -340,11 +339,11 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
         dv = state.dv
         viz_fields = [("CV", cv),
                       ("dt", dt),
-                      ("DV_U", cv.momentum[0]/cv.mass),
-                      ("DV_V", cv.momentum[1]/cv.mass),
-                      ("DV_Ma", cv.velocity[0]/dv.speed_of_sound),
-                      ("DV_P", dv.pressure),
-                      ("DV_T", dv.temperature)]
+                      ("U", cv.velocity[0]),
+                      ("V", cv.velocity[1]),
+                      ("P", dv.pressure),
+                      ("T", dv.temperature),
+                      ("Mach", cv.velocity[0]/dv.speed_of_sound)]
 
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
                       step=step, t=t, overwrite=True)
@@ -370,11 +369,11 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
         pressure = force_evaluation(actx, dv.pressure)
         temperature = force_evaluation(actx, dv.temperature)
 
-        if global_reduce(check_naninf_local(dcoll, "vol", pressure), op="lor"):
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        if global_reduce(check_naninf_local(dcoll, "vol", temperature), op="lor"):
+        if check_naninf_local(dcoll, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in temperature data.")
 
