@@ -47,7 +47,8 @@ from mirgecom.logging_quantities import (
 
 from mirgecom.simutil import (
     ApplicationOptionsError,
-    distribute_mesh_pkl
+    distribute_mesh_pkl,
+    invert_decomp
 )
 from mirgecom.mpi import mpi_entry_point
 
@@ -278,24 +279,32 @@ def main(actx_class, mesh_source=None, ndist=None, mdist=None,
             source_mesh_data = get_mesh_data()
             from meshmode.mesh import Mesh
             if isinstance(source_mesh_data, Mesh):
+                multivolume_dataset = False
                 source_mesh = source_mesh_data
                 tag_to_elements = None
                 volume_to_tags = None
             elif isinstance(source_mesh_data, tuple):
                 source_mesh, tag_to_elements, volume_to_tags = source_mesh_data
+                multivolume_dataset = True
             else:
                 raise TypeError("Unexpected result from get_mesh_data")
+            comm.bcast(multivolume_dataset)
             rank_per_element = my_partitioner(source_mesh, tag_to_elements, mdist)
             with open(source_decomp_map_file, "wb") as pkl_file:
                 pickle.dump(rank_per_element, pkl_file)
             print("Done generating source decomp.")
+        else:
+            multivolume_dataset = comm.bcast(None)
 
     comm.Barrier()
 
     if rank == 0:
-        print(f"Partitioning mesh to {ndist} parts, writing to {mesh_filename}...")
+        meshtype = " multi-volume " if multivolume_dataset else ""
+        print(f"Partitioning {meshtype} mesh to {ndist} parts, "
+              f"writing to {mesh_filename}...")
 
     # This bit creates the N-parted mesh pkl files and partition table
+    # Should only do this if the n decomp map is not found in the output path.
     distribute_mesh_pkl(
         comm, get_mesh_data, filename=mesh_filename,
         num_target_ranks=ndist, partition_generator_func=part_func, logmgr=logmgr)
@@ -306,10 +315,33 @@ def main(actx_class, mesh_source=None, ndist=None, mdist=None,
         print("Done partitioning target mesh, mesh pkl files written.")
         print(f"Generating the restart data for {ndist} parts...")
 
-    target_decomp_map_file = mesh_filename + f"_decomp_np{ndist}.pkl"
-    from mirgecom.restart import redistribute_restart_data
-    redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
-                              target_decomp_map_file, output_path, mesh_filename)
+    if multivolume_dataset:
+        target_decomp_map_file = mesh_filename + f"_decomp_np{ndist}.pkl"
+        target_multivol_decomp_map_file = \
+            mesh_filename + f"_multivol_idecomp_np{ndist}.pkl"
+        with open(target_decomp_map_file, "rb") as pkl_file:
+            trg_dcmp = pickle.load(pkl_file)
+            trg_idcmp = invert_decomp(trg_dcmp)
+        with open(target_multivol_decomp_map_file, "rb") as pkl_file:
+            trg_mv_dcmp = pickle.load(pkl_file)
+        source_decomp_map_file = input_path + f"_decomp_np{mdist}.pkl"
+        source_multivol_decomp_map_file = \
+            input_path + f"_multivol_idcomp_np{mdist}.pkl"
+        with open(source_decomp_map_file, "rb") as pkl_file:
+            src_dcmp = pickle.load(pkl_file)
+            src_idcmp = invert_decomp(src_dcmp)
+        with open(source_multivol_decomp_map_file, "rb") as pkl_file:
+            src_mv_dcmp = pickle.load(pkl_file)
+        from mirgecom.restart import redistribute_multivolume_restart_data
+        redistribute_multivolume_restart_data(
+            actx, comm, src_idcmp, trg_idcmp,
+            src_mv_dcmp, trg_mv_dcmp, input_path,
+            output_path, mesh_filename)
+    else:
+        target_decomp_map_file = mesh_filename + f"_decomp_np{ndist}.pkl"
+        from mirgecom.restart import redistribute_restart_data
+        redistribute_restart_data(actx, comm, source_decomp_map_file, input_path,
+                                  target_decomp_map_file, output_path, mesh_filename)
 
     if rank == 0:
         print("Done generating restart data.")
