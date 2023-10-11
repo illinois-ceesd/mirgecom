@@ -4,19 +4,17 @@
 #SBATCH --partition=gpuA40x4
 #SBATCH --ntasks-per-node=4
 #SBATCH --gpus-per-node=4
-#SBATCH --gpu-bind=closest       # select a cpu close to gpu on pci bus topology
+#SBATCH --gpu-bind=single:1
 #SBATCH --account=bbkf-delta-gpu
 #SBATCH --exclusive              # dedicated node for this job
 #SBATCH --no-requeue
 #SBATCH --gpus-per-task=1
-#SBATCH --gpu-bind=per_task:1
 
 # Run this script with 'sbatch delta.sbatch.sh'
 
 # Delta user guide:
 # - https://wiki.ncsa.illinois.edu/display/DSC/Delta+User+Guide
 # - https://ncsa-delta-doc.readthedocs-hosted.com/en/latest/
-
 
 # Put any environment activation here, e.g.:
 # source ../../config/activate_env.sh
@@ -41,6 +39,5 @@ export XDG_CACHE_HOME_ROOT="/tmp/$USER/xdg-scratch/rank"
 # (each rank needs its own POCL cache dir)
 export POCL_CACHE_DIR_ROOT="/tmp/$USER/pocl-cache/rank"
 
-
 # Run application
-$srun_cmd bash -c 'POCL_CACHE_DIR=$POCL_CACHE_DIR_ROOT$OMPI_COMM_WORLD_RANK XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$OMPI_COMM_WORLD_RANK python -u -O -m mpi4py ./pulse.py'
+$srun_cmd bash -c 'POCL_CACHE_DIR=$POCL_CACHE_DIR_ROOT$SLURM_PROCID XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$SLURM_PROCID python -u -O -m mpi4py ./pulse.py'
