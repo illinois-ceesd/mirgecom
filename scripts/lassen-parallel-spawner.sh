@@ -1,6 +1,8 @@
 #!/bin/bash
 #
-# Used to wrap the spawning of parallel mirgecom drivers on Lassen
+# Used to wrap the spawning of parallel mirgecom drivers on Lassen.
+# Can also be used on delta.
+
 # unset CUDA_CACHE_DISABLE
 POCL_CACHE_ROOT=${POCL_CACHE_ROOT:-"/tmp/$USER/pocl-scratch"}
 XDG_CACHE_ROOT=${XDG_CACHE_HOME:-"/tmp/$USER/xdg-scratch"}
