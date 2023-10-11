@@ -92,6 +92,7 @@ from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
+from collections import defaultdict
 
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
@@ -1489,6 +1490,9 @@ def copy_mapped_dof_array_data(trg_dof_array, src_dof_array, index_map):
     src_nel, src_nnodes = src_array.shape
     trg_nel, trg_nnodes = trg_array.shape
 
+    if trg_nel == 0 or src_nel == 0:
+        return trg_dof_array
+
     if src_nnodes != trg_nnodes:
         raise ValueError("DOFArray mapped copy must be of same order.")
 
@@ -1553,6 +1557,44 @@ def interdecomposition_mapping(target_decomp, source_decomp):
         interdecomp_map[part] = list(interdecomp_map[part])
 
     return interdecomp_map
+
+
+def summarize_decomposition(decomp_map, multivol_decomp_map):
+    """Summarize decomp."""
+    # Inputs are the decomp_map {rank: [elements]}
+    # and multivol_decomp_map {PartID: array([elements])}
+    nranks = len(decomp_map)
+
+    # Initialize counters and containers
+    total_num_elem = 0
+    volume_element_counts = defaultdict(int)
+    rank_element_counts = {}
+    rank_volume_element_counts = defaultdict(lambda: defaultdict(int))
+    unique_volumes = set()
+
+    # Process data from decomp_map
+    for rank, elements in decomp_map.items():
+        rank_element_counts[rank] = len(elements)
+        total_num_elem += len(elements)
+
+    # Process data from multivol_decomp_map
+    for partid, elements in multivol_decomp_map.items():
+        vol, rank = partid.volume_tag, partid.rank
+        unique_volumes.add(vol)
+        nvol_els = len(elements)
+        volume_element_counts[vol] += nvol_els
+        rank_volume_element_counts[rank][vol] = nvol_els
+
+    # Print summary
+    print(f"Number of elements: {total_num_elem}")
+    print(f"Volumes({len(unique_volumes)}): {unique_volumes}")
+    for vol, count in volume_element_counts.items():
+        print(f" - Volume({vol}): {count} elements.")
+    print(f"Number of ranks: {nranks}")
+    for rank in range(nranks):
+        print(f" - Rank({rank}): {rank_element_counts[rank]} elements.")
+        for vol, size in rank_volume_element_counts[rank].items():
+            print(f" -- Vol({vol}): {size}")
 
 
 # Need a function to determine which of my local elements overlap
