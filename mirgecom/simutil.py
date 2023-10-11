@@ -1345,14 +1345,15 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             part_id_to_elements = _get_multi_volume_partitions(
                 mesh, num_target_ranks, rank_per_element, tag_to_elements,
                 volume_to_tags)
+
             # Save this little puppy for later (m-to-n restart support)
             if reader_rank == 0:
                 mv_part_table_fname = \
                     filename + f"_multivol_idecomp_np{num_target_ranks}.pkl"
                 if os.path.exists(mv_part_table_fname):
                     os.remove(mv_part_table_fname)
-                    with open(mv_part_table_fname, "wb") as pkl_file:
-                        pickle.dump(part_id_to_elements, pkl_file)
+                with open(mv_part_table_fname, "wb") as pkl_file:
+                    pickle.dump(part_id_to_elements, pkl_file)
 
         reader_comm.Barrier()
         if reader_rank == 0:
@@ -1608,71 +1609,109 @@ def interdecomposition_overlap(target_decomp_map, source_decomp_map,
 
 
 # Interdecomposition overlap utility for multi-volume datasets
-def multivolume_interdecomposition_overlap(target_idecomp, source_idecomp,
-                                           target_vol_decomp, source_vol_decomp,
-                                           return_ranks=None):
+def multivolume_interdecomposition_overlap(src_decomp_map, trg_decomp_map,
+                              src_multivol_decomp_map, trg_multivol_decomp_map,
+                              return_ranks=None):
     """
-    Map element indices for overlapping, disparate decompositions with volumes.
+    Construct local-to-local index mapping for overlapping deconmps.
 
     Parameters
     ----------
-        target_idecomp: Decomposition map of the target {rank: [elements]}
-        source_idecomp: Decomposition map of the source {rank: [elements]}
-        target_vol_decomp: Decomposition map of the target with volumes
-            {PartID: [elements]}
-        source_vol_decomp: Decomposition map of the source with volumes
-            {PartID: [elements]}
-        return_ranks: List of ranks for which the overlaps should be computed.
-            If None, all ranks are considered.
+        src_decomp_map: dict
+            Source decomposition map {rank: [elements]}
+        trg_decomp_map: dict
+            Target decomposition map {rank: [elements]}
+        src_multivol_decomp_map: dict
+            Source multivolume decomposition map {PartID: np.array(elements)}
+        trg_multivol_decomp_map: dict
+            Target multivolume decomposition map {PartID: np.array(elements)}
 
     Returns
     -------
         A dictionary with structure:
         {
-            target_rank: {
-                source_rank: {
-                    (targ)PartID: {
-                        target_local_index: source_local_index
-                    }
+            trg_partid: {
+                src_partid: {
+                    trg_local_el_index: src_local_el_index
                 }
             }
         }
     """
     # If no specific ranks are provided, consider all ranks in the target decomp
     if return_ranks is None:
-        return_ranks = list(target_idecomp.keys())
+        return_ranks = list(trg_decomp_map.keys())
 
-    rank_overlap_map = interdecomposition_imapping(target_idecomp, source_idecomp)
+    mapping = {}
 
-    overlap_maps = {}
+    # First, identify overlapping ranks using the regular decomp maps
+    overlapping_ranks = interdecomposition_imapping(trg_decomp_map, src_decomp_map)
+    # print(f"{overlapping_ranks=}")
 
-    for trg_rank in return_ranks:
-        # Extract set of unique PartIDs for current trg rank from tgt_vol_decomp
-        targ_partids = [partid for partid in target_vol_decomp.keys()
-                        if partid.rank == trg_rank]
+    # Now, for each overlapping rank, determine the overlapping elements using the
+    # multivol decomp maps
+    for trg_partid, trg_elems in trg_multivol_decomp_map.items():
+        trg_nelem_part = len(trg_elems)
+        # print(f"dbg Finding overlaps for: {trg_partid=}, {trg_nelem_part}")
+        if trg_nelem_part == 0:
+            # print("dbg - Skipping empty target part.")
+            continue
+        trg_rank = trg_partid.rank
+        if trg_rank not in return_ranks:
+            # print("dbg - Skipping unrelated trg rank.")
+            continue
+        target_elements_set = set(trg_elems)
+        # print(f"dbg {target_elements_set=}")
+        # print(f"dbg type of trg_elems={type(trg_elems)}, "
+        #       f"trg_elems content={trg_elems}")
+        noverlap = 0
+        for src_rank in overlapping_ranks[trg_rank]:
+            # print(f"dbg - Searching for src partids with {src_rank=}")
+            for src_partid, src_elems in src_multivol_decomp_map.items():
+                # print(f"dbg -- Considering {src_partid=}, {len(src_elems)=}")
+                if src_partid.rank != src_rank:
+                    # print("dbg --- Skipping unrelated src rank.")
+                    continue
+                if src_partid.volume_tag != trg_partid.volume_tag:
+                    # print("dbg --- Skipping unrelated src volume.")
+                    continue
+                # print("dbg --- Determining overlap")
+                # Determine element overlaps, set is used for performance
+                source_elements_set = set(src_elems)
+                # print(f"dbg {source_elements_set=}")
+                common_elements_set = \
+                    target_elements_set.intersection(source_elements_set)
+                # print(f"dbg {common_elements_set=}")
+                if common_elements_set:
+                    if trg_partid not in mapping:
+                        mapping[trg_partid] = {}
 
-        overlap_maps[trg_rank] = {}
-        for src_rank in rank_overlap_map[trg_rank]:
-            overlap_maps[trg_rank][src_rank] = {}
+                local_mapping = {}
+                for trg_el in common_elements_set:
+                    # print(f"dbg {trg_el=}")
+                    trg_local_idx = np.where(trg_elems == trg_el)[0][0]
+                    src_local_idx = np.where(src_elems == trg_el)[0][0]
+                    local_mapping[trg_local_idx] = src_local_idx
 
-        for targ_partid in targ_partids:
-            src_partid = PartID(volume_tag=targ_partid.volume_tag, rank=src_rank)
-            overlap_maps[trg_rank][src_rank][targ_partid] = {}
+                # Store the local mapping if there are any overlapping elements
+                if local_mapping:
+                    # init empty dict if needed
+                    # if trg_partid not in mapping:
+                    #    mapping[trg_partid] = {}
+                    num_local_overlap = len(local_mapping)
+                    noverlap = noverlap + num_local_overlap
+                    # print(f"dbg ---- found overlap: {trg_partid=}, {src_partid=}")
+                    # print(f"dbg ---- num_olap: {num_local_overlap}")
+                    mapping[trg_partid][src_partid] = local_mapping
+                # else:
+                #    print("dbg ---- No overlap found.")
+        # if noverlap == trg_nelem_part:
+        # print("dbg - Full overlaps found.")
+        if noverlap != trg_nelem_part:
+            # print("dbg - Overlaps did not cover target part!")
+            raise AssertionError("Source overlaps did not cover target part."
+                                 f" {trg_partid=}")
 
-            # Determine element overlaps, set is used for performance considerations
-            target_elements_set = set(target_vol_decomp[targ_partid])
-            source_elements_set = set(source_vol_decomp.get(src_partid, []))
-
-            common_elements_set = \
-                target_elements_set.intersection(source_elements_set)
-
-        for trg_el in common_elements_set:
-            trg_local_idx = target_vol_decomp[targ_partid].index(trg_el)
-            src_local_idx = source_vol_decomp[src_partid].index(trg_el)
-            overlap_maps[trg_rank][src_rank][targ_partid][trg_local_idx] = \
-                src_local_idx
-
-    return overlap_maps
+    return mapping
 
 
 def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
