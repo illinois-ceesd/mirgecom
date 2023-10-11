@@ -28,6 +28,7 @@ import numpy as np
 import numpy.random
 import logging
 import pytest
+from collections import defaultdict
 from pytools.obj_array import make_obj_array
 from mirgecom.discretization import create_discretization_collection
 from meshmode.array_context import (  # noqa
@@ -214,6 +215,7 @@ def test_dofarray_mapped_copy(actx_factory):
 
 def test_multivolume_interdecomp_overlap_basic():
     """Test the multivolume_interdecomp_overlap."""
+    import numpy as np
     # Total elements in the testing mesh
     total_elements = 100
 
@@ -237,8 +239,8 @@ def test_multivolume_interdecomp_overlap_basic():
 
     # Testing volume decomps
     # Vol1: even elements, Vol2: odd elements
-    vol1_elements = [i for i in range(total_elements) if i % 2 == 0]
-    vol2_elements = [i for i in range(total_elements) if i % 2 != 0]
+    vol1_elements = np.array([i for i in range(total_elements) if i % 2 == 0])
+    vol2_elements = np.array([i for i in range(total_elements) if i % 2 != 0])
 
     src_vol_decomp = {}
     trg_vol_decomp = {}
@@ -246,34 +248,73 @@ def test_multivolume_interdecomp_overlap_basic():
     # Test vol decomps
     for i in range(src_np):
         src_vol_decomp[PartID(volume_tag="vol1", rank=i)] = \
-            [el for el in src_decomp[i] if el in vol1_elements]
+            np.array([el for el in src_decomp[i] if el in vol1_elements])
         src_vol_decomp[PartID(volume_tag="vol2", rank=i)] = \
-            [el for el in src_decomp[i] if el in vol2_elements]
+            np.array([el for el in src_decomp[i] if el in vol2_elements])
 
     for i in range(trg_np):
         trg_vol_decomp[PartID(volume_tag="vol1", rank=i)] = \
-            [el for el in trg_decomp[i] if el in vol1_elements]
+            np.array([el for el in trg_decomp[i] if el in vol1_elements])
         trg_vol_decomp[PartID(volume_tag="vol2", rank=i)] = \
-            [el for el in trg_decomp[i] if el in vol2_elements]
+            np.array([el for el in trg_decomp[i] if el in vol2_elements])
 
     from mirgecom.simutil import multivolume_interdecomposition_overlap
     # Compute the multivolume interdecomp overlaps
     mv_idx = multivolume_interdecomposition_overlap(
-        trg_decomp, src_decomp, trg_vol_decomp, src_vol_decomp
+        src_decomp, trg_decomp, src_vol_decomp, trg_vol_decomp
     )
 
-    # Perform some basic checks on the returned data structure
-    # The num trg ranks in the overlap should match the input
-    assert set(mv_idx.keys()) == set(trg_decomp.keys())
+    for trg_partid, src_partid_mappings in mv_idx.items():
+        uncovered_elements = set(trg_vol_decomp[trg_partid])
+        for src_partid, element_mapping in src_partid_mappings.items():
+            for trg_local_idx, _ in element_mapping.items():
+                uncovered_elements.discard(trg_vol_decomp[trg_partid][trg_local_idx])
+            for trg_local_idx, src_local_idx in element_mapping.items():
+                # match element ids for the trg and src at resp index
+                assert trg_vol_decomp[trg_partid][trg_local_idx] == \
+                    src_vol_decomp[src_partid][src_local_idx]
+        assert not uncovered_elements
 
-    for _trg_rank, src_rank_mappings in mv_idx.items():
-        for src_rank, partid_mappings in src_rank_mappings.items():
-            for partid, element_mappings in partid_mappings.items():
-                for trg_local_idx, src_local_idx in element_mappings.items():
-                    # match element ids for the trg and src at resp index
-                    assert trg_vol_decomp[partid][trg_local_idx] == \
-                        src_vol_decomp[PartID(volume_tag=partid.volume_tag,
-                                              rank=src_rank)][src_local_idx]
+    for trg_partid, src_partid_mappings in mv_idx.items():
+        mapped_trg_elems = set()
+        # validate ranks in trg mapping
+        assert 0 <= trg_partid.rank < trg_np,\
+            f"Invalid target rank: {trg_partid.rank}"
+        for src_partid, element_mapping in src_partid_mappings.items():
+            # check for consistent volume_tags
+            assert trg_partid.volume_tag == src_partid.volume_tag, \
+                f"Volume tag mismatch: {trg_partid.volume_tag} "\
+                f"vs {src_partid.volume_tag}"
+            # validate ranks in src mapping
+            assert 0 <= src_partid.rank < src_np,\
+                f"Invalid source rank: {src_partid.rank}"
+            for trg_local_idx, src_local_idx in element_mapping.items():
+                # check that each trg el is mapped only once
+                assert trg_local_idx not in mapped_trg_elems,\
+                    f"Duplicate mapping for target element {trg_local_idx}"
+                mapped_trg_elems.add(trg_local_idx)
+                # check for valid src and trg indices
+                assert 0 <= src_local_idx < len(src_vol_decomp[src_partid]),\
+                    f"Invalid source index {src_local_idx} for {src_partid}"
+                assert 0 <= trg_local_idx < len(trg_vol_decomp[trg_partid]),\
+                    f"Invalid target index {trg_local_idx} for {trg_partid}"
+
+    # Check that the mapping is 1-to-1, that each src element is covered and maps
+    # to one and only one target element
+    accumulated_mapped_src_elems = defaultdict(list)
+    for _, src_partid_mappings in mv_idx.items():
+        for src_partid, element_mapping in src_partid_mappings.items():
+            mapped_src_elems = list(element_mapping.values())
+            accumulated_mapped_src_elems[src_partid].extend(mapped_src_elems)
+
+    for src_partid, mapped_src_elems in accumulated_mapped_src_elems.items():
+        src_elem_set = set(mapped_src_elems)
+        assert set(range(len(src_vol_decomp[src_partid]))) == src_elem_set, \
+            f"Some elements in {src_partid} are not mapped to any target element"
+        # do not map to more than one trg elem
+        for elem in src_elem_set:
+            assert mapped_src_elems.count(elem) == 1, \
+                f"Element {elem} in {src_partid} is mapped more than once"
 
 
 def _generate_decompositions(total_elements, num_ranks, pattern="chunked"):
@@ -295,7 +336,8 @@ def _generate_decompositions(total_elements, num_ranks, pattern="chunked"):
         decomp = {i: all_elements[i * elements_per_rank: (i + 1) * elements_per_rank]
                   for i in range(num_ranks)}
         decomp[num_ranks - 1].extend(all_elements[num_ranks * elements_per_rank:])
-    return decomp
+
+    return {k: np.array(v) for k, v in decomp.items()}  # Convert to numpy arrays
 
 
 @pytest.mark.parametrize("decomp_pattern", ["chunked", "strided", "random"])
@@ -343,15 +385,57 @@ def test_multivolume_interdecomp_overlap(decomp_pattern, vol_pattern, src_trg_ra
     # Testing the overlap utility
     from mirgecom.simutil import multivolume_interdecomposition_overlap
     mv_idx = multivolume_interdecomposition_overlap(
-        trg_decomp, src_decomp, trg_vol_decomp, src_vol_decomp
+        src_decomp, trg_decomp, src_vol_decomp, trg_vol_decomp
     )
 
-    assert set(mv_idx.keys()) == set(trg_decomp.keys())
+    for trg_partid, src_partid_mappings in mv_idx.items():
+        uncovered_elements = set(trg_vol_decomp[trg_partid])
+        for src_partid, element_mapping in src_partid_mappings.items():
+            for trg_local_idx, _ in element_mapping.items():
+                uncovered_elements.discard(trg_vol_decomp[trg_partid][trg_local_idx])
+            for trg_local_idx, src_local_idx in element_mapping.items():
+                # match element ids for the trg and src at resp index
+                assert trg_vol_decomp[trg_partid][trg_local_idx] == \
+                    src_vol_decomp[src_partid][src_local_idx]
+        assert not uncovered_elements
 
-    for _trg_rank, src_rank_mappings in mv_idx.items():
-        for src_rank, partid_mappings in src_rank_mappings.items():
-            for partid, element_mappings in partid_mappings.items():
-                for trg_local_idx, src_local_idx in element_mappings.items():
-                    assert trg_vol_decomp[partid][trg_local_idx] == \
-                        src_vol_decomp[PartID(volume_tag=partid.volume_tag,
-                                              rank=src_rank)][src_local_idx]
+    for trg_partid, src_partid_mappings in mv_idx.items():
+        mapped_trg_elems = set()
+        # validate ranks in trg mapping
+        assert 0 <= trg_partid.rank < trg_np,\
+            f"Invalid target rank: {trg_partid.rank}"
+        for src_partid, element_mapping in src_partid_mappings.items():
+            # check for consistent volume_tags
+            assert trg_partid.volume_tag == src_partid.volume_tag, \
+                f"Volume tag mismatch: {trg_partid.volume_tag} "\
+                f"vs {src_partid.volume_tag}"
+            # validate ranks in src mapping
+            assert 0 <= src_partid.rank < src_np,\
+                f"Invalid source rank: {src_partid.rank}"
+            for trg_local_idx, src_local_idx in element_mapping.items():
+                # check that each trg el is mapped only once
+                assert trg_local_idx not in mapped_trg_elems,\
+                    f"Duplicate mapping for target element {trg_local_idx}"
+                mapped_trg_elems.add(trg_local_idx)
+                # check for valid src and trg indices
+                assert 0 <= src_local_idx < len(src_vol_decomp[src_partid]),\
+                    f"Invalid source index {src_local_idx} for {src_partid}"
+                assert 0 <= trg_local_idx < len(trg_vol_decomp[trg_partid]),\
+                    f"Invalid target index {trg_local_idx} for {trg_partid}"
+
+    # Check that the mapping is 1-to-1, that each src element is covered and maps
+    # to one and only one target element
+    accumulated_mapped_src_elems = defaultdict(list)
+    for _, src_partid_mappings in mv_idx.items():
+        for src_partid, element_mapping in src_partid_mappings.items():
+            mapped_src_elems = list(element_mapping.values())
+            accumulated_mapped_src_elems[src_partid].extend(mapped_src_elems)
+
+    for src_partid, mapped_src_elems in accumulated_mapped_src_elems.items():
+        src_elem_set = set(mapped_src_elems)
+        assert set(range(len(src_vol_decomp[src_partid]))) == src_elem_set, \
+            f"Some elements in {src_partid} are not mapped to any target element"
+        # do not map to more than one trg elem
+        for elem in src_elem_set:
+            assert mapped_src_elems.count(elem) == 1, \
+                f"Element {elem} in {src_partid} is mapped more than once"
