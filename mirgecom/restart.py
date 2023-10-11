@@ -37,6 +37,7 @@ from mirgecom.simutil import (
     invert_decomp,
     interdecomposition_overlap,
     multivolume_interdecomposition_overlap,
+    # construct_element_mapping,
     copy_mapped_dof_array_data
 )
 
@@ -235,7 +236,9 @@ def _find_rank_with_all_volumes(multivol_decomp_map):
     ranks_seen_volumes = defaultdict(set)
 
     for partid, elements in multivol_decomp_map.items():
-        if elements:  # non-empty means this rank has data for this volume
+        if elements is None:
+            continue
+        if len(elements) > 0:  # non-empty means this rank has data for this volume
             ranks_seen_volumes[partid.rank].add(partid.volume_tag)
 
     # Now, find a rank that has seen all volumes
@@ -249,8 +252,8 @@ def _find_rank_with_all_volumes(multivol_decomp_map):
 # Traverse the restart_data and copy data from the src
 # into the target DOFArrays in-place, so that the trg data
 # is persistent across multiple calls with different src data.
-def _recursive_map_and_copy(trg_item, src_item, trg_partid_to_index_map,
-                            src_volume_sizes):
+def _recursive_map_and_copy(trg_item, src_item, trsrs_idx_maps,
+                            src_volume_sizes, trg_rank, src_rank):
     """
     Recursively map and copy DOFArrays from the source item to the target item.
 
@@ -271,39 +274,48 @@ def _recursive_map_and_copy(trg_item, src_item, trg_partid_to_index_map,
         The target item after mapping and copying the data from the source item.
     """
     if trg_item is None:
-        print(f"{src_item=}")
-        raise ValueError("trg_item is None, but src_item is not.")
+        # print(f"dbg {src_item=}")
+        # print("dbg trg_item was None.")
+        return trg_item
+        # raise ValueError("trg_item is None, but src_item is not.")
     if src_item is None:
         print(f"{trg_item=}")
         raise ValueError("src_item is None, but trg_item is not.")
-    trg_rank = next(iter(trg_partid_to_index_map)).rank
-
+    # print(f"{trsrs_idx_maps=}")
+    # trg_rank = next(iter(trsrs_idx_maps)).rank
     # print(f"{trg_item=}")
     # print(f"{src_item=}")
-    src_nel, src_nnodes = src_item[0].shape
-    volume_tag = next((vol_tag for vol_tag, size in src_volume_sizes.items()
-                       if size == src_nel), None)
-    target_partid = PartID(volume_tag=volume_tag, rank=trg_rank)
-    elem_map = trg_partid_to_index_map[target_partid]
-
     if isinstance(src_item, DOFArray):
         if trg_item is None:
-            raise ValueError("No corresponding target DOFArray found.")
-        return copy_mapped_dof_array_data(trg_item, src_item, elem_map)
+            raise ValueError(
+                f"No corresponding target DOFArray found {src_item=}.")
+        src_nel, src_nnodes = src_item[0].shape
+        volume_tag = next((vol_tag for vol_tag, size in src_volume_sizes.items()
+                           if size == src_nel), None)
+        trg_partid = PartID(volume_tag=volume_tag, rank=trg_rank)
+        if trg_partid in trsrs_idx_maps:
+            trvs_mapping = trsrs_idx_maps[trg_partid]
+            src_partid = PartID(volume_tag=volume_tag, rank=src_rank)
+            elem_map = trvs_mapping[src_partid]
+            # print(f"dbg Copying data {src_partid=}, {trg_partid=}")
+            return copy_mapped_dof_array_data(trg_item, src_item, elem_map)
+        # else:
+        #    print("dbg Skipping copy for non-target volume.")
     elif isinstance(src_item, dict):
         return {k: _recursive_map_and_copy(
-            trg_item.get(k, None), v, trg_partid_to_index_map,
-            src_volume_sizes) for k, v in src_item.items()}
+            trg_item.get(k, None), v, trsrs_idx_maps,
+            src_volume_sizes, trg_rank, src_rank) for k, v in src_item.items()}
     elif isinstance(src_item, (list, tuple)):
         return type(src_item)(_recursive_map_and_copy(
-            t, v, trg_partid_to_index_map, src_volume_sizes)
+            t, v, trsrs_idx_maps, src_volume_sizes, trg_rank, src_rank)
             for t, v in zip(trg_item, src_item))
     elif is_dataclass(src_item):
         trg_dict = asdict(trg_item)
         return type(src_item)(**{
             k: _recursive_map_and_copy(
-                trg_dict.get(k, None), v, trg_partid_to_index_map,
-                src_volume_sizes) for k, v in asdict(src_item).items()})
+                trg_dict.get(k, None), v, trsrs_idx_maps,
+                src_volume_sizes, trg_rank, src_rank)
+            for k, v in asdict(src_item).items()})
     else:
         return src_item  # dupe non-dof data outright
 
@@ -311,10 +323,10 @@ def _recursive_map_and_copy(trg_item, src_item, trg_partid_to_index_map,
 def _ensure_unique_nelems(mesh_data_dict):
     seen_nelems = set()
     for volid, mesh_data in mesh_data_dict.items():
-        if mesh_data.nelements in seen_nelems:
+        if mesh_data[0].nelements in seen_nelems:
             raise ValueError(f"Multiple volumes {volid} found with same "
                              "number of elements.")
-        seen_nelems.add(mesh_data.nelem)
+        seen_nelems.add(mesh_data[0].nelements)
 
 
 def _get_volume_sizes_on_each_rank(multivol_decomp_map):
@@ -383,35 +395,52 @@ def _get_volume_sizes_for_rank(target_rank, multivol_decomp_map):
     return volume_sizes
 
 
+def _extract_src_rank_specific_mapping(trs_olaps, src_rank):
+    """Extract source rank-specific mappings from overlap mapping."""
+    return {trg_partid: {src_partid: local_mapping
+                         for src_partid, local_mapping in src_mappings.items()
+                         if src_partid.rank == src_rank}
+            for trg_partid, src_mappings in trs_olaps.items()
+            if src_rank in {src_partid.rank for src_partid in src_mappings.keys()}}
+
+
+# Call this one with target-rank-specific mappings (trs_olaps) of the form:
+# {targ_partid : { src_partid : {trg_el_index : src_el_index} } }
 def _get_restart_data_for_target_rank(
-        actx, trg_rank, sample_rst_data, sample_vol_sizes, src_overlaps,
+        actx, trg_rank, sample_rst_data, sample_vol_sizes, trs_olaps,
         target_multivol_decomp_map, source_multivol_decomp_map,
         input_path):
     trg_vol_sizes = _get_volume_sizes_for_rank(
         trg_rank, target_multivol_decomp_map)
-
+    # print(f"dbg Target rank = {trg_rank}")
     with array_context_for_pickling(actx):
         out_rst_data = _recursive_resize_reinit_with_zeros(
             actx, sample_rst_data, trg_vol_sizes, sample_vol_sizes)
+    src_ranks_in_mapping = {k.rank for v in trs_olaps.values()
+                            for k in v.keys()}
+    # print(f"dbg olap src ranks: {src_ranks_in_mapping}")
 
-        # Read and Map DOFArrays from source to target
-        for src_rank, trg_partid_to_idx_map in src_overlaps.items():
-            src_vol_sizes = _get_volume_sizes_for_rank(
-                src_rank, source_multivol_decomp_map)
+    # Read and Map DOFArrays from each source rank to target
+    for src_rank in src_ranks_in_mapping:
+        # get src_rank-specific overlaps
+        trsrs_idx_maps = _extract_src_rank_specific_mapping(trs_olaps, src_rank)
+        # print(f"dbg {src_rank=},{trsrs_idx_maps=}")
+        src_vol_sizes = _get_volume_sizes_for_rank(
+            src_rank, source_multivol_decomp_map)
+        src_restart_file = f"{input_path}-{src_rank:04d}.pkl"
+        with array_context_for_pickling(actx):
+            with open(src_restart_file, "rb") as f:
+                src_rst_data = pickle.load(f)
+        src_mesh_data = src_rst_data.pop("volume_to_local_mesh_data", None)
+        _ensure_unique_nelems(src_mesh_data)
+        # Copies data for all overlapping parts from src to trg rank data
+        with array_context_for_pickling(actx):
+            out_rst_data = \
+                _recursive_map_and_copy(
+                    out_rst_data, src_rst_data, trsrs_idx_maps,
+                    src_vol_sizes, trg_rank, src_rank)
 
-            src_restart_file = f"{input_path}-{src_rank:04d}.pkl"
-            with array_context_for_pickling(actx):
-                with open(src_restart_file, "rb") as f:
-                    src_rst_data = pickle.load(f)
-                    mesh_data = src_rst_data.pop("volume_to_local_mesh_data", None)
-                    _ensure_unique_nelems(mesh_data)
-
-                with array_context_for_pickling(actx):
-                    out_rst_data = _recursive_map_and_copy(
-                        out_rst_data, src_rst_data, trg_partid_to_idx_map,
-                        src_vol_sizes)
-
-        return out_rst_data
+    return out_rst_data
 
 
 def redistribute_multivolume_restart_data(
@@ -462,7 +491,7 @@ def redistribute_multivolume_restart_data(
     sample_rank = _find_rank_with_all_volumes(source_multivol_decomp_map)
     if sample_rank is None:
         raise ValueError("No source rank found with data for all volumes.")
-
+    print(f"Found source rank {sample_rank} having data for all volumes.")
     mesh_data_item = "volume_to_local_mesh_data"
     sample_restart_file = f"{src_input_path}-{sample_rank:04d}.pkl"
     with array_context_for_pickling(actx):
@@ -486,7 +515,7 @@ def redistribute_multivolume_restart_data(
     if writer_color:
         writer_nprocs = writer_comm_wrapper.Get_size()
         writer_rank = writer_comm_wrapper.Get_rank()
-        nparts_per_writer = int(writer_nprocs / trg_nparts)
+        nparts_per_writer = max(1, trg_nparts // writer_nprocs)
         nleftover = trg_nparts - (nparts_per_writer * writer_nprocs)
         nparts_this_writer = nparts_per_writer + (1 if writer_rank
                                                     < nleftover else 0)
@@ -495,21 +524,32 @@ def redistribute_multivolume_restart_data(
                                                < nleftover else nleftover)
         my_ending_rank = my_starting_rank + nparts_this_writer - 1
         parts_to_write = list(range(my_starting_rank, my_ending_rank+1))
-        xdo = multivolume_interdecomposition_overlap(target_idecomp_map,
-                                                     source_idecomp_map,
-                                                     target_multivol_decomp_map,
+        print(f"{my_rank=}, {writer_rank=}, {parts_to_write=}")
+        # print(f"{source_multivol_decomp_map=}")
+        # print(f"{target_multivol_decomp_map=}")
+
+        xdo = multivolume_interdecomposition_overlap(source_idecomp_map,
+                                                     target_idecomp_map,
                                                      source_multivol_decomp_map,
+                                                     target_multivol_decomp_map,
                                                      return_ranks=parts_to_write)
 
-        for trg_rank, olaps in xdo.items():
+        # for trg_partid, olaps in xdo.items():
+        #    print(f"dbg {trg_partid=}, "
+        #          "f{len(target_multivol_map[trg_partid])=}")
+        #    for src_partid, elem_map in olaps.items():
+        #        print(f"dbg {src_partid=}, {len(elem_map)=}")
 
+        for trg_rank in parts_to_write:
+            trs_olaps = {k: v for k, v in xdo.items() if k.rank == trg_rank}
             out_rst_data = _get_restart_data_for_target_rank(
-                actx, trg_rank, sample_rst_data, sample_vol_sizes,
-                olaps, target_multivol_decomp_map, source_multivol_decomp_map,
+                actx, trg_rank, sample_rst_data, sample_vol_sizes, trs_olaps,
+                target_multivol_decomp_map, source_multivol_decomp_map,
                 src_input_path)
 
             # Read new mesh data and stack it in the restart file
-            mesh_pkl_filename = f"{mesh_filename}_np{trg_nparts}_rank{trg_rank}.pkl"
+            mesh_pkl_filename = \
+                f"{mesh_filename}_mesh_np{trg_nparts}_rank{trg_rank}.pkl"
             with array_context_for_pickling(actx):
                 with open(mesh_pkl_filename, "rb") as pkl_file:
                     global_nelements, mesh_data = \
