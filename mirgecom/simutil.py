@@ -1666,10 +1666,11 @@ def multivolume_interdecomposition_overlap(target_idecomp, source_idecomp,
             common_elements_set = \
                 target_elements_set.intersection(source_elements_set)
 
-    for trg_el in common_elements_set:
-        trg_local_idx = target_vol_decomp[targ_partid].index(trg_el)
-        src_local_idx = source_vol_decomp[src_partid].index(trg_el)
-        overlap_maps[trg_rank][src_rank][targ_partid][trg_local_idx] = src_local_idx
+        for trg_el in common_elements_set:
+            trg_local_idx = target_vol_decomp[targ_partid].index(trg_el)
+            src_local_idx = source_vol_decomp[src_partid].index(trg_el)
+            overlap_maps[trg_rank][src_rank][targ_partid][trg_local_idx] = \
+                src_local_idx
 
     return overlap_maps
 

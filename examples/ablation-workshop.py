@@ -27,7 +27,7 @@ import gc
 import numpy as np
 import scipy  # type: ignore[import]
 from scipy.interpolate import CubicSpline  # type: ignore[import]
-
+from warnings import warn
 from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 

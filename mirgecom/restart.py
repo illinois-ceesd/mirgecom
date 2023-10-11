@@ -358,15 +358,17 @@ def _recursive_resize_reinit_with_zeros(actx, sample_item, target_volume_sizes,
                                  dtype=sample_item[0].dtype)
         return DOFArray(actx, (zeros_array,))
     elif isinstance(sample_item, dict):
-        return {k: _recursive_resize_reinit_with_zeros(actx, v, target_volume_sizes)
-                for k, v in sample_item.items()}
+        return {k: _recursive_resize_reinit_with_zeros(
+            actx, v, target_volume_sizes, sample_volume_sizes)
+            for k, v in sample_item.items()}
     elif isinstance(sample_item, (list, tuple)):
-        return type(sample_item)(_recursive_resize_reinit_with_zeros(actx, v,
-                                                            target_volume_sizes)
-                                 for v in sample_item)
+        return type(sample_item)(_recursive_resize_reinit_with_zeros(
+            actx, v, target_volume_sizes, sample_volume_sizes)
+            for v in sample_item)
     elif is_dataclass(sample_item):
         return type(sample_item)(**{k: _recursive_resize_reinit_with_zeros(
-            actx, v, target_volume_sizes) for k, v in asdict(sample_item).items()})
+            actx, v, target_volume_sizes, sample_volume_sizes)
+            for k, v in asdict(sample_item).items()})
     else:
         return sample_item  # retain non-dof data outright
 
