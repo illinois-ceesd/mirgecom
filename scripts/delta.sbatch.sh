@@ -2,8 +2,8 @@
 #SBATCH --nodes=1                # number of nodes
 #SBATCH -t 00:30:00              # walltime (hh:mm:ss)
 #SBATCH --partition=gpuA40x4
-#SBATCH --ntasks-per-node=4
-#SBATCH --gpus-per-node=4
+#SBATCH --ntasks-per-node=4      # change this if running on a partition with other than 4 GPUs per node
+#SBATCH --gpus-per-node=4        # change this if running on a partition with other than 4 GPUs per node
 #SBATCH --gpu-bind=single:1
 #SBATCH --account=bbkf-delta-gpu
 #SBATCH --exclusive              # dedicated node for this job
@@ -24,7 +24,7 @@ export PYOPENCL_CTX="port:nvidia"     # Run on Nvidia GPU with pocl
 # export PYOPENCL_CTX="port:pthread"  # Run on CPU with pocl
 
 nnodes=$SLURM_JOB_NUM_NODES
-nproc=$((4*nnodes)) # 4 ranks per node, 1 per GPU
+nproc=$SLURM_NTASKS
 
 echo nnodes=$nnodes nproc=$nproc
 
