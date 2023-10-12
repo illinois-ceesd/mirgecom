@@ -1103,7 +1103,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
             if do_garbage:
                 with gc_timer:
-                    warn("Running gc.collect() to work around memory growth issue ")
+                    logger.info(
+                        "Running gc.collect() to work around memory growth issue ")
                     gc.collect()
 
             if do_health:
