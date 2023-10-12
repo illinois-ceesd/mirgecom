@@ -396,6 +396,17 @@ def _recursive_resize_reinit_with_zeros(actx, sample_item, target_volume_sizes,
         zeros_array = actx.zeros(shape=(trg_nel, sample_nnodes),
                                  dtype=sample_item[0].dtype)
         return DOFArray(actx, (zeros_array,))
+    elif isinstance(sample_item, np.ndarray):
+        if sample_item.size > 0 and isinstance(sample_item.flat[0], DOFArray):
+            # handle ndarray containing DOFArrays
+            new_shape = sample_item.shape
+            new_arr = np.empty(new_shape, dtype=object)
+            for idx, dof in np.ndenumerate(sample_item):
+                new_arr[idx] = _recursive_resize_reinit_with_zeros(
+                    actx, dof, target_volume_sizes, sample_volume_sizes)
+            return new_arr
+        else:
+            return sample_item  # retain non-DOFArray ndarray data outright
     elif isinstance(sample_item, dict):
         return {k: _recursive_resize_reinit_with_zeros(
             actx, v, target_volume_sizes, sample_volume_sizes)
@@ -432,7 +443,7 @@ def _extract_src_rank_specific_mapping(trs_olaps, src_rank):
 
 
 def _get_item_structure(item):
-    """Return a simplified representation of the data structure with field names."""
+    """Report data structure with field names."""
     if isinstance(item, DOFArray):
         return "DOFArray"
     elif isinstance(item, np.ndarray):
@@ -453,6 +464,32 @@ def _get_item_structure(item):
         field_structure = [f"{k}: {_get_item_structure(v)}"
                            for k, v in item_fields.items()]
         return f"{type(item).__name__}({', '.join(field_structure)})"
+    else:
+        return type(item).__name__
+
+
+def _get_item_structure_and_size(item, ignore_keys=None):
+    """Report data structure with field names and sizes for DOFArrays."""
+    if ignore_keys is None:
+        ignore_keys = {"volume_to_local_mesh_data"}
+    if isinstance(item, DOFArray):
+        shape = item[0].shape
+        return f"DOFArray({shape[0]} elements, {shape[1]} nodes)"
+    elif isinstance(item, dict):
+        return {k: _get_item_structure_and_size(v)
+                for k, v in item.items() if k not in ignore_keys}
+    elif isinstance(item, (list, tuple)):
+        item_structure = [_get_item_structure_and_size(v) for v in item]
+        return f"{type(item).__name__}({', '.join(map(str, item_structure))})"
+    elif is_dataclass(item):
+        item_fields = asdict(item)
+        field_structure = [f"{k}: {_get_item_structure_and_size(v)}"
+                           for k, v in item_fields.items() if k not in ignore_keys]
+        return f"{type(item).__name__}({', '.join(field_structure)})"
+    elif isinstance(item, np.ndarray):
+        array_structure = [_get_item_structure_and_size(sub_item)
+                           for sub_item in item]
+        return f"ndarray({', '.join(map(str, array_structure))})"
     else:
         return type(item).__name__
 
