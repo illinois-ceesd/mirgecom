@@ -3,6 +3,7 @@
 .. autoclass:: StatisticsAccumulator
 .. autofunction:: asdict_shallow
 .. autofunction:: force_evaluation
+.. autofunction:: force_compile
 .. autofunction:: normalize_boundaries
 .. autofunction:: project_from_base
 .. autofunction:: mask_from_elements
@@ -125,6 +126,14 @@ def force_evaluation(actx, x):
     if actx is None:
         return x
     return actx.freeze_thaw(x)
+
+
+def force_compile(actx, f, *args):
+    """Force compilation of *f* with *args*."""
+    new_args = [force_evaluation(actx, arg) for arg in args]
+    f_compiled = actx.compile(f)
+    f_compiled(*new_args)
+    return f_compiled
 
 
 def normalize_boundaries(boundaries):
