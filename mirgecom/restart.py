@@ -32,6 +32,7 @@ import pickle
 import numpy as np
 from meshmode.dof_array import array_context_for_pickling, DOFArray
 from grudge.discretization import PartID
+from datetime import datetime
 from dataclasses import is_dataclass, asdict
 from collections import defaultdict
 from mirgecom.simutil import (
@@ -620,10 +621,10 @@ def redistribute_multivolume_restart_data(
     vol_to_sample_mesh_data = \
         sample_rst_data.pop(mesh_data_item, None)
     _ensure_unique_nelems(vol_to_sample_mesh_data)
-    if my_rank == 0:
-        with array_context_for_pickling(actx):
+    with array_context_for_pickling(actx):
+        inp_rst_structure = _get_item_structure(sample_rst_data)
+        if my_rank == 0:
             print("Restart data structure:")
-            inp_rst_structure = _get_item_structure(sample_rst_data)
             pprint(inp_rst_structure)
 
     # sample_vol_sizes, determine from mesh?
@@ -648,15 +649,20 @@ def redistribute_multivolume_restart_data(
                                                < nleftover else nleftover)
         my_ending_rank = my_starting_rank + nparts_this_writer - 1
         parts_to_write = list(range(my_starting_rank, my_ending_rank+1))
-        print(f"{my_rank=}, {writer_rank=}, {parts_to_write=}")
+        print(f"{my_rank=}, {writer_rank=}, "
+              f"Parts[{my_starting_rank},{my_ending_rank}]")
         # print(f"{source_multivol_decomp_map=}")
         # print(f"{target_multivol_decomp_map=}")
 
+        if writer_rank == 0:
+            print(f"{datetime.now()}: Computing interdecomp mapping ...")
         xdo = multivolume_interdecomposition_overlap(source_idecomp_map,
                                                      target_idecomp_map,
                                                      source_multivol_decomp_map,
                                                      target_multivol_decomp_map,
                                                      return_ranks=parts_to_write)
+        if writer_rank == 0:
+            print(f"{datetime.now()}: Computing interdecomp mapping (done)")
 
         # for trg_partid, olaps in xdo.items():
         #    print(f"dbg {trg_partid=}, "
@@ -665,6 +671,8 @@ def redistribute_multivolume_restart_data(
         #        print(f"dbg {src_partid=}, {len(elem_map)=}")
 
         for trg_rank in parts_to_write:
+            if writer_rank == 0:
+                print(f"{datetime.now()}: Processing rank {trg_rank}.")
             trs_olaps = {k: v for k, v in xdo.items() if k.rank == trg_rank}
             out_rst_data = _get_restart_data_for_target_rank(
                 actx, trg_rank, sample_rst_data, sample_vol_sizes, trs_olaps,
@@ -700,5 +708,9 @@ def redistribute_multivolume_restart_data(
             with array_context_for_pickling(actx):
                 with open(output_filename, "wb") as f:
                     pickle.dump(out_rst_data, f)
+            
+        if writer_rank == 0 and writer_nprocs > 1:
+            print(f"{datetime.now()}: Waiting on other ranks to finish ...")
+        writer_comm_wrapper.Barrier()
 
     return
