@@ -68,7 +68,7 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, mesh_source=None, ndist=None, dim=3,
+def main(actx_class, mesh_source=None, ndist=None, dim=None,
          output_path=None, log_path=None,
          casename=None, use_1d_part=None, use_wall=False):
     """The main function."""
@@ -76,6 +76,9 @@ def main(actx_class, mesh_source=None, ndist=None, dim=3,
         raise ApplicationOptionsError("Missing mesh source file.")
 
     mesh_source.strip("'")
+
+    if dim is None:
+        dim = 3
 
     if log_path is None:
         log_path = "log_data"
@@ -176,7 +179,7 @@ def main(actx_class, mesh_source=None, ndist=None, dim=3,
     def get_mesh_data():
         from meshmode.mesh.io import read_gmsh
         mesh, tag_to_elements = read_gmsh(
-            mesh_source, force_ambient_dim=2,
+            mesh_source, force_ambient_dim=dim,
             return_tag_to_elements_map=True)
         volume_to_tags = {
             "fluid": ["fluid"]}
