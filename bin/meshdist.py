@@ -68,7 +68,7 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, mesh_source=None, ndist=None,
+def main(actx_class, mesh_source=None, ndist=None, dim=None,
          output_path=None, log_path=None,
          casename=None, use_1d_part=None, use_wall=False):
     """The main function."""
@@ -76,6 +76,9 @@ def main(actx_class, mesh_source=None, ndist=None,
         raise ApplicationOptionsError("Missing mesh source file.")
 
     mesh_source.strip("'")
+
+    if dim is None:
+        dim = 3
 
     if log_path is None:
         log_path = "log_data"
@@ -176,7 +179,7 @@ def main(actx_class, mesh_source=None, ndist=None,
     def get_mesh_data():
         from meshmode.mesh.io import read_gmsh
         mesh, tag_to_elements = read_gmsh(
-            mesh_source,
+            mesh_source, force_ambient_dim=dim,
             return_tag_to_elements_map=True)
         volume_to_tags = {
             "fluid": ["fluid"]}
@@ -238,6 +241,9 @@ if __name__ == "__main__":
                         action="store_true", help="Include wall domain in mesh.")
     parser.add_argument("-1", "--1dpart", dest="one_d_part",
                         action="store_true", help="Use 1D partitioner.")
+    parser.add_argument("-d", "--dimen", type=int, dest="dim",
+                        nargs="?", action="store",
+                        help="Number dimensions")
     parser.add_argument("-n", "--ndist", type=int, dest="ndist",
                         nargs="?", action="store",
                         help="Number of distributed parts")
@@ -257,7 +263,7 @@ if __name__ == "__main__":
     actx_class = get_reasonable_array_context_class(
         lazy=False, distributed=True, profiling=False, numpy=False)
 
-    main(actx_class, mesh_source=args.source,
+    main(actx_class, mesh_source=args.source, dim=args.dim,
          output_path=args.output_path, ndist=args.ndist,
          log_path=args.log_path, casename=args.casename,
          use_1d_part=args.one_d_part, use_wall=args.use_wall)
