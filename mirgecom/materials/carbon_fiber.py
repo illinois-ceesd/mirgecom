@@ -133,14 +133,6 @@ class FiberEOS(PorousWallEOS):
         if normal > dim:
             raise ValueError("Normal direction must be less or equal than dim.")
 
-    def fiber_radius(self, tau: DOFArray) -> DOFArray:
-        r"""Return the fiber radius as a function of oxidation progress.
-
-        The initial radius is imposed as 5e-6m.
-        """
-        actx = tau.array_context
-        return 5.5e-6*actx.np.sqrt(tau)
-
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
 
