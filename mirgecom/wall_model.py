@@ -70,7 +70,7 @@ THE SOFTWARE.
 
 from dataclasses import dataclass
 from abc import abstractmethod
-from typing import Union
+from typing import Union, Optional
 import numpy as np
 from meshmode.dof_array import DOFArray
 from arraycontext import (
@@ -244,18 +244,20 @@ class PorousWallEOS:
         raise NotImplementedError()
 
     @abstractmethod
-    def enthalpy(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def enthalpy(self, temperature: DOFArray,
+                 tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the enthalpy $h_s$ of the solid."""
         raise NotImplementedError()
 
     @abstractmethod
-    def heat_capacity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def heat_capacity(self, temperature: DOFArray,
+                      tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the heat capacity $C_{p_s}$ of the solid."""
         raise NotImplementedError()
 
     @abstractmethod
     def thermal_conductivity(self, temperature: DOFArray,
-                             tau: DOFArray) -> DOFArray:
+                             tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the thermal conductivity $\kappa$ of the solid."""
         raise NotImplementedError()
 
@@ -270,7 +272,7 @@ class PorousWallEOS:
         raise NotImplementedError()
 
     @abstractmethod
-    def emissivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
         raise NotImplementedError()
 

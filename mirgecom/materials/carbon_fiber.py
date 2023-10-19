@@ -28,7 +28,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Optional
 from abc import abstractmethod
 import numpy as np
 from meshmode.dof_array import DOFArray
@@ -151,15 +150,14 @@ class FiberEOS(PorousWallEOS):
         """
         return 1.0 - self.volume_fraction(tau)
 
-    def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
+    def enthalpy(self, temperature, tau=None) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
         return (
             - 3.37112113e-11*temperature**5 + 3.13156695e-07*temperature**4
             - 1.17026962e-03*temperature**3 + 2.29194901e+00*temperature**2
             - 3.62422269e+02*temperature**1 - 5.96993843e+04)
 
-    def heat_capacity(self, temperature: DOFArray,
-                      tau: Optional[DOFArray]) -> DOFArray:
+    def heat_capacity(self, temperature, tau=None) -> DOFArray:
         r"""Evaluate the heat capacity $C_{p_s}$ of the fibers.
 
         The coefficients are obtained with the analytical derivative of the
@@ -171,8 +169,7 @@ class FiberEOS(PorousWallEOS):
             + 4.58389802e+00*temperature**1 - 3.62422269e+02)
 
     # ~~~~~~~~ fiber conductivity
-    def thermal_conductivity(self, temperature: DOFArray,
-                                   tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature, tau=None) -> DOFArray:
         r"""Evaluate the thermal conductivity $\kappa$ of the fibers.
 
         It accounts for anisotropy and oxidation progress.
@@ -207,7 +204,7 @@ class FiberEOS(PorousWallEOS):
         permeability[self._normal] = 2.62e-11 + actx.np.zeros_like(tau)
         return permeability
 
-    def emissivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
         return (
             + 2.26413679e-18*temperature**5 - 2.03008004e-14*temperature**4
