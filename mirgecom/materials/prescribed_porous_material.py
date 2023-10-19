@@ -98,8 +98,7 @@ class PrescribedMaterialEOS(PorousWallEOS):
         actx = tau.array_context
         return self._permeability_func(tau) + actx.np.zeros_like(tau)
 
-    def emissivity(self, temperature: Optional[DOFArray],
-                   tau: DOFArray) -> DOFArray:
+    def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
         actx = tau.array_context
         return self._emissivity_func(tau) + actx.np.zeros_like(tau)
