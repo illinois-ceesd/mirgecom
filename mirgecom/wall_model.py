@@ -270,7 +270,7 @@ class PorousWallEOS:
         raise NotImplementedError()
 
     @abstractmethod
-    def emissivity(self, tau: DOFArray) -> DOFArray:
+    def emissivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Emissivity for energy radiation."""
         raise NotImplementedError()
 
