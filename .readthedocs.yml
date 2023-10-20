@@ -2,6 +2,10 @@ version: 2
 
 conda:
   environment: .rtd-env-py3.yml
+
+version: 2
+build:
+  os: "ubuntu-22.04"
   
 sphinx:
   fail_on_warning: true
