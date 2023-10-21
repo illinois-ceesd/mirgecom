@@ -177,17 +177,12 @@ class FiberEOS(PorousWallEOS):
             + 1.93072961e-10*temperature**3 - 3.52595953e-07*temperature**2
             + 4.54935976e-04*temperature**1 + 5.08960039e-02)
 
-#        kappa = np.zeros(self._dim,)
+        # initialize with the in-plane value
+        kappa = make_obj_array([kappa_ij for _ in range(self._dim)])
+        # modify only the normal direction
+        kappa[self._normal] = kappa_k
 
-#        print(self._dim)
-#        print(kappa_ij)
-
-#        kappa[:] = kappa_ij
-#        kappa[self._normal] = kappa_k
-
-#        kappa = make_obj_array([kappa_ij, kappa_k])
-        kappa = make_obj_array([kappa_ij, kappa_ij])
-
+        # account for fiber shrinkage via "tau"
         return kappa*tau
 
     # ~~~~~~~~ other properties

@@ -97,6 +97,7 @@ def harmonic_mean(x, y):
     return rec_multimap_array_container(
         scalar_harmonic_mean, x, y, leaf_class=DOFArray)
 
+
 def __getattr__(name):
     """
     Return a function that calls an appropriate math function based on its inputs.

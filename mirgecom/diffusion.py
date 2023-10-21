@@ -42,7 +42,6 @@ from functools import partial
 import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -145,12 +144,10 @@ def diffusion_facial_flux_central(
     flux_without_penalty = np.dot(flux_tpair.avg, normal)
 
     # TODO: Verify that this is the correct form for the penalty term
-    if isinstance(kappa_tpair.int, np.ndarray):
+    if isinstance(kappa_tpair.avg, np.ndarray):
         actx = normal[0].array_context
-        kappa_tpair_avg = 0.5*(
-            + actx.np.abs(np.dot(kappa_tpair.int, normal))
-            + actx.np.abs(np.dot(kappa_tpair.ext, normal)))
-        tau = penalty_amount*kappa_tpair_avg/lengthscales_tpair.avg
+        kappa_avg_normal = actx.np.abs(np.dot(kappa_tpair.avg, normal))
+        tau = penalty_amount*kappa_avg_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
 
@@ -187,8 +184,8 @@ def diffusion_facial_flux_harmonic(
     if isinstance(kappa_harmonic_mean, np.ndarray):
         # if anisotropic, get the normal diffusivity absolute value
         actx = normal[0].array_context
-        kappa_normal = actx.np.abs(np.dot(kappa_harmonic_mean, normal))
-        tau = penalty_amount*kappa_normal/lengthscales_tpair.avg
+        kappa_mean_normal = actx.np.abs(np.dot(kappa_harmonic_mean, normal))
+        tau = penalty_amount*kappa_mean_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
 
