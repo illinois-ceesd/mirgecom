@@ -32,6 +32,7 @@ from abc import abstractmethod
 import numpy as np
 from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallEOS
+from pytools.obj_array import make_obj_array
 
 
 class Oxidation:
@@ -176,9 +177,16 @@ class FiberEOS(PorousWallEOS):
             + 1.93072961e-10*temperature**3 - 3.52595953e-07*temperature**2
             + 4.54935976e-04*temperature**1 + 5.08960039e-02)
 
-        kappa = np.zeros(self._dim,)
-        kappa[:] = kappa_ij
-        kappa[self._normal] = kappa_k
+#        kappa = np.zeros(self._dim,)
+
+#        print(self._dim)
+#        print(kappa_ij)
+
+#        kappa[:] = kappa_ij
+#        kappa[self._normal] = kappa_k
+
+#        kappa = make_obj_array([kappa_ij, kappa_k])
+        kappa = make_obj_array([kappa_ij, kappa_ij])
 
         return kappa*tau
 

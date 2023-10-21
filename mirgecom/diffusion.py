@@ -81,23 +81,31 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
         F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}.
     """
     actx = u_tpair.int.array_context
+
+    kappa_int = kappa_tpair.int
+    kappa_ext = kappa_tpair.ext
+
+    # if any of the coefficients are anisotropic, weight by the absolute value
+    # of the normal diffusivity
+    if isinstance(kappa_tpair.int, np.ndarray):
+        kappa_int = actx.np.abs(np.dot(kappa_tpair.int, normal))
+    if isinstance(kappa_tpair.ext, np.ndarray):
+        kappa_ext = actx.np.abs(np.dot(kappa_tpair.ext, normal))
+
     kappa_sum = actx.np.where(
-        actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0*kappa_tpair.int),
-        kappa_tpair.int + kappa_tpair.ext,
-        0*kappa_tpair.int + 1)
-    return (
-        -(u_tpair.int * kappa_tpair.int + u_tpair.ext * kappa_tpair.ext)
-        / kappa_sum
-        * normal)
+        actx.np.greater(kappa_int + kappa_ext, 0*kappa_int),
+        kappa_int + kappa_ext,
+        0*kappa_int + 1)
+
+    return -(u_tpair.int*kappa_int + u_tpair.ext*kappa_ext)/kappa_sum * normal
 
 
 def diffusion_flux(kappa, grad_u):
-    r"""
-    Compute the diffusive flux $-\kappa \nabla u$.
+    r"""Compute the diffusive flux $-\kappa \nabla u$.
 
     Parameters
     ----------
-    kappa: float or :class:`meshmode.dof_array.DOFArray`
+    kappa: float, numpy.ndarray or :class:`meshmode.dof_array.DOFArray`
 
         The thermal conductivity.
 
@@ -137,7 +145,14 @@ def diffusion_facial_flux_central(
     flux_without_penalty = np.dot(flux_tpair.avg, normal)
 
     # TODO: Verify that this is the correct form for the penalty term
-    tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
+    if isinstance(kappa_tpair.int, np.ndarray):
+        actx = normal[0].array_context
+        kappa_tpair_avg = 0.5*(
+            + actx.np.abs(np.dot(kappa_tpair.int, normal))
+            + actx.np.abs(np.dot(kappa_tpair.ext, normal)))
+        tau = penalty_amount*kappa_tpair_avg/lengthscales_tpair.avg
+    else:
+        tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
 
     return flux_without_penalty - tau*(u_tpair.ext - u_tpair.int)
 
@@ -169,7 +184,13 @@ def diffusion_facial_flux_harmonic(
     flux_without_penalty = np.dot(flux_tpair.avg, normal)
 
     # TODO: Verify that this is the correct form for the penalty term
-    tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
+    if isinstance(kappa_harmonic_mean, np.ndarray):
+        # if anisotropic, get the normal diffusivity absolute value
+        actx = normal[0].array_context
+        kappa_normal = actx.np.abs(np.dot(kappa_harmonic_mean, normal))
+        tau = penalty_amount*kappa_normal/lengthscales_tpair.avg
+    else:
+        tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
 
     return flux_without_penalty - tau*(u_tpair.ext - u_tpair.int)
 
@@ -199,8 +220,7 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
 
 class DirichletDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Dirichlet boundary condition for the diffusion operator.
+    r"""Dirichlet boundary condition for the diffusion operator.
 
     For the boundary condition $u|_\Gamma = f$, uses external data
 
@@ -218,8 +238,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """
-        Initialize the boundary condition.
+        """Initialize the boundary condition.
 
         Parameters
         ----------
@@ -264,8 +283,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
-    r"""
-    Neumann boundary condition for the diffusion operator.
+    r"""Neumann boundary condition for the diffusion operator.
 
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma = g$, uses
     external data
@@ -291,8 +309,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """
-        Initialize the boundary condition.
+        """Initialize the boundary condition.
 
         Parameters
         ----------
@@ -361,8 +378,7 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """
-        Initialize the boundary condition.
+        """Initialize the boundary condition.
 
         Parameters
         ----------
@@ -415,8 +431,7 @@ def grad_operator(
         # FIXME: See if there's a better way to do this
         kappa_tpairs=None,
         u_tpairs=None):
-    r"""
-    Compute the gradient of *u*.
+    r"""Compute the gradient of *u*.
 
     Parameters
     ----------
@@ -528,8 +543,7 @@ def diffusion_operator(
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         grad_u=None):
-    r"""
-    Compute the diffusion operator.
+    r"""Compute the diffusion operator.
 
     The diffusion operator is defined as
     $\nabla\cdot(\kappa\nabla u)$, where $\kappa$ is the conductivity and
