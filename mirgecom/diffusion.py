@@ -81,15 +81,17 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     """
     actx = u_tpair.int.array_context
 
-    kappa_int = kappa_tpair.int
-    kappa_ext = kappa_tpair.ext
-
     # if any of the coefficients are anisotropic, weight by the absolute value
     # of the normal diffusivity
     if isinstance(kappa_tpair.int, np.ndarray):
         kappa_int = actx.np.abs(np.dot(kappa_tpair.int, normal))
+    else:
+        kappa_int = kappa_tpair.int
+
     if isinstance(kappa_tpair.ext, np.ndarray):
         kappa_ext = actx.np.abs(np.dot(kappa_tpair.ext, normal))
+    else:
+        kappa_ext = kappa_tpair.ext
 
     kappa_sum = actx.np.where(
         actx.np.greater(kappa_int + kappa_ext, 0*kappa_int),
