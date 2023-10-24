@@ -96,8 +96,10 @@ def main(actx_class, use_esdg=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
-    queue = getattr(actx, "queue", None)
+    actx_o = initialize_actx(actx_class, comm)
+    queue = getattr(actx_o, "queue", None)
+    from grudge.array_context import TensorProductArrayContext
+    actx = TensorProductArrayContext(queue)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
@@ -137,19 +139,21 @@ def main(actx_class, use_esdg=False,
         box_ll = -1
         box_ur = 1
         nel_1d = 16
+        from meshmode.mesh import TensorProductElementGroup
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
             boundary_tag_to_face={
                 "outlet_L": ["+y"],
                 "outlet_R": ["-y", "+x"],
-                "inlet": ["-x"]})
+                "inlet": ["-x"]}, group_cls=TensorProductElementGroup)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
     order = 1
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             use_tensor_product_elements=True)
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
