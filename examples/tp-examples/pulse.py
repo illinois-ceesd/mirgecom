@@ -79,7 +79,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None):
+         casename=None, rst_filename=None,
+         use_tensor_product_elements=False):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -97,7 +98,10 @@ def main(actx_class, use_esdg=False,
 
     from grudge.array_context import TensorProductMPIPyOpenCLArrayContext
     from mirgecom.array_context import initialize_actx
-    actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
+    if use_tensor_product_elements:
+        actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
+    else:
+        actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = False
 
@@ -108,9 +112,9 @@ def main(actx_class, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.1
+    t_final = 0.3
     current_cfl = 1.0
-    current_dt = .0025
+    current_dt = .003
     current_t = 0
     constant_cfl = False
 
@@ -149,15 +153,28 @@ def main(actx_class, use_esdg=False,
         #        "outlet_R": ["-y", "+x"],
         #        "inlet": ["-x"]}, group_cls=TensorProductElementGroup)
 
-        local_mesh = generate_regular_rect_mesh(
-            a=(box_ll,)*dim,
-            b=(box_ur,)*dim,
-            nelements_per_axis=(nel_1d,)*dim,
-            boundary_tag_to_face={
-                   "outlet_L": ["+y"],
-                   "outlet_R": ["-y", "+x"],
-                   "inlet": ["-x", "+z"]},
-            group_cls=TensorProductElementGroup)
+        if use_tensor_product_elements:
+            local_mesh = generate_regular_rect_mesh(
+                a=(box_ll,)*dim,
+                b=(box_ur,)*dim,
+                nelements_per_axis=(nel_1d,)*dim,
+                boundary_tag_to_face={
+                       "outlet_L": ["+y"],
+                       "outlet_R": ["-y", "+x"],
+                       "inlet": ["-x"]},
+                group_cls=TensorProductElementGroup)
+        else:
+            local_mesh = generate_regular_rect_mesh(
+                a=(box_ll,)*dim,
+                b=(box_ur,)*dim,
+                nelements_per_axis=(nel_1d,)*dim,
+                boundary_tag_to_face={
+                       "outlet_L": ["+y"],
+                       "outlet_R": ["-y", "+x"],
+                       "inlet": ["-x"]})
+
+        print(type(actx))
+        print(type(local_mesh.groups[0]))
 
         # local_mesh, global_nelements = generate_and_distribute_mesh(comm,
         #                                                            generate_mesh)
@@ -165,8 +182,13 @@ def main(actx_class, use_esdg=False,
         global_nelements = local_nelements
 
     order = 5
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             use_tensor_product_elements=True)
+    if use_tensor_product_elements:
+        dcoll = create_discretization_collection(
+            actx, local_mesh, order=order, use_tensor_product_elements=True)
+    else:
+        dcoll = create_discretization_collection(
+            actx, local_mesh, order=order)
+
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
@@ -394,6 +416,7 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--use_tensor_product_elements", action="store_true")
     args = parser.parse_args()
 
     from warnings import warn
@@ -418,6 +441,7 @@ if __name__ == "__main__":
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename)
+         casename=casename, rst_filename=rst_filename,
+         use_tensor_product_elements=args.use_tensor_product_elements)
 
 # vim: foldmethod=marker

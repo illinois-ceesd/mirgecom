@@ -53,7 +53,7 @@ def create_discretization_collection(actx, volume_meshes, order, *,
     from meshmode.discretization.poly_element import (
         QuadratureSimplexGroupFactory,
         PolynomialRecursiveNodesGroupFactory,
-        LegendreGaussLobattoTensorProductElementGroup as Lgl
+        LegendreGaussLobattoTensorProductGroupFactory as Lgl
     )
 
     if quadrature_order < 0:
