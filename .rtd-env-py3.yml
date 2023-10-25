@@ -9,6 +9,7 @@ dependencies:
 - islpy
 - pip
 - pyopencl
+- graphviz
 # - scipy
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
