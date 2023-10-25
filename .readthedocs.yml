@@ -9,7 +9,6 @@ build:
     python: "mambaforge-22.9"
 
 sphinx:
-  configuration: doc/conf.py
   fail_on_warning: true
 
 python:
