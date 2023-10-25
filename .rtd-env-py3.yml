@@ -10,7 +10,7 @@ dependencies:
 - pip
 - pyopencl
 - graphviz
-# - scipy
+- scipy
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
   - "git+https://github.com/inducer/loopy.git#egg=loopy"
