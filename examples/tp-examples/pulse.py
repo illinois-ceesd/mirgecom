@@ -124,7 +124,7 @@ def main(actx_class, use_esdg=False,
     nviz = 100
     nhealth = 1
 
-    dim = 2
+    dim = 3
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"

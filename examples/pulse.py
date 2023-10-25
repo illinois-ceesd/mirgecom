@@ -95,11 +95,10 @@ def main(actx_class, use_esdg=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from grudge.array_context import TensorProductMPIPyOpenCLArrayContext
-    from mirgecom.array_context import initialize_actx
-    actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
-    use_profiling = False
+    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     current_step = 0
@@ -110,7 +109,7 @@ def main(actx_class, use_esdg=False,
         timestepper = rk4_step
     t_final = 0.1
     current_cfl = 1.0
-    current_dt = .0025
+    current_dt = .005
     current_t = 0
     constant_cfl = False
 
@@ -138,35 +137,19 @@ def main(actx_class, use_esdg=False,
         box_ll = -1
         box_ur = 1
         nel_1d = 16
-        from meshmode.mesh import TensorProductElementGroup
-        # FIXME: dumping/loading TP mesh via pickle errors
-        # see github.com/inducer/meshmode/issues/391
-        # generate_mesh = partial(generate_regular_rect_mesh,
-        #    a=(box_ll,)*dim, b=(box_ur,)*dim,
-        #    nelements_per_axis=(nel_1d,)*dim,
-        #    boundary_tag_to_face={
-        #        "outlet_L": ["+y"],
-        #        "outlet_R": ["-y", "+x"],
-        #        "inlet": ["-x"]}, group_cls=TensorProductElementGroup)
-
-        local_mesh = generate_regular_rect_mesh(
-            a=(box_ll,)*dim,
-            b=(box_ur,)*dim,
+        generate_mesh = partial(generate_regular_rect_mesh,
+            a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
             boundary_tag_to_face={
-                   "outlet_L": ["+y"],
-                   "outlet_R": ["-y", "+x"],
-                   "inlet": ["-x", "+z"]},
-            group_cls=TensorProductElementGroup)
-
-        # local_mesh, global_nelements = generate_and_distribute_mesh(comm,
-        #                                                            generate_mesh)
+                "outlet_L": ["+y"],
+                "outlet_R": ["-y", "+x"],
+                "inlet": ["-x"]})
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                    generate_mesh)
         local_nelements = local_mesh.nelements
-        global_nelements = local_nelements
 
-    order = 5
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             use_tensor_product_elements=True)
+    order = 1
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
