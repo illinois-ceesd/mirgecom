@@ -1,7 +1,7 @@
 version: 2
 
-# conda:
-#   environment: .rtd-env-py3.yml
+conda:
+  environment: .rtd-env-py3.yml
 
 build:
   os: "ubuntu-22.04"

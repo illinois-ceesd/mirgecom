@@ -9,17 +9,17 @@ dependencies:
 - islpy
 - pip
 - pyopencl
-- scipy
-- pip:
-  - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
-  - "git+https://github.com/inducer/loopy.git#egg=loopy"
-  - "git+https://github.com/inducer/dagrt.git#egg=dagrt"
-  - "git+https://github.com/inducer/leap.git#egg=leap"
-  - "git+https://github.com/inducer/modepy.git#egg=modepy"
-  - "git+https://github.com/illinois-ceesd/arraycontext.git@production#egg=arraycontext"
-  - "git+https://github.com/illinois-ceesd/meshmode.git@production#egg=meshmode"
-  - "git+https://github.com/illinois-ceesd/grudge.git@production#egg=grudge"
-  - "sphinx-math-dollar"
-  - "sphinx-copybutton"
-  - "furo"
+# - scipy
+# - pip:
+#   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
+#   - "git+https://github.com/inducer/loopy.git#egg=loopy"
+#   - "git+https://github.com/inducer/dagrt.git#egg=dagrt"
+#   - "git+https://github.com/inducer/leap.git#egg=leap"
+#   - "git+https://github.com/inducer/modepy.git#egg=modepy"
+#   - "git+https://github.com/illinois-ceesd/arraycontext.git@production#egg=arraycontext"
+#   - "git+https://github.com/illinois-ceesd/meshmode.git@production#egg=meshmode"
+#   - "git+https://github.com/illinois-ceesd/grudge.git@production#egg=grudge"
+#   - "sphinx-math-dollar"
+#   - "sphinx-copybutton"
+#   - "furo"
 
