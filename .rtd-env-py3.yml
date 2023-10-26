@@ -4,13 +4,12 @@ channels:
 - conda-forge
 - nodefaults
 dependencies:
-# readthedocs does not yet support Python 3.11
-# See e.g. https://readthedocs.org/api/v2/build/18650881.txt
-- python=3.10
+- python=3.11
 - mpi4py
 - islpy
 - pip
 - pyopencl
+- graphviz
 - scipy
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
