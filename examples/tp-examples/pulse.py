@@ -44,6 +44,7 @@ from mirgecom.io import make_init_message
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
+    AdiabaticSlipBoundary,
     LinearizedOutflowBoundary,
     RiemannInflowBoundary,
     PressureOutflowBoundary
@@ -112,9 +113,9 @@ def main(actx_class, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.3
+    t_final = 0.1
     current_cfl = 1.0
-    current_dt = .003
+    current_dt = .0005
     current_t = 0
     constant_cfl = False
 
@@ -139,49 +140,27 @@ def main(actx_class, use_esdg=False,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        box_ll = -1
-        box_ur = 1
-        nel_1d = 16
-        from meshmode.mesh import TensorProductElementGroup
-        # FIXME: dumping/loading TP mesh via pickle errors
-        # see github.com/inducer/meshmode/issues/391
-        # generate_mesh = partial(generate_regular_rect_mesh,
-        #    a=(box_ll,)*dim, b=(box_ur,)*dim,
-        #    nelements_per_axis=(nel_1d,)*dim,
-        #    boundary_tag_to_face={
-        #        "outlet_L": ["+y"],
-        #        "outlet_R": ["-y", "+x"],
-        #        "inlet": ["-x"]}, group_cls=TensorProductElementGroup)
+        box_ll = -0.5
+        box_ur = 0.5
+        nel_1d = 32
 
         if use_tensor_product_elements:
-            local_mesh = generate_regular_rect_mesh(
-                a=(box_ll,)*dim,
-                b=(box_ur,)*dim,
+            from meshmode.mesh import TensorProductElementGroup
+            generate_mesh = partial(generate_regular_rect_mesh,
+                a=(box_ll,)*dim, b=(box_ur,)*dim,
                 nelements_per_axis=(nel_1d,)*dim,
-                boundary_tag_to_face={
-                       "outlet_L": ["+y"],
-                       "outlet_R": ["-y", "+x"],
-                       "inlet": ["-x"]},
                 group_cls=TensorProductElementGroup)
         else:
-            local_mesh = generate_regular_rect_mesh(
-                a=(box_ll,)*dim,
-                b=(box_ur,)*dim,
-                nelements_per_axis=(nel_1d,)*dim,
-                boundary_tag_to_face={
-                       "outlet_L": ["+y"],
-                       "outlet_R": ["-y", "+x"],
-                       "inlet": ["-x"]})
+            generate_mesh = partial(generate_regular_rect_mesh,
+                a=(box_ll,)*dim, b=(box_ur,)*dim,
+                nelements_per_axis=(nel_1d,)*dim)
 
-        print(type(actx))
-        print(type(local_mesh.groups[0]))
-
-        # local_mesh, global_nelements = generate_and_distribute_mesh(comm,
-        #                                                            generate_mesh)
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                   generate_mesh)
         local_nelements = local_mesh.nelements
-        global_nelements = local_nelements
+        # global_nelements = local_nelements
 
-    order = 5
+    order = 1
     if use_tensor_product_elements:
         dcoll = create_discretization_collection(
             actx, local_mesh, order=order, use_tensor_product_elements=True)
@@ -228,31 +207,20 @@ def main(actx_class, use_esdg=False,
     from mirgecom.initializers import initialize_flow_solution
     from mirgecom.utils import force_evaluation
 
+    # free_stream_cv = initialize_flow_solution(
+    #     actx, dcoll, gas_model, dd_bdry=BoundaryDomainTag("inlet"),
+    #     pressure=1.0, temperature=1.0, velocity=velocity)
+
     free_stream_cv = initialize_flow_solution(
-        actx, dcoll, gas_model, dd_bdry=BoundaryDomainTag("inlet"),
+        actx, dcoll, gas_model,
         pressure=1.0, temperature=1.0, velocity=velocity)
 
     inflow_freestream_state = make_fluid_state(cv=free_stream_cv,
                                                gas_model=gas_model)
     inflow_freestream_state = force_evaluation(actx, inflow_freestream_state)
 
-    def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
-        return inflow_freestream_state
-
-    riemann_inflow_bnd = RiemannInflowBoundary(
-        free_stream_state_func=_inflow_bnd_state_func)
-
-    # Linearized outflow
-    linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=1.0,
-        free_stream_velocity=velocity, free_stream_pressure=1.0)
-
-    # Pressure prescribed outflow boundary
-    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
-
-    # boundaries
-    boundaries = {BoundaryDomainTag("inlet"): riemann_inflow_bnd,
-                  BoundaryDomainTag("outlet_L"): linear_outflow_bnd,
-                  BoundaryDomainTag("outlet_R"): pressure_outflow_bnd}
+    my_boundary = AdiabaticSlipBoundary()
+    boundaries = {BTAG_ALL: my_boundary}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
