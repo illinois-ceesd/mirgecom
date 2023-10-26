@@ -97,10 +97,12 @@ def main(actx_class, use_esdg=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from grudge.array_context import TensorProductMPIPyOpenCLArrayContext
+    from grudge.array_context import \
+            TensorProductMPIFusionContractorArrayContext
     from mirgecom.array_context import initialize_actx
     if use_tensor_product_elements:
-        actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
+        actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
+                               comm)
     else:
         actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
