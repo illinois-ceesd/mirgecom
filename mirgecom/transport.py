@@ -822,9 +822,9 @@ class ArtificialViscosityTransportDiv3(TransportModel):
         return (av_kappa
                 + self._physical_transport.thermal_conductivity(cv, dv, eos))
 
-    def species_diffusivity(self, cv: ConservedVars,
-                            dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+    def species_diffusivity(self, cv: ConservedVars, # type: ignore[override]
+                            dv: GasDependentVars,
+                            eos: GasEOS) -> DOFArray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         actx = cv.array_context
         smoothness_d = actx.np.where(
