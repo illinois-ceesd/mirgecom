@@ -829,5 +829,5 @@ class ArtificialViscosityTransportDiv3(TransportModel):
         actx = cv.array_context
         smoothness_d = actx.np.where(
             actx.np.greater(dv.smoothness_d, 0.), dv.smoothness_d, 0.)
-        return (smoothness_d
+        return (smoothness_d*self.av_d(cv, dv, eos)
                 + self._physical_transport.species_diffusivity(cv, dv, eos))
