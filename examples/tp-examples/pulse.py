@@ -115,7 +115,7 @@ def main(actx_class, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.1
+    t_final = 2.0
     current_cfl = 1.0
     current_dt = .0005
     current_t = 0
@@ -151,7 +151,8 @@ def main(actx_class, use_esdg=False,
             generate_mesh = partial(generate_regular_rect_mesh,
                 a=(box_ll,)*dim, b=(box_ur,)*dim,
                 nelements_per_axis=(nel_1d,)*dim,
-                group_cls=TensorProductElementGroup)
+                                    group_cls=TensorProductElementGroup,
+                                    periodic=(True,)*dim)
         else:
             generate_mesh = partial(generate_regular_rect_mesh,
                 a=(box_ll,)*dim, b=(box_ur,)*dim,
@@ -200,7 +201,7 @@ def main(actx_class, use_esdg=False,
     eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
     gas_model = GasModel(eos=eos)
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.1
+    velocity[0] = 0.0
     orig = np.zeros(shape=(dim,))
     initializer = Uniform(dim=dim, velocity=velocity)
     uniform_state = initializer(nodes, eos=eos)
@@ -222,7 +223,7 @@ def main(actx_class, use_esdg=False,
     inflow_freestream_state = force_evaluation(actx, inflow_freestream_state)
 
     my_boundary = AdiabaticSlipBoundary()
-    boundaries = {BTAG_ALL: my_boundary}
+    boundaries = {}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
