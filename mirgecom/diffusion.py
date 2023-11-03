@@ -102,7 +102,8 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
 
 
 def diffusion_flux(kappa, grad_u):
-    r"""Compute the diffusive flux $-\kappa \nabla u$.
+    r"""
+    Compute the diffusive flux $-\kappa \nabla u$.
 
     Parameters
     ----------
@@ -219,7 +220,8 @@ class DiffusionBoundary(metaclass=abc.ABCMeta):
 
 
 class DirichletDiffusionBoundary(DiffusionBoundary):
-    r"""Dirichlet boundary condition for the diffusion operator.
+    r"""
+    Dirichlet boundary condition for the diffusion operator.
 
     For the boundary condition $u|_\Gamma = f$, uses external data
 
@@ -237,7 +239,8 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """Initialize the boundary condition.
+        """
+        Initialize the boundary condition.
 
         Parameters
         ----------
@@ -282,7 +285,8 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
 
 class NeumannDiffusionBoundary(DiffusionBoundary):
-    r"""Neumann boundary condition for the diffusion operator.
+    r"""
+    Neumann boundary condition for the diffusion operator.
 
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma = g$, uses
     external data
@@ -308,7 +312,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """Initialize the boundary condition.
+        """
+        Initialize the boundary condition.
 
         Parameters
         ----------
@@ -355,7 +360,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
 
 class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
-    r"""Prescribed flux boundary condition for the diffusion operator.
+    r"""
+    Prescribed flux boundary condition for the diffusion operator.
 
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
     external data
@@ -377,7 +383,8 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
     """
 
     def __init__(self, value):
-        """Initialize the boundary condition.
+        """
+        Initialize the boundary condition.
 
         Parameters
         ----------
@@ -430,7 +437,8 @@ def grad_operator(
         # FIXME: See if there's a better way to do this
         kappa_tpairs=None,
         u_tpairs=None):
-    r"""Compute the gradient of *u*.
+    r"""
+    Compute the gradient of *u*.
 
     Parameters
     ----------
@@ -542,7 +550,8 @@ def diffusion_operator(
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         grad_u=None):
-    r"""Compute the diffusion operator.
+    r"""
+    Compute the diffusion operator.
 
     The diffusion operator is defined as
     $\nabla\cdot(\kappa\nabla u)$, where $\kappa$ is the conductivity and
