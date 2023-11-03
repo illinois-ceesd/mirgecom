@@ -1168,8 +1168,6 @@ class FarfieldBoundary(MengaldoBoundaryCondition):
     def __init__(self, dim, free_stream_pressure, free_stream_velocity,
                  free_stream_temperature, free_stream_mass_fractions=None):
         """Initialize the boundary condition object."""
-        dim = len(free_stream_velocity)
-
         self._temperature = free_stream_temperature
         self._pressure = free_stream_pressure
         self._species_mass_fractions = free_stream_mass_fractions
