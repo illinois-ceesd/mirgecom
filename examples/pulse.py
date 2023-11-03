@@ -25,11 +25,12 @@ THE SOFTWARE.
 """
 
 import logging
-from functools import partial
 import numpy as np
+from functools import partial
 
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_QUAD
 
 from logpyle import IntervalTimer, set_dt
 
@@ -41,14 +42,10 @@ from mirgecom.simutil import (
     generate_and_distribute_mesh
 )
 from mirgecom.io import make_init_message
+
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    LinearizedOutflow2DBoundary,
-    RiemannInflowBoundary,
-    PressureOutflowBoundary,
-    FarfieldBoundary
-)
+from mirgecom.boundary import AdiabaticSlipBoundary  # noqa
 from mirgecom.initializers import (
     Uniform,
     AcousticPulse
@@ -107,7 +104,7 @@ def main(actx_class, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.1
+    t_final = 1.0
     current_cfl = 1.0
     current_dt = .005
     current_t = 0
@@ -140,11 +137,8 @@ def main(actx_class, use_esdg=False,
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
-            boundary_tag_to_face={
-                "outlet_bottom": ["-y"],
-                "outlet_top": ["+y"],
-                "outlet_right": ["+x"],
-                "inlet": ["-x"]})
+            periodic=(True,)*dim)
+
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
@@ -152,11 +146,7 @@ def main(actx_class, use_esdg=False,
     order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-
-    if use_overintegration:
-        quadrature_tag = DISCR_TAG_QUAD
-    else:
-        quadrature_tag = None
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     vis_timer = None
 
@@ -186,32 +176,8 @@ def main(actx_class, use_esdg=False,
     initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
-    # Riemann inflow boundary
-    from mirgecom.initializers import initialize_flow_solution
-    bnd_discr = dcoll.discr_from_dd(BoundaryDomainTag("inlet"))
-    bnd_nodes = actx.thaw(bnd_discr.nodes())
-    free_stream_cv = initialize_flow_solution(
-        actx, gas_model=gas_model, nodes=bnd_nodes,
-        pressure=1.0, temperature=1.0, velocity=velocity)
-    riemann_inflow_bnd = RiemannInflowBoundary(cv=free_stream_cv,
-                                               temperature=1.0)
-
-    # Linearized outflow
-    linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=1.0,
-        free_stream_velocity=velocity, free_stream_pressure=1.0)
-
-    # Pressure prescribed outflow boundary
-    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
-
-    # Farfield boundary
-    farfield_bnd = FarfieldBoundary(dim=2, free_stream_pressure=1.0,
-        free_stream_velocity=velocity, free_stream_temperature=1.0)
-
-    # boundaries
-    boundaries = {BoundaryDomainTag("inlet"): riemann_inflow_bnd,
-                  BoundaryDomainTag("outlet_bottom"): linear_outflow_bnd,
-                  BoundaryDomainTag("outlet_right"): pressure_outflow_bnd,
-                  BoundaryDomainTag("outlet_top"): farfield_bnd}
+    # my_boundary = AdiabaticSlipBoundary()
+    boundaries = {}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
