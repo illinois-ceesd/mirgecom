@@ -57,7 +57,7 @@ from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import make_fluid_state
 
 
-def initialize_flow_solution(actx, nodes=None, gas_model=None, eos=None,
+def initialize_flow_solution(actx, nodes, gas_model=None, eos=None,
         pressure=None, temperature=None, density=None, velocity=None,
         species_mass_fractions=None, return_fluid_state=False):
     """Create a fluid CV/state from a set of minimal input data."""
@@ -1059,7 +1059,7 @@ class Uniform:
         self._temp = temperature
         self._p = pressure
         self._rho = rho
-        self._e = energy
+        self._e = energy  # XXX Unused. Deprecate this?
         self._dim = dim
 
     def __call__(self, x_vec, eos, **kwargs):
