@@ -28,7 +28,7 @@ import logging
 import numpy as np
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DISCR_TAG_QUAD
 
@@ -39,13 +39,13 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
-    generate_and_distribute_mesh
+    distribute_mesh
 )
 from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary  # noqa
+from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
     Uniform,
     AcousticPulse
@@ -137,10 +137,10 @@ def main(actx_class, use_esdg=False,
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
-            periodic=(True,)*dim)
+            # periodic=(True,)*dim
+        )
 
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
-                                                                    generate_mesh)
+        local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
     order = 1
@@ -171,13 +171,13 @@ def main(actx_class, use_esdg=False,
     eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
     gas_model = GasModel(eos=eos)
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.1
+    velocity[0] = 0.0
     orig = np.zeros(shape=(dim,))
     initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
-    # my_boundary = AdiabaticSlipBoundary()
-    boundaries = {}
+    boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
+    # boundaries = {}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
