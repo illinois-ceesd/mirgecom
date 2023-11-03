@@ -63,8 +63,6 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
-from mirgecom.initializers import initialize_flow_solution
-from mirgecom.utils import force_evaluation
 
 logger = logging.getLogger(__name__)
 
@@ -177,10 +175,6 @@ def main(actx_class, use_esdg=False,
     orig = np.zeros(shape=(dim,))
     initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
-
-    free_stream_cv = initialize_flow_solution(
-        actx, nodes=nodes, gas_model=gas_model,
-        pressure=1.0, temperature=1.0, velocity=velocity)
 
     # my_boundary = AdiabaticSlipBoundary()
     boundaries = {}
