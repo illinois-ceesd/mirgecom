@@ -761,8 +761,7 @@ class ArtificialViscosityTransportDiv3(TransportModel):
     def av_d(self, cv, dv, eos):
         r"""Get the shear artificial viscosity for the gas."""
         actx = cv.array_context
-        return (self._av_d * cv.mass
-                * actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
+        return (self._av_d * actx.np.sqrt(np.dot(cv.velocity, cv.velocity)
                                + dv.speed_of_sound**2))
 
     def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
