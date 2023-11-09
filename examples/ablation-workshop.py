@@ -488,7 +488,8 @@ class TabulatedGasEOS(MixtureEOS):
         raise NotImplementedError
 
     def dependent_vars(self, cv: ConservedVars, temperature_seed=None,
-            smoothness_mu=None, smoothness_kappa=None, smoothness_beta=None):
+            smoothness_mu=None, smoothness_kappa=None,
+            smoothness_d=None, smoothness_beta=None):
         raise NotImplementedError
 
 
@@ -755,6 +756,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             smoothness_mu=zeros,
             smoothness_kappa=zeros,
             smoothness_beta=zeros,
+            smoothness_d=zeros,
             species_enthalpies=cv.species_mass,  # empty array
         )
 
