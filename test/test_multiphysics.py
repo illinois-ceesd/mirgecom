@@ -160,7 +160,11 @@ def test_thermally_coupled_fluid_wall(
     try:
         from grudge.discretization import PartID  # noqa: F401
     except ImportError:
-        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+        from mirgecom.simutil import is_running_in_ak_downstream_ci
+        if is_running_in_ak_downstream_ci():
+            pytest.skip("This test requires a coupling-enabled branch of grudge.")
+        else:
+            raise
 
     actx = actx_factory()
 

@@ -93,9 +93,13 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     try:
         from grudge.discretization import PartID  # noqa: F401
     except ImportError:
-        from warnings import warn
-        warn("This example requires a coupling-enabled branch of grudge; exiting.")
-        return
+        from mirgecom.simutil import is_running_in_ak_downstream_ci
+        if is_running_in_ak_downstream_ci():
+            from warnings import warn
+            warn("This example requires a coupling-enabled branch of grudge; exiting.")
+            return
+        else:
+            raise
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD

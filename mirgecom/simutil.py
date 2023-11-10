@@ -1260,6 +1260,19 @@ def configurate(config_key, config_object=None, default_value=None):
     return default_value
 
 
+def is_running_in_ak_downstream_ci() -> bool:
+    """Return True if running in another package in AK downstream CI."""
+    import os
+    if ("CI" in os.environ
+        and "GITHUB_RUN_ID" in os.environ
+        and "DOWNSTREAM_PROJECT" in os.environ
+        and os.environ["DOWNSTREAM_PROJECT"] == "mirgecom"
+    ):
+        return True
+
+    return False
+
+
 def compare_files_vtu(
         first_file: str,
         second_file: str,
