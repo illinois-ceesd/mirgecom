@@ -119,6 +119,7 @@ jobs:
 
         - name: Run examples
           run: |
+            set -x
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
@@ -198,6 +199,7 @@ jobs:
             fetch-depth: '0'
         - name: Prepare production environment
           run: |
+            set -x
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
 
