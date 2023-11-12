@@ -124,7 +124,10 @@ jobs:
             export XDG_CACHE_HOME=/tmp
             mamba install vtk  # needed for the accuracy comparison
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
-            # && export POCL_DEBUG=cuda
+            
+             # This is only possible because actions run sequentially on porter
+            [[ $(hostname) == "porter" ]] && rm -rf /tmp/$USER/pocl-scratch" && rm -rf /tmp/$USER/xdg-scratch"
+            
             scripts/run-integrated-tests.sh --examples
 
     doc:
@@ -197,6 +200,10 @@ jobs:
           run: |
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+
+            # This is only possible because actions run sequentially on porter
+            [[ $(hostname) == "porter" ]] && rm -rf /tmp/$USER/pocl-scratch" && rm -rf /tmp/$USER/xdg-scratch"
+            
             MIRGEDIR=$(pwd)
             cat scripts/production-testing-env.sh
             . scripts/production-testing-env.sh
