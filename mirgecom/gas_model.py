@@ -118,6 +118,7 @@ class FluidState:
     .. autoattribute:: temperature
     .. autoattribute:: smoothness_mu
     .. autoattribute:: smoothness_kappa
+    .. autoattribute:: smoothness_d
     .. autoattribute:: smoothness_beta
     .. autoattribute:: velocity
     .. autoattribute:: speed
@@ -168,6 +169,11 @@ class FluidState:
     def smoothness_kappa(self):
         """Return the smoothness_kappa field."""
         return self.dv.smoothness_kappa
+
+    @property
+    def smoothness_d(self):
+        """Return the smoothness_d field."""
+        return self.dv.smoothness_d
 
     @property
     def smoothness_beta(self):
@@ -297,6 +303,7 @@ def make_fluid_state(cv, gas_model,
                      temperature_seed=None,
                      smoothness_mu=None,
                      smoothness_kappa=None,
+                     smoothness_d=None,
                      smoothness_beta=None,
                      material_densities=None,
                      limiter_func=None, limiter_dd=None):
@@ -328,6 +335,11 @@ def make_fluid_state(cv, gas_model,
         Optional array containing the smoothness parameter for extra thermal
         conductivity in the artificial viscosity.
 
+    smoothness_d: :class:`~meshmode.dof_array.DOFArray`
+
+        Optional array containing the smoothness parameter for extra species
+        diffusivity in the artificial viscosity.
+
     smoothness_beta: :class:`~meshmode.dof_array.DOFArray`
 
         Optional array containing the smoothness parameter for extra bulk
@@ -357,6 +369,8 @@ def make_fluid_state(cv, gas_model,
                         is None else smoothness_kappa)
     smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
                        is None else smoothness_beta)
+    smoothness_d = (actx.np.zeros_like(cv.mass) if smoothness_d
+                        is None else smoothness_d)
 
     if isinstance(gas_model, GasModel):
         temperature = gas_model.eos.temperature(cv=cv,
@@ -373,6 +387,7 @@ def make_fluid_state(cv, gas_model,
             speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
+            smoothness_d=smoothness_d,
             smoothness_beta=smoothness_beta
         )
 
@@ -384,6 +399,7 @@ def make_fluid_state(cv, gas_model,
                 speed_of_sound=dv.speed_of_sound,
                 smoothness_mu=dv.smoothness_mu,
                 smoothness_kappa=dv.smoothness_kappa,
+                smoothness_d=dv.smoothness_d,
                 smoothness_beta=dv.smoothness_beta,
                 species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
             )
@@ -428,6 +444,7 @@ def make_fluid_state(cv, gas_model,
             speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
+            smoothness_d=smoothness_d,
             smoothness_beta=smoothness_beta,
             species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
         )
@@ -507,6 +524,10 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     if state.dv.smoothness_kappa is not None:
         smoothness_kappa = op.project(dcoll, src, tgt, state.dv.smoothness_kappa)
 
+    smoothness_d = None
+    if state.dv.smoothness_d is not None:
+        smoothness_d = op.project(dcoll, src, tgt, state.dv.smoothness_d)
+
     smoothness_beta = None
     if state.dv.smoothness_beta is not None:
         smoothness_beta = op.project(dcoll, src, tgt, state.dv.smoothness_beta)
@@ -519,6 +540,7 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
                             temperature_seed=temperature_seed,
                             smoothness_mu=smoothness_mu,
                             smoothness_kappa=smoothness_kappa,
+                            smoothness_d=smoothness_d,
                             smoothness_beta=smoothness_beta,
                             material_densities=material_densities,
                             limiter_func=limiter_func, limiter_dd=tgt)
@@ -535,6 +557,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
                                  temperature_seed_pairs=None,
                                  smoothness_mu_pairs=None,
                                  smoothness_kappa_pairs=None,
+                                 smoothness_d_pairs=None,
                                  smoothness_beta_pairs=None,
                                  material_densities_pairs=None,
                                  limiter_func=None):
@@ -579,6 +602,8 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
         smoothness_mu_pairs = [None] * len(cv_pairs)
     if smoothness_kappa_pairs is None:
         smoothness_kappa_pairs = [None] * len(cv_pairs)
+    if smoothness_d_pairs is None:
+        smoothness_d_pairs = [None] * len(cv_pairs)
     if smoothness_beta_pairs is None:
         smoothness_beta_pairs = [None] * len(cv_pairs)
     if material_densities_pairs is None:
@@ -590,6 +615,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             temperature_seed=_getattr_ish(tseed_pair, "int"),
             smoothness_mu=_getattr_ish(smoothness_mu_pair, "int"),
             smoothness_kappa=_getattr_ish(smoothness_kappa_pair, "int"),
+            smoothness_d=_getattr_ish(smoothness_d_pair, "int"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "int"),
             material_densities=_getattr_ish(material_densities_pair, "int"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd),
@@ -598,6 +624,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             temperature_seed=_getattr_ish(tseed_pair, "ext"),
             smoothness_mu=_getattr_ish(smoothness_mu_pair, "ext"),
             smoothness_kappa=_getattr_ish(smoothness_kappa_pair, "ext"),
+            smoothness_d=_getattr_ish(smoothness_d_pair, "ext"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "ext"),
             material_densities=_getattr_ish(material_densities_pair, "ext"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd))
@@ -605,10 +632,11 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             tseed_pair,
             smoothness_mu_pair,
             smoothness_kappa_pair,
+            smoothness_d_pair,
             smoothness_beta_pair,
             material_densities_pair in zip(
                 cv_pairs, temperature_seed_pairs,
-                smoothness_mu_pairs, smoothness_kappa_pairs,
+                smoothness_mu_pairs, smoothness_kappa_pairs, smoothness_d_pairs,
                 smoothness_beta_pairs, material_densities_pairs)]
 
 
@@ -625,6 +653,10 @@ class _FluidSmoothnessMuTag:
 
 
 class _FluidSmoothnessKappaTag:
+    pass
+
+
+class _FluidSmoothnessDiffTag:
     pass
 
 
@@ -758,6 +790,14 @@ def make_operator_fluid_states(
                 dcoll, volume_state.smoothness_kappa, volume_dd=dd_vol,
                 tag=(_FluidSmoothnessKappaTag, comm_tag))]
 
+    smoothness_d_interior_pairs = None
+    if volume_state.smoothness_d is not None:
+        smoothness_d_interior_pairs = [
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.smoothness_d, volume_dd=dd_vol,
+                tag=(_FluidSmoothnessDiffTag, comm_tag))]
+
     smoothness_beta_interior_pairs = None
     if volume_state.smoothness_beta is not None:
         smoothness_beta_interior_pairs = [
@@ -780,6 +820,7 @@ def make_operator_fluid_states(
         temperature_seed_pairs=tseed_interior_pairs,
         smoothness_mu_pairs=smoothness_mu_interior_pairs,
         smoothness_kappa_pairs=smoothness_kappa_interior_pairs,
+        smoothness_d_pairs=smoothness_d_interior_pairs,
         smoothness_beta_pairs=smoothness_beta_interior_pairs,
         material_densities_pairs=material_densities_interior_pairs,
         limiter_func=limiter_func)
@@ -874,6 +915,7 @@ def replace_fluid_state(
         temperature_seed=new_tseed,
         smoothness_mu=state.smoothness_mu,
         smoothness_kappa=state.smoothness_kappa,
+        smoothness_d=state.smoothness_d,
         smoothness_beta=state.smoothness_beta,
         material_densities=material_densities,
         limiter_func=limiter_func,

@@ -32,6 +32,12 @@ elif [[ $(hostname) == "lassen"* ]]; then
     PYOPENCL_TEST="port:tesla"
     PYOPENCL_CTX="port:tesla"
     MIRGE_MPI_EXEC="jsrun -g 1 -a 1"
+
+elif [[ $(hostname) == "delta"* ]]; then
+    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/delta-parallel-spawner.sh"
+    PYOPENCL_CTX="port:nvidia"
+    PYOPENCL_TEST="port:nvidia"
+    MIRGE_MPI_EXEC="srun"
 fi
 
 export MIRGE_HOME
