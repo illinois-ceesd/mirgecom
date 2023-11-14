@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-"""mirgecom mesh distribution utility"""
+"""Read gmsh mesh, partition it, and create a pkl file per mesh partition."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -69,14 +68,17 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, mesh_source=None, ndist=None,
+def main(actx_class, mesh_source=None, ndist=None, dim=None,
          output_path=None, log_path=None,
          casename=None, use_1d_part=None, use_wall=False):
-
+    """The main function."""
     if mesh_source is None:
         raise ApplicationOptionsError("Missing mesh source file.")
 
     mesh_source.strip("'")
+
+    if dim is None:
+        dim = 3
 
     if log_path is None:
         log_path = "log_data"
@@ -177,7 +179,7 @@ def main(actx_class, mesh_source=None, ndist=None,
     def get_mesh_data():
         from meshmode.mesh.io import read_gmsh
         mesh, tag_to_elements = read_gmsh(
-            mesh_source,
+            mesh_source, force_ambient_dim=dim,
             return_tag_to_elements_map=True)
         volume_to_tags = {
             "fluid": ["fluid"]}
@@ -200,7 +202,7 @@ def main(actx_class, mesh_source=None, ndist=None,
     if os.path.exists(output_path):
         if not os.path.isdir(output_path):
             raise ApplicationOptionsError(
-                "Mesh dist mode requires \"output\""
+                "Mesh dist mode requires 'output'"
                 " parameter to be a directory for output.")
     if rank == 0:
         if not os.path.exists(output_path):
@@ -218,7 +220,7 @@ def main(actx_class, mesh_source=None, ndist=None,
         partition_generator_func=part_func, logmgr=logmgr)
 
     comm.Barrier()
-    
+
     logmgr_set_time(logmgr, 0, 0)
     logmgr
     logmgr.tick_before()
@@ -239,12 +241,17 @@ if __name__ == "__main__":
                         action="store_true", help="Include wall domain in mesh.")
     parser.add_argument("-1", "--1dpart", dest="one_d_part",
                         action="store_true", help="Use 1D partitioner.")
+    parser.add_argument("-d", "--dimen", type=int, dest="dim",
+                        nargs="?", action="store",
+                        help="Number dimensions")
     parser.add_argument("-n", "--ndist", type=int, dest="ndist",
-                        nargs="?", action="store", help="Number of distributed parts")
+                        nargs="?", action="store",
+                        help="Number of distributed parts")
     parser.add_argument("-s", "--source", type=str, dest="source",
                         nargs="?", action="store", help="Gmsh mesh source file")
     parser.add_argument("-o", "--ouput-path", type=str, dest="output_path",
-                        nargs="?", action="store", help="Output path for distributed mesh pkl files")
+                        nargs="?", action="store",
+                        help="Output path for distributed mesh pkl files")
     parser.add_argument("-c", "--casename", type=str, dest="casename", nargs="?",
                         action="store", help="Root name of distributed mesh pkl files.")
     parser.add_argument("-g", "--logpath", type=str, dest="log_path", nargs="?",
@@ -256,7 +263,7 @@ if __name__ == "__main__":
     actx_class = get_reasonable_array_context_class(
         lazy=False, distributed=True, profiling=False, numpy=False)
 
-    main(actx_class, mesh_source=args.source,
+    main(actx_class, mesh_source=args.source, dim=args.dim,
          output_path=args.output_path, ndist=args.ndist,
          log_path=args.log_path, casename=args.casename,
          use_1d_part=args.one_d_part, use_wall=args.use_wall)

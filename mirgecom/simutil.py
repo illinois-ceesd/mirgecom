@@ -26,6 +26,11 @@ Mesh and element utilities
 .. autofunction:: distribute_mesh
 .. autofunction:: get_number_of_tetrahedron_nodes
 .. autofunction:: get_box_mesh
+.. autofunction:: interdecomposition_mapping
+.. autofunction:: interdecomposition_overlap
+.. autofunction:: invert_decomp
+.. autofunction:: multivolume_interdecomposition_overlap
+.. autofunction:: copy_mapped_dof_array_data
 
 Simulation support utilities
 ----------------------------
@@ -87,6 +92,7 @@ from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
+from collections import defaultdict
 
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
@@ -613,7 +619,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
 
     # Create geometrically even partitions
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
-    
+
     if debug:
         print(f"{elem_to_rank=}")
 
@@ -893,6 +899,17 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     return distribute_mesh(comm, generate_mesh)
 
 
+def invert_decomp(decomp_map):
+    """Return a list of global elements for each partition."""
+    from collections import defaultdict
+    global_elements_per_part = defaultdict(list)
+
+    for elemid, part in enumerate(decomp_map):
+        global_elements_per_part[part].append(elemid)
+
+    return global_elements_per_part
+
+
 def _partition_single_volume_mesh(
         mesh, num_ranks, rank_per_element, *, return_ranks=None):
     rank_to_elements = {
@@ -904,18 +921,15 @@ def _partition_single_volume_mesh(
         mesh, rank_to_elements, return_parts=return_ranks)
 
 
-def _partition_multi_volume_mesh(
-        mesh, num_ranks, rank_per_element, tag_to_elements, volume_to_tags, *,
-        return_ranks=None):
-    if return_ranks is None:
-        return_ranks = list(range(num_ranks))
+def _get_multi_volume_partitions(mesh, num_ranks, rank_per_element,
+                                 tag_to_elements, volume_to_tags):
+
+    volumes = list(volume_to_tags.keys())
 
     tag_to_volume = {
         tag: vol
         for vol, tags in volume_to_tags.items()
         for tag in tags}
-
-    volumes = list(volume_to_tags.keys())
 
     volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
     for tag, elements in tag_to_elements.items():
@@ -933,8 +947,24 @@ def _partition_multi_volume_mesh(
         for vol_idx in range(len(volumes))
         for rank in range(num_ranks)}
 
+    return part_id_to_elements
+
+
+def _partition_multi_volume_mesh(
+        mesh, num_ranks, rank_per_element,
+        part_id_to_elements, tag_to_elements, volume_to_tags, *,
+        return_ranks=None):
+    if return_ranks is None:
+        return_ranks = list(range(num_ranks))
+    volumes = list(volume_to_tags.keys())
+
     # TODO: Add a public meshmode function to accomplish this? So we're
     # not depending on meshmode internals
+    # PartID is (rank, vol) pair
+    # part_index is range(len(PartID))
+    # part_id_to_part_index is {PartID: part_index}
+    # global_elem_to_part_elem is ary[global_elem_index] = \
+    #    [part_index, local_element_index]
     part_id_to_part_index = {
         part_id: part_index
         for part_index, part_id in enumerate(part_id_to_elements.keys())}
@@ -943,6 +973,8 @@ def _partition_multi_volume_mesh(
         mesh.nelements, part_id_to_elements, part_id_to_part_index,
         mesh.element_id_dtype)
 
+    # tag_to_global_to_part = \
+    #    {tag: ary[global_elem_index][part_index, local_element_index]}
     tag_to_global_to_part = {
         tag: global_elem_to_part_elem[elements, :]
         for tag, elements in tag_to_elements.items()}
@@ -972,6 +1004,7 @@ def _partition_multi_volume_mesh(
                 part_id_to_tag_to_elements[PartID(vol, rank)])
             for vol in volumes}
         for rank in return_ranks}
+
 
 @contextmanager
 def _manage_mpi_comm(comm):
@@ -1049,7 +1082,6 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
         my_reader_rank = reader_comm.Get_rank()
 
         if my_node_rank == 0:
-            
             num_reading_ranks = reader_comm.Get_size()
             num_per_batch = num_per_batch or num_reading_ranks
             num_reading_batches = max(int(num_reading_ranks / num_per_batch), 1)
@@ -1112,9 +1144,12 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                         mesh, num_ranks, rank_per_element,
                         return_ranks=node_ranks)
                 else:
-                    rank_to_mesh_data = _partition_multi_volume_mesh(
+                    part_id_to_elements = _get_multi_volume_partitions(
                         mesh, num_ranks, rank_per_element, tag_to_elements,
-                        volume_to_tags, return_ranks=node_ranks)
+                        volume_to_tags)
+                    rank_to_mesh_data = _partition_multi_volume_mesh(
+                        mesh, num_ranks, rank_per_element, part_id_to_elements,
+                        tag_to_elements, volume_to_tags, return_ranks=node_ranks)
 
                 rank_to_node_rank = {
                     rank: node_rank
@@ -1207,6 +1242,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         The number of elements in the global mesh
     """
     from mpi4py.util import pkl5
+    from datetime import datetime
     comm_wrapper = pkl5.Intracomm(comm)
 
     num_ranks = comm_wrapper.Get_size()
@@ -1238,20 +1274,36 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         my_ending_rank = my_starting_rank + num_ranks_this_reader - 1
         ranks_to_write = list(range(my_starting_rank, my_ending_rank+1))
 
+        if reader_rank == 0:
+            print("Reading(world_rank,reader_rank): "
+                  "Writing[starting_rank,ending_rank]")
+            print("----------------------------------")
+        reader_comm.Barrier()
         print(f"R({my_rank},{reader_rank}): "
-              f"W({my_starting_rank},{my_ending_rank})")
+              f"W[{my_starting_rank},{my_ending_rank}]")
 
         if partition_generator_func is None:
             def partition_generator_func(mesh, tag_to_elements, num_target_ranks):
                 from meshmode.distributed import get_partition_by_pymetis
                 return get_partition_by_pymetis(mesh, num_target_ranks)
 
-        if logmgr:
-            logmgr.add_quantity(t_mesh_data)
-            with t_mesh_data.get_sub_timer():
+        if reader_rank == 0:
+            if logmgr:
+                logmgr.add_quantity(t_mesh_data)
+                with t_mesh_data.get_sub_timer():
+                    global_data = get_mesh_data()
+            else:
                 global_data = get_mesh_data()
+            print(f"{datetime.now()}: Done reading source mesh from file. "
+                  "Broadcasting...")
+            global_data = reader_comm_wrapper.bcast(global_data, root=0)
         else:
-            global_data = get_mesh_data()
+            global_data = reader_comm_wrapper.bcast(None, root=0)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done distrbuting source mesh data."
+                  " Partitioning...")
 
         from meshmode.mesh import Mesh
         if isinstance(global_data, Mesh):
@@ -1272,6 +1324,43 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             rank_per_element = partition_generator_func(mesh, tag_to_elements,
                                                         num_target_ranks)
 
+        # Save this little puppy for later (m-to-n restart support)
+        if reader_rank == 0:
+            part_table_fname = filename + f"_decomp_np{num_target_ranks}.pkl"
+            if os.path.exists(part_table_fname):
+                os.remove(part_table_fname)
+            with open(part_table_fname, "wb") as pkl_file:
+                pickle.dump(rank_per_element, pkl_file)
+            rank_to_elems = invert_decomp(rank_per_element)
+            part_table_fname = filename + f"_idecomp_np{num_target_ranks}.pkl"
+            with open(part_table_fname, "wb") as pkl_file:
+                pickle.dump(rank_to_elems, pkl_file)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done with global partitioning. Splitting...")
+
+        if tag_to_elements is None:
+            part_id_to_elements = None
+        else:
+            part_id_to_elements = _get_multi_volume_partitions(
+                mesh, num_target_ranks, rank_per_element, tag_to_elements,
+                volume_to_tags)
+
+            # Save this little puppy for later (m-to-n restart support)
+            if reader_rank == 0:
+                mv_part_table_fname = \
+                    filename + f"_multivol_idecomp_np{num_target_ranks}.pkl"
+                if os.path.exists(mv_part_table_fname):
+                    os.remove(mv_part_table_fname)
+                with open(mv_part_table_fname, "wb") as pkl_file:
+                    pickle.dump(part_id_to_elements, pkl_file)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: - Got PartID-to-elements. "
+                  "Making mesh data structures...")
+
         def get_rank_to_mesh_data():
             if tag_to_elements is None:
                 rank_to_mesh_data = _partition_single_volume_mesh(
@@ -1279,10 +1368,11 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                     return_ranks=ranks_to_write)
             else:
                 rank_to_mesh_data = _partition_multi_volume_mesh(
-                    mesh, num_target_ranks, rank_per_element, tag_to_elements,
-                    volume_to_tags, return_ranks=ranks_to_write)
+                    mesh, num_target_ranks, rank_per_element, part_id_to_elements,
+                    tag_to_elements, volume_to_tags, return_ranks=ranks_to_write)
             return rank_to_mesh_data
 
+        reader_comm.Barrier()
         if logmgr:
             logmgr.add_quantity(t_mesh_split)
             with t_mesh_split.get_sub_timer():
@@ -1290,11 +1380,16 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             rank_to_mesh_data = get_rank_to_mesh_data()
 
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done splitting mesh. Writing...")
+
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
                 for part_rank, part_mesh in rank_to_mesh_data.items():
-                    pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                    pkl_filename = (filename
+                                    + f"_np{num_target_ranks}_rank{part_rank}.pkl")
                     mesh_data_to_pickle = (mesh.nelements, part_mesh)
                     if os.path.exists(pkl_filename):
                         os.remove(pkl_filename)
@@ -1302,12 +1397,16 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                         pickle.dump(mesh_data_to_pickle, pkl_file)
         else:
             for part_rank, part_mesh in rank_to_mesh_data.items():
-                pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                pkl_filename = filename + f"_rank{part_rank}.pkl"
                 mesh_data_to_pickle = (mesh.nelements, part_mesh)
                 if os.path.exists(pkl_filename):
                     os.remove(pkl_filename)
                 with open(pkl_filename, "wb") as pkl_file:
                     pickle.dump(mesh_data_to_pickle, pkl_file)
+
+        reader_comm.Barrier()
+        if reader_rank == 0:
+            print(f"{datetime.now()}: Done writing partitioned mesh.")
 
 
 def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
@@ -1379,9 +1478,287 @@ def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
     return in_mesh, tag_to_in_elements
 
 
+def copy_mapped_dof_array_data(trg_dof_array, src_dof_array, index_map):
+    """Copy data between DOFArrays from disparate meshes."""
+    # Assume ONE group (tetrahedra ONLY)
+    actx = trg_dof_array.array_context
+    trg_dof_array_np = actx.to_numpy(trg_dof_array)
+    src_dof_array_np = actx.to_numpy(src_dof_array)
+
+    trg_array = trg_dof_array_np[0]
+    src_array = src_dof_array_np[0]
+    src_nel, src_nnodes = src_array.shape
+    trg_nel, trg_nnodes = trg_array.shape
+
+    if trg_nel == 0 or src_nel == 0:
+        return trg_dof_array
+
+    if src_nnodes != trg_nnodes:
+        raise ValueError("DOFArray mapped copy must be of same order.")
+
+    # Actual data copy
+    for trg_el, src_el in index_map.items():
+        trg_array[trg_el] = src_array[src_el]
+
+    return actx.from_numpy(trg_dof_array_np)
+
+
+def interdecomposition_imapping(target_idecomp, source_idecomp):
+    """
+    Return a mapping of which partitions to source for the target decomp.
+
+    Expects input format: {rank: [elements]}
+
+    Parameters
+    ----------
+    target_idecomp: dict
+        Target decomposition in the format {rank: [elements]}
+    source_idecomp: dict
+        Source decomposition in the format {rank: [elements]}
+
+    Returns
+    -------
+    dict
+        Dictionary like {trg_rank: [src_ranks]}
+    """
+    from collections import defaultdict
+
+    # Convert {rank: [elements]} format into {element: rank} for faster look-up
+    source_elem_to_rank = {}
+    for rank, elements in source_idecomp.items():
+        for elem in elements:
+            source_elem_to_rank[elem] = rank
+
+    interdecomp_map = defaultdict(set)
+
+    for trg_rank, trg_elements in target_idecomp.items():
+        for elem in trg_elements:
+            src_rank = source_elem_to_rank.get(elem)
+            if src_rank is not None:
+                interdecomp_map[trg_rank].add(src_rank)
+
+    # Convert sets to lists for the final output
+    for rank in interdecomp_map:
+        interdecomp_map[rank] = list(interdecomp_map[rank])
+
+    return interdecomp_map
+
+
+def interdecomposition_mapping(target_decomp, source_decomp):
+    """Return a mapping of which partitions to source for the target decomp."""
+    from collections import defaultdict
+
+    interdecomp_map = defaultdict(set)
+
+    for elemid, part in enumerate(target_decomp):
+        interdecomp_map[part].add(source_decomp[elemid])
+
+    for part in interdecomp_map:
+        interdecomp_map[part] = list(interdecomp_map[part])
+
+    return interdecomp_map
+
+
+def summarize_decomposition(decomp_map, multivol_decomp_map):
+    """Summarize decomp."""
+    # Inputs are the decomp_map {rank: [elements]}
+    # and multivol_decomp_map {PartID: array([elements])}
+    nranks = len(decomp_map)
+
+    # Initialize counters and containers
+    total_num_elem = 0
+    volume_element_counts = defaultdict(int)
+    rank_element_counts = {}
+    rank_volume_element_counts = defaultdict(lambda: defaultdict(int))
+    unique_volumes = set()
+
+    # Process data from decomp_map
+    for rank, elements in decomp_map.items():
+        rank_element_counts[rank] = len(elements)
+        total_num_elem += len(elements)
+
+    # Process data from multivol_decomp_map
+    for partid, elements in multivol_decomp_map.items():
+        vol, rank = partid.volume_tag, partid.rank
+        unique_volumes.add(vol)
+        nvol_els = len(elements)
+        volume_element_counts[vol] += nvol_els
+        rank_volume_element_counts[rank][vol] = nvol_els
+
+    # Print summary
+    print(f"Number of elements: {total_num_elem}")
+    print(f"Volumes({len(unique_volumes)}): {unique_volumes}")
+    for vol, count in volume_element_counts.items():
+        print(f" - Volume({vol}): {count} elements.")
+    print(f"Number of ranks: {nranks}")
+    for rank in range(nranks):
+        print(f" - Rank({rank}): {rank_element_counts[rank]} elements.")
+        for vol, size in rank_volume_element_counts[rank].items():
+            print(f" -- Vol({vol}): {size}")
+
+
+# Need a function to determine which of my local elements overlap
+# with a disparate decomp part. Optionally restrict attention to
+# selected parts.
+# For each (or selected) new part
+#   Make a dict/map to hold element mapping (key: old_part, val: dict[elid]->[elid])
+#   For each local element in the new part
+#     1. find the global el id
+#     2. grab the old part for that global el
+#     3. find the old part-local id (i.e. index) for that global el
+#     4. Append local and remote el id lists for old-part-specific dict entry
+def interdecomposition_overlap(target_decomp_map, source_decomp_map,
+                               return_parts=None):
+    """Map element indices for overlapping, disparate decompositions.
+
+    For each (or optionally selected) target parts, this routine
+    returns a dictionary keyed by overlapping remote partitions from
+    the source decomposition, the value of which is a map from the
+    target-part-specific local indexes to the source-part-specific local
+    index of for the corresponding element.
+
+    { targ_part_1 : { src_part_1 : { local_el_index : remote_el_index, ... },
+                      src_part_2 : { local_el_index : remote_el_index, ... },
+                      ...
+                    },
+      targ_part_2 : { ... },
+      ...
+    }
+
+    This data structure is useful for mapping the solution data from
+    the old decomp pkl restart files to the new decomp solution arrays.
+    """
+    src_part_to_els = invert_decomp(source_decomp_map)
+    trg_part_to_els = invert_decomp(target_decomp_map)
+    ipmap = interdecomposition_mapping(target_decomp_map, source_decomp_map)
+
+    ntrg_parts = len(trg_part_to_els)
+    if return_parts is None:
+        return_parts = list(range(ntrg_parts))
+    overlap_maps = {}
+    for trg_part in return_parts:
+        overlap_maps[trg_part] = {}
+        for src_part in ipmap[trg_part]:
+            overlap_maps[trg_part][src_part] = {}
+    for trg_part in return_parts:
+        trg_els = trg_part_to_els[trg_part]
+        for glb_el in trg_els:
+            src_part = source_decomp_map[glb_el]
+            src_el_index = src_part_to_els[src_part].index(glb_el)
+            loc_el_index = trg_els.index(glb_el)
+            overlap_maps[trg_part][src_part][loc_el_index] = src_el_index
+    return overlap_maps
+
+
+# Interdecomposition overlap utility for multi-volume datasets
+def multivolume_interdecomposition_overlap(src_decomp_map, trg_decomp_map,
+                              src_multivol_decomp_map, trg_multivol_decomp_map,
+                              return_ranks=None):
+    """
+    Construct local-to-local index mapping for overlapping deconmps.
+
+    Parameters
+    ----------
+        src_decomp_map: dict
+            Source decomposition map {rank: [elements]}
+        trg_decomp_map: dict
+            Target decomposition map {rank: [elements]}
+        src_multivol_decomp_map: dict
+            Source multivolume decomposition map {PartID: np.array(elements)}
+        trg_multivol_decomp_map: dict
+            Target multivolume decomposition map {PartID: np.array(elements)}
+
+    Returns
+    -------
+        A dictionary with structure:
+        {
+            trg_partid: {
+                src_partid: {
+                    trg_local_el_index: src_local_el_index
+                }
+            }
+        }
+    """
+    # If no specific ranks are provided, consider all ranks in the target decomp
+    if return_ranks is None:
+        return_ranks = list(trg_decomp_map.keys())
+
+    mapping = {}
+
+    # First, identify overlapping ranks using the regular decomp maps
+    overlapping_ranks = interdecomposition_imapping(trg_decomp_map, src_decomp_map)
+    # print(f"{overlapping_ranks=}")
+
+    # Now, for each overlapping rank, determine the overlapping elements using the
+    # multivol decomp maps
+    for trg_partid, trg_elems in trg_multivol_decomp_map.items():
+        trg_nelem_part = len(trg_elems)
+        # print(f"dbg Finding overlaps for: {trg_partid=}, {trg_nelem_part}")
+        if trg_nelem_part == 0:
+            # print("dbg - Skipping empty target part.")
+            continue
+        trg_rank = trg_partid.rank
+        if trg_rank not in return_ranks:
+            # print("dbg - Skipping unrelated trg rank.")
+            continue
+        target_elements_set = set(trg_elems)
+        # print(f"dbg {target_elements_set=}")
+        # print(f"dbg type of trg_elems={type(trg_elems)}, "
+        #       f"trg_elems content={trg_elems}")
+        noverlap = 0
+        for src_rank in overlapping_ranks[trg_rank]:
+            # print(f"dbg - Searching for src partids with {src_rank=}")
+            for src_partid, src_elems in src_multivol_decomp_map.items():
+                # print(f"dbg -- Considering {src_partid=}, {len(src_elems)=}")
+                if src_partid.rank != src_rank:
+                    # print("dbg --- Skipping unrelated src rank.")
+                    continue
+                if src_partid.volume_tag != trg_partid.volume_tag:
+                    # print("dbg --- Skipping unrelated src volume.")
+                    continue
+                # print("dbg --- Determining overlap")
+                # Determine element overlaps, set is used for performance
+                source_elements_set = set(src_elems)
+                # print(f"dbg {source_elements_set=}")
+                common_elements_set = \
+                    target_elements_set.intersection(source_elements_set)
+                # print(f"dbg {common_elements_set=}")
+                if common_elements_set:
+                    if trg_partid not in mapping:
+                        mapping[trg_partid] = {}
+
+                local_mapping = {}
+                for trg_el in common_elements_set:
+                    # print(f"dbg {trg_el=}")
+                    trg_local_idx = np.where(trg_elems == trg_el)[0][0]
+                    src_local_idx = np.where(src_elems == trg_el)[0][0]
+                    local_mapping[trg_local_idx] = src_local_idx
+
+                # Store the local mapping if there are any overlapping elements
+                if local_mapping:
+                    # init empty dict if needed
+                    # if trg_partid not in mapping:
+                    #    mapping[trg_partid] = {}
+                    num_local_overlap = len(local_mapping)
+                    noverlap = noverlap + num_local_overlap
+                    # print(f"dbg ---- found overlap: {trg_partid=}, {src_partid=}")
+                    # print(f"dbg ---- num_olap: {num_local_overlap}")
+                    mapping[trg_partid][src_partid] = local_mapping
+                # else:
+                #    print("dbg ---- No overlap found.")
+        # if noverlap == trg_nelem_part:
+        # print("dbg - Full overlaps found.")
+        if noverlap != trg_nelem_part:
+            # print("dbg - Overlaps did not cover target part!")
+            raise AssertionError("Source overlaps did not cover target part."
+                                 f" {trg_partid=}")
+
+    return mapping
+
+
 def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
                     mesh=None):
-    """Generate a report of the grid boundaries."""
+    """Generate a report of the mesh boundaries."""
     boundaries = normalize_boundaries(boundaries)
 
     comm = dcoll.mpi_communicator
@@ -1729,7 +2106,7 @@ class _XdmfReader:
                 connectivity = a
 
         if connectivity is None:
-            raise ValueError("File is missing grid connectivity data")
+            raise ValueError("File is missing mesh connectivity data")
 
         return connectivity
 
@@ -1741,7 +2118,7 @@ class _XdmfReader:
                 geometry = a
 
         if geometry is None:
-            raise ValueError("File is missing grid node location data")
+            raise ValueError("File is missing mesh node location data")
 
         return geometry
 
