@@ -119,12 +119,16 @@ jobs:
 
         - name: Run examples
           run: |
+            set -x
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             mamba install vtk  # needed for the accuracy comparison
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
-            # && export POCL_DEBUG=cuda
+
+             # This is only possible because actions run sequentially on porter
+            [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
+
             scripts/run-integrated-tests.sh --examples
 
     doc:
@@ -195,8 +199,13 @@ jobs:
             fetch-depth: '0'
         - name: Prepare production environment
           run: |
+            set -x
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
             [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+
+            # This is only possible because actions run sequentially on porter
+            [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
+
             MIRGEDIR=$(pwd)
             cat scripts/production-testing-env.sh
             . scripts/production-testing-env.sh
