@@ -72,8 +72,12 @@ THE SOFTWARE.
 """
 import logging
 import sys
+import os
+import pickle
 from functools import partial
 from typing import TYPE_CHECKING, Dict, List, Optional
+from contextlib import contextmanager
+
 from logpyle import IntervalTimer
 
 import grudge.op as op
@@ -609,8 +613,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
 
     # Create geometrically even partitions
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
-
-    print(f"{elem_to_rank=}")
+    
+    if debug:
+        print(f"{elem_to_rank=}")
 
     # map partition id to list of elements in that partition
     part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
@@ -888,7 +893,284 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     return distribute_mesh(comm, generate_mesh)
 
 
-def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=None):
+def _partition_single_volume_mesh(
+        mesh, num_ranks, rank_per_element, *, return_ranks=None):
+    rank_to_elements = {
+        rank: np.where(rank_per_element == rank)[0]
+        for rank in range(num_ranks)}
+
+    from meshmode.mesh.processing import partition_mesh
+    return partition_mesh(
+        mesh, rank_to_elements, return_parts=return_ranks)
+
+
+def _partition_multi_volume_mesh(
+        mesh, num_ranks, rank_per_element, tag_to_elements, volume_to_tags, *,
+        return_ranks=None):
+    if return_ranks is None:
+        return_ranks = list(range(num_ranks))
+
+    tag_to_volume = {
+        tag: vol
+        for vol, tags in volume_to_tags.items()
+        for tag in tags}
+
+    volumes = list(volume_to_tags.keys())
+
+    volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
+    for tag, elements in tag_to_elements.items():
+        volume_index_per_element[elements] = volumes.index(
+            tag_to_volume[tag])
+
+    if np.any(volume_index_per_element < 0):
+        raise ValueError("Missing volume specification for some elements.")
+
+    part_id_to_elements = {
+        PartID(volumes[vol_idx], rank):
+            np.where(
+                (volume_index_per_element == vol_idx)
+                & (rank_per_element == rank))[0]
+        for vol_idx in range(len(volumes))
+        for rank in range(num_ranks)}
+
+    # TODO: Add a public meshmode function to accomplish this? So we're
+    # not depending on meshmode internals
+    part_id_to_part_index = {
+        part_id: part_index
+        for part_index, part_id in enumerate(part_id_to_elements.keys())}
+    from meshmode.mesh.processing import _compute_global_elem_to_part_elem
+    global_elem_to_part_elem = _compute_global_elem_to_part_elem(
+        mesh.nelements, part_id_to_elements, part_id_to_part_index,
+        mesh.element_id_dtype)
+
+    tag_to_global_to_part = {
+        tag: global_elem_to_part_elem[elements, :]
+        for tag, elements in tag_to_elements.items()}
+
+    part_id_to_tag_to_elements = {}
+    for part_id in part_id_to_elements.keys():
+        part_idx = part_id_to_part_index[part_id]
+        part_tag_to_elements = {}
+        for tag, global_to_part in tag_to_global_to_part.items():
+            part_tag_to_elements[tag] = global_to_part[
+                global_to_part[:, 0] == part_idx, 1]
+        part_id_to_tag_to_elements[part_id] = part_tag_to_elements
+
+    return_parts = {
+        PartID(vol, rank)
+        for vol in volumes
+        for rank in return_ranks}
+
+    from meshmode.mesh.processing import partition_mesh
+    part_id_to_mesh = partition_mesh(
+        mesh, part_id_to_elements, return_parts=return_parts)
+
+    return {
+        rank: {
+            vol: (
+                part_id_to_mesh[PartID(vol, rank)],
+                part_id_to_tag_to_elements[PartID(vol, rank)])
+            for vol in volumes}
+        for rank in return_ranks}
+
+@contextmanager
+def _manage_mpi_comm(comm):
+    try:
+        yield comm
+    finally:
+        comm.Free()
+
+
+def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=None,
+                    num_per_batch=None):
+    r"""Distribute a mesh among all ranks in *comm*.
+
+    Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
+    partition the mesh, and distribute it to every rank in the provided MPI
+    communicator *comm*.
+
+    .. note::
+        This is a collective routine and must be called by all MPI ranks.
+
+    Parameters
+    ----------
+    comm:
+        MPI communicator over which to partition the mesh
+    get_mesh_data:
+        Callable of zero arguments returning *mesh* or
+        *(mesh, tag_to_elements, volume_to_tags)*, where *mesh* is a
+        :class:`meshmode.mesh.Mesh`, *tag_to_elements* is a
+        :class:`dict` mapping mesh volume tags to :class:`numpy.ndarray`\ s of
+        element numbers, and *volume_to_tags* is a :class:`dict` that maps volumes
+        in the resulting distributed mesh to volume tags in *tag_to_elements*.
+    partition_generator_func:
+        Optional callable that takes *mesh*, *tag_to_elements*, and *comm*'s size,
+        and returns a :class:`numpy.ndarray` indicating to which rank each element
+        belongs.
+
+    Returns
+    -------
+    local_mesh_data: :class:`meshmode.mesh.Mesh` or :class:`dict`
+        If the result of calling *get_mesh_data* specifies a single volume,
+        *local_mesh_data* is the local mesh.  If it specifies multiple volumes,
+        *local_mesh_data* will be a :class:`dict` mapping volume tags to
+        tuples of the form *(local_mesh, local_tag_to_elements)*.
+    global_nelements: :class:`int`
+        The number of elements in the global mesh
+    """
+    from mpi4py import MPI
+    from mpi4py.util import pkl5
+    from socket import gethostname
+    from meshmode.distributed import mpi_distribute
+
+    num_ranks = comm.Get_size()
+    my_global_rank = comm.Get_rank()
+    hostname = gethostname()
+
+    t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh data.")
+    t_mesh_data = IntervalTimer("t_mesh_data", "Time spent getting mesh data.")
+    t_mesh_part = IntervalTimer("t_mesh_part", "Time spent partitioning the mesh.")
+    t_mesh_split = IntervalTimer("t_mesh_split", "Time spent splitting mesh parts.")
+
+    if partition_generator_func is None:
+        def partition_generator_func(mesh, tag_to_elements, num_ranks):
+            from meshmode.distributed import get_partition_by_pymetis
+            return get_partition_by_pymetis(mesh, num_ranks)
+
+    with _manage_mpi_comm(
+            pkl5.Intracomm(comm.Split_type(MPI.COMM_TYPE_SHARED,
+                                           comm.Get_rank(), MPI.INFO_NULL))
+    ) as node_comm:
+
+        node_ranks = node_comm.gather(comm.Get_rank(), root=0)
+        my_node_rank = node_comm.Get_rank()
+        reader_color = 0 if my_node_rank == 0 else 1
+        reader_comm = comm.Split(reader_color, my_global_rank)
+        my_reader_rank = reader_comm.Get_rank()
+
+        if my_node_rank == 0:
+            
+            num_reading_ranks = reader_comm.Get_size()
+            num_per_batch = num_per_batch or num_reading_ranks
+            num_reading_batches = max(int(num_reading_ranks / num_per_batch), 1)
+            read_batch = int(my_reader_rank / num_per_batch)
+
+            print(f"Read(rank, batch): Dist({my_reader_rank}, "
+                  f"{read_batch}) on {hostname}.")
+
+            if logmgr:
+                logmgr.add_quantity(t_mesh_data)
+                with t_mesh_data.get_sub_timer():
+                    for reading_batch in range(num_reading_batches):
+                        if read_batch == reading_batch:
+                            print(f"Reading mesh on {hostname}.")
+                            global_data = get_mesh_data()
+                            reader_comm.Barrier()
+                        else:
+                            reader_comm.Barrier()
+            else:
+                for reading_batch in range(num_reading_batches):
+                    if read_batch == reading_batch:
+                        print(f"Reading mesh on {hostname}.")
+                        global_data = get_mesh_data()
+                        reader_comm.Barrier()
+                    else:
+                        reader_comm.Barrier()
+
+            reader_comm.Barrier()
+            if my_reader_rank == 0:
+                print("Mesh reading done on all nodes.")
+
+            from meshmode.mesh import Mesh
+            if isinstance(global_data, Mesh):
+                mesh = global_data
+                tag_to_elements = None
+                volume_to_tags = None
+            elif isinstance(global_data, tuple) and len(global_data) == 3:
+                mesh, tag_to_elements, volume_to_tags = global_data
+            else:
+                raise TypeError("Unexpected result from get_mesh_data")
+
+            reader_comm.Barrier()
+            if my_reader_rank == 0:
+                print("Making partition table on all nodes.")
+
+            if logmgr:
+                logmgr.add_quantity(t_mesh_part)
+                with t_mesh_part.get_sub_timer():
+                    rank_per_element = \
+                        partition_generator_func(mesh, tag_to_elements,
+                                                 num_ranks)
+            else:
+                rank_per_element = \
+                    partition_generator_func(mesh, tag_to_elements,
+                                             num_ranks)
+
+            def get_rank_to_mesh_data():
+                if tag_to_elements is None:
+                    rank_to_mesh_data = _partition_single_volume_mesh(
+                        mesh, num_ranks, rank_per_element,
+                        return_ranks=node_ranks)
+                else:
+                    rank_to_mesh_data = _partition_multi_volume_mesh(
+                        mesh, num_ranks, rank_per_element, tag_to_elements,
+                        volume_to_tags, return_ranks=node_ranks)
+
+                rank_to_node_rank = {
+                    rank: node_rank
+                    for node_rank, rank in enumerate(node_ranks)}
+
+                node_rank_to_mesh_data = {
+                    rank_to_node_rank[rank]: mesh_data
+                    for rank, mesh_data in rank_to_mesh_data.items()}
+
+                return node_rank_to_mesh_data
+
+            reader_comm.Barrier()
+            if my_reader_rank == 0:
+                print("Partitioning mesh on all nodes.")
+
+            if logmgr:
+                logmgr.add_quantity(t_mesh_split)
+                with t_mesh_split.get_sub_timer():
+                    node_rank_to_mesh_data = get_rank_to_mesh_data()
+            else:
+                node_rank_to_mesh_data = get_rank_to_mesh_data()
+
+            reader_comm.Barrier()
+            if my_reader_rank == 0:
+                print("Partitioning done, distributing to node-local ranks.")
+
+            global_nelements = node_comm.bcast(mesh.nelements, root=0)
+
+            if logmgr:
+                logmgr.add_quantity(t_mesh_dist)
+                with t_mesh_dist.get_sub_timer():
+                    local_mesh_data = mpi_distribute(
+                        node_comm, source_rank=0,
+                        source_data=node_rank_to_mesh_data)
+            else:
+                local_mesh_data = mpi_distribute(
+                    node_comm, source_rank=0,
+                    source_data=node_rank_to_mesh_data)
+
+        else:  # my_node_rank > 0, get mesh part from MPI
+            global_nelements = node_comm.bcast(None, root=0)
+
+            if logmgr:
+                logmgr.add_quantity(t_mesh_dist)
+                with t_mesh_dist.get_sub_timer():
+                    local_mesh_data = \
+                        mpi_distribute(node_comm, source_rank=0)
+            else:
+                local_mesh_data = mpi_distribute(node_comm, source_rank=0)
+
+    return local_mesh_data, global_nelements
+
+
+def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
+                        num_target_ranks=0, num_reader_ranks=0,
+                        partition_generator_func=None, logmgr=None):
     r"""Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -928,17 +1210,42 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
     comm_wrapper = pkl5.Intracomm(comm)
 
     num_ranks = comm_wrapper.Get_size()
+    my_rank = comm_wrapper.Get_rank()
+
+    if num_target_ranks <= 0:
+        num_target_ranks = num_ranks
+    if num_reader_ranks <= 0:
+        num_reader_ranks = num_ranks
+
+    reader_color = 1 if my_rank < num_reader_ranks else 0
+    reader_comm = comm_wrapper.Split(reader_color, my_rank)
+    reader_comm_wrapper = pkl5.Intracomm(reader_comm)
+    reader_rank = reader_comm_wrapper.Get_rank()
+    num_ranks_per_reader = int(num_target_ranks / num_reader_ranks)
+    num_leftover = num_target_ranks - (num_ranks_per_reader * num_reader_ranks)
+    num_ranks_this_reader = num_ranks_per_reader + (1 if reader_rank
+                                                    < num_leftover else 0)
+
     t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh data.")
     t_mesh_data = IntervalTimer("t_mesh_data", "Time spent getting mesh data.")
     t_mesh_part = IntervalTimer("t_mesh_part", "Time spent partitioning the mesh.")
     t_mesh_split = IntervalTimer("t_mesh_split", "Time spent splitting mesh parts.")
 
-    if partition_generator_func is None:
-        def partition_generator_func(mesh, tag_to_elements, num_ranks):
-            from meshmode.distributed import get_partition_by_pymetis
-            return get_partition_by_pymetis(mesh, num_ranks)
+    if reader_color and num_ranks_this_reader > 0:
+        my_starting_rank = num_ranks_per_reader * reader_rank
+        my_starting_rank = my_starting_rank + (reader_rank if reader_rank
+                                               < num_leftover else num_leftover)
+        my_ending_rank = my_starting_rank + num_ranks_this_reader - 1
+        ranks_to_write = list(range(my_starting_rank, my_ending_rank+1))
 
-    if comm_wrapper.Get_rank() == 0:
+        print(f"R({my_rank},{reader_rank}): "
+              f"W({my_starting_rank},{my_ending_rank})")
+
+        if partition_generator_func is None:
+            def partition_generator_func(mesh, tag_to_elements, num_target_ranks):
+                from meshmode.distributed import get_partition_by_pymetis
+                return get_partition_by_pymetis(mesh, num_target_ranks)
+
         if logmgr:
             logmgr.add_quantity(t_mesh_data)
             with t_mesh_data.get_sub_timer():
@@ -960,83 +1267,20 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
             logmgr.add_quantity(t_mesh_part)
             with t_mesh_part.get_sub_timer():
                 rank_per_element = partition_generator_func(mesh, tag_to_elements,
-                                                            num_ranks)
+                                                            num_target_ranks)
         else:
             rank_per_element = partition_generator_func(mesh, tag_to_elements,
-                                                        num_ranks)
+                                                        num_target_ranks)
 
         def get_rank_to_mesh_data():
-            from meshmode.mesh.processing import partition_mesh
             if tag_to_elements is None:
-                rank_to_elements = {
-                    rank: np.where(rank_per_element == rank)[0]
-                    for rank in range(num_ranks)}
-
-                rank_to_mesh_data_dict = partition_mesh(mesh, rank_to_elements)
-
-                rank_to_mesh_data = [
-                    rank_to_mesh_data_dict[rank]
-                    for rank in range(num_ranks)]
-
+                rank_to_mesh_data = _partition_single_volume_mesh(
+                    mesh, num_target_ranks, rank_per_element,
+                    return_ranks=ranks_to_write)
             else:
-                tag_to_volume = {
-                    tag: vol
-                    for vol, tags in volume_to_tags.items()
-                    for tag in tags}
-
-                volumes = list(volume_to_tags.keys())
-
-                volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
-                for tag, elements in tag_to_elements.items():
-                    volume_index_per_element[elements] = volumes.index(
-                        tag_to_volume[tag])
-
-                if np.any(volume_index_per_element < 0):
-                    raise ValueError("Missing volume specification "
-                                     "for some elements.")
-
-                part_id_to_elements = {
-                    PartID(volumes[vol_idx], rank):
-                    np.where(
-                        (volume_index_per_element == vol_idx)
-                        & (rank_per_element == rank))[0]
-                    for vol_idx in range(len(volumes))
-                    for rank in range(num_ranks)}
-
-                # TODO: Add a public meshmode function to accomplish this? So we're
-                # not depending on meshmode internals
-                part_id_to_part_index = {
-                    part_id: part_index
-                    for part_index, part_id in enumerate(part_id_to_elements.keys())}
-                from meshmode.mesh.processing import \
-                    _compute_global_elem_to_part_elem
-                global_elem_to_part_elem = _compute_global_elem_to_part_elem(
-                    mesh.nelements, part_id_to_elements, part_id_to_part_index,
-                    mesh.element_id_dtype)
-
-                tag_to_global_to_part = {
-                    tag: global_elem_to_part_elem[elements, :]
-                    for tag, elements in tag_to_elements.items()}
-
-                part_id_to_tag_to_elements = {}
-                for part_id in part_id_to_elements.keys():
-                    part_idx = part_id_to_part_index[part_id]
-                    part_tag_to_elements = {}
-                    for tag, global_to_part in tag_to_global_to_part.items():
-                        part_tag_to_elements[tag] = global_to_part[
-                            global_to_part[:, 0] == part_idx, 1]
-                        part_id_to_tag_to_elements[part_id] = part_tag_to_elements
-
-                part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
-
-                rank_to_mesh_data = [
-                    {
-                        vol: (
-                            part_id_to_mesh[PartID(vol, rank)],
-                            part_id_to_tag_to_elements[PartID(vol, rank)])
-                        for vol in volumes}
-                    for rank in range(num_ranks)]
-
+                rank_to_mesh_data = _partition_multi_volume_mesh(
+                    mesh, num_target_ranks, rank_per_element, tag_to_elements,
+                    volume_to_tags, return_ranks=ranks_to_write)
             return rank_to_mesh_data
 
         if logmgr:
@@ -1046,26 +1290,24 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
         else:
             rank_to_mesh_data = get_rank_to_mesh_data()
 
-        global_nelements = comm_wrapper.bcast(mesh.nelements, root=0)
-
         if logmgr:
             logmgr.add_quantity(t_mesh_dist)
             with t_mesh_dist.get_sub_timer():
-                local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
+                for part_rank, part_mesh in rank_to_mesh_data.items():
+                    pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                    mesh_data_to_pickle = (mesh.nelements, part_mesh)
+                    if os.path.exists(pkl_filename):
+                        os.remove(pkl_filename)
+                    with open(pkl_filename, "wb") as pkl_file:
+                        pickle.dump(mesh_data_to_pickle, pkl_file)
         else:
-            local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
-
-    else:
-        global_nelements = comm_wrapper.bcast(None, root=0)
-
-        if logmgr:
-            logmgr.add_quantity(t_mesh_dist)
-            with t_mesh_dist.get_sub_timer():
-                local_mesh_data = comm_wrapper.scatter(None, root=0)
-        else:
-            local_mesh_data = comm_wrapper.scatter(None, root=0)
-
-    return local_mesh_data, global_nelements
+            for part_rank, part_mesh in rank_to_mesh_data.items():
+                pkl_filename = filename + f"_rank{part_rank}.pkl"          
+                mesh_data_to_pickle = (mesh.nelements, part_mesh)
+                if os.path.exists(pkl_filename):
+                    os.remove(pkl_filename)
+                with open(pkl_filename, "wb") as pkl_file:
+                    pickle.dump(mesh_data_to_pickle, pkl_file)
 
 
 def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
