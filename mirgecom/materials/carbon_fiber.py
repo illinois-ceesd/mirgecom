@@ -109,6 +109,10 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
 class FiberEOS(PorousWallEOS):
     r"""Evaluate the properties of the solid state containing only fibers.
 
+    The properties are obtained as a function of oxidation progress. It can
+    be computed based on the mass $m$, which is related to the void fraction
+    $\epsilon$ and radius $r$ as:
+
     .. math::
         \tau = \frac{m}{m_0} = \frac{\rho_i \epsilon}{\rho_i \epsilon_0}
              = \frac{r^2}{r_0^2}
@@ -124,15 +128,15 @@ class FiberEOS(PorousWallEOS):
     .. automethod:: decomposition_progress
     """
 
-    def __init__(self, dim, normal, char_mass, virgin_mass):
+    def __init__(self, dim, anisotropic_direction, char_mass, virgin_mass):
         """Bulk density considering the porosity and intrinsic density."""
         self._char_mass = char_mass
         self._virgin_mass = virgin_mass
         self._dim = dim
-        self._normal = normal
+        self._anisotropic_dir = anisotropic_direction
 
-        if normal > dim:
-            raise ValueError("Normal direction must be less or equal than dim.")
+        if anisotropic_direction > dim:
+            raise ValueError("Anisotropic axis must be less or equal than dim.")
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -157,9 +161,9 @@ class FiberEOS(PorousWallEOS):
         enthalpy fit.
         """
         return (
-            + 0.00000000e+00*temperature**5 - 1.68556056e-10*temperature**4
-            + 1.25262678e-06*temperature**3 - 3.51080885e-03*temperature**2
-            + 4.58389802e+00*temperature**1 - 3.62422269e+02)
+            - 1.68556056e-10*temperature**4 + 1.25262678e-06*temperature**3
+            - 3.51080885e-03*temperature**2 + 4.58389802e+00*temperature**1
+            - 3.62422269e+02)
 
     # ~~~~~~~~ fiber conductivity
     def thermal_conductivity(self, temperature, tau=None) -> DOFArray:
@@ -180,7 +184,7 @@ class FiberEOS(PorousWallEOS):
         # initialize with the in-plane value
         kappa = make_obj_array([kappa_ij for _ in range(self._dim)])
         # modify only the normal direction
-        kappa[self._normal] = kappa_k
+        kappa[self._anisotropic_dir] = kappa_k
 
         # account for fiber shrinkage via "tau"
         return kappa*tau
@@ -196,7 +200,7 @@ class FiberEOS(PorousWallEOS):
         actx = tau.array_context
         permeability = np.zeros(self._dim,)
         permeability[:] = 5.57e-11 + actx.np.zeros_like(tau)
-        permeability[self._normal] = 2.62e-11 + actx.np.zeros_like(tau)
+        permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
         return permeability
 
     def emissivity(self, temperature=None, tau=None) -> DOFArray:
