@@ -77,6 +77,7 @@ class GasDependentVars:
     .. attribute:: smoothness_mu
     .. attribute:: smoothness_kappa
     .. attribute:: smoothness_beta
+    .. attribute:: smoothness_d
     """
 
     temperature: DOFArray
@@ -84,6 +85,7 @@ class GasDependentVars:
     speed_of_sound: DOFArray
     smoothness_mu: DOFArray
     smoothness_kappa: DOFArray
+    smoothness_d: DOFArray
     smoothness_beta: DOFArray
 
 
@@ -180,6 +182,7 @@ class GasEOS(metaclass=ABCMeta):
             temperature_seed: Optional[DOFArray] = None,
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
+            smoothness_d: Optional[DOFArray] = None,
             smoothness_beta: Optional[DOFArray] = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
@@ -195,6 +198,8 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_mu = zeros
         if smoothness_kappa is None:
             smoothness_kappa = zeros
+        if smoothness_d is None:
+            smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
 
@@ -204,6 +209,7 @@ class GasEOS(metaclass=ABCMeta):
             speed_of_sound=self.sound_speed(cv, temperature),
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
+            smoothness_d=smoothness_d,
             smoothness_beta=smoothness_beta
         )
 
@@ -258,6 +264,7 @@ class MixtureEOS(GasEOS):
             temperature_seed: Optional[DOFArray] = None,
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
+            smoothness_d: Optional[DOFArray] = None,
             smoothness_beta: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
@@ -273,6 +280,8 @@ class MixtureEOS(GasEOS):
             smoothness_mu = zeros
         if smoothness_kappa is None:
             smoothness_kappa = zeros
+        if smoothness_d is None:
+            smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
 
@@ -283,6 +292,7 @@ class MixtureEOS(GasEOS):
             species_enthalpies=self.species_enthalpies(cv, temperature),
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
+            smoothness_d=smoothness_d,
             smoothness_beta=smoothness_beta
         )
 
