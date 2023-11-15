@@ -59,7 +59,7 @@ def test_fluid_api(actx_factory):
     gas_model = GasModel(eos=eos)
 
     eps = .001
-    initializer = Uniform(dim=dim)
+    initializer = Uniform(dim=dim, pressure=1.0, rho=1.0)
     fluid_cv = initializer(nodes, eos=eos)
     fluid_cv = fluid_cv.replace(mass=ones-eps)
 
