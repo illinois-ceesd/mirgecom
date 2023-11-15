@@ -1173,6 +1173,9 @@ class FarfieldBoundary(MengaldoBoundaryCondition):
         self._species_mass_fractions = free_stream_mass_fractions
         self._velocity = free_stream_velocity
 
+        from warnings import warn
+        warn("Passing 'dim' as an argument was deprecated in Q4 2023.", stacklevel=2)
+
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary."""
         free_stream_mass_fractions = (0.*state_minus.species_mass_fractions
