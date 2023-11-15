@@ -197,7 +197,7 @@ def main(actx_class, use_esdg=False,
     y = make_obj_array([aux, 1.0 - aux, aux*0.0])
     orig = np.zeros(shape=(dim,))
     initial_cv = initialize_flow_solution(
-        actx, nodes=nodes, eos=eos, pressure=101325.0, temperature=300.0,
+        actx, coords=nodes, eos=eos, pressure=101325.0, temperature=300.0,
         velocity=velocity, species_mass_fractions=y)
     initial_cv = force_evaluation(actx, initial_cv)
 
@@ -329,7 +329,7 @@ def main(actx_class, use_esdg=False,
 #        bnd_discr = dcoll.discr_from_dd(BoundaryDomainTag("inlet"))
 #        bnd_nodes = actx.thaw(bnd_discr.nodes())
 #        free_stream_cv = initialize_flow_solution(
-#            actx, nodes=bnd_nodes, gas_model=gas_model, pressure=101325.0,
+#            actx, coords=bnd_nodes, gas_model=gas_model, pressure=101325.0,
 #            temperature=300.0, velocity=velocity, species_mass_fractions=y_inlet)
 #        free_stream_cv = force_evaluation(actx, free_stream_cv)
 

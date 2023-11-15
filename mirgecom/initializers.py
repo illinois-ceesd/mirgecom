@@ -54,27 +54,19 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
-from mirgecom.gas_model import make_fluid_state
 
 
-def initialize_flow_solution(actx, nodes, gas_model=None, eos=None,
+def initialize_flow_solution(actx, coords, gas_model=None, eos=None,
         pressure=None, temperature=None, density=None, velocity=None,
-        species_mass_fractions=None, return_fluid_state=False):
-    """Create a fluid CV/state from a set of minimal input data."""
-    if gas_model is None and eos is None:
-        raise ValueError("Must provide 1 of (gas_model, eos).")
-    if eos is None:
-        eos = gas_model.eos
-    if return_fluid_state and gas_model is None:
-        raise ValueError("Must provide gas_model to create a fluid state.")
-
+        species_mass_fractions=None):
+    """Create a fluid CV from a set of minimal input data."""
     state_spec = [pressure is None, temperature is None, density is None]
     if sum(state_spec) != 1:
         raise ValueError("Must provide 2 of (pressure, temperature, density).")
 
-    dim = nodes.shape[0]
+    dim = coords.shape[0]
 
-    zeros = nodes[0]*0.0
+    zeros = coords[0]*0.0
 
     if velocity is None:
         velocity = np.zeros(dim,)
@@ -100,16 +92,10 @@ def initialize_flow_solution(actx, nodes, gas_model=None, eos=None,
         species_mass = make_obj_array([density*species_mass_fractions[i] + zeros
                                        for i in range(nspecies)])
 
-    cv = make_conserved(dim=dim, mass=density + zeros,
-                        energy=energy + zeros,
-                        momentum=momentum + zeros,
-                        species_mass=species_mass)
-
-    if return_fluid_state:
-        return make_fluid_state(cv=cv, gas_model=gas_model,
-                                temperature_seed=temperature)
-
-    return cv
+    return make_conserved(dim=dim, mass=density + zeros,
+                          energy=energy + zeros,
+                          momentum=momentum + zeros,
+                          species_mass=species_mass)
 
 
 def make_pulse(amp, r0, w, r):
@@ -976,12 +962,8 @@ class AcousticPulse:
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        if not isinstance(eos, IdealSingleGas):
-            temperature = eos.temperature(cv, tseed)
-            gamma = eos.gamma(cv=cv, temperature=temperature)
-        else:
-            temperature = eos.temperature(cv)
-            gamma = eos.gamma(cv=cv)
+        temperature = eos.temperature(cv, tseed)
+        gamma = eos.gamma(cv, temperature)
 
         y = cv.species_mass_fractions
 
@@ -1079,7 +1061,7 @@ class Uniform:
         """
         actx = x_vec[0].array_context
         return initialize_flow_solution(
-            actx, nodes=x_vec, eos=eos, pressure=self._p, density=self._rho,
+            actx, coords=x_vec, eos=eos, pressure=self._p, density=self._rho,
             velocity=self._velocity, temperature=self._temp,
             species_mass_fractions=self._mass_fracs)
 
@@ -1165,7 +1147,7 @@ class MixtureInitializer:
 
         actx = x_vec[0].array_context
         return initialize_flow_solution(
-            actx, nodes=x_vec, eos=eos, pressure=self._pressure,
+            actx, coords=x_vec, eos=eos, pressure=self._pressure,
             temperature=self._temperature, velocity=self._velocity,
             species_mass_fractions=self._massfracs)
 
