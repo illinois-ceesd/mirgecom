@@ -360,7 +360,8 @@ class _TestSoln:
         from mirgecom.initializers import Uniform
         origin = np.zeros(self._dim)
         velocity = origin + 1
-        self._initializer = Uniform(dim=self._dim, velocity=velocity)
+        self._initializer = Uniform(dim=self._dim, velocity=velocity,
+                                    pressure=1.0, rho=1.0)
 
     def dim(self):
         return self._dim
