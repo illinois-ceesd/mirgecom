@@ -52,8 +52,7 @@ from mirgecom.gas_model import (
     make_fluid_state
 )
 from mirgecom.initializers import (
-    Vortex2D, Lump,
-    MixtureInitializer
+    Vortex2D, Lump, Uniform
 )
 from mirgecom.discretization import create_discretization_collection
 from pyopencl.tools import (  # noqa
@@ -527,9 +526,9 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         eos = PyrometheusMixture(prometheus_mechanism)
         gas_model = GasModel(eos=eos)
-        initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
-                                         pressure=pyro_p, temperature=pyro_t,
-                                         massfractions=y0s, velocity=velocity)
+        initializer = Uniform(
+            dim=dim, pressure=pyro_p, temperature=pyro_t,
+            species_mass_fractions=y0s, velocity=velocity)
 
         cv = initializer(eos=eos, t=0, x_vec=nodes)
         fluid_state = make_fluid_state(cv, gas_model, temperature_seed=tguess)
