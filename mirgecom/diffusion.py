@@ -1,12 +1,57 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
+Diffusion equation:
+
+.. math::
+
+    \frac{\partial u}{\partial t} = \nabla \cdot (\boldsymbol{\kappa} \nabla u)
+
+where:
+
+- conserved variable $u$
+- scalar (isotropic) or diagonal-tensor (orthotropic) $\boldsymbol{\kappa}$
+
+In the orthotropic case, the product $\boldsymbol{\kappa} \nabla u$ is treated
+as a Hadamard product of arrays rather than a matrix-array multiplication.
+Fully anisotropic materials are not currently handled.
+
+Due to the possibility of big differences in the magnitude of diffusivity
+coefficients, such as thermal conductivity in air and a solid, an harmonic
+average can be used to increase robustness and avoid numerical instabilities.
+In this case, to ensure flux continuity,
+
+.. math::
+
+    F = \kappa^- \nabla T^- = \kappa^+ \nabla T^+
+        = \bar{\kappa} (\frac{\nabla T^- + \nabla T^+}{2})
+
+where
+
+.. math::
+    \bar{\kappa} = \frac{2 \kappa^-_{ii} \kappa^+_{ii}}
+        {\kappa^-_{ii} + \kappa^+_{ii}}
+
+with $\kappa_{ii}$ being either the individual components of the diffusivity
+array (orthotropic material) or a single scalar (isotropic).
+
+Numerical flux function
+^^^^^^^^^^^^^^^^^^^^^^^
+
 .. autofunction:: grad_facial_flux_central
 .. autofunction:: grad_facial_flux_weighted
-.. autofunction:: diffusion_flux
 .. autofunction:: diffusion_facial_flux_central
 .. autofunction:: diffusion_facial_flux_harmonic
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
+.. autofunction:: diffusion_flux
 .. autofunction:: grad_operator
 .. autofunction:: diffusion_operator
+
+Boundary conditions
+^^^^^^^^^^^^^^^^^^^
+
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
@@ -73,15 +118,23 @@ def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
 def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     r"""Compute the numerical flux for $\nabla u$.
 
-    Weights each side's value by the corresponding thermal conductivity $\kappa$:
+    Weights each side's value by the corresponding thermal conductivity $\kappa$,
+    for an isotropic material, given by
 
     .. math::
 
-        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}.
+        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n},
+
+    or an orthotropic material, as
+
+    .. math::
+
+        F = -\frac{(\kappa^- \cdot \hat{n}) u^- + (\kappa^+ \cdot \hat{n}) u^+}
+            {\kappa^- \cdot \hat{n} + \kappa^+ \cdot \hat{n}} \hat{n}
     """
     actx = u_tpair.int.array_context
 
-    # if any of the coefficients are anisotropic, weight by the absolute value
+    # if any of the coefficients are orthotropic, weight by the absolute value
     # of the normal diffusivity
     if isinstance(kappa_tpair.int, np.ndarray):
         kappa_int = actx.np.abs(np.dot(kappa_tpair.int, normal))
@@ -133,7 +186,17 @@ def diffusion_facial_flux_central(
 
     .. math::
 
-        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n}.
+        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
+
+    The amount of penalization $\tau$ is given by
+
+    .. math::
+
+        \tau = \frac{\alpha \bar{\kappa}_{avg}}{l},
+
+    where $\alpha$ is a user-definied value, $l$ is the element characteristic
+    lengthscale and $\bar{\kappa}_{avg}$ is the averaged value, considering
+    both isotropic (scalar) or orthotropic (array) cases.
     """
     if penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -163,12 +226,22 @@ def diffusion_facial_flux_harmonic(
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$.
 
     Uses a modified average of the two sides' values that replaces $\kappa^-$
-    and $\kappa^+$ with their harmonic mean:
+    and $\kappa^+$ with their harmonic mean, plus a penalization term
 
     .. math::
 
-        F = -\frac{2 \kappa^- \kappa^+}{\kappa^- + \kappa^+}\frac{u^- + u^+}{2}
-                \cdot \hat{n}.
+        F = -\frac{2 \kappa_ii^- \kappa_ii^+}{\kappa_ii^- + \kappa_ii^+}
+                \frac{u^- + u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
+
+    The amout of penalization $\tau$ is given by
+
+    .. math::
+
+        \tau = \frac{\alpha \bar{\kappa}_{harm}}{l},
+
+    where $\alpha$ is a user-defined value, $l$ is the element characteristic
+    lengthscale and $\bar{\kappa}_{harm}$ is the harmonic mean, considering
+    both isotropic (scalar) or orthotropic (array) cases.
     """
     if penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -185,7 +258,7 @@ def diffusion_facial_flux_harmonic(
 
     # TODO: Verify that this is the correct form for the penalty term
     if isinstance(kappa_harmonic_mean, np.ndarray):
-        # if anisotropic, get the normal diffusivity absolute value
+        # if orthotropic, get the normal diffusivity absolute value
         actx = normal[0].array_context
         kappa_mean_normal = actx.np.abs(np.dot(kappa_harmonic_mean, normal))
         tau = penalty_amount*kappa_mean_normal/lengthscales_tpair.avg
