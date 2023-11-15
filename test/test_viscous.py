@@ -389,9 +389,6 @@ def test_diffusive_heat_flux(actx_factory):
 
     # create a gradient of temperature
     temperature = nodes[0] + 2*nodes[1] + 3*nodes[2]
-    kappa = make_obj_array([0.1 + nodes[0]*0.0,
-                            0.2 + nodes[1]*0.0,
-                            0.3 + nodes[2]*0.0])
 
     massval = 2
     mass = massval*ones
@@ -407,6 +404,9 @@ def test_diffusive_heat_flux(actx_factory):
 
     mu_b = 1.0
     mu = 0.5
+    # create orthotropic heat conduction
+    zeros = nodes[0]*0.0
+    kappa = make_obj_array([0.1 + zeros, 0.2 + zeros, 0.3 + zeros])
     # assemble d_alpha so that every species has a unique j
     d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
 
