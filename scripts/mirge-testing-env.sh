@@ -40,12 +40,9 @@ elif [[ $(hostname) == "delta"* ]]; then
     MIRGE_MPI_EXEC="srun"
 elif [[ $(hostname) == "tioga"* ]]; then
     MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/tioga-parallel-spawner.sh"
-    PYOPENCL_CTX="AMD:0"
+    PYOPENCL_CTX="AMD:0"  # ROCR_VISIBLE_DEVICES handles device visibility
     PYOPENCL_TEST="AMD:0"
-    MIRGE_MPI_EXEC="flux run -N 2 -n 16 --exclusive"
-else
-    echo "Unknown host: $(hostname)"
-    exit 1
+    MIRGE_MPI_EXEC="flux run --exclusive"
 fi
 
 export MIRGE_HOME
