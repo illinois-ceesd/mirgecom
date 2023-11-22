@@ -398,7 +398,6 @@ def test_diffusive_heat_flux(actx_factory):
     mu_b = 1.0
     mu = 0.5
     kappa = 5.0
-
     # assemble d_alpha so that every species has a unique j
     d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
 
