@@ -135,7 +135,8 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     actx = u_tpair.int.array_context
 
     # if any of the coefficients are orthotropic, weight by the absolute value
-    # of the normal diffusivity
+    # of the normal diffusivity. There is no reference to support this approach,
+    # however numerical experiments showed that this works.
     if isinstance(kappa_tpair.int, np.ndarray):
         kappa_int = actx.np.abs(np.dot(kappa_tpair.int, normal))
     else:
@@ -199,7 +200,8 @@ def diffusion_facial_flux_central(
 
     where $\alpha$ is a user-definied value, $l$ is the element characteristic
     lengthscale and $\bar{\kappa}_{avg}$ is the averaged value, considering
-    both isotropic (scalar) or orthotropic (array) cases.
+    both isotropic (scalar) or orthotropic (array) cases. In the latter, the
+    normal value is used for the penalization (see [Ern_2008]_).
     """
     if penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -244,7 +246,8 @@ def diffusion_facial_flux_harmonic(
 
     where $\alpha$ is a user-defined value, $l$ is the element characteristic
     lengthscale and $\bar{\kappa}_{harm}$ is the harmonic mean, considering
-    both isotropic (scalar) or orthotropic (array) cases.
+    both isotropic (scalar) or orthotropic (array) cases. In the latter, the
+    normal value is used for the penalization (see [Ern_2008]_).
     """
     if penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
