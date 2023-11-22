@@ -34,9 +34,10 @@ where
 with $\kappa_{ii}$ being either the individual components of the diffusivity
 array (orthotropic material) or a single scalar (isotropic).
 
-Numerical flux function
-^^^^^^^^^^^^^^^^^^^^^^^
+Flux functions
+^^^^^^^^^^^^^^
 
+.. autofunction:: diffusion_flux
 .. autofunction:: grad_facial_flux_central
 .. autofunction:: grad_facial_flux_weighted
 .. autofunction:: diffusion_facial_flux_central
@@ -45,7 +46,6 @@ Numerical flux function
 RHS Evaluation
 ^^^^^^^^^^^^^^
 
-.. autofunction:: diffusion_flux
 .. autofunction:: grad_operator
 .. autofunction:: diffusion_operator
 
@@ -146,6 +146,9 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
     else:
         kappa_ext = kappa_tpair.ext
 
+#    kappa_int = kappa_tpair.int
+#    kappa_ext = kappa_tpair.ext
+
     kappa_sum = actx.np.where(
         actx.np.greater(kappa_int + kappa_ext, 0*kappa_int),
         kappa_int + kappa_ext,
@@ -230,7 +233,7 @@ def diffusion_facial_flux_harmonic(
 
     .. math::
 
-        F = -\frac{2 \kappa_ii^- \kappa_ii^+}{\kappa_ii^- + \kappa_ii^+}
+        F = -\frac{2 \kappa_{ii}^- \kappa_{ii}^+}{\kappa_{ii}^- + \kappa_{ii}^+}
                 \frac{u^- + u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
 
     The amout of penalization $\tau$ is given by
