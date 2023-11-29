@@ -46,7 +46,7 @@ from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
-from mirgecom.initializers import MixtureInitializer
+from mirgecom.initializers import Uniform
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import (
     GasModel, make_fluid_state
@@ -265,9 +265,8 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     # (density, pressure, temperature, mass_fractions)
     print(f"Cantera state (rho,T,P,Y) = ({can_rho}, {can_t}, {can_p}, {can_y}")
     velocity = np.zeros(shape=(dim,))
-    initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
-                                     pressure=can_p, temperature=can_t,
-                                     massfractions=can_y, velocity=velocity)
+    initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
+                          species_mass_fractions=can_y, velocity=velocity)
 
     my_boundary = AdiabaticSlipBoundary()
     boundaries = {BTAG_ALL: my_boundary}

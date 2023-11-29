@@ -760,7 +760,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
         actx = state_minus.array_context
         bnd_discr = dcoll.discr_from_dd(dd_bdry)
         nodes = actx.thaw(bnd_discr.nodes())
-        boundary_cv = exact_soln(x=nodes)
+        boundary_cv = exact_soln(x_vec=nodes)
         return make_fluid_state(boundary_cv, gas_model)
 
     boundaries = {
@@ -791,7 +791,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
         nodes = actx.thaw(dcoll.nodes())
         print(f"{nodes=}")
 
-        cv_exact = exact_soln(x=nodes)
+        cv_exact = exact_soln(x_vec=nodes)
         print(f"{cv_exact=}")
         exact_fluid_state = make_fluid_state(cv=cv_exact, gas_model=gas_model)
 

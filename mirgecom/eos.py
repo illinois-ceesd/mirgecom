@@ -77,6 +77,7 @@ class GasDependentVars:
     .. attribute:: smoothness_mu
     .. attribute:: smoothness_kappa
     .. attribute:: smoothness_beta
+    .. attribute:: smoothness_d
     """
 
     temperature: DOFArray
@@ -84,6 +85,7 @@ class GasDependentVars:
     speed_of_sound: DOFArray
     smoothness_mu: DOFArray
     smoothness_kappa: DOFArray
+    smoothness_d: DOFArray
     smoothness_beta: DOFArray
 
 
@@ -135,8 +137,9 @@ class GasEOS(metaclass=ABCMeta):
         """Get the gas sound speed."""
 
     @abstractmethod
-    def gas_const(self, cv: Optional[ConservedVars],
-                  temperature: Optional[DOFArray] = None):
+    def gas_const(self, cv: Optional[ConservedVars] = None,
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         r"""Get the specific gas constant ($R_s$)."""
 
     @abstractmethod
@@ -179,6 +182,7 @@ class GasEOS(metaclass=ABCMeta):
             temperature_seed: Optional[DOFArray] = None,
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
+            smoothness_d: Optional[DOFArray] = None,
             smoothness_beta: Optional[DOFArray] = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
@@ -194,6 +198,8 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_mu = zeros
         if smoothness_kappa is None:
             smoothness_kappa = zeros
+        if smoothness_d is None:
+            smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
 
@@ -203,6 +209,7 @@ class GasEOS(metaclass=ABCMeta):
             speed_of_sound=self.sound_speed(cv, temperature),
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
+            smoothness_d=smoothness_d,
             smoothness_beta=smoothness_beta
         )
 
@@ -257,6 +264,7 @@ class MixtureEOS(GasEOS):
             temperature_seed: Optional[DOFArray] = None,
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
+            smoothness_d: Optional[DOFArray] = None,
             smoothness_beta: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
@@ -272,6 +280,8 @@ class MixtureEOS(GasEOS):
             smoothness_mu = zeros
         if smoothness_kappa is None:
             smoothness_kappa = zeros
+        if smoothness_d is None:
+            smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
 
@@ -282,6 +292,7 @@ class MixtureEOS(GasEOS):
             species_enthalpies=self.species_enthalpies(cv, temperature),
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
+            smoothness_d=smoothness_d,
             smoothness_beta=smoothness_beta
         )
 
@@ -347,7 +358,8 @@ class IdealSingleGas(GasEOS):
         return self._gas_const / (self._gamma - 1)
 
     def gas_const(self, cv: Optional[ConservedVars] = None,
-            temperature: Optional[DOFArray] = None) -> DOFArray:
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         """Get specific gas constant R."""
         return self._gas_const
 
@@ -670,17 +682,23 @@ class PyrometheusMixture(MixtureEOS):
         """
         y = cv.species_mass_fractions
         cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
-        rspec = self.gas_const(cv)
+        rspec = self.gas_const(cv=cv)
         return cp / (cp - rspec)
 
     def gas_const(self, cv: ConservedVars,  # type: ignore[override]
-                  temperature: Optional[DOFArray] = None) -> DOFArray:
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         r"""Get specific gas constant $R_s$.
 
-        The mixture specific gas constant is calculated
-        as $R_s = \frac{R}{\sum{\frac{{Y}_\alpha}{{M}_\alpha}}}$ by the
-        :mod:`pyrometheus` mechanism provided by the user. ${M}_\alpha$ are the
-        species molar masses.
+        The mixture specific gas constant is calculated as
+
+        .. math::
+
+            R_s = \frac{R}{\sum{\frac{{Y}_\alpha}{{M}_\alpha}}}
+
+        by the :mod:`pyrometheus` mechanism provided by the user. In this
+        equation, ${M}_\alpha$ are the species molar masses and R is the
+        universal gas constant.
 
         Parameters
         ----------
@@ -689,7 +707,10 @@ class PyrometheusMixture(MixtureEOS):
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
         """
-        y = cv.species_mass_fractions
+        from warnings import warn
+        warn("Passing CV to eos.gas_const will be deprecated in Q1 2024.",
+             stacklevel=2)
+        y = species_mass_fractions if cv is None else cv.species_mass_fractions
         return self._pyrometheus_mech.get_specific_gas_constant(y)
 
     def kinetic_energy(self, cv: ConservedVars):
