@@ -228,7 +228,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
+def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
     """Test the inviscid rhs using a trivial constant/uniform state.
 
     This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
