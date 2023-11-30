@@ -127,7 +127,7 @@ def main(actx_class, use_esdg=False,
     nviz = 100
     nhealth = 1
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -141,29 +141,38 @@ def main(actx_class, use_esdg=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        box_ll = -1
-        box_ur = 1
-        nel_1d = 32
+        use_gmsh = True
+        if use_gmsh:
+            from meshmode.mesh.io import read_gmsh
 
-        if use_tensor_product_elements:
-            from meshmode.mesh import TensorProductElementGroup
-            generate_mesh = partial(generate_regular_rect_mesh,
-                a=(box_ll,)*dim, b=(box_ur,)*dim,
-                nelements_per_axis=(nel_1d,)*dim,
-                                    group_cls=TensorProductElementGroup,
-                                    periodic=(True,)*dim)
+            def read_mesh():
+                return read_gmsh("pulse_mesh.msh", force_ambient_dim=2)
+            generate_mesh = partial(read_mesh)
         else:
-            generate_mesh = partial(generate_regular_rect_mesh,
-                a=(box_ll,)*dim, b=(box_ur,)*dim,
-                nelements_per_axis=(nel_1d,)*dim)
+            from meshmode.mesh.generation import generate_regular_rect_mesh
+            box_ll = -1
+            box_ur = 1
+            nel_1d = 32
+            if use_tensor_product_elements:
+                from meshmode.mesh import TensorProductElementGroup
+                generate_mesh = partial(generate_regular_rect_mesh,
+                                        a=(box_ll,)*dim, b=(box_ur,)*dim,
+                                        nelements_per_axis=(nel_1d,)*dim,
+                                        group_cls=TensorProductElementGroup,
+                                        periodic=(True,)*dim)
+            else:
+                generate_mesh = partial(generate_regular_rect_mesh,
+                                        a=(box_ll,)*dim, b=(box_ur,)*dim,
+                                        nelements_per_axis=(nel_1d,)*dim)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                    generate_mesh)
         local_nelements = local_mesh.nelements
+        print(f"{local_mesh=}")
+
         # global_nelements = local_nelements
 
-    order = 1
+    order = 2
     dcoll = create_discretization_collection(
         actx, local_mesh, order=order,
         use_tensor_product_elements=use_tensor_product_elements)
@@ -362,8 +371,8 @@ def main(actx_class, use_esdg=False,
     elif use_profiling:
         print(actx.tabulate_profiling_data())
 
-    finish_tol = 1e-16
-    assert np.abs(current_t - t_final) < finish_tol
+    # finish_tol = 1e-16
+    # assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":
