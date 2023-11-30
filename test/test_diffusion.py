@@ -21,35 +21,36 @@ THE SOFTWARE.
 """
 
 from abc import ABCMeta, abstractmethod
+import logging
 import numpy as np
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
-from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import grudge.op as op
+import mirgecom.math as mm
+import pytest
+from pytools.obj_array import make_obj_array
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
+from grudge.trace_pair import TracePair
+from grudge.shortcuts import make_visualizer
+from meshmode.dof_array import DOFArray
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
     div as sym_div,
     evaluate)
-import mirgecom.math as mm
 from mirgecom.diffusion import (
     diffusion_flux,
-    grad_operator,
     diffusion_operator,
+    grad_facial_flux_weighted,
+    diffusion_facial_flux_harmonic,
     DiffusionBoundary,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
-from meshmode.dof_array import DOFArray
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
-from mirgecom.discretization import create_discretization_collection
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-import pytest
 from mirgecom.simutil import get_box_mesh
-import logging
-from grudge.shortcuts import make_visualizer
+from mirgecom.discretization import create_discretization_collection
+
 logger = logging.getLogger(__name__)
 
 
@@ -628,11 +629,10 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
     assert rel_linf_err < 1.e-5
 
 
-from grudge.trace_pair import TracePair
-from mirgecom.diffusion import grad_facial_flux_central
 class DummyDiffusionBoundary(DiffusionBoundary):
-    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
-        numerical_flux_func=grad_facial_flux_central):
+    """Dummy boundary condition that duplicates the internal values."""
+    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
+                      numerical_flux_func):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -642,10 +642,11 @@ class DummyDiffusionBoundary(DiffusionBoundary):
             exterior=u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
         return numerical_flux_func(kappa_tpair, u_tpair, normal)
-    def get_diffusion_flux(
-            self, dcoll, dd_bdry, kappa_minus, u_minus,
-            grad_u_minus, lengthscales_minus, penalty_amount=None,
-            numerical_flux_func=None):
+
+    def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
+                           grad_u_minus, lengthscales_minus, *,
+                           numerical_flux_func=diffusion_facial_flux_harmonic,
+                           penalty_amount=None):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -664,12 +665,8 @@ class DummyDiffusionBoundary(DiffusionBoundary):
             penalty_amount=penalty_amount)
 
 
-@pytest.mark.parametrize("vector_kappa", [False])
-def test_orthotropic_diffusion(actx_factory, vector_kappa):
-    """
-    Checks that the diffusion operator can be called with either scalars or object
-    arrays for `u`.
-    """
+def test_orthotropic_diffusion(actx_factory):
+    """Checks that the diffusion operator can handle arrays for diffusivity."""
     actx = actx_factory()
     dim = 2
     n = 4
@@ -695,7 +692,7 @@ def test_orthotropic_diffusion(actx_factory, vector_kappa):
 
     rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
             boundaries=boundaries, return_grad_u=True,
-            gradient_numerical_flux_func=grad_facial_flux_central)
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
 
     err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 30.0, np.inf))
     err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 60.0, np.inf))
@@ -721,7 +718,8 @@ def test_orthotropic_diffusion(actx_factory, vector_kappa):
     }
 
     rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
-            boundaries=boundaries, return_grad_u=True)
+            boundaries=boundaries, return_grad_u=True,
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
 
     err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 30.0, np.inf))
     err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 60.0, np.inf))
