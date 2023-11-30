@@ -351,7 +351,7 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
-    parser.add_argument("--use_tensor_product_elements", action="store_true")
+    parser.add_argument("--use-tensor-product-elements", action="store_true")
     args = parser.parse_args()
 
     from warnings import warn

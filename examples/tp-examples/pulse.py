@@ -97,14 +97,8 @@ def main(actx_class, use_esdg=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from grudge.array_context import \
-            TensorProductMPIFusionContractorArrayContext
     from mirgecom.array_context import initialize_actx
-    if use_tensor_product_elements:
-        actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
-                               comm)
-    else:
-        actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = False
 
@@ -115,7 +109,7 @@ def main(actx_class, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2.0
+    t_final = .1
     current_cfl = 1.0
     current_dt = .0005
     current_t = 0
@@ -156,14 +150,15 @@ def main(actx_class, use_esdg=False,
         else:
             generate_mesh = partial(generate_regular_rect_mesh,
                 a=(box_ll,)*dim, b=(box_ur,)*dim,
-                nelements_per_axis=(nel_1d,)*dim)
+                nelements_per_axis=(nel_1d,)*dim,
+                                    periodic=(True,)*dim)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                    generate_mesh)
         local_nelements = local_mesh.nelements
         # global_nelements = local_nelements
 
-    order = 1
+    order = 2
     dcoll = create_discretization_collection(
         actx, local_mesh, order=order,
         use_tensor_product_elements=use_tensor_product_elements)
@@ -183,8 +178,8 @@ def main(actx_class, use_esdg=False,
         logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
                              extract_vars_for_logging, units_for_logging)
 
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
+        # vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        # logmgr.add_quantity(vis_timer)
 
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
@@ -384,7 +379,7 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
-    parser.add_argument("--use_tensor_product_elements", action="store_true")
+    parser.add_argument("--use-tensor-product-elements", action="store_true")
     args = parser.parse_args()
 
     from warnings import warn
@@ -396,8 +391,19 @@ if __name__ == "__main__":
             warn("ESDG requires overintegration, enabling --overintegration.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+    if not args.use_tensor_product_elements:
+        actx_class = get_reasonable_array_context_class(
+            lazy=args.lazy, distributed=True, profiling=args.profiling,
+            numpy=args.numpy)
+    else:
+        if args.lazy:
+            from grudge.array_context import \
+                TensorProductMPIFusionContractorArrayContext
+            actx_class = TensorProductMPIFusionContractorArrayContext
+        else:
+            from grudge.array_context import \
+                TensorProductMPIPyOpenCLArrayContext
+            actx_class = TensorProductMPIPyOpenCLArrayContext
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
