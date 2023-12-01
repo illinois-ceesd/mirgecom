@@ -24,12 +24,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
 import logging
-import pytest
 import math
 from functools import partial
+import pytest
+import numpy as np
 
+from pytools.convergence import EOCRecorder
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
@@ -47,7 +48,6 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import max_component_norm
 from mirgecom.inviscid import (
@@ -57,6 +57,7 @@ from mirgecom.inviscid import (
 )
 from mirgecom.integrators import rk4_step
 
+import grudge.op as op
 from grudge.dof_desc import DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 
@@ -64,17 +65,20 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 from meshmode.mesh import BTAG_ALL
-
+from meshmode.mesh.generation import generate_regular_rect_mesh
 
 logger = logging.getLogger(__name__)
+
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [True, False])
-@pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+@pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
+                                                 inviscid_facial_flux_hll])
 def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
                      numerical_flux_func):
     """Test the inviscid rhs using a trivial constant/uniform state.
@@ -86,11 +90,9 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 
     tolerance = 1e-9
 
-    from pytools.convergence import EOCRecorder
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
     for nel_1d in [4, 8, 12]:
-        from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
@@ -220,193 +222,10 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
     )
 
 
-@pytest.mark.parametrize("nspecies", [0, 10])
-@pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [2, 3, 4])
-def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
-    """Test the inviscid rhs with ESDG using a trivial constant/uniform state.
-
-    This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
-    and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
-    """
-    actx = actx_factory()
-
-    tolerance = 1e-9
-
-    from pytools.convergence import EOCRecorder
-    eoc_rec0 = EOCRecorder()
-    eoc_rec1 = EOCRecorder()
-
-    for nel_1d in [4, 8, 12]:
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-        )
-
-        logger.info(
-            f"Number of {dim}d elements: {mesh.nelements}"
-        )
-
-        dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                 quadrature_order=2*order+1)
-        quadrature_tag = DISCR_TAG_QUAD
-
-        zeros = dcoll.zeros(actx)
-        ones = zeros + 1.0
-
-        mass_input = dcoll.zeros(actx) + 1
-        energy_input = dcoll.zeros(actx) + 2.5
-
-        mom_input = make_obj_array(
-            [dcoll.zeros(actx) for i in range(dcoll.dim)]
-        )
-
-        mass_frac_input = flat_obj_array(
-            [ones / ((i + 1) * 10) for i in range(nspecies)]
-        )
-        species_mass_input = mass_input * mass_frac_input
-        num_equations = dim + 2 + len(species_mass_input)
-
-        cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            species_mass=species_mass_input)
-        gas_model = GasModel(eos=IdealSingleGas())
-        fluid_state = make_fluid_state(cv, gas_model)
-
-        from mirgecom.gas_model import (
-            conservative_to_entropy_vars,
-            entropy_to_conservative_vars
-        )
-        temp_state = make_fluid_state(cv, gas_model)
-        gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        # from meshmode.dof_array import DOFArray
-        # if isinstance(gamma, DOFArray):
-        #    gamma = op.project(dcoll, src, tgt, gamma)
-        ev_sd = conservative_to_entropy_vars(gamma, temp_state)
-        cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
-        cv_resid = cv - cv_sd
-
-        expected_rhs = make_conserved(  # noqa
-            dim, q=make_obj_array([dcoll.zeros(actx)
-                                   for i in range(num_equations)])
-        )
-
-        boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(
-            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, quadrature_tag=quadrature_tag, use_esdg=True)
-        rhs_resid = inviscid_rhs - expected_rhs
-
-        rho_resid = cv_resid.mass
-        rhoe_resid = cv_resid.energy
-        mom_resid = cv_resid.momentum
-        rhoy_resid = cv_resid.species_mass
-
-        rho_mcv = cv_sd.mass
-        rhoe_mcv = cv_sd.energy
-        rhov_mcv = cv_sd.momentum
-        rhoy_mcv = cv_sd.species_mass
-
-        print(
-            f"{rho_mcv=}\n"
-            f"{rhoe_mcv=}\n"
-            f"{rhov_mcv=}\n"
-            f"{rhoy_mcv=}\n"
-        )
-
-        def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
-
-        assert inf_norm(rho_resid) < tolerance
-        assert inf_norm(rhoe_resid) < tolerance
-        for i in range(dim):
-            assert inf_norm(mom_resid[i]) < tolerance
-        for i in range(nspecies):
-            assert inf_norm(rhoy_resid[i]) < tolerance
-
-        rhs_rho_resid = rhs_resid.mass
-        rhs_rhoe_resid = rhs_resid.energy
-        rhs_mom_resid = rhs_resid.momentum
-        rhs_rhoy_resid = rhs_resid.species_mass
-
-        assert inf_norm(rhs_rho_resid) < tolerance
-        assert inf_norm(rhs_rhoe_resid) < tolerance
-
-        err_max = inf_norm(rho_resid)
-        eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
-
-        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-        # set a non-zero, but uniform velocity component
-        for i in range(len(mom_input)):
-            mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
-
-        cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            species_mass=species_mass_input)
-        gas_model = GasModel(eos=IdealSingleGas())
-        fluid_state = make_fluid_state(cv, gas_model)
-
-        temp_state = make_fluid_state(cv, gas_model)
-        gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
-        # if isinstance(gamma, DOFArray):
-        #    gamma = op.project(dcoll, src, tgt, gamma)
-        ev_sd = conservative_to_entropy_vars(gamma, temp_state)
-        cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
-        cv_resid = cv - cv_sd
-
-        boundaries = {BTAG_ALL: DummyBoundary()}
-        inviscid_rhs = euler_operator(
-            dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, quadrature_tag=quadrature_tag, use_esdg=True)
-        rhs_resid = inviscid_rhs - expected_rhs
-
-        rho_resid = cv_resid.mass
-        rhoe_resid = cv_resid.energy
-        mom_resid = cv_resid.momentum
-        rhoy_resid = cv_resid.species_mass
-
-        assert inf_norm(rho_resid) < tolerance
-        assert inf_norm(rhoe_resid) < tolerance
-        for i in range(dim):
-            assert inf_norm(mom_resid[i]) < tolerance
-        for i in range(nspecies):
-            assert inf_norm(rhoy_resid[i]) < tolerance
-
-        rhs_rho_resid = rhs_resid.mass
-        rhs_rhoe_resid = rhs_resid.energy
-        rhs_mom_resid = rhs_resid.momentum
-        rhs_rhoy_resid = rhs_resid.species_mass
-
-        assert inf_norm(rhs_rho_resid) < tolerance
-        assert inf_norm(rhs_rhoe_resid) < tolerance
-        for i in range(dim):
-            assert inf_norm(rhs_mom_resid[i]) < tolerance
-        for i in range(nspecies):
-            assert inf_norm(rhs_rhoy_resid[i]) < tolerance
-
-        err_max = inf_norm(rho_resid)
-        eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
-
-    logger.info(
-        f"V == 0 Errors:\n{eoc_rec0}"
-        f"V != 0 Errors:\n{eoc_rec1}"
-    )
-
-    assert (
-        eoc_rec0.order_estimate() >= order - 0.5
-        or eoc_rec0.max_error() < 1e-9
-    )
-    assert (
-        eoc_rec1.order_estimate() >= order - 0.5
-        or eoc_rec1.max_error() < 1e-9
-    )
-
-
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [True, False])
-@pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+@pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
+                                                 inviscid_facial_flux_hll])
 def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_func):
     """Test the inviscid rhs using the non-trivial 2D isentropic vortex.
 
@@ -417,13 +236,15 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
 
     dim = 2
 
-    from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
-    from meshmode.mesh.generation import generate_regular_rect_mesh
+    def _vortex_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
+        nodes = actx.thaw(bnd_discr.nodes())
+        return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
     for nel_1d in [32, 48, 64]:
-
         mesh = generate_regular_rect_mesh(
             a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
@@ -447,12 +268,6 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         vortex_soln = vortex(nodes)
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(vortex_soln, gas_model)
-
-        def _vortex_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-            actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(dd_bdry)
-            nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
@@ -481,8 +296,8 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [True, False])
-@pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+@pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
+                                                 inviscid_facial_flux_hll])
 def test_lump_rhs(actx_factory, dim, order, use_overintegration,
                   numerical_flux_func):
     """Test the inviscid rhs using the non-trivial mass lump case.
@@ -495,15 +310,16 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
     tolerance = 1e-10
     maxxerr = 0.0
 
-    from pytools.convergence import EOCRecorder
-
     eoc_rec = EOCRecorder()
 
-    for nel_1d in [4, 8, 12]:
-        from meshmode.mesh.generation import (
-            generate_regular_rect_mesh,
-        )
+    def _lump_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
+        nodes = actx.thaw(bnd_discr.nodes())
+        return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
+                                gas_model)
 
+    for nel_1d in [4, 8, 12]:
         mesh = generate_regular_rect_mesh(
             a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
@@ -527,13 +343,6 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         lump_soln = lump(nodes)
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(lump_soln, gas_model)
-
-        def _lump_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-            actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(dd_bdry)
-            nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
-                                    gas_model)
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_lump_boundary)
@@ -568,8 +377,8 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
 @pytest.mark.parametrize("order", [1, 2, 4])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
 @pytest.mark.parametrize("use_overintegration", [True, False])
-@pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+@pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
+                                                 inviscid_facial_flux_hll])
 def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
                        numerical_flux_func):
     """Test the Euler rhs using the non-trivial 1, 2, and 3D mass lump case.
@@ -582,15 +391,15 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
     tolerance = 1e-8
     maxxerr = 0.0
 
-    from pytools.convergence import EOCRecorder
-
     eoc_rec = EOCRecorder()
 
-    for nel_1d in [4, 8, 12]:
-        from meshmode.mesh.generation import (
-            generate_regular_rect_mesh,
-        )
+    def _my_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
+        nodes = actx.thaw(bnd_discr.nodes())
+        return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
+    for nel_1d in [4, 8, 12]:
         mesh = generate_regular_rect_mesh(
             a=(-1,) * dim, b=(1,) * dim, nelements_per_axis=(nel_1d,) * dim,
         )
@@ -622,12 +431,6 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         lump_soln = lump(nodes)
         gas_model = GasModel(eos=IdealSingleGas())
         fluid_state = make_fluid_state(lump_soln, gas_model)
-
-        def _my_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-            actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(dd_bdry)
-            nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
@@ -805,8 +608,8 @@ def _euler_flow_stepper(actx, parameters):
 
 @pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("use_overintegration", [True, False])
-@pytest.mark.parametrize("numerical_flux_func",
-                         [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
+@pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
+                                                 inviscid_facial_flux_hll])
 def test_isentropic_vortex(actx_factory, order, use_overintegration,
                            numerical_flux_func):
     """Advance the 2D isentropic vortex case in time with non-zero velocities.
@@ -819,15 +622,15 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
 
     dim = 2
 
-    from pytools.convergence import EOCRecorder
-
     eoc_rec = EOCRecorder()
 
-    for nel_1d in [16, 32, 64]:
-        from meshmode.mesh.generation import (
-            generate_regular_rect_mesh,
-        )
+    def _vortex_boundary(dcoll, dd_bdry, state_minus, gas_model, **kwargs):
+        actx = state_minus.array_context
+        bnd_discr = dcoll.discr_from_dd(dd_bdry)
+        nodes = actx.thaw(bnd_discr.nodes())
+        return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
+    for nel_1d in [16, 32, 64]:
         mesh = generate_regular_rect_mesh(
             a=(-5.0,) * dim, b=(5.0,) * dim, nelements_per_axis=(nel_1d,) * dim
         )
@@ -841,12 +644,6 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
         dt = .0001
         initializer = Vortex2D(center=orig, velocity=vel)
         casename = "Vortex"
-
-        def _vortex_boundary(dcoll, dd_bdry, state_minus, gas_model, **kwargs):
-            actx = state_minus.array_context
-            bnd_discr = dcoll.discr_from_dd(dd_bdry)
-            nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)

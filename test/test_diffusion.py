@@ -45,8 +45,13 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 import pytest
 from mirgecom.simutil import get_box_mesh
+from mirgecom.integrators import rk4_step
 import logging
 logger = logging.getLogger(__name__)
+
+
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 class HeatProblem(metaclass=ABCMeta):
@@ -287,7 +292,7 @@ def sym_diffusion(dim, sym_kappa, sym_u):
         (OscillatingTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
-            visualize=False):
+                            visualize=False):
     """
     Checks the accuracy of the diffusion operator by solving the heat equation for a
     given problem setup.
@@ -313,7 +318,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     for n in scales:
         mesh = p.get_mesh(n)
 
-        dcoll = create_discretization_collection(actx, mesh, order)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
 
         nodes = actx.thaw(dcoll.nodes())
 
@@ -332,8 +337,6 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         t = 0.
 
         u = p.get_solution(nodes, t)
-
-        from mirgecom.integrators import rk4_step
 
         for _ in range(nsteps):
             u = rk4_step(u, t, dt, get_rhs)
@@ -364,7 +367,9 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_diffusion_discontinuous_kappa(actx_factory, order,
+        use_overintegration, visualize=False):
     """
     Checks the accuracy of the diffusion operator for an kappa field that has a
     jump across an element face.
@@ -375,7 +380,9 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     mesh = get_box_mesh(1, -1, 1, n)
 
-    dcoll = create_discretization_collection(actx, mesh, order)
+    dcoll = create_discretization_collection(
+        actx, mesh, order=order, quadrature_order=2*order+1)
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     nodes = actx.thaw(dcoll.nodes())
 
@@ -411,7 +418,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     def get_rhs(t, u, return_grad_u=False):
         return diffusion_operator(
             dcoll, kappa=kappa, boundaries=boundaries, u=u,
-            return_grad_u=return_grad_u)
+            quadrature_tag=quadrature_tag, return_grad_u=return_grad_u)
 
     rhs, grad_u_steady = get_rhs(0, u_steady, return_grad_u=True)
 
@@ -448,8 +455,6 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     dt = 1e-3 / order**2
     t = 0
-
-    from mirgecom.integrators import rk4_step
 
     for _ in range(50):
         u = rk4_step(u, t, dt, get_rhs)
