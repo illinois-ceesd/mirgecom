@@ -401,8 +401,6 @@ def test_diffusive_heat_flux(actx_factory):
     # assemble d_alpha so that every species has a unique j
     d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
 
-    # h_alpha = np.array([1./(ispec+1) for ispec in range(nspecies)])
-
     tv_model = SimpleTransport(bulk_viscosity=mu_b, viscosity=mu,
                                thermal_conductivity=kappa,
                                species_diffusivity=d_alpha)
