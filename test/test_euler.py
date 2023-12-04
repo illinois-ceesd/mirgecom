@@ -69,8 +69,8 @@ from meshmode.mesh.generation import generate_regular_rect_mesh
 
 logger = logging.getLogger(__name__)
 
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+#import os
+#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])

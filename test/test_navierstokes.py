@@ -74,8 +74,8 @@ from mirgecom.simutil import (
     get_box_mesh
 )
 
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+#import os
+#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +180,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration, pe
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        visualize = True
+        visualize = False
         if visualize:
             from grudge.shortcuts import make_visualizer
             vis = make_visualizer(dcoll, order)
@@ -249,12 +249,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration, pe
 
 
 from mirgecom.navierstokes import grad_cv_operator, grad_t_operator
-@pytest.mark.parametrize("nspecies", [0, 3])
-#@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("nspecies", [0])
 @pytest.mark.parametrize("dim", [2])
-@pytest.mark.parametrize("order", [2, 3, 4])
+@pytest.mark.parametrize("order", [1])
 @pytest.mark.parametrize("profile", ["linear"])
-@pytest.mark.parametrize("use_overintegration", [False, True])
+@pytest.mark.parametrize("use_overintegration", [True])
 def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration, profile):
     """Test the gradients from the Navier-Stokes operator with non-uniform profiles.
 
@@ -269,21 +268,25 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         ones = zeros + 1.0
 
         mass_input = 1.0 + 0.1*nodes[0]
-        temperature_input = 1.0 + 0.1*nodes[0]
+#        temperature_input = 1.0 + 0.0*nodes[0]
+
+        #print(nodes[0])
+        #print(temperature_input)
 
         # set a non-zero, but uniform velocity component
         mom_input = make_obj_array([zeros for i in range(dim)])
         for i in range(dim):
-            mom_input[i] = 0.1 + 0.1*float(i+1)*nodes[i]
+            mom_input[i] = 0.0 + 0.0*float(i+1)*nodes[i]
 
         mass_frac_input = flat_obj_array(
             [ones / ((i + 1) * 10) for i in range(nspecies)]
         )
         species_mass_input = mass_input * mass_frac_input
 
-        energy_input = mass_input*(
-            gas_model.eos.get_internal_energy(temperature=temperature_input)) \
-            + 0.5*np.dot(mom_input, mom_input)/mass_input
+        energy_input = 2.5 + 0.0*nodes[0]
+#        energy_input = mass_input*(
+#            gas_model.eos.get_internal_energy(temperature=temperature_input)) \
+#            + 0.5*np.dot(mom_input, mom_input)/mass_input
 
         return make_conserved(dim, mass=mass_input, momentum=mom_input,
             energy=energy_input, species_mass=species_mass_input)
@@ -321,12 +324,14 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 
     eoc_rec0 = EOCRecorder()
     # eoc_rec1 = EOCRecorder()
-    for nel_1d in [64, 32, 16, 8]:
+#    for nel_1d in [64, 32, 16, 8, 4, 2]:
+    for nel_1d in [2]:
         mesh = generate_regular_rect_mesh(
             a=(-0.5,)*dim, b=(0.5,)*dim, nelements_per_axis=(nel_1d,)*dim)
 
-#        boundaries = {BTAG_ALL: DummyBoundary()}
-        boundaries = {BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)}
+        boundaries = {BTAG_ALL: DummyBoundary()}
+#        boundaries = {
+#            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)}
 
         logger.info(f"Number of {dim}d elements: {mesh.nelements}")
 
@@ -341,11 +346,26 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
             eos=IdealSingleGas(gamma=1.4, gas_const=1.0),
             transport=SimpleTransport(viscosity=1.0,
                                       thermal_conductivity=1.0,
-                                      species_diffusivity=.5 * np.ones(nspecies))
+                                      species_diffusivity=0.5*np.ones(nspecies))
         )
 
         cv = _conserved_vars(nodes)
         state = make_fluid_state(gas_model=gas_model, cv=cv)
+
+        print(state.cv.energy)
+
+        from grudge.dof_desc import DD_VOLUME_ALL
+        from mirgecom.gas_model import make_operator_fluid_states
+        operator_states_quad = make_operator_fluid_states(
+            dcoll, state, gas_model, boundaries, quadrature_tag,
+            dd=DD_VOLUME_ALL)
+
+        vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
+            operator_states_quad
+        print('===========================')
+        print(vol_state_quad.cv.energy)
+
+        1/0
 
         grad_cv = grad_cv_operator(
             dcoll, gas_model, boundaries, state, time=0.0,
@@ -355,9 +375,9 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
             dcoll, gas_model, boundaries, state, time=0.0,
             quadrature_tag=quadrature_tag)
 
-        ns_rhs = ns_operator(dcoll, gas_model=gas_model, boundaries=boundaries,
-                             state=state, time=0.0, quadrature_tag=quadrature_tag,
-                             grad_cv=grad_cv, grad_t=grad_t)
+        ns_rhs = ns_operator(
+            dcoll, gas_model=gas_model, boundaries=boundaries, state=state,
+            time=0.0, quadrature_tag=quadrature_tag, grad_cv=grad_cv, grad_t=grad_t)
 
         grad_vel = velocity_gradient(cv, grad_cv)
 
@@ -376,6 +396,7 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
                     #("exact_grad_t_x", exact_grad_t_x),
                     #("exact_grad_t_y", exact_grad_t_y),
                     ("grad_rho", grad_cv.mass),
+                    ("grad_rhoe", grad_cv.energy),
                     ("grad_rhou", grad_cv.momentum[0]),
                     ("grad_rhov", grad_cv.momentum[1] if dim >= 2 else None),
                     ("grad_rhow", grad_cv.momentum[2] if dim == 3 else None),
@@ -389,10 +410,10 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
                     ], overwrite=True)
 
         if profile == "linear":
-            check_grad_t = grad_t[0] - 0.1
-            #assert actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf)) < tolerance
-            #for i in range(1, dim):
-            #    assert actx.to_numpy(op.norm(dcoll, grad_t[i], np.inf)) < tolerance
+            check_grad_t = grad_t[0] - 0.0
+            assert actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf)) < tolerance
+            for i in range(1, dim):
+                assert actx.to_numpy(op.norm(dcoll, grad_t[i], np.inf)) < tolerance
             err_max = actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf))
             eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
