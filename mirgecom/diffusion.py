@@ -23,7 +23,7 @@ In this case, to ensure flux continuity,
 .. math::
 
     F = \kappa^- \nabla T^- = \kappa^+ \nabla T^+
-        = \bar{\kappa} (\frac{\nabla T^- + \nabla T^+}{2})
+        = \bar{\kappa} \left( \frac{\nabla T^- + \nabla T^+}{2} \right)
 
 where
 
@@ -116,39 +116,37 @@ def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
 
 
 def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
-    r"""Compute the numerical flux for $\nabla u$.
+    r"""Compute the numerical flux for $\nabla u$ using a weighted average.
 
-    Weights each side's value by the corresponding thermal conductivity $\kappa$,
-    for an isotropic material, given by
-
-    .. math::
-
-        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n},
-
-    or an orthotropic material, as
+    Weights each side's value by the corresponding thermal conductivity $\kappa$:
 
     .. math::
 
-        F = -\frac{(\kappa^- \cdot \hat{n}) u^- + (\kappa^+ \cdot \hat{n}) u^+}
-            {\kappa^- \cdot \hat{n} + \kappa^+ \cdot \hat{n}} \hat{n}
+        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}
+
+    For an orthotropic material, uses an averaging wrt to the normal component
+    according to
+
+    .. math::
+
+        \kappa = \sqrt{(\kappa \circ n) \cdot (\kappa \circ n)}
     """
     actx = u_tpair.int.array_context
 
-    # if any of the coefficients are orthotropic, weight by the absolute value
-    # of the normal diffusivity. There is no reference to support this approach,
-    # however numerical experiments showed that this works.
+    # If any of the coefficients are orthotropic, weight by the normal.
+    # There is no reference to support the current implementation, however
+    # numerical experiments showed that this converges to the analytical solution.
     if isinstance(kappa_tpair.int, np.ndarray):
-        kappa_int = actx.np.abs(np.dot(kappa_tpair.int, normal))
+        kappa_int = actx.np.sqrt(np.dot(kappa_tpair.int*normal,
+                                        kappa_tpair.int*normal))
     else:
         kappa_int = kappa_tpair.int
 
     if isinstance(kappa_tpair.ext, np.ndarray):
-        kappa_ext = actx.np.abs(np.dot(kappa_tpair.ext, normal))
+        kappa_ext = actx.np.sqrt(np.dot(kappa_tpair.ext*normal,
+                                        kappa_tpair.ext*normal))
     else:
         kappa_ext = kappa_tpair.ext
-
-#    kappa_int = kappa_tpair.int
-#    kappa_ext = kappa_tpair.ext
 
     kappa_sum = actx.np.where(
         actx.np.greater(kappa_int + kappa_ext, 0*kappa_int),
@@ -217,7 +215,8 @@ def diffusion_facial_flux_central(
     # TODO: Verify that this is the correct form for the penalty term
     if isinstance(kappa_tpair.avg, np.ndarray):
         actx = normal[0].array_context
-        kappa_avg_normal = actx.np.abs(np.dot(kappa_tpair.avg, normal))
+        kappa_avg_normal = actx.np.sqrt(np.dot(kappa_tpair.avg*normal,
+                                               kappa_tpair.avg*normal))
         tau = penalty_amount*kappa_avg_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
@@ -264,9 +263,10 @@ def diffusion_facial_flux_harmonic(
 
     # TODO: Verify that this is the correct form for the penalty term
     if isinstance(kappa_harmonic_mean, np.ndarray):
-        # if orthotropic, get the normal diffusivity absolute value
+        # if orthotropic, weight by the normal
         actx = normal[0].array_context
-        kappa_mean_normal = actx.np.abs(np.dot(kappa_harmonic_mean, normal))
+        kappa_mean_normal = actx.np.sqrt(np.dot(kappa_harmonic_mean*normal,
+                                                kappa_harmonic_mean*normal))
         tau = penalty_amount*kappa_mean_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
