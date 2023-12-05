@@ -23,7 +23,6 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import grudge.op as op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag
 from mirgecom.discretization import create_discretization_collection
@@ -40,9 +39,7 @@ from logpyle import IntervalTimer, set_dt
 
 
 @mpi_entry_point
-def main(actx_class, use_esdg=False,
-         use_overintegration=False,
-         use_leap=False, casename=None, rst_filename=None):
+def main(actx_class, use_overintegration=False, casename=None, rst_filename=None):
     """Run the example."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -70,7 +67,7 @@ def main(actx_class, use_esdg=False,
     t_final = 0.00025
     istep = 0
 
-    factor = 4.0
+    factor = 4.0  # rate between the two components of the conductivity
     gaussian_width = 0.1
     _kappa = np.zeros(2,)
     _kappa[1] = 0.5
@@ -82,10 +79,8 @@ def main(actx_class, use_esdg=False,
             a=(-1.0*np.sqrt(factor), -1.0),
             b=(+1.0*np.sqrt(factor), +1.0),
             nelements_per_axis=(nel_x, nel_y),
-            boundary_tag_to_face={
-                "x": ["+x", "-x"],
-                "y": ["+y", "-y"]
-                }
+            boundary_tag_to_face={"x": ["+x", "-x"],
+                                  "y": ["+y", "-y"]}
             )
 
         print("%d elements" % mesh.nelements)
@@ -104,16 +99,12 @@ def main(actx_class, use_esdg=False,
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
 
     from grudge.dof_desc import DISCR_TAG_QUAD
-    if use_overintegration:
-        quadrature_tag = DISCR_TAG_QUAD
-    else:
-        quadrature_tag = None  # noqa
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
         # this is significantly smaller than the maximum allowable CFL
         dt = 0.05/(nel_x*order)**2
-        print(dt)
     else:
         raise ValueError("don't have a stable time step guesstimate")
 
@@ -126,6 +117,7 @@ def main(actx_class, use_esdg=False,
         BoundaryDomainTag("y"): DirichletDiffusionBoundary(0.),
     }
 
+    # create a Gaussian function
     r2 = np.dot(nodes/actx.np.sqrt(kappa), nodes/actx.np.sqrt(kappa))
     u = dcoll.zeros(actx) + 30.0*actx.np.exp(-r2/(2.0*gaussian_width**2))
 
@@ -184,9 +176,6 @@ def main(actx_class, use_esdg=False,
             set_dt(logmgr, dt)
             logmgr.tick_after()
 
-    final_error = actx.to_numpy(op.norm(dcoll, error, np.inf))
-    print(1.0*np.sqrt(factor)/nel_x, 1.0/nel_y, final_error)
-
     if logmgr:
         logmgr.close()
 
@@ -201,8 +190,6 @@ if __name__ == "__main__":
         help="turn on detailed performance profiling")
     parser.add_argument("--overintegration", action="store_true",
         help="turn on overintegration.")
-    parser.add_argument("--leap", action="store_true",
-        help="use leap timestepper")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
@@ -220,8 +207,7 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_leap=args.leap,
-         use_overintegration=args.overintegration,
+    main(actx_class, use_overintegration=args.overintegration,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
