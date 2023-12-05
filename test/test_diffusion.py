@@ -29,7 +29,6 @@ import mirgecom.math as mm
 import pytest
 from pytools.obj_array import make_obj_array
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
-from grudge.trace_pair import TracePair
 from grudge.shortcuts import make_visualizer
 from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
@@ -44,10 +43,9 @@ from mirgecom.diffusion import (
     diffusion_flux,
     diffusion_operator,
     grad_facial_flux_weighted,
-    diffusion_facial_flux_harmonic,
-    DiffusionBoundary,
     DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary)
+    NeumannDiffusionBoundary,
+    DummyDiffusionBoundary)
 from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
 
@@ -627,42 +625,6 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
         op.norm(dcoll, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
         / op.norm(dcoll, expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5
-
-
-class DummyDiffusionBoundary(DiffusionBoundary):
-    """Dummy boundary condition that duplicates the internal values."""
-    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-                      numerical_flux_func):
-        actx = u_minus.array_context
-        kappa_tpair = TracePair(dd_bdry,
-            interior=kappa_minus,
-            exterior=kappa_minus)
-        u_tpair = TracePair(dd_bdry,
-            interior=u_minus,
-            exterior=u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        return numerical_flux_func(kappa_tpair, u_tpair, normal)
-
-    def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
-                           grad_u_minus, lengthscales_minus, *,
-                           numerical_flux_func=diffusion_facial_flux_harmonic,
-                           penalty_amount=None):
-        actx = u_minus.array_context
-        kappa_tpair = TracePair(dd_bdry,
-            interior=kappa_minus,
-            exterior=kappa_minus)
-        u_tpair = TracePair(dd_bdry,
-            interior=u_minus,
-            exterior=u_minus)
-        grad_u_tpair = TracePair(dd_bdry,
-            interior=grad_u_minus,
-            exterior=grad_u_minus)
-        lengthscales_tpair = TracePair(
-            dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        return numerical_flux_func(
-            kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
-            penalty_amount=penalty_amount)
 
 
 def test_orthotropic_diffusion(actx_factory):

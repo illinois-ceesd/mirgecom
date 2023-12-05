@@ -37,13 +37,19 @@ from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
+from mirgecom.simutil import write_visfile, check_step
 from mirgecom.utils import force_evaluation
-
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 from logpyle import IntervalTimer, set_dt
+
+
+class MyRuntimeError(RuntimeError):
+    """Simple exception to kill the simulation."""
+
+    pass
 
 
 @mpi_entry_point
@@ -72,6 +78,10 @@ def main(actx_class, use_esdg=False,
     t = 0
     t_final = 0.0002
     istep = 0
+
+    nviz = 10
+    viz_path = "viz_data/"
+    vizname = viz_path+casename
 
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -140,40 +150,53 @@ def main(actx_class, use_esdg=False,
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(dcoll)
+    visualizer = make_visualizer(dcoll)
 
-    def rhs(t, u):
+    def my_write_viz(step, t, state):
+        viz_fields = [("u", state)]
+        write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
+                      step=step, t=t, overwrite=True, comm=comm)
+
+    def my_pre_step(step, t, dt, state):
+        try:
+            if logmgr:
+                logmgr.tick_before()
+
+            if istep % 10 == 0:
+                print(istep, t, actx.to_numpy(actx.np.linalg.norm(u[0])))
+
+            do_viz = check_step(step=step, interval=nviz)
+            if do_viz:
+                my_write_viz(step=step, t=t, state=state)
+
+        except MyRuntimeError:
+            if rank == 0:
+                logger.info("Errors detected; attempting graceful exit.")
+            my_write_viz(step=step, t=t, state=fluid_state)
+            raise
+
+        return state, dt
+
+    def my_rhs(t, state):
         return (
-            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u,
+            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=state,
                                quadrature_tag=quadrature_tag)
             + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
 
-    compiled_rhs = actx.compile(rhs)
-
-    rank = comm.Get_rank()
-
-    while t < t_final:
-        if logmgr:
-            logmgr.tick_before()
-
-        if istep % 10 == 0:
-            print(istep, t, actx.to_numpy(actx.np.linalg.norm(u[0])))
-            vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
-                    [
-                        ("u", u)
-                        ], overwrite=True)
-
-        u = rk4_step(u, t, dt, compiled_rhs)
-        u = force_evaluation(actx, u)
-
-        t += dt
-        istep += 1
-
+    def my_post_step(step, t, dt, state):
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+        return state, dt
 
-    final_answer = actx.to_numpy(op.norm(dcoll, u, np.inf))
+    from mirgecom.steppers import advance_state
+    current_step, current_t, advanced_state = \
+        advance_state(rhs=my_rhs, timestepper=rk4_step,
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step, dt=dt, state=u, t=t,
+                      t_final=t_final, istep=istep, force_eval=True)
+
+    final_answer = actx.to_numpy(op.norm(dcoll, advanced_state, np.inf))
     resid = abs(final_answer - 0.0002062062188374177)
     if resid > 1e-15:
         raise ValueError(f"Run did not produce the expected result {resid=}")

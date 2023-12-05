@@ -56,6 +56,7 @@ Boundary conditions
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
 .. autoclass:: PrescribedFluxDiffusionBoundary
+.. autoclass:: DummyDiffusionBoundary
 """
 
 __copyright__ = """
@@ -490,6 +491,42 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         # returns the product "flux @ normal"
         return actx.np.zeros_like(u_minus) + self.value
+
+
+class DummyDiffusionBoundary(DiffusionBoundary):
+    """Dummy boundary condition that duplicates the internal values."""
+    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
+                      numerical_flux_func):
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(kappa_tpair, u_tpair, normal)
+
+    def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
+                           grad_u_minus, lengthscales_minus, *,
+                           numerical_flux_func=diffusion_facial_flux_harmonic,
+                           penalty_amount=None):
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        grad_u_tpair = TracePair(dd_bdry,
+            interior=grad_u_minus,
+            exterior=grad_u_minus)
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(
+            kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
+            penalty_amount=penalty_amount)
 
 
 class _DiffusionKappaTag:

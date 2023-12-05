@@ -30,12 +30,18 @@ from mirgecom.integrators import rk4_step
 from mirgecom.diffusion import diffusion_operator, DirichletDiffusionBoundary
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.utils import force_evaluation
-
+from mirgecom.simutil import (generate_and_distribute_mesh,
+                              write_visfile, check_step)
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
-
 from logpyle import IntervalTimer, set_dt
+
+
+class MyRuntimeError(RuntimeError):
+    """Simple exception to kill the simulation."""
+
+    pass
 
 
 @mpi_entry_point
@@ -56,9 +62,11 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
     mesh_dist = MPIMeshDistributor(comm)
 
+    nviz = 50
     viz_path = "viz_data/"
     vizname = viz_path+casename
 
+    order = 2
     dim = 2
     nel_x = 61
     nel_y = 31
@@ -73,28 +81,17 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     _kappa[1] = 0.5
     _kappa[0] = factor*_kappa[1]
 
-    if mesh_dist.is_mananger_rank():
-        from meshmode.mesh.generation import generate_regular_rect_mesh
-        mesh = generate_regular_rect_mesh(
-            a=(-1.0*np.sqrt(factor), -1.0),
-            b=(+1.0*np.sqrt(factor), +1.0),
-            nelements_per_axis=(nel_x, nel_y),
-            boundary_tag_to_face={"x": ["+x", "-x"],
-                                  "y": ["+y", "-y"]}
-            )
+    from functools import partial
+    from meshmode.mesh.generation import generate_regular_rect_mesh
+    generate_mesh = partial(generate_regular_rect_mesh,
+        a=(-1.0*np.sqrt(factor), -1.0), b=(+1.0*np.sqrt(factor), +1.0),
+        nelements_per_axis=(nel_x, nel_y),
+        boundary_tag_to_face={"x": ["+x", "-x"], "y": ["+y", "-y"]})
 
-        print("%d elements" % mesh.nelements)
-
-        part_per_element = get_partition_by_pymetis(mesh, num_parts)
-
-        local_mesh = mesh_dist.send_mesh_parts(mesh, part_per_element, num_parts)
-
-        del mesh
-
-    else:
-        local_mesh = mesh_dist.receive_mesh_part()
-
-    order = 2
+    local_mesh, global_nelements = (
+        generate_and_distribute_mesh(comm, generate_mesh))
+    local_nelements = local_mesh.nelements
+    print("%d elements" % global_nelements)
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
 
@@ -140,41 +137,54 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
 
     visualizer = make_visualizer(dcoll)
 
-    def rhs(t, u):
+    def my_write_viz(step, t, state):
+        amp = 30.0/(1.0 + 2.0*t/gaussian_width**2)
+        r2 = np.dot(nodes/np.sqrt(_kappa), nodes/np.sqrt(_kappa))
+        exact = amp*actx.np.exp(-r2/(2.0*gaussian_width**2 + 4.0*t))
+        error = state - exact
+        viz_fields = [
+            ("u", state),
+            ("exact", exact),
+            ("error", error),
+            ("kappa_x", kappa[0]),
+            ("kappa_y", kappa[1]),
+        ]
+        write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
+                      step=step, t=t, overwrite=True, comm=comm)
+
+    def my_pre_step(step, t, dt, state):
+        try:
+            if logmgr:
+                logmgr.tick_before()
+
+            do_viz = check_step(step=step, interval=nviz)
+            if do_viz:
+                my_write_viz(step=step, t=t, state=state)
+
+        except MyRuntimeError:
+            if rank == 0:
+                logger.info("Errors detected; attempting graceful exit.")
+            my_write_viz(step=step, t=t, state=fluid_state)
+            raise
+
+        return state, dt
+
+    def my_rhs(t, state):
         return diffusion_operator(dcoll, kappa=kappa, boundaries=boundaries,
-                                  u=u, quadrature_tag=quadrature_tag)
+                                  u=state, quadrature_tag=quadrature_tag)
 
-    compiled_rhs = actx.compile(rhs)
-
-    from mirgecom.simutil import write_visfile
-    while t < t_final:
-        if logmgr:
-            logmgr.tick_before()
-
-        if istep % 10 == 0:
-            amp = 30.0/(1.0 + 2.0*t/gaussian_width**2)
-            r2 = np.dot(nodes/np.sqrt(_kappa), nodes/np.sqrt(_kappa))
-            exact = amp*actx.np.exp(-r2/(2.0*gaussian_width**2 + 4.0*t))
-            error = u - exact
-            viz_fields = [
-                ("u", u),
-                ("exact", exact),
-                ("error", error),
-                ("kappa_x", kappa[0]),
-                ("kappa_y", kappa[1]),
-            ]
-            write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
-                          step=istep, t=t, overwrite=True, comm=comm)
-
-        u = rk4_step(u, t, dt, compiled_rhs)
-        u = force_evaluation(actx, u)
-
-        t += dt
-        istep += 1
-
+    def my_post_step(step, t, dt, state):
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+        return state, dt
+
+    from mirgecom.steppers import advance_state
+    current_step, current_t, advanced_state = \
+        advance_state(rhs=my_rhs, timestepper=rk4_step,
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step, dt=dt, state=u, t=t,
+                      t_final=t_final, istep=istep, force_eval=True)
 
     if logmgr:
         logmgr.close()
@@ -182,7 +192,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
 
 if __name__ == "__main__":
     import argparse
-    casename = "heat-diffusion"
+    casename = "ortho-diff"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
