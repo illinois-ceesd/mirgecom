@@ -171,9 +171,8 @@ def main(actx_class, use_esdg=False,
                 ("kappa_x", kappa[0]),
                 ("kappa_y", kappa[1]),
             ]
-            write_visfile(dcoll, viz_fields, visualizer,
-                          vizname=vizname+"heat-diffusion", step=istep, t=t,
-                          overwrite=True, comm=comm)
+            write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
+                          step=istep, t=t, overwrite=True, comm=comm)
 
         u = rk4_step(u, t, dt, compiled_rhs)
         u = force_evaluation(actx, u)
