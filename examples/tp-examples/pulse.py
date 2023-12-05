@@ -97,12 +97,17 @@ def main(actx_class, use_esdg=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from grudge.array_context import \
-            TensorProductMPIFusionContractorArrayContext
+    from grudge.array_context import (
+        TensorProductMPIFusionContractorArrayContext,
+        TensorProductMPIPyOpenCLArrayContext
+    )
     from mirgecom.array_context import initialize_actx
     if use_tensor_product_elements:
-        actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
-                               comm)
+        # For lazy:
+        # actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
+        #                       comm)
+        # For eager:
+        actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
     else:
         actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
@@ -124,7 +129,7 @@ def main(actx_class, use_esdg=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 5
-    nviz = 100
+    nviz = 1
     nhealth = 1
 
     dim = 2
@@ -141,7 +146,7 @@ def main(actx_class, use_esdg=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        use_gmsh = True
+        use_gmsh = False
         if use_gmsh:
             from meshmode.mesh.io import read_gmsh
 
@@ -152,7 +157,7 @@ def main(actx_class, use_esdg=False,
             from meshmode.mesh.generation import generate_regular_rect_mesh
             box_ll = -1
             box_ur = 1
-            nel_1d = 32
+            nel_1d = 2
             if use_tensor_product_elements:
                 from meshmode.mesh import TensorProductElementGroup
                 generate_mesh = partial(generate_regular_rect_mesh,
@@ -167,12 +172,18 @@ def main(actx_class, use_esdg=False,
 
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                    generate_mesh)
-        local_nelements = local_mesh.nelements
-        print(f"{local_mesh=}")
+        from meshmode.mesh.processing import rotate_mesh_around_axis
+        local_mesh = rotate_mesh_around_axis(local_mesh, theta=np.pi/6.)
+        global_nelements = local_nelements = local_mesh.nelements
 
-        # global_nelements = local_nelements
+    print(f"{local_mesh=}")
+    from meshmode.mesh.visualization import draw_2d_mesh
+    import matplotlib.pyplot as plt
+    draw_2d_mesh(local_mesh, draw_vertex_numbers=True, set_bounding_box=True)
+    plt.show()
+    # raise AssertionError("Stop here.")
 
-    order = 2
+    order = 1
     dcoll = create_discretization_collection(
         actx, local_mesh, order=order,
         use_tensor_product_elements=use_tensor_product_elements)
