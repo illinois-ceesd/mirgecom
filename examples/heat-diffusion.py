@@ -67,7 +67,7 @@ def main(actx_class, use_esdg=False,
     nel_y = 31
 
     t = 0
-    t_final = 0.01
+    t_final = 0.00025
     istep = 0
 
     factor = 4.0
