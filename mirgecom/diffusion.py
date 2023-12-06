@@ -135,12 +135,12 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
 
     # If any of the coefficients are orthotropic, weight by the normal.
     if isinstance(kappa_tpair.int, np.ndarray):
-        kappa_int = np.dot(normal, np.dot(kappa_tpair.int, normal))
+        kappa_int = np.dot(normal, kappa_tpair.int*normal)
     else:
         kappa_int = kappa_tpair.int
 
     if isinstance(kappa_tpair.ext, np.ndarray):
-        kappa_ext = np.dot(normal, np.dot(kappa_tpair.ext, normal))
+        kappa_ext = np.dot(normal, kappa_tpair.ext*normal)
     else:
         kappa_ext = kappa_tpair.ext
 
@@ -210,7 +210,7 @@ def diffusion_facial_flux_central(
 
     # TODO: Verify that this is the correct form for the penalty term
     if isinstance(kappa_tpair.avg, np.ndarray):
-        kappa_avg_normal = np.dot(normal, np.dot(kappa_tpair.avg.int, normal))
+        kappa_avg_normal = np.dot(normal, kappa_tpair.avg.int*normal)
         tau = penalty_amount*kappa_avg_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
@@ -258,7 +258,7 @@ def diffusion_facial_flux_harmonic(
     # TODO: Verify that this is the correct form for the penalty term
     if isinstance(kappa_harmonic_mean, np.ndarray):
         # if orthotropic, weight by the normal
-        kappa_mean_normal = np.dot(normal, np.dot(kappa_harmonic_mean, normal))
+        kappa_mean_normal = np.dot(normal, kappa_harmonic_mean*normal)
         tau = penalty_amount*kappa_mean_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
