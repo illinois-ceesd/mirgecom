@@ -86,7 +86,6 @@ THE SOFTWARE.
 import abc
 from functools import partial
 import numpy as np
-import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
 from grudge.dof_desc import (
@@ -130,22 +129,18 @@ def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
 
     .. math::
 
-        \kappa = \sqrt{(\kappa \circ n) \cdot (\kappa \circ n)}
+        \kappa = n^T \cdot \kappa \cdot n
     """
     actx = u_tpair.int.array_context
 
     # If any of the coefficients are orthotropic, weight by the normal.
-    # There is no reference to support the current implementation, however
-    # numerical experiments showed that this converges to the analytical solution.
     if isinstance(kappa_tpair.int, np.ndarray):
-        kappa_int = actx.np.sqrt(np.dot(kappa_tpair.int*normal,
-                                        kappa_tpair.int*normal))
+        kappa_int = np.dot(normal, np.dot(kappa_tpair.int, normal))
     else:
         kappa_int = kappa_tpair.int
 
     if isinstance(kappa_tpair.ext, np.ndarray):
-        kappa_ext = actx.np.sqrt(np.dot(kappa_tpair.ext*normal,
-                                        kappa_tpair.ext*normal))
+        kappa_ext = np.dot(normal, np.dot(kappa_tpair.ext, normal))
     else:
         kappa_ext = kappa_tpair.ext
 
@@ -215,9 +210,7 @@ def diffusion_facial_flux_central(
 
     # TODO: Verify that this is the correct form for the penalty term
     if isinstance(kappa_tpair.avg, np.ndarray):
-        actx = normal[0].array_context
-        kappa_avg_normal = actx.np.sqrt(np.dot(kappa_tpair.avg*normal,
-                                               kappa_tpair.avg*normal))
+        kappa_avg_normal = np.dot(normal, np.dot(kappa_tpair.avg.int, normal))
         tau = penalty_amount*kappa_avg_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
@@ -265,9 +258,7 @@ def diffusion_facial_flux_harmonic(
     # TODO: Verify that this is the correct form for the penalty term
     if isinstance(kappa_harmonic_mean, np.ndarray):
         # if orthotropic, weight by the normal
-        actx = normal[0].array_context
-        kappa_mean_normal = actx.np.sqrt(np.dot(kappa_harmonic_mean*normal,
-                                                kappa_harmonic_mean*normal))
+        kappa_mean_normal = np.dot(normal, np.dot(kappa_harmonic_mean, normal))
         tau = penalty_amount*kappa_mean_normal/lengthscales_tpair.avg
     else:
         tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
