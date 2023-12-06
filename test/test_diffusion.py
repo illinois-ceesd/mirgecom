@@ -44,8 +44,7 @@ from mirgecom.diffusion import (
     diffusion_operator,
     grad_facial_flux_weighted,
     DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary,
-    DummyDiffusionBoundary)
+    NeumannDiffusionBoundary)
 from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
 
@@ -672,11 +671,15 @@ def test_orthotropic_diffusion(actx_factory):
     err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
     assert err_rhs < 1.e-8
 
+    def make_dirichlet_bc(btag):
+        bdry_u = op.project(dcoll, "vol", BoundaryDomainTag(btag), u)
+        return DirichletDiffusionBoundary(bdry_u)
+
     boundaries = {
-        BoundaryDomainTag("-1"): DummyDiffusionBoundary(),
-        BoundaryDomainTag("+1"): DummyDiffusionBoundary(),
-        BoundaryDomainTag("-2"): DummyDiffusionBoundary(),
-        BoundaryDomainTag("+2"): DummyDiffusionBoundary(),
+        BoundaryDomainTag("-1"): make_dirichlet_bc("-1"),
+        BoundaryDomainTag("+1"): make_dirichlet_bc("+1"),
+        BoundaryDomainTag("-2"): make_dirichlet_bc("-2"),
+        BoundaryDomainTag("+2"): make_dirichlet_bc("+2"),
     }
 
     rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
