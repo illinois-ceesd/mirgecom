@@ -486,8 +486,9 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
 class DummyDiffusionBoundary(DiffusionBoundary):
     """Dummy boundary condition that duplicates the internal values."""
+
     def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-                      numerical_flux_func):
+                      numerical_flux_func):  # noqa: D102
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -501,7 +502,7 @@ class DummyDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
                            grad_u_minus, lengthscales_minus, *,
                            numerical_flux_func=diffusion_facial_flux_harmonic,
-                           penalty_amount=None):
+                           penalty_amount=None):  # noqa: D102
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,

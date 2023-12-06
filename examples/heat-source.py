@@ -24,9 +24,7 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-import numpy.linalg as la  # noqa
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag
@@ -38,12 +36,15 @@ from mirgecom.diffusion import (
     NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.simutil import write_visfile, check_step
-from mirgecom.utils import force_evaluation
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 from logpyle import IntervalTimer, set_dt
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class MyRuntimeError(RuntimeError):
@@ -59,6 +60,7 @@ def main(actx_class, use_esdg=False,
     """Run the example."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
     num_parts = comm.Get_size()
 
     logmgr = initialize_logmgr(True,
@@ -172,7 +174,7 @@ def main(actx_class, use_esdg=False,
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=fluid_state)
+            my_write_viz(step=step, t=t, state=state)
             raise
 
         return state, dt

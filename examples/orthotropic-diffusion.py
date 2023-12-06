@@ -38,6 +38,10 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 from logpyle import IntervalTimer, set_dt
 
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
 class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
 
@@ -49,7 +53,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     """Run the example."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
-    num_parts = comm.Get_size()
+    rank = comm.Get_rank()
 
     logmgr = initialize_logmgr(True,
         filename="heat-diffusion.sqlite", mode="wu", mpi_comm=comm)
@@ -58,9 +62,6 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
-
-    from meshmode.distributed import MPIMeshDistributor, get_partition_by_pymetis
-    mesh_dist = MPIMeshDistributor(comm)
 
     nviz = 50
     viz_path = "viz_data/"
@@ -90,7 +91,6 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
 
     local_mesh, global_nelements = (
         generate_and_distribute_mesh(comm, generate_mesh))
-    local_nelements = local_mesh.nelements
     print("%d elements" % global_nelements)
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
@@ -164,7 +164,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=fluid_state)
+            my_write_viz(step=step, t=t, state=state)
             raise
 
         return state, dt
