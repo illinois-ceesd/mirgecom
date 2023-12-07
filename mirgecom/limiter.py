@@ -39,6 +39,7 @@ import numpy as np
 from meshmode.transform_metadata import FirstAxisIsElementsTag
 from meshmode.dof_array import DOFArray
 
+from functools import partial
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                              mmin=0.0, mmax=None, modify_average=False,
@@ -152,3 +153,110 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         )
 
     return _theta*(field - cell_avgs) + cell_avgs
+
+from arraycontext import map_array_container
+from arraycontext import thaw, freeze
+
+def neighbor_list(dim, mesh):
+
+    centroids = np.empty(
+            (mesh.ambient_dim, mesh.nelements),
+            dtype=mesh.vertices.dtype)
+
+    for base_element_nr, grp in zip(mesh.base_element_nrs, mesh.groups):
+        centroids[:, base_element_nr:base_element_nr + grp.nelements] = (
+                np.sum(mesh.vertices[:, grp.vertex_indices], axis=-1)
+                / grp.vertex_indices.shape[-1])
+
+    adj = mesh.facial_adjacency_groups[0]
+    nconnections = (adj[0].elements).shape[0]
+    connections = np.empty((nconnections, 2), dtype=np.int32)
+    connections[:,0] = np.sort(adj[0].elements)
+    connections[:,1] = adj[0].neighbors[np.argsort(adj[0].elements)]
+
+    neighbors = np.zeros((mesh.nelements,dim+2),dtype=np.int32)
+    ii = 0
+    for kk in range(0,mesh.nelements):
+        neighbors[kk,:] = kk
+        idx = 0
+        while connections[ii,0] == kk:
+            idx += 1
+            neighbors[kk,idx] = connections[ii,1]
+            ii += 1
+
+        if ii == nconnections:
+            break
+
+    return neighbors
+
+def limiter_liu_osher(dcoll: DiscretizationCollection, neig, field):
+    """.
+
+    Parameters
+    ----------
+    dcoll: :class:`grudge.discretization.DiscretizationCollection`
+        Grudge discretization with boundaries object
+    field: meshmode.dof_array.DOFArray or numpy.ndarray
+        A field or collection of scalar fields to limit
+    Returns
+    -------
+    meshmode.dof_array.DOFArray or numpy.ndarray
+        An array container containing the limited field(s).
+    """
+
+    actx = field.array_context
+
+    volume = op.elementwise_integral(dcoll, field*0.0 + 1.0)
+
+    # Compute cell averages of the state
+    cell_avgs = 1.0/volume*op.elementwise_integral(dcoll, field)
+    avgs = actx.to_numpy(cell_avgs[0])[:,0]
+
+    # Compute nodal and elementwise max/mins of the field
+    mmax_i = actx.to_numpy(op.elementwise_max(dcoll, field)[0])[:,0]
+    mmin_i = actx.to_numpy(op.elementwise_min(dcoll, field)[0])[:,0]
+    
+#    # Cell gradient
+#    grad_i = op.local_grad(dcoll, field)
+#    grad_X = 1.0/volume*op.elementwise_integral(dcoll, grad_i[0])
+#    grad_Y = 1.0/volume*op.elementwise_integral(dcoll, grad_i[1])
+
+#    grad = np.sqrt( (actx.to_numpy( grad_X[0] )[:,0])**2 +
+#                    (actx.to_numpy( grad_Y[0] )[:,0])**2 )
+
+    # Compute minmod factor (Eq. 2.9)
+    nneighbors = neig.shape[1]
+
+    mmax = np.maximum( avgs[neig[:,0]], avgs[neig[:,1]] )
+    for i in range(2,nneighbors):
+        mmax = np.maximum( mmax, avgs[neig[:,i]] )
+
+    mmin = np.minimum( avgs[neig[:,0]], avgs[neig[:,1]] )
+    for i in range(2,nneighbors):
+        mmin = np.minimum( mmin, avgs[neig[:,i]] )
+
+#    #mmax = np.maximum( mmax_i[neig[:,0]], mmax_i[neig[:,1]] )
+#    mmax = mmax_i[neig[:,1]]
+#    for i in range(2,nneighbors):
+#        mmax = np.maximum( mmax, mmax_i[neig[:,i]] )
+#
+#    #mmin = np.minimum( mmin_i[neig[:,0]], mmin_i[neig[:,1]] )
+#    mmin = mmin_i[neig[:,1]]
+#    for i in range(2,nneighbors):
+#        mmin = np.minimum( mmin, mmin_i[neig[:,i]] )
+
+    _theta = np.minimum(
+                1., np.minimum(
+                abs( (mmax-avgs)/(mmax_i-avgs+1e-12) ),
+                abs( (mmin-avgs)/(mmin_i-avgs+1e-12) ) )
+             )
+
+    # Transform back to array context
+    #FIXME apparently there is a broadcast operation
+    dummy = np.zeros(cell_avgs[0].shape)       
+    for i in range(0,cell_avgs[0].shape[-1]):
+      dummy[:,i] = _theta[:]
+
+    theta = DOFArray(actx, data=(actx.from_numpy(np.array(dummy)), ))
+  
+    return theta*(field - cell_avgs) + cell_avgs
