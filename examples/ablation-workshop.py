@@ -446,7 +446,8 @@ class TabulatedGasEOS(MixtureEOS):
         return cv.mass*gas_const*temperature
 
     def gas_const(self, cv: Optional[ConservedVars] = None,
-                  temperature: Optional[DOFArray] = None) -> DOFArray:
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         molar_mass = eval_spline(temperature, bnds, coeffs)
@@ -738,10 +739,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             material_densities=material_densities,
             tau=tau,
             density=gas_model.solid_density(material_densities),
-            void_fraction=gas_model.wall_eos.void_fraction(tau),
-            emissivity=gas_model.wall_eos.emissivity(tau),
-            permeability=gas_model.wall_eos.permeability(tau),
-            tortuosity=gas_model.wall_eos.tortuosity(tau)
+            void_fraction=gas_model.wall_eos.void_fraction(tau=tau),
+            emissivity=gas_model.wall_eos.emissivity(tau=tau),
+            permeability=gas_model.wall_eos.permeability(tau=tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau=tau)
         )
 
         temperature = gas_model.get_temperature(cv=cv, wv=wv,

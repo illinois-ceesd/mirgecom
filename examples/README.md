@@ -13,6 +13,7 @@ The examples and the unique features they exercise are as follows:
 - `sod.py`: Sod's shock case: Fluid test case with strong shock
 - `vortex.py`: Isentropic vortex advection: outflow boundaries, verification
 - `hotplate.py`: Isothermal BC verification (prescribed exact soln)
+- `blasius.py`: Inflow, outflow and no-slip wall BC verification
 - `doublemach.py`: AV test case
 - `poiseuille.py`: Poiseuille flow verification case
 - `poiseuille-multispecies.py`: Poiseuille flow with passive scalars
