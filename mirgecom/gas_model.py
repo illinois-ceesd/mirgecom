@@ -511,6 +511,7 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     if entropy_stable:
         temp_state = make_fluid_state(cv=cv_sd, gas_model=gas_model,
                                       temperature_seed=temperature_seed,
+                                      material_densities=material_densities, # XXX
                                       limiter_func=limiter_func, limiter_dd=tgt)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
