@@ -25,8 +25,8 @@ THE SOFTWARE.
 import logging
 import gc
 import numpy as np
-import scipy  # type: ignore[import]
-from scipy.interpolate import CubicSpline  # type: ignore[import]
+import scipy  # type: ignore[import-untyped]
+from scipy.interpolate import CubicSpline  # type: ignore[import-untyped]
 
 from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
@@ -446,7 +446,8 @@ class TabulatedGasEOS(MixtureEOS):
         return cv.mass*gas_const*temperature
 
     def gas_const(self, cv: Optional[ConservedVars] = None,
-                  temperature: Optional[DOFArray] = None) -> DOFArray:
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         molar_mass = eval_spline(temperature, bnds, coeffs)
@@ -488,7 +489,8 @@ class TabulatedGasEOS(MixtureEOS):
         raise NotImplementedError
 
     def dependent_vars(self, cv: ConservedVars, temperature_seed=None,
-            smoothness_mu=None, smoothness_kappa=None, smoothness_beta=None):
+            smoothness_mu=None, smoothness_kappa=None,
+            smoothness_d=None, smoothness_beta=None):
         raise NotImplementedError
 
 
@@ -737,10 +739,10 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             material_densities=material_densities,
             tau=tau,
             density=gas_model.solid_density(material_densities),
-            void_fraction=gas_model.wall_eos.void_fraction(tau),
-            emissivity=gas_model.wall_eos.emissivity(tau),
-            permeability=gas_model.wall_eos.permeability(tau),
-            tortuosity=gas_model.wall_eos.tortuosity(tau)
+            void_fraction=gas_model.wall_eos.void_fraction(tau=tau),
+            emissivity=gas_model.wall_eos.emissivity(tau=tau),
+            permeability=gas_model.wall_eos.permeability(tau=tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau=tau)
         )
 
         temperature = gas_model.get_temperature(cv=cv, wv=wv,
@@ -755,6 +757,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             smoothness_mu=zeros,
             smoothness_kappa=zeros,
             smoothness_beta=zeros,
+            smoothness_d=zeros,
             species_enthalpies=cv.species_mass,  # empty array
         )
 
@@ -1103,7 +1106,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
             if do_garbage:
                 with gc_timer:
-                    warn("Running gc.collect() to work around memory growth issue ")
+                    logger.info(
+                        "Running gc.collect() to work around memory growth issue ")
                     gc.collect()
 
             if do_health:

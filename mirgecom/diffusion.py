@@ -1,16 +1,62 @@
 r""":mod:`mirgecom.diffusion` computes the diffusion operator.
 
+Diffusion equation:
+
+.. math::
+
+    \frac{\partial u}{\partial t} = \nabla \cdot (\boldsymbol{\kappa} \nabla u)
+
+where:
+
+- conserved variable $u$
+- scalar (isotropic) or diagonal-tensor (orthotropic) $\boldsymbol{\kappa}$
+
+In the orthotropic case, the product $\boldsymbol{\kappa} \nabla u$ is treated
+as a Hadamard product of arrays rather than a matrix-array multiplication.
+Fully anisotropic materials are not currently handled.
+
+Due to the possibility of big differences in the magnitude of diffusivity
+coefficients, such as thermal conductivity in air and a solid, an harmonic
+average can be used to increase robustness and avoid numerical instabilities.
+In this case, to ensure flux continuity,
+
+.. math::
+
+    F = \kappa^- \nabla T^- = \kappa^+ \nabla T^+
+        = \bar{\kappa} \left( \frac{\nabla T^- + \nabla T^+}{2} \right)
+
+where
+
+.. math::
+    \bar{\kappa} = \frac{2 \kappa^-_{ii} \kappa^+_{ii}}
+        {\kappa^-_{ii} + \kappa^+_{ii}}
+
+with $\kappa_{ii}$ being either the individual components of the diffusivity
+array (orthotropic material) or a single scalar (isotropic).
+
+Flux functions
+^^^^^^^^^^^^^^
+
+.. autofunction:: diffusion_flux
 .. autofunction:: grad_facial_flux_central
 .. autofunction:: grad_facial_flux_weighted
-.. autofunction:: diffusion_flux
 .. autofunction:: diffusion_facial_flux_central
 .. autofunction:: diffusion_facial_flux_harmonic
+
+RHS Evaluation
+^^^^^^^^^^^^^^
+
 .. autofunction:: grad_operator
 .. autofunction:: diffusion_operator
+
+Boundary conditions
+^^^^^^^^^^^^^^^^^^^
+
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
 .. autoclass:: PrescribedFluxDiffusionBoundary
+.. autoclass:: DummyDiffusionBoundary
 """
 
 __copyright__ = """
@@ -40,9 +86,7 @@ THE SOFTWARE.
 import abc
 from functools import partial
 import numpy as np
-import numpy.linalg as la  # noqa
 from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -72,23 +116,40 @@ def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
 
 
 def grad_facial_flux_weighted(kappa_tpair, u_tpair, normal):
-    r"""Compute the numerical flux for $\nabla u$.
+    r"""Compute the numerical flux for $\nabla u$ using a weighted average.
 
     Weights each side's value by the corresponding thermal conductivity $\kappa$:
 
     .. math::
 
-        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}.
+        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{\kappa^- + \kappa^+} \hat{n}
+
+    For an orthotropic material, uses an averaging wrt to the normal component
+    according to
+
+    .. math::
+
+        \kappa = n^T \cdot \kappa \cdot n
     """
     actx = u_tpair.int.array_context
+
+    # If any of the coefficients are orthotropic, weight by the normal.
+    if isinstance(kappa_tpair.int, np.ndarray):
+        kappa_int = np.dot(normal, kappa_tpair.int*normal)
+    else:
+        kappa_int = kappa_tpair.int
+
+    if isinstance(kappa_tpair.ext, np.ndarray):
+        kappa_ext = np.dot(normal, kappa_tpair.ext*normal)
+    else:
+        kappa_ext = kappa_tpair.ext
+
     kappa_sum = actx.np.where(
-        actx.np.greater(kappa_tpair.int + kappa_tpair.ext, 0*kappa_tpair.int),
-        kappa_tpair.int + kappa_tpair.ext,
-        0*kappa_tpair.int + 1)
-    return (
-        -(u_tpair.int * kappa_tpair.int + u_tpair.ext * kappa_tpair.ext)
-        / kappa_sum
-        * normal)
+        actx.np.greater(kappa_int + kappa_ext, 0*kappa_int),
+        kappa_int + kappa_ext,
+        0*kappa_int + 1)
+
+    return -(u_tpair.int*kappa_int + u_tpair.ext*kappa_ext)/kappa_sum * normal
 
 
 def diffusion_flux(kappa, grad_u):
@@ -97,7 +158,7 @@ def diffusion_flux(kappa, grad_u):
 
     Parameters
     ----------
-    kappa: float or :class:`meshmode.dof_array.DOFArray`
+    kappa: float, numpy.ndarray or :class:`meshmode.dof_array.DOFArray`
 
         The thermal conductivity.
 
@@ -123,7 +184,18 @@ def diffusion_facial_flux_central(
 
     .. math::
 
-        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n}.
+        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
+
+    The amount of penalization $\tau$ is given by
+
+    .. math::
+
+        \tau = \frac{\alpha \bar{\kappa}_{avg}}{l},
+
+    where $\alpha$ is a user-definied value, $l$ is the element characteristic
+    lengthscale and $\bar{\kappa}_{avg}$ is the averaged value, considering
+    both isotropic (scalar) or orthotropic (array) cases. In the latter, the
+    normal value is used for the penalization (see [Ern_2008]_).
     """
     if penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -137,7 +209,11 @@ def diffusion_facial_flux_central(
     flux_without_penalty = np.dot(flux_tpair.avg, normal)
 
     # TODO: Verify that this is the correct form for the penalty term
-    tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
+    if isinstance(kappa_tpair.avg, np.ndarray):
+        kappa_avg_normal = np.dot(normal, kappa_tpair.avg.int*normal)
+        tau = penalty_amount*kappa_avg_normal/lengthscales_tpair.avg
+    else:
+        tau = penalty_amount*kappa_tpair.avg/lengthscales_tpair.avg
 
     return flux_without_penalty - tau*(u_tpair.ext - u_tpair.int)
 
@@ -148,12 +224,23 @@ def diffusion_facial_flux_harmonic(
     r"""Compute the numerical flux for $\nabla \cdot (\kappa \nabla u)$.
 
     Uses a modified average of the two sides' values that replaces $\kappa^-$
-    and $\kappa^+$ with their harmonic mean:
+    and $\kappa^+$ with their harmonic mean, plus a penalization term
 
     .. math::
 
-        F = -\frac{2 \kappa^- \kappa^+}{\kappa^- + \kappa^+}\frac{u^- + u^+}{2}
-                \cdot \hat{n}.
+        F = -\frac{2 \kappa_{ii}^- \kappa_{ii}^+}{\kappa_{ii}^- + \kappa_{ii}^+}
+                \frac{u^- + u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
+
+    The amout of penalization $\tau$ is given by
+
+    .. math::
+
+        \tau = \frac{\alpha \bar{\kappa}_{harm}}{l},
+
+    where $\alpha$ is a user-defined value, $l$ is the element characteristic
+    lengthscale and $\bar{\kappa}_{harm}$ is the harmonic mean, considering
+    both isotropic (scalar) or orthotropic (array) cases. In the latter, the
+    normal value is used for the penalization (see [Ern_2008]_).
     """
     if penalty_amount is None:
         # FIXME: After verifying the form of the penalty term, figure out what value
@@ -169,7 +256,12 @@ def diffusion_facial_flux_harmonic(
     flux_without_penalty = np.dot(flux_tpair.avg, normal)
 
     # TODO: Verify that this is the correct form for the penalty term
-    tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
+    if isinstance(kappa_harmonic_mean, np.ndarray):
+        # if orthotropic, weight by the normal
+        kappa_mean_normal = np.dot(normal, kappa_harmonic_mean*normal)
+        tau = penalty_amount*kappa_mean_normal/lengthscales_tpair.avg
+    else:
+        tau = penalty_amount*kappa_harmonic_mean/lengthscales_tpair.avg
 
     return flux_without_penalty - tau*(u_tpair.ext - u_tpair.int)
 
@@ -339,7 +431,8 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
 
 class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
-    r"""Prescribed flux boundary condition for the diffusion operator.
+    r"""
+    Prescribed flux boundary condition for the diffusion operator.
 
     For the boundary condition $(\nabla u \cdot \mathbf{\hat{n}})|_\Gamma$, uses
     external data
@@ -389,6 +482,43 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
 
         # returns the product "flux @ normal"
         return actx.np.zeros_like(u_minus) + self.value
+
+
+class DummyDiffusionBoundary(DiffusionBoundary):
+    """Dummy boundary condition that duplicates the internal values."""
+
+    def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
+                      numerical_flux_func):  # noqa: D102
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(kappa_tpair, u_tpair, normal)
+
+    def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
+                           grad_u_minus, lengthscales_minus, *,
+                           numerical_flux_func=diffusion_facial_flux_harmonic,
+                           penalty_amount=None):  # noqa: D102
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        grad_u_tpair = TracePair(dd_bdry,
+            interior=grad_u_minus,
+            exterior=grad_u_minus)
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        return numerical_flux_func(
+            kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
+            penalty_amount=penalty_amount)
 
 
 class _DiffusionKappaTag:
