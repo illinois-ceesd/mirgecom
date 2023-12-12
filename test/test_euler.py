@@ -69,13 +69,13 @@ from meshmode.mesh.generation import generate_regular_rect_mesh
 
 logger = logging.getLogger(__name__)
 
-#import os
-#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 2, 3, 6])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
                                                  inviscid_facial_flux_hll])
@@ -83,12 +83,17 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
                      numerical_flux_func):
     """Test the inviscid rhs using a trivial constant/uniform state.
 
-    This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
-    and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
+    This state should yield rhs = 0 to FP. The test is performed for:
+        - 1, 2, and 3 dimensions
+        - orders 1, 2, 3 and 6
+        - with and without passive species
+        - with and without overintegration
     """
     actx = actx_factory()
 
-    tolerance = 1e-9
+    tolerance = 1e-9 if order < 6 else 1.2e-8
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos)
 
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
@@ -125,11 +130,10 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         species_mass_input = mass_input * mass_frac_input
         num_equations = dim + 2 + len(species_mass_input)
 
-        cv = make_conserved(
+        quiescent_cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
             species_mass=species_mass_input)
-        gas_model = GasModel(eos=IdealSingleGas())
-        fluid_state = make_fluid_state(cv, gas_model)
+        fluid_state = make_fluid_state(quiescent_cv, gas_model)
 
         expected_rhs = make_conserved(
             dim, q=make_obj_array([dcoll.zeros(actx)
@@ -178,17 +182,19 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         # set a non-zero, but uniform velocity component
         for i in range(len(mom_input)):
             mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
+        kinetic_energy = 0.5*np.dot(mom_input, mom_input)/quiescent_cv.mass
+        energy_input = quiescent_cv.energy + kinetic_energy
 
-        cv = make_conserved(
-            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
-            species_mass=species_mass_input)
-        gas_model = GasModel(eos=IdealSingleGas())
-        fluid_state = make_fluid_state(cv, gas_model)
+        uniform_cv = make_conserved(
+            dim=dim, mass=quiescent_cv.mass, species_mass=quiescent_cv.species_mass,
+            energy=energy_input, momentum=mom_input)
+        fluid_state = make_fluid_state(uniform_cv, gas_model)
 
         boundaries = {BTAG_ALL: DummyBoundary()}
         inviscid_rhs = euler_operator(
             dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
-            time=0.0, inviscid_numerical_flux_func=numerical_flux_func)
+            time=0.0, inviscid_numerical_flux_func=numerical_flux_func,
+            quadrature_tag=quadrature_tag)
         rhs_resid = inviscid_rhs - expected_rhs
 
         rho_resid = rhs_resid.mass
@@ -214,11 +220,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 
     assert (
         eoc_rec0.order_estimate() >= order - 0.5
-        or eoc_rec0.max_error() < 1e-9
+        or eoc_rec0.max_error() < tolerance
     )
     assert (
         eoc_rec1.order_estimate() >= order - 0.5
-        or eoc_rec1.max_error() < 1e-9
+        or eoc_rec1.max_error() < tolerance
     )
 
 

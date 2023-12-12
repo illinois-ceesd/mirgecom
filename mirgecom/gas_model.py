@@ -504,6 +504,10 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     """
     cv_sd = op.project(dcoll, src, tgt, state.cv)
 
+    int_energy = op.project(dcoll, src, tgt, gas_model.eos.internal_energy(state.cv))
+    kin_energy = gas_model.eos.kinetic_energy(cv_sd)
+    cv_sd = cv_sd.replace(energy=int_energy+kin_energy)
+
     temperature_seed = None
     if state.is_mixture:
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
@@ -511,7 +515,7 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     if entropy_stable:
         temp_state = make_fluid_state(cv=cv_sd, gas_model=gas_model,
                                       temperature_seed=temperature_seed,
-                                      material_densities=material_densities, # XXX
+                                      material_densities=material_densities,
                                       limiter_func=limiter_func, limiter_dd=tgt)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
@@ -645,6 +649,22 @@ class _FluidCVTag:
     pass
 
 
+class _FluidMassTag:
+    pass
+
+
+class _FluidMomentumTag:
+    pass
+
+
+class _FluidEnergyTag:
+    pass
+
+
+class _FluidSpeciesTag:
+    pass
+
+
 class _FluidTemperatureTag:
     pass
 
@@ -751,14 +771,58 @@ def make_operator_fluid_states(
         for bdtag in boundaries
     }
 
-    # performs MPI communication of CV if needed
-    cv_interior_pairs = [
-        # Get the interior trace pairs onto the surface quadrature
-        # discretization (if any)
+    # performs MPI communication of individual CV components (if needed)
+    # Get the interior trace pairs onto the surface quadrature discretization
+    mass_interior_pairs = [
         interp_to_surf_quad(tpair=tpair)
         for tpair in interior_trace_pairs(
-            dcoll, volume_state.cv, volume_dd=dd_vol,
-            comm_tag=(_FluidCVTag, comm_tag))
+            dcoll, volume_state.cv.mass, volume_dd=dd_vol,
+            comm_tag=(_FluidMassTag, comm_tag))
+    ]
+
+    momentum_interior_pairs = [
+        interp_to_surf_quad(tpair=tpair)
+        for tpair in interior_trace_pairs(
+            dcoll, volume_state.cv.momentum, volume_dd=dd_vol,
+            comm_tag=(_FluidMomentumTag, comm_tag))
+    ]
+
+    from grudge.trace_pair import TracePair
+    from mirgecom.fluid import make_conserved
+    int_energy_pairs = [
+        interp_to_surf_quad(tpair=tpair)
+        for tpair in interior_trace_pairs(
+            dcoll, gas_model.eos.internal_energy(volume_state.cv),
+            volume_dd=dd_vol, comm_tag=(_FluidEnergyTag, comm_tag))]
+    kin_energy_pairs = [
+        TracePair(dd=mass.dd,
+                  interior=.5*np.dot(momentum.int, momentum.int)/mass.int,
+                  exterior=.5*np.dot(momentum.ext, momentum.ext)/mass.ext)
+        for mass, momentum in zip(mass_interior_pairs,
+                                  momentum_interior_pairs)]
+    energy_interior_pairs = [
+        int_energy + kin_energy
+        for int_energy, kin_energy in zip(int_energy_pairs, kin_energy_pairs)]
+
+    species_interior_pairs = [
+        interp_to_surf_quad(tpair=tpair)
+        for tpair in interior_trace_pairs(
+            dcoll, volume_state.cv.species_mass, volume_dd=dd_vol,
+            comm_tag=(_FluidSpeciesTag, comm_tag))
+    ]
+
+    cv_interior_pairs = [
+        TracePair(dd=mass.dd,
+                  interior=make_conserved(dim=volume_state.dim, mass=mass.int,
+                                          energy=energy.int, momentum=momentum.int,
+                                          species_mass=species.int),
+                  exterior=make_conserved(dim=volume_state.dim, mass=mass.ext,
+                                          energy=energy.ext, momentum=momentum.ext,
+                                          species_mass=species.ext))
+        for mass, energy, momentum, species in zip(mass_interior_pairs,
+                                                   energy_interior_pairs,
+                                                   momentum_interior_pairs,
+                                                   species_interior_pairs)
     ]
 
     tseed_interior_pairs = None
@@ -940,7 +1004,7 @@ def make_entropy_projected_fluid_state(
         gamma = volume_and_surface_quadrature_interpolation(
             discr, dd_vol, dd_faces, gamma)
 
-    # Convert back to conserved varaibles and use to make the new fluid state
+    # Convert back to conserved variables and use to make the new fluid state
     cv_modified = entropy_to_conservative_vars(gamma, ev_quad)
 
     return make_fluid_state(cv=cv_modified,

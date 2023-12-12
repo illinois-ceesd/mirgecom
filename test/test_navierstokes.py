@@ -40,10 +40,7 @@ from pytools.obj_array import (
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.navierstokes import ns_operator
-from mirgecom.fluid import (
-    make_conserved,
-    velocity_gradient
-)
+from mirgecom.fluid import make_conserved, velocity_gradient
 from mirgecom.utils import force_evaluation
 from mirgecom.boundary import (
     DummyBoundary,
@@ -74,8 +71,8 @@ from mirgecom.simutil import (
     get_box_mesh
 )
 
-#import os
-#os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 logger = logging.getLogger(__name__)
 
@@ -85,15 +82,17 @@ logger = logging.getLogger(__name__)
 @pytest.mark.parametrize("order", [1, 2, 5])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 @pytest.mark.parametrize("periodic", [False, True])
-def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration, periodic):
+def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
+                     periodic):
     """Test the Navier-Stokes operator using a trivial constant/uniform state.
 
-    This state should yield rhs = 0 to FP. The test is performed for 1, 2,
-    and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
+    This state should yield rhs = 0 to FP. Tests 1, 2, and 3 dimensions;
+    with orders 1, 2, and 5; with and without passive species; with and without
+    overintegration.
     """
     actx = actx_factory()
 
-    tolerance = 4e-9 if dim <= 2 else 3e-8
+    tolerance = 4e-9 if dim < 3 else 3e-8
 
     def _conserved_vars(nodes, quiescent):
         zeros = actx.np.zeros_like(nodes[0])
@@ -180,29 +179,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration, pe
             f"rhoy_rhs = {rhoy_rhs}\n"
         )
 
-        visualize = False
-        if visualize:
-            from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(dcoll, order)
-            if use_overintegration:
-                viz_suffix = f"uniformRHS_{dim}_{order}_{nspecies}_{nel_1d}_over.vtu"
-            else:
-                viz_suffix = f"uniformRHS_{dim}_{order}_{nspecies}_{nel_1d}.vtu"
-            vis.write_vtk_file(viz_suffix, [
-                    ("grad_t", grad_t),
-                    ("grad_rho", grad_cv.mass),
-                    ("grad_rhou", grad_cv.momentum[0]),
-                    ("grad_rhov", grad_cv.momentum[1] if dim >= 2 else None),
-                    ("grad_rhow", grad_cv.momentum[2] if dim == 3 else None),
-                    ("ns_rhs", ns_rhs),
-                    ("CV", cv),
-                    ("T", state.temperature),
-                    ("P", state.pressure),
-                    ("U", state.velocity[0]),
-                    ("V", state.velocity[1] if dim >= 2 else None),
-                    ("W", state.velocity[2] if dim == 3 else None),
-                    ], overwrite=True)
-
         assert actx.to_numpy(op.norm(dcoll, rho_resid, np.inf)) < tolerance
         assert actx.to_numpy(op.norm(dcoll, rhoe_resid, np.inf)) < tolerance
         for i in range(dim):
@@ -246,196 +222,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration, pe
             or eoc_rec0.max_error() < tolerance)
     assert (eoc_rec1.order_estimate() >= order - 0.5
             or eoc_rec1.max_error() < tolerance)
-
-
-from mirgecom.navierstokes import grad_cv_operator, grad_t_operator
-@pytest.mark.parametrize("nspecies", [0])
-@pytest.mark.parametrize("dim", [2])
-@pytest.mark.parametrize("order", [1])
-@pytest.mark.parametrize("profile", ["linear"])
-@pytest.mark.parametrize("use_overintegration", [True])
-def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration, profile):
-    """Test the gradients from the Navier-Stokes operator with non-uniform profiles.
-
-    This state should yield ...
-    """
-    actx = actx_factory()
-
-    tolerance = 1e-9
-
-    def _conserved_vars(nodes):
-        zeros = actx.np.zeros_like(nodes[0])
-        ones = zeros + 1.0
-
-        mass_input = 1.0 + 0.1*nodes[0]
-#        temperature_input = 1.0 + 0.0*nodes[0]
-
-        #print(nodes[0])
-        #print(temperature_input)
-
-        # set a non-zero, but uniform velocity component
-        mom_input = make_obj_array([zeros for i in range(dim)])
-        for i in range(dim):
-            mom_input[i] = 0.0 + 0.0*float(i+1)*nodes[i]
-
-        mass_frac_input = flat_obj_array(
-            [ones / ((i + 1) * 10) for i in range(nspecies)]
-        )
-        species_mass_input = mass_input * mass_frac_input
-
-        energy_input = 2.5 + 0.0*nodes[0]
-#        energy_input = mass_input*(
-#            gas_model.eos.get_internal_energy(temperature=temperature_input)) \
-#            + 0.5*np.dot(mom_input, mom_input)/mass_input
-
-        return make_conserved(dim, mass=mass_input, momentum=mom_input,
-            energy=energy_input, species_mass=species_mass_input)
-
-#    def _conserved_vars(nodes):
-#        zeros = actx.np.zeros_like(nodes[0])
-#        ones = zeros + 1.0
-
-#        mass_input = 1.0 + 0.0*nodes[0]
-#        temperature_input = 1.0 + actx.np.exp(-np.dot(nodes, nodes)/0.1**2)
-
-#        # set a non-zero, but uniform velocity component
-#        mom_input = make_obj_array([zeros for i in range(dim)])
-#        for i in range(dim):
-#            mom_input[i] = 0.1 + 0.1*float(i+1)*nodes[i]
-
-#        mass_frac_input = flat_obj_array(
-#            [ones / ((i + 1) * 10) for i in range(nspecies)]
-#        )
-#        species_mass_input = mass_input * mass_frac_input
-
-#        energy_input = mass_input*(
-#            gas_model.eos.get_internal_energy(temperature=temperature_input)) \
-#            + 0.5*np.dot(mom_input, mom_input)/mass_input
-
-#        return make_conserved(dim, mass=mass_input, momentum=mom_input,
-#            energy=energy_input, species_mass=species_mass_input)
-
-    def _my_boundary(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(dd_bdry)
-        nodes = actx.thaw(bnd_discr.nodes())
-        bnd_cv = _conserved_vars(nodes)
-        return make_fluid_state(bnd_cv, gas_model)
-
-    eoc_rec0 = EOCRecorder()
-    # eoc_rec1 = EOCRecorder()
-#    for nel_1d in [64, 32, 16, 8, 4, 2]:
-    for nel_1d in [2]:
-        mesh = generate_regular_rect_mesh(
-            a=(-0.5,)*dim, b=(0.5,)*dim, nelements_per_axis=(nel_1d,)*dim)
-
-        boundaries = {BTAG_ALL: DummyBoundary()}
-#        boundaries = {
-#            BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)}
-
-        logger.info(f"Number of {dim}d elements: {mesh.nelements}")
-
-        dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                 quadrature_order=2*order+1)
-        quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
-        nodes = force_evaluation(actx, dcoll.nodes())
-        zeros = actx.np.zeros_like(nodes[0])
-        ones = zeros + 1.0
-
-        gas_model = GasModel(
-            eos=IdealSingleGas(gamma=1.4, gas_const=1.0),
-            transport=SimpleTransport(viscosity=1.0,
-                                      thermal_conductivity=1.0,
-                                      species_diffusivity=0.5*np.ones(nspecies))
-        )
-
-        cv = _conserved_vars(nodes)
-        state = make_fluid_state(gas_model=gas_model, cv=cv)
-
-        print(state.cv.energy)
-
-        from grudge.dof_desc import DD_VOLUME_ALL
-        from mirgecom.gas_model import make_operator_fluid_states
-        operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=DD_VOLUME_ALL)
-
-        vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
-            operator_states_quad
-        print('===========================')
-        print(vol_state_quad.cv.energy)
-
-        1/0
-
-        grad_cv = grad_cv_operator(
-            dcoll, gas_model, boundaries, state, time=0.0,
-            quadrature_tag=quadrature_tag)
-
-        grad_t = grad_t_operator(
-            dcoll, gas_model, boundaries, state, time=0.0,
-            quadrature_tag=quadrature_tag)
-
-        ns_rhs = ns_operator(
-            dcoll, gas_model=gas_model, boundaries=boundaries, state=state,
-            time=0.0, quadrature_tag=quadrature_tag, grad_cv=grad_cv, grad_t=grad_t)
-
-        grad_vel = velocity_gradient(cv, grad_cv)
-
-        visualize = True
-        if visualize:
-            from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(dcoll, order)
-            if use_overintegration:
-                viz_suffix = f"nonuniformRHS_{dim}_{order}_{nspecies}_{nel_1d}_over.vtu"
-            else:
-                viz_suffix = f"nonuniformRHS_{dim}_{order}_{nspecies}_{nel_1d}.vtu"
-            #exact_grad_t_x = (-200.0*nodes[0]*actx.np.exp(-np.dot(nodes, nodes)/0.1**2))
-            #exact_grad_t_y = (-200.0*nodes[1]*actx.np.exp(-np.dot(nodes, nodes)/0.1**2))
-            vis.write_vtk_file(viz_suffix, [
-                    ("grad_t", grad_t),
-                    #("exact_grad_t_x", exact_grad_t_x),
-                    #("exact_grad_t_y", exact_grad_t_y),
-                    ("grad_rho", grad_cv.mass),
-                    ("grad_rhoe", grad_cv.energy),
-                    ("grad_rhou", grad_cv.momentum[0]),
-                    ("grad_rhov", grad_cv.momentum[1] if dim >= 2 else None),
-                    ("grad_rhow", grad_cv.momentum[2] if dim == 3 else None),
-                    ("ns_rhs", ns_rhs),
-                    ("CV", cv),
-                    ("T", state.temperature),
-                    ("P", state.pressure),
-                    ("U", state.velocity[0]),
-                    ("V", state.velocity[1] if dim >= 2 else None),
-                    ("W", state.velocity[2] if dim == 3 else None),
-                    ], overwrite=True)
-
-        if profile == "linear":
-            check_grad_t = grad_t[0] - 0.0
-            assert actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf)) < tolerance
-            for i in range(1, dim):
-                assert actx.to_numpy(op.norm(dcoll, grad_t[i], np.inf)) < tolerance
-            err_max = actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf))
-            eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
-
-        if profile == "gaussian":
-            check_grad_t = grad_t[0] - (-200.0*nodes[0]*actx.np.exp(-np.dot(nodes, nodes)/0.1**2))
-            err_max = actx.to_numpy(op.norm(dcoll, check_grad_t, np.inf))
-            eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
-
-#        for i in range(dim):
-#            check_grad_mom = grad_cv.momentum[i][i] - float(i+1)
-#            assert actx.to_numpy(op.norm(dcoll, check_grad_mom, np.inf)) < tolerance
-
-#        for i in range(dim):
-#            if i > 0:
-#                ref_grad_vel = mom_input[i]*(-1.0)/(1.0 + nodes[0])**2
-#            else:
-#                ref_grad_vel = 0.0
-
-#            check_dvdx = grad_vel[i][0] - ref_grad_vel
-#            assert actx.to_numpy(op.norm(dcoll, check_dvdx, np.inf)) < tolerance
-
-    #assert (eoc_rec0.order_estimate() >= order - 0.5)
 
 class FluidCase(metaclass=ABCMeta):
     """
@@ -847,40 +633,39 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 
 @pytest.mark.parametrize(("dim", "flow_direction"),
                          [(2, 0), (2, 1), (3, 0), (3, 1), (3, 2)])
-@pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegration):
     """Test the Navier-Stokes operator using an exact shear flow solution.
 
     The shear flow solution is defined in [Hesthaven_2008]_, Section 7.5.3
-    and documented in :class:`~mirgecom.iniitalizers.ShearFlow`.
+    and documented in :class:`~mirgecom.initializers.ShearFlow`.
 
     We expect convergence here to be *order* at best as we are checking
     the RHS directly, not a time-integrated solution, which takes far too
     long to perform in unit testing.
     """
-    visualize = True  # set to True for debugging viz
+    visualize = False  # set to True for debugging viz
     actx = actx_factory()
     transverse_direction = (flow_direction + 1) % dim
 
     mu = .01
     kappa = 0.
 
-    eos = IdealSingleGas(gamma=3/2, gas_const=287.0)
+    eos = IdealSingleGas(gamma=3/2, gas_const=1.0)
     transport = SimpleTransport(viscosity=mu, thermal_conductivity=kappa)
-    from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos, transport=transport)
 
     tol = 1e-8
 
     from mirgecom.initializers import ShearFlow as ExactShearFlow
-    exact_soln = ExactShearFlow(dim=dim, flow_dir=flow_direction,
+    exact_soln = ExactShearFlow(dim=dim, mu=mu, flow_dir=flow_direction,
                                 trans_dir=transverse_direction)
 
     # Only the energy eqn is non-trivial at all orders
     # Continuity eqn is solved exactly at any order
-    from pytools.convergence import EOCRecorder
     eoc_energy = EOCRecorder()
+    eoc_mom_0 = EOCRecorder()
 
     def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, time=0,
                              **kwargs):
@@ -906,7 +691,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
         a = (0,)*dim
         b = (1,)*dim
 
-        #print(f"{nx=}")
+        print(f"{nx=}")
         mesh = get_box_mesh(dim, a, b, n=nx)
 
         dcoll = create_discretization_collection(actx, mesh, order=order,
@@ -915,11 +700,14 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
         from grudge.dt_utils import h_max_from_volume
         h_max = actx.to_numpy(h_max_from_volume(dcoll))
 
+        def inf_norm(x):
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
+
         nodes = actx.thaw(dcoll.nodes())
-        #print(f"{nodes=}")
+        # print(f"{nodes=}")
 
         cv_exact = exact_soln(x_vec=nodes)
-        #print(f"{cv_exact=}")
+        # print(f"{cv_exact=}")
         exact_fluid_state = make_fluid_state(cv=cv_exact, gas_model=gas_model)
 
         fluid_state = exact_fluid_state
@@ -932,7 +720,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
 
         if visualize:
             from grudge.shortcuts import make_visualizer
-            vis = make_visualizer(dcoll, order)
+            vis = make_visualizer(dcoll)
             if use_overintegration:
                 viz_suffix = f"shear_flow_test_{dim}_{order}_{n}_over.vtu"
             else:
@@ -940,33 +728,37 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
             vis.write_vtk_file(viz_suffix, [
                     ("shear_flow", exact_fluid_state.cv),
                     ("rhs", ns_rhs),
-                    ("grad(E)", grad_cv.energy),
+                    ("grad(rhoU)", grad_cv.momentum[0]),
+                    ("grad(rhoV)", grad_cv.momentum[1]),
+                    ("grad(rhoE)", grad_cv.energy),
+                    ("P", fluid_state.pressure),
+                    ("T", fluid_state.temperature),
                     ], overwrite=True)
 
-        #print(f"{grad_cv=}")
+        # print(f"{grad_cv=}")
         rhs_norms = componentwise_norms(dcoll, ns_rhs)
 
-        # these ones should be exact at all orders
-        try:
-            assert rhs_norms.mass < tol
-        except:
-            print("Failed...")
-       
-        try:
-            assert rhs_norms.momentum[transverse_direction] < tol
-        except:
-            print("Failed...")
+        assert inf_norm(grad_cv.momentum[flow_direction][transverse_direction]
+                        - 2.0*nodes[transverse_direction]) < tol
 
-#        assert rhs_norms.mass < tol
-#        assert rhs_norms.momentum[transverse_direction] < tol
-        #print(f"{rhs_norms=}")
+        # these ones should be exact at all orders
+        assert rhs_norms.mass < tol
+        assert rhs_norms.momentum[transverse_direction] < tol
+
+        # print(f"{rhs_norms=}")
 
         eoc_energy.add_data_point(h_max, actx.to_numpy(rhs_norms.energy))
+        eoc_mom_0.add_data_point(
+            h_max, actx.to_numpy(rhs_norms.momentum[flow_direction]))
 
-    expected_eoc = order - 0.5
-    #print(f"{eoc_energy.pretty_print()}")
+    print(eoc_energy)
+    print(eoc_mom_0)
 
-    assert eoc_energy.order_estimate() >= expected_eoc
+    assert (eoc_energy.order_estimate() >= order - 0.5
+            or eoc_energy.max_error() < tol)
+
+    assert (eoc_mom_0.order_estimate() >= order - 0.5
+            or eoc_mom_0.max_error() < tol)
 
 
 class RoySolution(FluidManufacturedSolution):
@@ -1172,13 +964,9 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         err_scale = max_component_norm(dcoll, cv_exact)
 
         def get_rhs(t, cv):
-            from mirgecom.gas_model import make_fluid_state
             fluid_state = make_fluid_state(cv=cv, gas_model=gas_model)
-            rhs_val = (
-                ns_operator(dcoll, boundaries=boundaries, state=fluid_state,
-                            gas_model=gas_model, quadrature_tag=quadrature_tag)
-                + source_eval
-            )
+            rhs_val = ns_operator(dcoll, gas_model, fluid_state, boundaries,
+                                  quadrature_tag=quadrature_tag) + source_eval
             print(f"{max_component_norm(dcoll, rhs_val/err_scale)=}")
             return rhs_val
 

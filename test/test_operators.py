@@ -39,6 +39,8 @@ import mirgecom.symbolic as sym
 import grudge.op as op
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
+from arraycontext import flatten, outer
+from grudge.trace_pair import TracePair
 from grudge.geometry import normal
 from grudge.dof_desc import as_dofdesc
 from grudge.dof_desc import DISCR_TAG_QUAD
@@ -47,16 +49,16 @@ from grudge.trace_pair import (
     tracepair_with_discr_tag
 )
 from mirgecom.flux import num_flux_central
-from mirgecom.fluid import (
-    make_conserved
-)
+from mirgecom.fluid import make_conserved
+from mirgecom.simutil import componentwise_norms
+from mirgecom.operators import grad_operator
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
 
 
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
+#import os
+#os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 
 
 def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,
@@ -124,7 +126,6 @@ def _cv_test_func(dim):
 def central_flux_interior(actx, dcoll, int_tpair):
     """Compute a central flux for interior faces."""
     nhat = normal(actx, dcoll, int_tpair.dd)
-    from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), nhat)
     dd_allfaces = int_tpair.dd.with_domain_tag("all_faces")
     return op.project(dcoll, int_tpair.dd, dd_allfaces, flux_weak)
@@ -136,9 +137,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     bnd_nodes = actx.thaw(boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
     bnd_nhat = normal(actx, dcoll, dd_bdry)
-    from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
-    from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
     dd_allfaces = bnd_tpair.dd.with_domain_tag("all_faces")
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
@@ -210,9 +209,6 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory,
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
 
-        from mirgecom.simutil import componentwise_norms
-
-        from arraycontext import flatten
         err_scale = max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
                                 actx))
 
@@ -222,36 +218,25 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory,
         print(f"{test_data=}")
         print(f"{exact_grad=}")
 
-        from mirgecom.operators import grad_operator
+        boundaries = [BTAG_ALL]
+
         dd_vol = as_dofdesc("vol")
-        dd_allfaces = as_dofdesc("all_faces")
+        dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+        dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
+        # Data projection to the quad grid at the elements/domain boundaries
         if use_overintegration:
-            dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
-            dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
-            test_data_quad = op.project(dcoll, dd_vol, dd_vol_quad, test_data)
-
             tpair = local_interior_trace_pair(dcoll, test_data)
-            test_data_int_tpair = tracepair_with_discr_tag(
-                dcoll, quadrature_tag, tpair)
-
-            boundaries = [BTAG_ALL]
-            test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
-                                             test_data_int_tpair, boundaries,
-                                             dd_vol_quad)
-
-            test_grad = grad_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
-                                      test_data_quad, test_data_flux_bnd)
-
+            int_tpair = tracepair_with_discr_tag(dcoll, quadrature_tag, tpair)
         else:
-            test_data_int_tpair = local_interior_trace_pair(dcoll, test_data)
-            boundaries = [BTAG_ALL]
-            test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
-                                             test_data_int_tpair, boundaries,
-                                             dd_vol)
+            int_tpair = local_interior_trace_pair(dcoll, test_data)
 
-            test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
-                                      test_data, test_data_flux_bnd)
+        test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
+                                         int_tpair, boundaries, dd_vol_quad)
+
+        test_data_quad = op.project(dcoll, dd_vol, dd_vol_quad, test_data)
+        test_grad = grad_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
+                                  test_data_quad, test_data_flux_bnd)
 
         print(f"{test_grad=}")
         grad_err = \

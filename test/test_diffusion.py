@@ -318,7 +318,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     for n in scales:
         mesh = p.get_mesh(n)
 
-        dcoll = create_discretization_collection(actx, mesh, order=order)
+        dcoll = create_discretization_collection(actx, mesh, order)
 
         nodes = actx.thaw(dcoll.nodes())
 
