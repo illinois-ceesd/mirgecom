@@ -21,32 +21,35 @@ THE SOFTWARE.
 """
 
 from abc import ABCMeta, abstractmethod
+import logging
 import numpy as np
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
-from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 import grudge.op as op
+import mirgecom.math as mm
+import pytest
+from pytools.obj_array import make_obj_array
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
+from grudge.shortcuts import make_visualizer
+from meshmode.dof_array import DOFArray
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
     div as sym_div,
     evaluate)
-import mirgecom.math as mm
 from mirgecom.diffusion import (
+    diffusion_flux,
     diffusion_operator,
+    grad_facial_flux_weighted,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
-from meshmode.dof_array import DOFArray
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
-from mirgecom.discretization import create_discretization_collection
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-import pytest
 from mirgecom.simutil import get_box_mesh
 from mirgecom.integrators import rk4_step
-import logging
+from mirgecom.discretization import create_discretization_collection
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -425,7 +428,6 @@ def test_diffusion_discontinuous_kappa(actx_factory, order,
     grad_u_steady_exact = -flux/kappa
 
     if visualize:
-        from grudge.shortcuts import make_visualizer
         vis = make_visualizer(dcoll, order+3)
         vis.write_vtk_file("diffusion_discontinuous_kappa_rhs_{order}.vtu"
             .format(order=order), [
@@ -553,6 +555,7 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
     arrays for `u`.
     """
     actx = actx_factory()
+    dim = 1
 
     if vector_kappa:
         kappa1 = 2
@@ -561,10 +564,10 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
         kappa1 = 2
         kappa2 = kappa1
 
-    p1 = DecayingTrig(1, kappa1)
-    p2 = DecayingTrig(1, kappa2)
+    p1 = DecayingTrig(dim, kappa1)
+    p2 = DecayingTrig(dim, kappa2)
 
-    sym_x = pmbl.make_sym_vector("x", 1)
+    sym_x = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
 
     def get_u1(x, t):
@@ -576,8 +579,8 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
     sym_u1 = get_u1(sym_x, sym_t)
     sym_u2 = get_u2(sym_x, sym_t)
 
-    sym_diffusion_u1 = sym_diffusion(1, kappa1, sym_u1)
-    sym_diffusion_u2 = sym_diffusion(1, kappa2, sym_u2)
+    sym_diffusion_u1 = sym_diffusion(dim, kappa1, sym_u1)
+    sym_diffusion_u2 = sym_diffusion(dim, kappa2, sym_u2)
 
     n = 128
 
@@ -627,6 +630,83 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
         op.norm(dcoll, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
         / op.norm(dcoll, expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5
+
+
+def test_orthotropic_diffusion(actx_factory):
+    """Checks that the diffusion operator can handle arrays for diffusivity."""
+    actx = actx_factory()
+    dim = 2
+    n = 4
+    order = 4
+
+    kappa0 = 2
+    kappa1 = 3
+
+    mesh = get_box_mesh(dim, -1, 1, n)
+    dcoll = create_discretization_collection(actx, mesh, order)
+    nodes = actx.thaw(dcoll.nodes())
+
+    zeros = actx.np.zeros_like(nodes[0])
+    kappa = make_obj_array([kappa0 + zeros, kappa1 + zeros])
+    u = 30.0*nodes[0] + 60.0*nodes[1]
+
+    boundaries = {
+        BoundaryDomainTag("-1"): NeumannDiffusionBoundary(-30.0),  # grad \cdot n
+        BoundaryDomainTag("+1"): NeumannDiffusionBoundary(+30.0),  # grad \cdot n
+        BoundaryDomainTag("-2"): NeumannDiffusionBoundary(-60.0),  # grad \cdot n
+        BoundaryDomainTag("+2"): NeumannDiffusionBoundary(+60.0),  # grad \cdot n
+    }
+
+    rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
+            boundaries=boundaries, return_grad_u=True,
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
+
+    err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 30.0, np.inf))
+    err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 60.0, np.inf))
+    assert err_grad_x < 1.e-9
+    assert err_grad_y < 1.e-9
+
+    diff_flux = diffusion_flux(kappa, grad_u)
+    flux_x = -(kappa0 + zeros)*grad_u[0]
+    flux_y = -(kappa1 + zeros)*grad_u[1]
+    err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
+    err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
+    assert err_flux_x < 1.e-9
+    assert err_flux_y < 1.e-9
+
+    err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
+    assert err_rhs < 1.e-8
+
+    def make_dirichlet_bc(btag):
+        bdry_u = op.project(dcoll, "vol", BoundaryDomainTag(btag), u)
+        return DirichletDiffusionBoundary(bdry_u)
+
+    boundaries = {
+        BoundaryDomainTag("-1"): make_dirichlet_bc("-1"),
+        BoundaryDomainTag("+1"): make_dirichlet_bc("+1"),
+        BoundaryDomainTag("-2"): make_dirichlet_bc("-2"),
+        BoundaryDomainTag("+2"): make_dirichlet_bc("+2"),
+    }
+
+    rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
+            boundaries=boundaries, return_grad_u=True,
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
+
+    err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 30.0, np.inf))
+    err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 60.0, np.inf))
+    assert err_grad_x < 1.e-9
+    assert err_grad_y < 1.e-9
+
+    diff_flux = diffusion_flux(kappa, grad_u)
+    flux_x = -(kappa0 + zeros)*grad_u[0]
+    flux_y = -(kappa1 + zeros)*grad_u[1]
+    err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
+    err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
+    assert err_flux_x < 1.e-9
+    assert err_flux_y < 1.e-9
+
+    err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
+    assert err_rhs < 1.e-8
 
 
 if __name__ == "__main__":

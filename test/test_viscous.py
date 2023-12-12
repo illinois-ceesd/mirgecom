@@ -365,6 +365,8 @@ def test_diffusive_heat_flux(actx_factory):
 
     order = 1
 
+    eos = IdealSingleGas()
+
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
     zeros = dcoll.zeros(actx)
@@ -385,19 +387,26 @@ def test_diffusive_heat_flux(actx_factory):
                                                for iidim in range(dim)])
         y[ispec+1] = -y[ispec]
 
+    # create a gradient of temperature
+    temperature = nodes[0] + 2*nodes[1] + 3*nodes[2]
+
     massval = 2
     mass = massval*ones
-    energy = zeros + 2.5
+    energy = eos.get_internal_energy(temperature) \
+             + 0.5*massval*np.dot(velocity, velocity)
     mom = mass * velocity
     species_mass = mass*y
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
     grad_cv = op.local_grad(dcoll, cv)
+    grad_t = op.local_grad(dcoll, temperature)
 
     mu_b = 1.0
     mu = 0.5
-    kappa = 5.0
+    # create orthotropic heat conduction
+    zeros = nodes[0]*0.0
+    kappa = make_obj_array([0.1 + zeros, 0.2 + zeros, 0.3 + zeros])
     # assemble d_alpha so that every species has a unique j
     d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
 
@@ -405,17 +414,21 @@ def test_diffusive_heat_flux(actx_factory):
                                thermal_conductivity=kappa,
                                species_diffusivity=d_alpha)
 
-    eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=tv_model)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    from mirgecom.viscous import diffusive_flux
+    from mirgecom.viscous import diffusive_flux, conductive_heat_flux
+    q = conductive_heat_flux(fluid_state, grad_t)
     j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     tol = 1e-10
+    for idim in range(dim):
+        exact_q = -kappa[idim]*grad_t[idim]
+        assert inf_norm(q[idim] - exact_q) < tol
+
     for idim in range(dim):
         ispec = 2*idim
         exact_dy = np.array([((ispec+1)*(idim*dim+1))*(iidim+1)
