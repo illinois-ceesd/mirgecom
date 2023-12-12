@@ -69,8 +69,9 @@ from meshmode.mesh.generation import generate_regular_rect_mesh
 
 logger = logging.getLogger(__name__)
 
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+# import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
@@ -180,7 +181,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
-        for i in range(len(mom_input)):
+        for i in enumerate(mom_input):
             mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
         kinetic_energy = 0.5*np.dot(mom_input, mom_input)/quiescent_cv.mass
         energy_input = quiescent_cv.energy + kinetic_energy
@@ -241,13 +242,11 @@ def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
 
     tolerance = 1e-9
 
-    from pytools.convergence import EOCRecorder
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
 
     # for nel_1d in [4, 8, 12]:
     for nel_1d in [4, 8]:
-        from meshmode.mesh.generation import generate_regular_rect_mesh
         mesh = generate_regular_rect_mesh(
             a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
         )

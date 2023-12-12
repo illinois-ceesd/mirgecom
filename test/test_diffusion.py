@@ -50,8 +50,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+# import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 class HeatProblem(metaclass=ABCMeta):

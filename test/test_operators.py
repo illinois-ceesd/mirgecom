@@ -57,8 +57,8 @@ from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
 
 
-#import os
-#os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
+# import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 
 
 def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,

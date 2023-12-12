@@ -24,23 +24,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
+from abc import ABCMeta, abstractmethod
+import numpy as np
 import pytest
 
+import pymbolic as pmbl
+import grudge.op as op
+from grudge.dof_desc import DISCR_TAG_QUAD
 from pytools.convergence import EOCRecorder
+from pytools.obj_array import flat_obj_array, make_obj_array
 from meshmode.mesh.generation import generate_regular_rect_mesh
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
-
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.mesh import BTAG_ALL
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context
+    as pytest_generate_tests)
+from meshmode.dof_array import DOFArray
 from mirgecom.navierstokes import ns_operator
-from mirgecom.fluid import make_conserved, velocity_gradient
+from mirgecom.fluid import make_conserved
 from mirgecom.utils import force_evaluation
 from mirgecom.boundary import (
     DummyBoundary,
@@ -49,18 +50,9 @@ from mirgecom.boundary import (
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.discretization import create_discretization_collection
-from grudge.dof_desc import DISCR_TAG_QUAD
-import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-from abc import ABCMeta, abstractmethod
-from meshmode.dof_array import DOFArray
-import pymbolic as pmbl
 from mirgecom.symbolic import (
     diff as sym_diff,
     evaluate)
-import mirgecom.math as mm
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
@@ -70,9 +62,12 @@ from mirgecom.simutil import (
     componentwise_norms,
     get_box_mesh
 )
+import mirgecom.math as mm
 
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+# import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 
 logger = logging.getLogger(__name__)
 
@@ -133,7 +128,6 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
         nodes = force_evaluation(actx, dcoll.nodes())
         zeros = actx.np.zeros_like(nodes[0])
-        ones = zeros + 1.0
 
         cv = _conserved_vars(nodes=nodes, quiescent=True)
 
@@ -222,6 +216,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
             or eoc_rec0.max_error() < tolerance)
     assert (eoc_rec1.order_estimate() >= order - 0.5
             or eoc_rec1.max_error() < tolerance)
+
 
 class FluidCase(metaclass=ABCMeta):
     """
@@ -477,7 +472,7 @@ class IsentropicVortex(FluidManufacturedSolution):
         x_rel = x_c - vortex_loc[0]
         y_rel = y_c - vortex_loc[1]
 
-        r2 = (x_rel ** 2 + y_rel ** 2)
+        r2 = x_rel ** 2 + y_rel ** 2
         expterm = self._beta * mm.exp(1 - r2)
 
         u = self._velocity[0] - expterm * y_rel / (2 * np.pi)
@@ -726,14 +721,14 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
             else:
                 viz_suffix = f"shear_flow_test_{dim}_{order}_{n}.vtu"
             vis.write_vtk_file(viz_suffix, [
-                    ("shear_flow", exact_fluid_state.cv),
-                    ("rhs", ns_rhs),
-                    ("grad(rhoU)", grad_cv.momentum[0]),
-                    ("grad(rhoV)", grad_cv.momentum[1]),
-                    ("grad(rhoE)", grad_cv.energy),
-                    ("P", fluid_state.pressure),
-                    ("T", fluid_state.temperature),
-                    ], overwrite=True)
+                ("shear_flow", exact_fluid_state.cv),
+                ("rhs", ns_rhs),
+                ("grad(rhoU)", grad_cv.momentum[0]),
+                ("grad(rhoV)", grad_cv.momentum[1]),
+                ("grad(rhoE)", grad_cv.energy),
+                ("P", fluid_state.pressure),
+                ("T", fluid_state.temperature),
+                ], overwrite=True)
 
         # print(f"{grad_cv=}")
         rhs_norms = componentwise_norms(dcoll, ns_rhs)
@@ -900,7 +895,6 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
 
     logger.info(f"{sym_source=}")
 
-    from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
 
     n0 = 4
@@ -939,7 +933,6 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         # assert tmp_err < tol
 
         if isinstance(source_eval.mass, DOFArray):
-            from mirgecom.simutil import componentwise_norms
             source_norms = componentwise_norms(dcoll, source_eval)
         else:
             source_norms = source_eval
