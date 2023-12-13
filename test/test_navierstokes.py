@@ -29,6 +29,7 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import pytest
 
+import cantera
 import pymbolic as pmbl
 import grudge.op as op
 from grudge.dof_desc import DISCR_TAG_QUAD, as_dofdesc
@@ -40,15 +41,16 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 from meshmode.dof_array import DOFArray
+import mirgecom.math as mm
 from mirgecom.navierstokes import (
-    ns_operator,
-    grad_cv_operator,
-    grad_t_operator
+    ns_operator, grad_cv_operator, grad_t_operator
 )
-from mirgecom.fluid import make_conserved, velocity_gradient
+from mirgecom.fluid import (
+    make_conserved, velocity_gradient, species_mass_fraction_gradient
+)
 from mirgecom.utils import force_evaluation
 from mirgecom.boundary import DummyBoundary, PrescribedFluidBoundary
-from mirgecom.eos import IdealSingleGas
+from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.transport import SimpleTransport
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.symbolic import (
@@ -56,15 +58,13 @@ from mirgecom.symbolic import (
     evaluate)
 from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.simutil import (
-    compare_fluid_solutions,
-    componentwise_norms,
-    get_box_mesh
+    compare_fluid_solutions, componentwise_norms, get_box_mesh
 )
-import mirgecom.math as mm
+from mirgecom.mechanisms import get_mechanism_input
+from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
-
-# import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 logger = logging.getLogger(__name__)
@@ -658,7 +658,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
     # Only the energy eqn is non-trivial at all orders
     # Continuity eqn is solved exactly at any order
     eoc_energy = EOCRecorder()
-    eoc_mom_0 = EOCRecorder()
+    eoc_momentum = EOCRecorder()
 
     def _boundary_state_func(dcoll, dd_bdry, gas_model, state_minus, time=0,
                              **kwargs):
@@ -678,20 +678,12 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
         base_n = 2
 
     for n in [1, 2, 4, 8]:
-
-        nx = (n*base_n,)*dim
-
-        a = (0,)*dim
-        b = (1,)*dim
-
-        print(f"{nx=}")
-        mesh = get_box_mesh(dim, a, b, n=nx)
+        nel_1d = n*base_n
+        mesh = get_box_mesh(dim, (0,)*dim, (1,)*dim, n=(nel_1d,)*dim)
 
         dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
         quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
-        from grudge.dt_utils import h_max_from_volume
-        h_max = actx.to_numpy(h_max_from_volume(dcoll))
 
         def inf_norm(x):
             return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
@@ -707,9 +699,8 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
 
         # Exact solution should have RHS=0, so the RHS itself is the residual
         ns_rhs, grad_cv, grad_t = \
-            ns_operator(dcoll, gas_model=gas_model, state=fluid_state,
-                        boundaries=boundaries, quadrature_tag=quadrature_tag,
-                        return_gradients=True)
+            ns_operator(dcoll, gas_model, fluid_state, boundaries,
+                        quadrature_tag=quadrature_tag, return_gradients=True)
 
         if visualize:
             from grudge.shortcuts import make_visualizer
@@ -740,18 +731,15 @@ def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegratio
 
         # print(f"{rhs_norms=}")
 
-        eoc_energy.add_data_point(h_max, actx.to_numpy(rhs_norms.energy))
-        eoc_mom_0.add_data_point(
-            h_max, actx.to_numpy(rhs_norms.momentum[flow_direction]))
-
-    print(eoc_energy)
-    print(eoc_mom_0)
+        eoc_energy.add_data_point(1.0/nel_1d, actx.to_numpy(rhs_norms.energy))
+        eoc_momentum.add_data_point(
+            1.0/nel_1d, actx.to_numpy(rhs_norms.momentum[flow_direction]))
 
     assert (eoc_energy.order_estimate() >= order - 0.5
             or eoc_energy.max_error() < tol)
 
-    assert (eoc_mom_0.order_estimate() >= order - 0.5
-            or eoc_mom_0.max_error() < tol)
+    assert (eoc_momentum.order_estimate() >= order - 0.5
+            or eoc_momentum.max_error() < tol)
 
 
 class RoySolution(FluidManufacturedSolution):
@@ -1001,7 +989,7 @@ def test_projection_to_quad_domain(actx_factory, nspecies, dim, order):
     """Test the projection for overintegration."""
     actx = actx_factory()
 
-    tol = 1e-9 if order < 6 else 5e-8
+    tol = 1e-9
 
     def _conserved_vars(nodes):
         zeros = actx.np.zeros_like(nodes[0])
@@ -1119,18 +1107,142 @@ def test_projection_to_quad_domain(actx_factory, nspecies, dim, order):
         assert (eoc4.order_estimate() >= order - 0.5 or eoc4.max_error() < tol)
 
 
-@pytest.mark.parametrize("nspecies", [0])
 @pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
+def test_gradients_mixture(actx_factory, dim, order, use_overintegration):
     """Test the gradients from the Navier-Stokes operator with non-uniform profiles.
 
     This state should yield ...
     """
     actx = actx_factory()
 
-    tol = 2e-9 if order < 6 else 5e-8
+    tol = 1e-7
+
+    boundaries = {BTAG_ALL: DummyBoundary()}
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+
+    # Pyrometheus initialization
+    mechname = "uiuc_7sp"
+    mech_input = get_mechanism_input(mechname)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=3)(actx.np)
+
+    nspecies = pyro_obj.num_species
+    print(f"PyrometheusMixture::NumSpecies = {nspecies}")
+
+    tseed = 500.0
+
+    i_fu = cantera_soln.species_index("H2")
+    i_ox = cantera_soln.species_index("O2")
+    i_di = cantera_soln.species_index("N2")
+
+    # Transport data initilization
+    eos = PyrometheusMixture(pyro_obj, temperature_guess=tseed)
+    gas_model = GasModel(eos=eos)
+
+    def _conserved_vars(nodes):
+        zeros = actx.np.zeros_like(nodes[0])
+
+        pressure = 101325.0 + 1000.0*nodes[0]
+        temperature = tseed + 50.0*nodes[0]
+
+        velocity = make_obj_array([zeros for i in range(dim)])
+        velocity[0] = 100.0 + 30.0*nodes[0]
+
+        mass_frac = make_obj_array([zeros for _ in range(nspecies)])
+        mass_frac[i_fu] = 0.2 + 0.1*nodes[0]
+        mass_frac[i_ox] = 0.2 - 0.1*nodes[0]
+        mass_frac[i_di] = 1.0 - (mass_frac[i_fu] + mass_frac[i_ox])
+
+        mass = eos.get_density(pressure, temperature, mass_frac)
+        species_mass = mass * mass_frac
+        momentum = mass*velocity
+
+        energy_input = mass*(
+            gas_model.eos.get_internal_energy(temperature, mass_frac)
+            + 0.5*np.dot(velocity, velocity))
+
+        return make_conserved(dim, mass=mass, momentum=momentum,
+            energy=energy_input, species_mass=species_mass)
+
+    def inf_norm(x):
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
+
+    eoc_rec0 = EOCRecorder()
+    eoc_rec1 = EOCRecorder()
+    eoc_rec2 = EOCRecorder()
+    eoc_rec3 = EOCRecorder()
+    eoc_rec4 = EOCRecorder()
+    for nel_1d in [4, 8, 16, 32]:
+        mesh = generate_regular_rect_mesh(
+            a=(-1.0,)*dim, b=(1.0,)*dim, nelements_per_axis=(nel_1d,)*dim)
+
+        logger.info(f"Number of {dim}d elements: {mesh.nelements}")
+
+        dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+        nodes = force_evaluation(actx, dcoll.nodes())
+
+        cv = _conserved_vars(nodes)
+        state = make_fluid_state(gas_model=gas_model, cv=cv,
+                                 temperature_seed=tseed)
+
+        grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, state,
+                                   quadrature_tag=quadrature_tag)
+
+        grad_v = velocity_gradient(cv, grad_cv)
+        grad_y = species_mass_fraction_gradient(cv, grad_cv)
+
+        grad_temp = grad_t_operator(dcoll, gas_model, boundaries, state,
+                                    quadrature_tag=quadrature_tag)
+
+        grad_u = 30.0
+        grad_t = 50.0
+
+        err_grad_y0 = inf_norm(grad_y[i_fu][0] - 0.1)
+        err_grad_y1 = inf_norm(grad_y[i_ox][0] + 0.1)
+        err_grad_y2 = inf_norm(grad_y[i_di][0] - 0.0)
+        err_grad_u = inf_norm(grad_v[0][0] - grad_u)
+        err_grad_t = inf_norm(grad_temp[0] - grad_t)
+
+        eoc_rec0.add_data_point(1.0 / nel_1d, err_grad_y0)
+        eoc_rec1.add_data_point(1.0 / nel_1d, err_grad_y1)
+        eoc_rec2.add_data_point(1.0 / nel_1d, err_grad_y2)
+        eoc_rec3.add_data_point(1.0 / nel_1d, err_grad_u)
+        eoc_rec4.add_data_point(1.0 / nel_1d, err_grad_t)
+
+    print(order)
+    print(eoc_rec0)
+    print(eoc_rec1)
+    print(eoc_rec2)
+    print(eoc_rec3)
+    print(eoc_rec4)
+
+    assert eoc_rec0.order_estimate() >= order - 0.5 or eoc_rec0.max_error() < tol
+    assert eoc_rec1.order_estimate() >= order - 0.5 or eoc_rec1.max_error() < tol
+    assert eoc_rec2.order_estimate() >= order - 0.5 or eoc_rec2.max_error() < tol
+    assert eoc_rec3.order_estimate() >= order - 0.5 or eoc_rec3.max_error() < tol
+    assert eoc_rec4.order_estimate() >= order - 0.5 or eoc_rec4.max_error() < tol
+
+
+@pytest.mark.parametrize("nspecies", [0, 3])
+@pytest.mark.parametrize("dim", [1, 2])
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_gradients(actx_factory, nspecies, dim, order, use_overintegration):
+    """Test the gradients from the N-S operator with non-uniform profiles."""
+    actx = actx_factory()
+
+    tol = 2e-9
+
+    boundaries = {BTAG_ALL: DummyBoundary()}
+
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+
+    eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
+    gas_model = GasModel(eos=eos)
 
     def _conserved_vars(nodes):
         zeros = actx.np.zeros_like(nodes[0])
@@ -1167,19 +1279,11 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration)
         mesh = generate_regular_rect_mesh(
             a=(-1.0,)*dim, b=(1.0,)*dim, nelements_per_axis=(nel_1d,)*dim)
 
-        boundaries = {BTAG_ALL: DummyBoundary()}
-
         logger.info(f"Number of {dim}d elements: {mesh.nelements}")
 
         dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
         nodes = force_evaluation(actx, dcoll.nodes())
-        quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
-
-        eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
-        transport = SimpleTransport(viscosity=1.0, thermal_conductivity=1.0,
-                                    species_diffusivity=0.5*np.ones(nspecies))
-        gas_model = GasModel(eos=eos, transport=transport)
 
         cv = _conserved_vars(nodes)
         state = make_fluid_state(gas_model=gas_model, cv=cv)
@@ -1189,20 +1293,21 @@ def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration)
 
         grad_v = velocity_gradient(cv, grad_cv)
 
-        grad_t = grad_t_operator(dcoll, gas_model, boundaries, state,
-                                 quadrature_tag=quadrature_tag)
+        grad_temp = grad_t_operator(dcoll, gas_model, boundaries, state,
+                                    quadrature_tag=quadrature_tag)
 
         x = nodes[0]
         grad_rho = 0.1
         grad_rhou = 0.07+0.02*x
-        grad_u = 0.1
         grad_rhoe = (1.0/0.4)*(0.02*x + 0.15) + 0.5*(0.003*x**2 + 0.018*x + 0.024)
+        grad_u = 0.1
+        grad_t = 0.1
 
         err_grad_rho = inf_norm(grad_cv.mass[0] - grad_rho)
-        err_grad_rhou = inf_norm(grad_cv.momentum[0][0] - grad_rhou)
         err_grad_rhoe = inf_norm(grad_cv.energy[0] - grad_rhoe)
+        err_grad_rhou = inf_norm(grad_cv.momentum[0][0] - grad_rhou)
         err_grad_u = inf_norm(grad_v[0][0] - grad_u)
-        err_grad_t = inf_norm(grad_t[0] - 0.1)
+        err_grad_t = inf_norm(grad_temp[0] - grad_t)
 
         eoc_rec0.add_data_point(1.0 / nel_1d, err_grad_rho)
         eoc_rec1.add_data_point(1.0 / nel_1d, err_grad_rhoe)
