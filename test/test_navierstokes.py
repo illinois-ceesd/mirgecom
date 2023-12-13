@@ -31,7 +31,7 @@ import pytest
 
 import pymbolic as pmbl
 import grudge.op as op
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_QUAD, as_dofdesc
 from pytools.convergence import EOCRecorder
 from pytools.obj_array import flat_obj_array, make_obj_array
 from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -40,23 +40,21 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 from meshmode.dof_array import DOFArray
-from mirgecom.navierstokes import ns_operator
-from mirgecom.fluid import make_conserved
-from mirgecom.utils import force_evaluation
-from mirgecom.boundary import (
-    DummyBoundary,
-    PrescribedFluidBoundary,
+from mirgecom.navierstokes import (
+    ns_operator,
+    grad_cv_operator,
+    grad_t_operator
 )
+from mirgecom.fluid import make_conserved, velocity_gradient
+from mirgecom.utils import force_evaluation
+from mirgecom.boundary import DummyBoundary, PrescribedFluidBoundary
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.symbolic import (
     diff as sym_diff,
     evaluate)
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
+from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.simutil import (
     compare_fluid_solutions,
     componentwise_norms,
@@ -994,3 +992,226 @@ def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
         eoc_rec.order_estimate() >= order - 0.5
         or eoc_rec.max_error() < tol
     )
+
+
+@pytest.mark.parametrize("nspecies", [0, 3])
+@pytest.mark.parametrize("dim", [1, 2])
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+def test_projection_to_quad_domain(actx_factory, nspecies, dim, order):
+    """Test the projection for overintegration."""
+    actx = actx_factory()
+
+    tol = 1e-9 if order < 6 else 5e-8
+
+    def _conserved_vars(nodes):
+        zeros = actx.np.zeros_like(nodes[0])
+        ones = zeros + 1.0
+
+        mass_input = 0.5 + 0.1*actx.np.cos(2.0*np.pi*nodes[0])
+
+        temperature_input = 1.0 + 0.1*actx.np.sin(2.0*np.pi*nodes[0])
+
+        mom_input = make_obj_array([zeros for i in range(dim)])
+        mom_input[0] = 0.2 + 0.1*nodes[0]
+
+        mass_frac_input = flat_obj_array(
+            [ones / ((i + 1) * 10) for i in range(nspecies)]
+        )
+        species_mass_input = mass_input * mass_frac_input
+
+        energy_input = mass_input*(
+            gas_model.eos.get_internal_energy(temperature=temperature_input)) \
+            + 0.5*np.dot(mom_input, mom_input)/mass_input
+
+        return make_conserved(dim, mass=mass_input, momentum=mom_input,
+            energy=energy_input, species_mass=species_mass_input)
+
+    def error(x):
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
+
+    boundaries = {BTAG_ALL: DummyBoundary()}
+
+    for use_overintegration in [True]:
+
+        eoc0 = EOCRecorder()
+        eoc1 = EOCRecorder()
+        eoc2 = EOCRecorder()
+        eoc3 = EOCRecorder()
+        eoc4 = EOCRecorder()
+        for nel_1d in [16, 32, 64]:
+            mesh = generate_regular_rect_mesh(
+                a=(-1.0,)*dim, b=(1.0,)*dim, nelements_per_axis=(nel_1d,)*dim)
+
+            logger.info(f"Number of {dim}d elements: {mesh.nelements}")
+
+            dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                     quadrature_order=2*order+1)
+            quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+            nodes = force_evaluation(actx, dcoll.nodes())
+
+            dd_vol = as_dofdesc("vol")
+            dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+
+            gas_model = GasModel(eos=IdealSingleGas(gamma=1.4, gas_const=1.0))
+
+            cv = _conserved_vars(nodes)
+            state = make_fluid_state(gas_model=gas_model, cv=cv)
+
+            # ~~~ project_everything
+            project_full_cv = op.project(dcoll, dd_vol, dd_vol_quad, cv)
+            state_from_proj_cv = make_fluid_state(gas_model=gas_model,
+                                                  cv=project_full_cv)
+
+            # ~~~ project cv + internal energy
+            int_energy = gas_model.eos.internal_energy(cv)
+            project_cv_and_e = op.project(dcoll, dd_vol, dd_vol_quad, cv)
+            project_e = op.project(dcoll, dd_vol, dd_vol_quad, int_energy)
+            kin_energy = 0.5/project_cv_and_e.mass*np.dot(project_cv_and_e.momentum,
+                                                          project_cv_and_e.momentum)
+            project_cv_and_e = project_cv_and_e.replace(energy=project_e+kin_energy)
+            state_from_proj_cv_and_e = make_fluid_state(gas_model=gas_model,
+                                                        cv=project_cv_and_e)
+
+            # ~~~ project cv + temperature
+            project_cv_and_t = op.project(dcoll, dd_vol, dd_vol_quad, cv)
+            project_t = op.project(dcoll, dd_vol, dd_vol_quad, state.temperature)
+            int_energy = \
+                project_cv_and_t.mass*gas_model.eos.get_internal_energy(project_t)
+            kin_energy = 0.5/project_cv_and_t.mass*np.dot(project_cv_and_t.momentum,
+                                                          project_cv_and_t.momentum)
+            project_cv_and_t = project_cv_and_t.replace(energy=int_energy+kin_energy)
+            state_from_proj_cv_and_t = make_fluid_state(gas_model=gas_model,
+                                                        cv=project_cv_and_t)
+
+            # ~~~ exact solution
+            overint_nodes = op.project(dcoll, dd_vol, dd_vol_quad, nodes)
+            x = overint_nodes[0]
+
+            # exact_mass = 0.5 + 0.1*actx.np.cos(2.0*np.pi*x)
+            exact_temp = 1.0 + 0.1*actx.np.sin(2.0*np.pi*x)
+
+            grad_mass_exact = -0.1*2.0*np.pi*actx.np.sin(2.0*np.pi*nodes[0])
+            grad_temp_exact = +0.1*2.0*np.pi*actx.np.cos(2.0*np.pi*nodes[0])
+
+            error_temp_1 = error(state_from_proj_cv.temperature - exact_temp)
+            eoc0.add_data_point(1.0 / nel_1d, error_temp_1)
+            error_temp_2 = error(state_from_proj_cv_and_e.temperature - exact_temp)
+            eoc1.add_data_point(1.0 / nel_1d, error_temp_2)
+            error_temp_3 = error(state_from_proj_cv_and_t.temperature - exact_temp)
+            eoc2.add_data_point(1.0 / nel_1d, error_temp_3)
+
+            grad_temp = grad_t_operator(dcoll, gas_model, boundaries, state,
+                                        quadrature_tag=quadrature_tag)
+
+            error_grad_temp = error(grad_temp[0] - grad_temp_exact)
+            eoc3.add_data_point(1.0 / nel_1d, error_grad_temp)
+
+            grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, state,
+                                       quadrature_tag=quadrature_tag)
+
+            error_grad_mass = error(grad_cv.mass[0] - grad_mass_exact)
+            eoc4.add_data_point(1.0 / nel_1d, error_grad_mass)
+
+        assert (eoc0.order_estimate() >= order+1 - 0.5 or eoc0.max_error() < tol)
+        assert (eoc1.order_estimate() >= order+1 - 0.5 or eoc1.max_error() < tol)
+        assert (eoc2.order_estimate() >= order+1 - 0.5 or eoc2.max_error() < tol)
+        assert (eoc3.order_estimate() >= order - 0.5 or eoc3.max_error() < tol)
+        assert (eoc4.order_estimate() >= order - 0.5 or eoc4.max_error() < tol)
+
+
+@pytest.mark.parametrize("nspecies", [0])
+@pytest.mark.parametrize("dim", [1, 2])
+@pytest.mark.parametrize("order", [1, 2, 3, 4])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_nonuniform_rhs(actx_factory, nspecies, dim, order, use_overintegration):
+    """Test the gradients from the Navier-Stokes operator with non-uniform profiles.
+
+    This state should yield ...
+    """
+    actx = actx_factory()
+
+    tol = 2e-9 if order < 6 else 5e-8
+
+    def _conserved_vars(nodes):
+        zeros = actx.np.zeros_like(nodes[0])
+        ones = zeros + 1.0
+
+        mass_input = 0.5 + 0.1*nodes[0]
+        temperature_input = 1.0 + 0.1*nodes[0]
+
+        vel_input = make_obj_array([zeros for i in range(dim)])
+        vel_input[0] = 0.2 + 0.1*nodes[0]
+        mom_input = mass_input*vel_input
+
+        mass_frac_input = flat_obj_array(
+            [ones / ((i + 1) * 10) for i in range(nspecies)]
+        )
+        species_mass_input = mass_input * mass_frac_input
+
+        energy_input = mass_input*(
+            gas_model.eos.get_internal_energy(temperature=temperature_input)) \
+            + 0.5*np.dot(mom_input, mom_input)/mass_input
+
+        return make_conserved(dim, mass=mass_input, momentum=mom_input,
+            energy=energy_input, species_mass=species_mass_input)
+
+    def inf_norm(x):
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
+
+    eoc_rec0 = EOCRecorder()
+    eoc_rec1 = EOCRecorder()
+    eoc_rec2 = EOCRecorder()
+    eoc_rec3 = EOCRecorder()
+    eoc_rec4 = EOCRecorder()
+    for nel_1d in [2, 4, 8, 16, 32, 64]:
+        mesh = generate_regular_rect_mesh(
+            a=(-1.0,)*dim, b=(1.0,)*dim, nelements_per_axis=(nel_1d,)*dim)
+
+        boundaries = {BTAG_ALL: DummyBoundary()}
+
+        logger.info(f"Number of {dim}d elements: {mesh.nelements}")
+
+        dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+        nodes = force_evaluation(actx, dcoll.nodes())
+        quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+
+        eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
+        transport = SimpleTransport(viscosity=1.0, thermal_conductivity=1.0,
+                                    species_diffusivity=0.5*np.ones(nspecies))
+        gas_model = GasModel(eos=eos, transport=transport)
+
+        cv = _conserved_vars(nodes)
+        state = make_fluid_state(gas_model=gas_model, cv=cv)
+
+        grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, state,
+                                   quadrature_tag=quadrature_tag)
+
+        grad_v = velocity_gradient(cv, grad_cv)
+
+        grad_t = grad_t_operator(dcoll, gas_model, boundaries, state,
+                                 quadrature_tag=quadrature_tag)
+
+        x = nodes[0]
+        grad_rho = 0.1
+        grad_rhou = 0.07+0.02*x
+        grad_u = 0.1
+        grad_rhoe = (1.0/0.4)*(0.02*x + 0.15) + 0.5*(0.003*x**2 + 0.018*x + 0.024)
+
+        err_grad_rho = inf_norm(grad_cv.mass[0] - grad_rho)
+        err_grad_rhou = inf_norm(grad_cv.momentum[0][0] - grad_rhou)
+        err_grad_rhoe = inf_norm(grad_cv.energy[0] - grad_rhoe)
+        err_grad_u = inf_norm(grad_v[0][0] - grad_u)
+        err_grad_t = inf_norm(grad_t[0] - 0.1)
+
+        eoc_rec0.add_data_point(1.0 / nel_1d, err_grad_rho)
+        eoc_rec1.add_data_point(1.0 / nel_1d, err_grad_rhoe)
+        eoc_rec2.add_data_point(1.0 / nel_1d, err_grad_rhou)
+        eoc_rec3.add_data_point(1.0 / nel_1d, err_grad_u)
+        eoc_rec4.add_data_point(1.0 / nel_1d, err_grad_t)
+
+    assert eoc_rec0.order_estimate() >= order - 0.5 or eoc_rec0.max_error() < tol
+    assert eoc_rec1.order_estimate() >= order - 0.5 or eoc_rec1.max_error() < tol
+    assert eoc_rec2.order_estimate() >= order - 0.5 or eoc_rec2.max_error() < tol
+    assert eoc_rec3.order_estimate() >= order - 0.5 or eoc_rec3.max_error() < tol
+    assert eoc_rec4.order_estimate() >= order - 0.5 or eoc_rec4.max_error() < tol
