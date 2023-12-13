@@ -514,6 +514,10 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
 
     if entropy_stable:
+        material_densities = None
+        if isinstance(gas_model, PorousFlowModel):
+            material_densities = state.wv.material_densities
+
         temp_state = make_fluid_state(cv=cv_sd, gas_model=gas_model,
                                       temperature_seed=temperature_seed,
                                       material_densities=material_densities,

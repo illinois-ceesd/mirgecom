@@ -1596,7 +1596,8 @@ def basic_coupled_ns_heat_operator(
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
         return_gradients=False,
-        use_esdg=False):
+        use_esdg=False,
+        inviscid_terms_on=True):
     r"""
     Simple implementation of a thermally-coupled fluid/wall operator.
 
@@ -1776,7 +1777,7 @@ def basic_coupled_ns_heat_operator(
 
     my_ns_operator = partial(ns_operator,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
-        use_esdg=use_esdg)
+        use_esdg=use_esdg, inviscid_terms_on=inviscid_terms_on)
     ns_result = my_ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,

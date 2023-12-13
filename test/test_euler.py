@@ -181,7 +181,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
 
         # set a non-zero, but uniform velocity component
-        for i in enumerate(mom_input):
+        for i, _ in enumerate(mom_input):
             mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
         kinetic_energy = 0.5*np.dot(mom_input, mom_input)/quiescent_cv.mass
         energy_input = quiescent_cv.energy + kinetic_energy
