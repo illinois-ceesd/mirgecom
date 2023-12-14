@@ -194,7 +194,7 @@ class TacotEOS(PorousWallEOS):
         char = 2.0e-11
         return virgin*tau + char*(1.0 - tau)
 
-    def emissivity(self, tau: DOFArray) -> DOFArray:
+    def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
         virgin = 0.8
         char = 0.9
