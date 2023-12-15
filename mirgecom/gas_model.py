@@ -505,6 +505,9 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     """
     cv_sd = op.project(dcoll, src, tgt, state.cv)
 
+    # project the internal energy and recompute the kinetic energy based on
+    # the projected mass and momentum
+    # FIXME is there a even better way to do this? maybe project "e" and not "rho e"?
     int_energy = op.project(dcoll, src, tgt, gas_model.eos.internal_energy(state.cv))
     kin_energy = gas_model.eos.kinetic_energy(cv_sd)
     cv_sd = cv_sd.replace(energy=int_energy+kin_energy)
@@ -650,8 +653,8 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
                 smoothness_beta_pairs, material_densities_pairs)]
 
 
-class _FluidCVTag:
-    pass
+# class _FluidCVTag:
+#     pass
 
 
 class _FluidMassTag:
@@ -775,6 +778,15 @@ def make_operator_fluid_states(
             entropy_stable=entropy_stable)
         for bdtag in boundaries
     }
+
+#    # performs MPI communication of CV (if needed)
+#    # Get the interior trace pairs onto the surface quadrature discretization
+#    cv_interior_pairs = [
+#        interp_to_surf_quad(tpair=tpair)
+#        for tpair in interior_trace_pairs(
+#            dcoll, volume_state.cv, volume_dd=dd_vol,
+#            comm_tag=(_FluidCVTag, comm_tag))
+#    ]
 
     # performs MPI communication of individual CV components (if needed)
     # Get the interior trace pairs onto the surface quadrature discretization

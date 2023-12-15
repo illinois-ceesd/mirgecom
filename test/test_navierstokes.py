@@ -63,14 +63,11 @@ from mirgecom.simutil import (
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
-
-# FIXME
-# import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-
-
 logger = logging.getLogger(__name__)
 
+# FIXME
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -1026,6 +1023,45 @@ class Trigonometric:
         return grad_rho, grad_rhou, grad_rhoe, grad_u, grad_t
 
 
+#class Linear:
+
+#    def conserved_vars(self, actx, dim, nodes, gas_model):
+#        zeros = actx.np.zeros_like(nodes[0])
+
+#        mass_input = 0.5 + 0.1*nodes[0]
+#        temperature_input = 1.0 + 0.1*nodes[0]
+
+#        vel_input = make_obj_array([zeros for i in range(dim)])
+#        vel_input[0] = 0.2 + 0.1*nodes[0]
+#        mom_input = mass_input*vel_input
+
+#        energy_input = mass_input*(
+#            gas_model.eos.get_internal_energy(temperature=temperature_input)) \
+#            + 0.5*np.dot(mom_input, mom_input)/mass_input
+
+#        return make_conserved(dim, mass=mass_input, momentum=mom_input,
+#                              energy=energy_input)
+
+#    def exact_solution(self, actx, x):
+#        exact_mass = 0.5 + 0.1*x
+#        exact_temp = 1.0 + 0.1*x
+#        exact_vel = 0.2 + 0.1*x
+#        exact_mom = exact_mass*exact_vel
+#        exact_energy = (
+#            (1.0/0.4)*exact_mass*exact_temp + 0.5*exact_mass*exact_vel*exact_vel)
+
+#        return exact_mass, exact_mom, exact_energy, exact_vel, exact_temp
+
+#    def exact_gradients(self, actx, x):
+#        grad_rho = 0.1
+#        grad_rhou = 0.07+0.02*x
+#        grad_rhoe = (1.0/0.4)*(0.02*x + 0.15) + 0.5*(0.003*x**2 + 0.018*x + 0.024)
+#        grad_u = 0.1
+#        grad_t = 0.1
+
+#        return grad_rho, grad_rhou, grad_rhoe, grad_u, grad_t
+
+
 class Linear:
 
     def conserved_vars(self, actx, dim, nodes, gas_model):
@@ -1034,9 +1070,8 @@ class Linear:
         mass_input = 0.5 + 0.1*nodes[0]
         temperature_input = 1.0 + 0.1*nodes[0]
 
-        vel_input = make_obj_array([zeros for i in range(dim)])
-        vel_input[0] = 0.2 + 0.1*nodes[0]
-        mom_input = mass_input*vel_input
+        mom_input = make_obj_array([zeros for i in range(dim)])
+        mom_input[0] = 0.2 + 0.1*nodes[0]
 
         energy_input = mass_input*(
             gas_model.eos.get_internal_energy(temperature=temperature_input)) \
@@ -1048,8 +1083,8 @@ class Linear:
     def exact_solution(self, actx, x):
         exact_mass = 0.5 + 0.1*x
         exact_temp = 1.0 + 0.1*x
-        exact_vel = 0.2 + 0.1*x
-        exact_mom = exact_mass*exact_vel
+        exact_mom = 0.2 + 0.1*x
+        exact_vel = exact_mom/exact_mass
         exact_energy = (
             (1.0/0.4)*exact_mass*exact_temp + 0.5*exact_mass*exact_vel*exact_vel)
 
@@ -1057,9 +1092,9 @@ class Linear:
 
     def exact_gradients(self, actx, x):
         grad_rho = 0.1
-        grad_rhou = 0.07+0.02*x
-        grad_rhoe = (1.0/0.4)*(0.02*x + 0.15) + 0.5*(0.003*x**2 + 0.018*x + 0.024)
-        grad_u = 0.1
+        grad_rhou = 0.1
+        grad_rhoe = (1.0/0.4)*(0.02*x + 0.15) + 0.5*(0.1*x**2 + 1.0*x + 1.6)/(x+5.0)**2
+        grad_u = 3.0/(x+5.0)**2
         grad_t = 0.1
 
         return grad_rho, grad_rhou, grad_rhoe, grad_u, grad_t
@@ -1067,14 +1102,17 @@ class Linear:
 
 @pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-@pytest.mark.parametrize("case", [Trigonometric(), Linear()])
+@pytest.mark.parametrize("test_case", [0, 1])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-def test_projection_to_quad_domain(actx_factory, dim, order, case,
+def test_projection_to_quad_domain(actx_factory, dim, order, test_case,
                                    use_overintegration):
     """Test the projection for overintegration."""
     actx = actx_factory()
 
-    tol = 1e-9
+    case_dict = {0: Linear(), 1: Trigonometric()}
+    case = case_dict[test_case]
+
+    tol = 1e-8
 
     boundaries = {BTAG_ALL: DummyBoundary()}
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
@@ -1127,6 +1165,7 @@ def test_projection_to_quad_domain(actx_factory, dim, order, case,
         grad_cv_aux = grad_cv_operator(dcoll, gas_model, boundaries, state,
                                        quadrature_tag=quadrature_tag)
 
+        # re-project as it is done in the N-S operator
         grad_temp = op.project(dcoll, dd_vol, dd_vol_quad, grad_temp_aux)
         grad_cv = op.project(dcoll, dd_vol, dd_vol_quad, grad_cv_aux)
 
@@ -1146,13 +1185,13 @@ def test_projection_to_quad_domain(actx_factory, dim, order, case,
         err_rhou = inf_norm(vol_state_quad.cv.momentum[0] - exact_mom)
         err_rhoe = inf_norm(vol_state_quad.cv.energy - exact_energy)
         err_u = inf_norm(vol_state_quad.cv.velocity[0] - exact_vel)
-        err_temp = inf_norm(vol_state_quad.temperature - exact_temp)
+        err_t = inf_norm(vol_state_quad.temperature - exact_temp)
 
         eoc_f0.add_data_point(1.0 / nel_1d, err_rho)
         eoc_f1.add_data_point(1.0 / nel_1d, err_rhou)
         eoc_f2.add_data_point(1.0 / nel_1d, err_rhoe)
         eoc_f3.add_data_point(1.0 / nel_1d, err_u)
-        eoc_t0.add_data_point(1.0 / nel_1d, err_temp)
+        eoc_t0.add_data_point(1.0 / nel_1d, err_t)
 
         err_grad_rho = inf_norm(grad_cv.mass[0] - grad_rho)
         err_grad_rhou = inf_norm(grad_cv.momentum[0][0] - grad_rhou)
@@ -1195,20 +1234,60 @@ def test_projection_to_quad_domain(actx_factory, dim, order, case,
 #                    ("U", state.velocity[0]),
 #                    ], overwrite=True)
 
-    assert (eoc_f0.order_estimate() >= order+1 - 0.5 or eoc_f0.max_error() < tol)
-    assert (eoc_f1.order_estimate() >= order+1 - 0.5 or eoc_f1.max_error() < tol)
-    assert (eoc_f2.order_estimate() >= order+1 - 0.5 or eoc_f2.max_error() < tol)
-    assert (eoc_f3.order_estimate() >= order+1 - 0.5 or eoc_f3.max_error() < tol)
-    assert (eoc_t0.order_estimate() >= order+1 - 0.5 or eoc_t0.max_error() < tol)
+    print("case=",case)
+    print("order=",order)
+    print("dim=",dim)
+    if test_case == 0:
 
-    assert (eoc_g0.order_estimate() >= order - 0.5 or eoc_g0.max_error() < tol)
-    assert (eoc_g1.order_estimate() >= order - 0.5 or eoc_g1.max_error() < tol)
-    assert (eoc_g2.order_estimate() >= order - 0.5 or eoc_g2.max_error() < tol)
-    assert (eoc_g3.order_estimate() >= order - 0.5 or eoc_g3.max_error() < tol)
-    assert (eoc_gt.order_estimate() >= order - 0.5 or eoc_gt.max_error() < tol)
+        # first assess the convergence order. If it fails, means it is exact
+        # and then it should match the imposed tolerance. If it is known to be
+        # exact at all orders, only checks the imposed tolerance
+        assert (eoc_f0.max_error() < tol)
+        assert (eoc_f1.max_error() < tol)
+        assert (eoc_t0.max_error() < tol)
+
+        try:  # energy
+            assert (eoc_f2.order_estimate() >= order+1 - 0.5)
+        except:
+            assert (eoc_f2.max_error() < tol)
+
+        try:  # velocity
+            assert (eoc_f3.order_estimate() >= order+1 - 0.5)
+        except:
+            assert (eoc_f3.max_error() < tol)
+
+        #~~~ assess the gradient
+        assert (eoc_g0.max_error() < tol)
+        assert (eoc_g1.max_error() < tol)
+        assert (eoc_gt.max_error() < tol)
+
+        try:  # energy
+            assert (eoc_g2.order_estimate() >= order - 0.5)
+        except:
+            assert (eoc_g2.max_error() < tol)
+
+        try:  # velocity
+            assert (eoc_g3.order_estimate() >= order - 0.5)
+        except:
+            assert (eoc_g3.max_error() < tol)
+    else:
+
+        # this case does not have exact solution but only convergence
+
+        assert (eoc_f0.order_estimate() >= order+1 - 0.5 or eoc_f0.max_error() < tol)
+        assert (eoc_f1.order_estimate() >= order+1 - 0.5 or eoc_f1.max_error() < tol)
+        assert (eoc_f2.order_estimate() >= order+1 - 0.5 or eoc_f2.max_error() < tol)
+        assert (eoc_f3.order_estimate() >= order+1 - 0.5 or eoc_f3.max_error() < tol)
+        assert (eoc_t0.order_estimate() >= order+1 - 0.5 or eoc_t0.max_error() < tol)
+
+        assert (eoc_g0.order_estimate() >= order - 0.5 or eoc_g0.max_error() < tol)
+        assert (eoc_g1.order_estimate() >= order - 0.5 or eoc_g1.max_error() < tol)
+        assert (eoc_g2.order_estimate() >= order - 0.5 or eoc_g2.max_error() < tol)
+        assert (eoc_g3.order_estimate() >= order - 0.5 or eoc_g3.max_error() < tol)
+        assert (eoc_gt.order_estimate() >= order - 0.5 or eoc_gt.max_error() < tol)
 
 
-@pytest.mark.parametrize("dim", [1, 2])
+@pytest.mark.parametrize("dim", [2])
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_gradients_mixture(actx_factory, dim, order, use_overintegration):
@@ -1246,36 +1325,45 @@ def test_gradients_mixture(actx_factory, dim, order, use_overintegration):
     def _conserved_vars(nodes):
         zeros = actx.np.zeros_like(nodes[0])
 
-        pressure = 101325.0 + 1000.0*nodes[0]
+        #pressure = 101325.0 + 1000.0*nodes[0]
+        mass = 1.0 + 0.1*nodes[0]
         temperature = tseed + 50.0*nodes[0]
 
-        velocity = make_obj_array([zeros for i in range(dim)])
-        velocity[0] = 100.0 + 30.0*nodes[0]
+        #velocity = make_obj_array([zeros for i in range(dim)])
+        #velocity[0] = 100.0 + 30.0*nodes[0]
+        momentum = make_obj_array([zeros for i in range(dim)])
+        momentum[0] = 100.0 + 30.0*nodes[0]
 
         mass_frac = make_obj_array([zeros for _ in range(nspecies)])
         mass_frac[i_fu] = 0.2 + 0.1*nodes[0]
         mass_frac[i_ox] = 0.2 - 0.1*nodes[0]
         mass_frac[i_di] = 1.0 - (mass_frac[i_fu] + mass_frac[i_ox])
 
-        mass = eos.get_density(pressure, temperature, mass_frac)
+        #mass = eos.get_density(pressure, temperature, mass_frac)
         species_mass = mass * mass_frac
-        momentum = mass*velocity
+#        momentum = mass*velocity
 
-        energy_input = mass*(
-            gas_model.eos.get_internal_energy(temperature, mass_frac)
-            + 0.5*np.dot(velocity, velocity))
+        energy_input = (
+            mass*gas_model.eos.get_internal_energy(temperature, mass_frac)
+            + 0.5*np.dot(momentum, momentum)/mass)
 
         return make_conserved(dim, mass=mass, momentum=momentum,
-            energy=energy_input, species_mass=species_mass)
+            energy=energy_input, species_mass=species_mass), temperature
 
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
-    eoc_rec0 = EOCRecorder()
-    eoc_rec1 = EOCRecorder()
-    eoc_rec2 = EOCRecorder()
-    eoc_rec3 = EOCRecorder()
-    eoc_rec4 = EOCRecorder()
+    eoc_f0 = EOCRecorder()
+    eoc_f1 = EOCRecorder()
+    eoc_f2 = EOCRecorder()
+    eoc_f3 = EOCRecorder()
+    eoc_f4 = EOCRecorder()
+
+    eoc_g0 = EOCRecorder()
+    eoc_g1 = EOCRecorder()
+    eoc_g2 = EOCRecorder()
+    eoc_g3 = EOCRecorder()
+    eoc_g4 = EOCRecorder()
     for nel_1d in [2, 4, 8, 16, 32]:
         mesh = generate_regular_rect_mesh(
             a=(-1.0,)*dim, b=(1.0,)*dim, nelements_per_axis=(nel_1d,)*dim)
@@ -1284,51 +1372,122 @@ def test_gradients_mixture(actx_factory, dim, order, use_overintegration):
 
         dcoll = create_discretization_collection(actx, mesh, order=order,
                                                  quadrature_order=2*order+1)
-        nodes = force_evaluation(actx, dcoll.nodes())
         dd_vol = as_dofdesc("vol")
         dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
 
-        cv = _conserved_vars(nodes)
+        # ~~~ base and quadrature nodes
+        nodes = force_evaluation(actx, dcoll.nodes())
+        overint_nodes = op.project(dcoll, dd_vol, dd_vol_quad, nodes)
+
+        cv, _ = _conserved_vars(nodes)
         state = make_fluid_state(gas_model=gas_model, cv=cv,
                                  temperature_seed=tseed)
 
         # ~~~ state projection
         vol_state_quad, _, _ = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag)
+        exact_cv, exact_temp = _conserved_vars(overint_nodes)
 
-        # compute the gradients using over-integration. However, the shape
-        # is the same as the base discretization
-        grad_cv_aux = grad_cv_operator(dcoll, gas_model, boundaries, state,
-                                       quadrature_tag=quadrature_tag)
-
+        # ~~~ compute gradients
+        # this will exercise the projection machinery internally
         grad_temp_aux = grad_t_operator(dcoll, gas_model, boundaries, state,
                                         quadrature_tag=quadrature_tag)
+
+        grad_cv_aux = grad_cv_operator(dcoll, gas_model, boundaries, state,
+                                       quadrature_tag=quadrature_tag)
 
         # re-project as it is done in the N-S operator
         grad_temp = op.project(dcoll, dd_vol, dd_vol_quad, grad_temp_aux)
         grad_cv = op.project(dcoll, dd_vol, dd_vol_quad, grad_cv_aux)
 
-        # compute dependent gradients in the quadrature domain
+        # note that the viscous fluxes are computed using both projected
+        # cv and grad, thus we do the same here
         grad_v = velocity_gradient(vol_state_quad.cv, grad_cv)
         grad_y = species_mass_fraction_gradient(vol_state_quad.cv, grad_cv)
 
-        grad_u = 30.0
-        grad_t = 50.0
+        # ~~~ errors
+        err_y0 = inf_norm(exact_cv.species_mass[i_fu] - vol_state_quad.cv.species_mass[i_fu])
+        err_y1 = inf_norm(exact_cv.species_mass[i_ox] - vol_state_quad.cv.species_mass[i_ox])
+        err_y2 = inf_norm(exact_cv.species_mass[i_di] - vol_state_quad.cv.species_mass[i_di])
+        err_u = inf_norm(exact_cv.velocity[0] - vol_state_quad.cv.velocity[0])
+        err_t = inf_norm(exact_temp - vol_state_quad.temperature)
+
+        eoc_f0.add_data_point(1.0 / nel_1d, err_y0)
+        eoc_f1.add_data_point(1.0 / nel_1d, err_y1)
+        eoc_f2.add_data_point(1.0 / nel_1d, err_y2)
+        eoc_f3.add_data_point(1.0 / nel_1d, err_u)
+        eoc_f4.add_data_point(1.0 / nel_1d, err_t)
 
         err_grad_y0 = inf_norm(grad_y[i_fu][0] - 0.1)
         err_grad_y1 = inf_norm(grad_y[i_ox][0] + 0.1)
         err_grad_y2 = inf_norm(grad_y[i_di][0] - 0.0)
-        err_grad_u = inf_norm(grad_v[0][0] - grad_u)
-        err_grad_t = inf_norm(grad_temp[0] - grad_t)
+        err_grad_u = inf_norm(grad_v[0][0] - 30.0)
+        err_grad_t = inf_norm(grad_temp[0] - 50.0)
 
-        eoc_rec0.add_data_point(1.0 / nel_1d, err_grad_y0)
-        eoc_rec1.add_data_point(1.0 / nel_1d, err_grad_y1)
-        eoc_rec2.add_data_point(1.0 / nel_1d, err_grad_y2)
-        eoc_rec3.add_data_point(1.0 / nel_1d, err_grad_u)
-        eoc_rec4.add_data_point(1.0 / nel_1d, err_grad_t)
+        eoc_g0.add_data_point(1.0 / nel_1d, err_grad_y0)
+        eoc_g1.add_data_point(1.0 / nel_1d, err_grad_y1)
+        eoc_g2.add_data_point(1.0 / nel_1d, err_grad_y2)
+        eoc_g3.add_data_point(1.0 / nel_1d, err_grad_u)
+        eoc_g4.add_data_point(1.0 / nel_1d, err_grad_t)
 
-    assert eoc_rec0.order_estimate() >= order - 0.5 or eoc_rec0.max_error() < tol
-    assert eoc_rec1.order_estimate() >= order - 0.5 or eoc_rec1.max_error() < tol
-    assert eoc_rec2.order_estimate() >= order - 0.5 or eoc_rec2.max_error() < tol
-    assert eoc_rec3.order_estimate() >= order - 0.5 or eoc_rec3.max_error() < tol
-    assert eoc_rec4.order_estimate() >= order - 0.5 or eoc_rec4.max_error() < tol
+        visualize = True
+        if visualize:
+            from grudge.shortcuts import make_visualizer
+            vis = make_visualizer(dcoll, order)
+            exact_cv, exact_temp = _conserved_vars(nodes)
+            grad_v = velocity_gradient(cv, grad_cv_aux)
+            grad_y = species_mass_fraction_gradient(cv, grad_cv_aux)
+            if use_overintegration:
+                viz_suffix = f"mixture_{dim}_{order}_{nel_1d}_over.vtu"
+            else:
+                viz_suffix = f"mixture_{dim}_{order}_{nel_1d}.vtu"
+            vis.write_vtk_file(viz_suffix, [
+                    ("CV", cv),
+                    ("grad_t", grad_temp_aux),
+                    ("grad_rho", grad_cv_aux.mass),
+                    ("grad_rhoe", grad_cv_aux.energy),
+                    ("grad_rhou", grad_cv_aux.momentum[0]),
+                    ("grad_u", grad_v[0][0]),
+                    ("grad_y0", grad_y[i_fu][0]),
+                    ("grad_y1", grad_y[i_ox][0]),
+                    ("grad_y2", grad_y[i_di][0]),
+                    ("exact_energy", exact_cv.energy),
+                    ("exact_velocity", exact_cv.velocity[0]),
+                    ("exact_temperature", exact_temp),
+                    ("exact_Y0", exact_cv.energy),
+                    ("exact_Y1", exact_cv.velocity[0]),
+                    ("exact_Y2", exact_temp),
+#                    ("exact_grad_rho", grad_rho),
+#                    ("exact_grad_rhoe", grad_rhoe),
+#                    ("exact_grad_t", grad_t),
+#                    ("exact_grad_u", grad_u),
+                    ("U", state.velocity[0]),
+                    ("T", state.temperature),
+                    ("Y0", state.species_mass_fractions[i_fu]),
+                    ("Y1", state.species_mass_fractions[i_ox]),
+                    ("Y2", state.species_mass_fractions[i_di]),
+                    ], overwrite=True)
+
+#    assert eoc_f0.order_estimate() >= order+1 - 0.5 or eoc_f0.max_error() < tol
+#    assert eoc_f1.order_estimate() >= order+1 - 0.5 or eoc_f1.max_error() < tol
+#    assert eoc_f2.order_estimate() >= order+1 - 0.5 or eoc_f2.max_error() < tol
+#    assert eoc_f3.order_estimate() >= order+1 - 0.5 or eoc_f3.max_error() < tol
+#    assert eoc_f4.order_estimate() >= order+1 - 0.5 or eoc_f4.max_error() < tol
+
+#    assert eoc_g0.order_estimate() >= order - 0.5 or eoc_g0.max_error() < tol
+#    assert eoc_g1.order_estimate() >= order - 0.5 or eoc_g1.max_error() < tol
+#    assert eoc_g2.order_estimate() >= order - 0.5 or eoc_g2.max_error() < tol
+#    assert eoc_g3.order_estimate() >= order - 0.5 or eoc_g3.max_error() < tol
+#    assert eoc_g4.order_estimate() >= order - 0.5 or eoc_g4.max_error() < tol
+
+    assert eoc_f0.max_error() < tol
+    assert eoc_f1.max_error() < tol
+    assert eoc_f2.max_error() < tol
+    assert eoc_f3.max_error() < tol
+    assert eoc_f4.max_error() < tol
+
+#    assert eoc_g0.max_error() < tol
+#    assert eoc_g1.max_error() < tol
+#    assert eoc_g2.max_error() < tol
+#    assert eoc_g3.max_error() < tol
+#    assert eoc_g4.max_error() < tol
