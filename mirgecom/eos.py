@@ -682,7 +682,7 @@ class PyrometheusMixture(MixtureEOS):
         """
         y = cv.species_mass_fractions
         cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
-        rspec = self.gas_const(cv=cv)
+        rspec = self.gas_const(species_mass_fractions=y)
         return cp / (cp - rspec)
 
     def gas_const(self, cv: ConservedVars,  # type: ignore[override]
