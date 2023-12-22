@@ -685,7 +685,7 @@ class PyrometheusMixture(MixtureEOS):
         rspec = self.gas_const(species_mass_fractions=y)
         return cp / (cp - rspec)
 
-    def gas_const(self, cv: ConservedVars,  # type: ignore[override]
+    def gas_const(self, cv: Optional[ConservedVars] = None,
                   temperature: Optional[DOFArray] = None,
                   species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         r"""Get specific gas constant $R_s$.
