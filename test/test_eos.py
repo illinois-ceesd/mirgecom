@@ -220,7 +220,7 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim):
 
         # First, check density
         mass = eos.get_density(pressin*ones, tempin*ones, yin)
-        abs_err_m = inf_norm(mass) - can_rho
+        abs_err_m = inf_norm(mass - can_rho)
         assert abs_err_m/can_rho < 1.0e-14
         assert abs_err_m < 1.0e-10
 
@@ -287,7 +287,7 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim):
         yin = can_y * ones
 
         mass = eos.get_density(pressin*ones, tempin*ones, yin)
-        abs_err_m = inf_norm(mass) - can_rho
+        abs_err_m = inf_norm(mass - can_rho)
         assert abs_err_m/can_rho < 1.0e-14
         assert abs_err_m < 1.0e-10
 
@@ -329,102 +329,6 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim):
         abs_err_h = inf_norm(enthalpy - can_h)
         assert abs_err_h/np.abs(can_h) < 1.0e-12
         assert abs_err_h < 1.0e-6
-
-
-@pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),
-                         [("uiuc_7sp", "C2H4", 1e-11),
-                          ("sandiego", "H2", 1e-9)])
-@pytest.mark.parametrize("reactor_type",
-                         ["IdealGasReactor", "IdealGasConstPressureReactor"])
-def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type):
-    """Test known pyrometheus reaction mechanisms.
-
-    This test reproduces a pyrometheus-native test in the MIRGE context.
-
-    Tests that the Pyrometheus mechanism code gets the same chemical properties
-    and reaction rates as the corresponding mechanism in Cantera. The reactions
-    are integrated in time and verified against a homogeneous reactor in
-    Cantera.
-    """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
-
-    dim = 1
-    nel_1d = 1
-
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-    )
-
-    order = 1
-
-    logger.info(f"Number of elements {mesh.nelements}")
-
-    dcoll = create_discretization_collection(actx, mesh, order=order)
-    zeros = dcoll.zeros(actx)
-    ones = dcoll.zeros(actx) + 1.0
-
-    def inf_norm(x):
-        return actx.to_numpy(op.norm(dcoll, x, np.inf))
-
-    # Pyrometheus initialization
-    mech_input = get_mechanism_input(mechname)
-    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
-
-    # XXX cantera is allowing a slightly negative species, so use a go-around
-    # to match cantera's values.
-    # Ideally, we would like to keep things strictly above zero.
-    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
-                                                          zero_level=-1e-16)(actx.np)
-
-    nspecies = pyro_obj.num_species
-    print(f"PyrometheusMixture::NumSpecies = {nspecies}")
-
-    tempin = 1200.0
-    pressin = cantera.one_atm
-    print(f"Testing (t,P) = ({tempin}, {pressin})")
-
-    # Homogeneous reactor to get test data
-    cantera_soln.set_equivalence_ratio(phi=1.0, fuel=fuel+":1",
-                                       oxidizer="O2:1.0,N2:3.76")
-    cantera_soln.TP = tempin, pressin
-
-    eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
-
-    # constant density, variable pressure
-    if reactor_type == "IdealGasReactor":
-        reactor = cantera.IdealGasReactor(cantera_soln, name="Batch Reactor")
-
-    # constant pressure, variable density
-    if reactor_type == "IdealGasConstPressureReactor":
-        reactor = cantera.IdealGasConstPressureReactor(cantera_soln,
-                                                       name="Batch Reactor")
-
-    net = cantera.ReactorNet([reactor])
-
-    time = 0.0
-    dt = 1e-6
-    for _ in range(100):
-        time += dt
-        net.advance(time)
-
-        can_t = reactor.T
-        tin = can_t * ones
-        rhoin = reactor.density * ones
-        yin = reactor.Y * ones
-        ein = eos.get_internal_energy(temperature=tin, species_mass_fractions=yin)
-
-        cv = make_conserved(dim=dim, mass=rhoin, energy=ein,
-            momentum=make_obj_array([zeros]), species_mass=rhoin*yin)
-
-        omega_mc = eos.get_production_rates(cv, tin)
-        omega_ct = cantera_soln.net_production_rates
-        for i in range(cantera_soln.n_species):
-            assert inf_norm((omega_mc[i] - omega_ct[i])) < rate_tol
-
-    assert can_t > 2000.0
-    assert can_t < 4000.0
 
 
 @pytest.mark.parametrize(("mechname", "rate_tol"),
@@ -509,9 +413,9 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol):
 
         # Test the concentrations zero level
         y = -ones*y0s
-        # print(f"{y=}")
+        print(f"{y=}")
         conc = pyro_mechanism.get_concentrations(pyro_m, y)
-        # print(f"{conc=}")
+        print(f"{conc=}")
         for spec in range(nspecies):
             assert inf_norm(conc[spec]) < 1e-14
 
@@ -520,9 +424,9 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, rate_tol):
             cantera_soln, zero_level=zlev)(actx.np)
 
         y = 0*y + zlev
-        # print(f"{y=}")
+        print(f"{y=}")
         conc = test_mech.get_concentrations(pyro_m, y)
-        # print(f"{conc=}")
+        print(f"{conc=}")
         for spec in range(nspecies):
             assert inf_norm(conc[spec]) < 1e-14
 
@@ -647,6 +551,103 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
         omega_ct = cantera_soln.net_production_rates
         for i in range(cantera_soln.n_species):
             assert inf_norm((omega_pm[i] - omega_ct[i])) < rate_tol
+
+    assert can_t > 2000.0
+    assert can_t < 4000.0
+
+
+@pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),
+                         [("uiuc_7sp", "C2H4", 1e-11),
+                          ("sandiego", "H2", 1e-9)])
+@pytest.mark.parametrize("reactor_type",
+                         ["IdealGasReactor", "IdealGasConstPressureReactor"])
+def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type):
+    """Test known pyrometheus reaction mechanisms.
+
+    This test reproduces a pyrometheus-native test in the MIRGE context.
+
+    Tests that the Pyrometheus mechanism code gets the same chemical properties
+    and reaction rates as the corresponding mechanism in Cantera. The reactions
+    are integrated in time and verified against a homogeneous reactor in
+    Cantera.
+    """
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    dim = 1
+    nel_1d = 1
+
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 4
+
+    logger.info(f"Number of elements {mesh.nelements}")
+
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    zeros = dcoll.zeros(actx)
+    ones = dcoll.zeros(actx) + 1.0
+
+    def inf_norm(x):
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
+
+    # Pyrometheus initialization
+    mech_input = get_mechanism_input(mechname)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+
+    # XXX cantera is allowing a slightly negative mass fractions, so use a  
+    # work-around to match cantera's reactions.
+    # Ideally, we would like to keep things strictly above zero, but then the
+    # test fails.
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
+                                                          zero_level=-1e-16)(actx.np)
+
+    nspecies = pyro_obj.num_species
+    print(f"PyrometheusMixture::NumSpecies = {nspecies}")
+
+    tempin = 1200.0
+    pressin = cantera.one_atm
+    print(f"Testing (t,P) = ({tempin}, {pressin})")
+
+    # Homogeneous reactor to get test data
+    cantera_soln.set_equivalence_ratio(phi=1.0, fuel=fuel+":1",
+                                       oxidizer="O2:1.0,N2:3.76")
+    cantera_soln.TP = tempin, pressin
+
+    eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
+
+    # constant density, variable pressure
+    if reactor_type == "IdealGasReactor":
+        reactor = cantera.IdealGasReactor(cantera_soln, name="Batch Reactor")
+
+    # constant pressure, variable density
+    if reactor_type == "IdealGasConstPressureReactor":
+        reactor = cantera.IdealGasConstPressureReactor(cantera_soln,
+                                                       name="Batch Reactor")
+
+    net = cantera.ReactorNet([reactor])
+
+    time = 0.0
+    dt = 1e-6
+    for _ in range(100):
+        time += dt
+        net.advance(time)
+
+        can_t = reactor.T
+        tin = can_t * ones
+        rhoin = reactor.density * ones
+        yin = reactor.Y * ones
+        ein = eos.get_internal_energy(temperature=tin, species_mass_fractions=yin)
+
+        cv = make_conserved(dim=dim, mass=rhoin, energy=ein,
+            momentum=make_obj_array([zeros]), species_mass=rhoin*yin)
+
+        omega_mc = eos.get_production_rates(cv, tin)
+        omega_ct = cantera_soln.net_production_rates
+        for i in range(cantera_soln.n_species):
+            assert inf_norm((omega_mc[i] - omega_ct[i])) < rate_tol
 
     assert can_t > 2000.0
     assert can_t < 4000.0
