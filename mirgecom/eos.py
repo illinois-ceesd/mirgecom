@@ -164,7 +164,8 @@ class GasEOS(metaclass=ABCMeta):
         """Get the kinetic energy for the gas."""
 
     @abstractmethod
-    def gamma(self, cv: ConservedVars, temperature: Optional[DOFArray] = None):
+    def gamma(self, cv: Optional[ConservedVars] = None,
+              temperature: Optional[DOFArray] = None):
         """Get the ratio of gas specific heats Cp/Cv."""
 
     @abstractmethod
