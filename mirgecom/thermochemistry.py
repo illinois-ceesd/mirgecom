@@ -85,7 +85,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
         # This only affects chemistry-related evaluations and does not interfere
         # with the actual fluid state.
         def get_concentrations(self, rho, mass_fractions):
-            concs = self.iwts * rho * mass_fractions
+            concs = self.inv_molecular_weights * rho * mass_fractions
             # ensure non-negative concentrations
             zero = self._pyro_zeros_like(concs[0])
             for i in range(self.num_species):
@@ -182,28 +182,5 @@ def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
     mech_input_source = get_mechanism_input(mechanism_name)
     from cantera import Solution
     cantera_soln = Solution(name="gas", yaml=mech_input_source)
-    return \
-        get_pyrometheus_wrapper_class_from_cantera(
-            cantera_soln, temperature_niter=temperature_niter,
-            zero_level=zero_level)
-
-
-# backwards compat
-def make_pyrometheus_mechanism_class(cantera_soln, temperature_niter=5,
-                                     zero_level=0.):
-    """Deprecate this interface to get_pyrometheus_mechanism_class."""
-    from warnings import warn
-    warn("make_pyrometheus_mechanism_class is deprecated."
-         " use get_pyrometheus_wrapper_class_from_cantera.")
-    return get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level)
-
-
-def make_pyro_thermochem_wrapper_class(cantera_soln, temperature_niter=5,
-                                       zero_level=0.):
-    """Deprecate this interface to pyro_wrapper_class_from_cantera."""
-    from warnings import warn
-    warn("make_pyrometheus_mechanism is deprecated."
-         " use get_pyrometheus_wrapper_class_from_cantera.")
     return get_pyrometheus_wrapper_class_from_cantera(
         cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level)

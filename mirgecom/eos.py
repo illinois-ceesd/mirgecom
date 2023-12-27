@@ -707,9 +707,10 @@ class PyrometheusMixture(MixtureEOS):
             ($\rho$), energy ($\rho{E}$), momentum ($\rho\vec{V}$), and the vector
             of species masses, ($\rho{Y}_\alpha$).
         """
-        from warnings import warn
-        warn("Passing CV to eos.gas_const will be deprecated in Q1 2024.",
-             stacklevel=2)
+        if cv is not None:
+            from warnings import warn
+            warn("Passing CV to eos.gas_const will be deprecated in Q1 2024.",
+                 stacklevel=2)
         y = species_mass_fractions if cv is None else cv.species_mass_fractions
         return self._pyrometheus_mech.get_specific_gas_constant(y)
 
