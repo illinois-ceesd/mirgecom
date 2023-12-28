@@ -629,7 +629,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
         print(f"pyro_conc = {pyro_c}")
 
         # forward rates
-        kfd_pm = pyro_obj.get_fwd_rate_coefficients(tin, cin)
+        kfd_pm = pyro_obj.get_fwd_rate_coefficients(tin, pyro_c)
         kfw_ct = cantera_soln.forward_rate_constants
         for i, _ in enumerate(cantera_soln.reactions()):
             assert inf_norm((kfd_pm[i] - kfw_ct[i]) / kfw_ct[i]) < 1.0e-13
@@ -642,16 +642,16 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
                 assert inf_norm((keq_pm[i] - keq_ct[i]) / keq_ct[i]) < 1.0e-13
 
         # reverse rates
-        krv_pm = pyro_obj.get_rev_rate_coefficients(pin, tin, cin)
+        krv_pm = pyro_obj.get_rev_rate_coefficients(pin, tin, pyro_c)
         krv_ct = cantera_soln.reverse_rate_constants
         for i, reaction in enumerate(cantera_soln.reactions()):
             if reaction.reversible:  # skip irreversible reactions
                 assert inf_norm((krv_pm[i] - krv_ct[i]) / krv_ct[i]) < 1.0e-13
 
         # reaction progress
-        rates_pm = pyro_obj.get_net_rates_of_progress(pin, tin, cin)
+        rates_pm = pyro_obj.get_net_rates_of_progress(pin, tin, pyro_c)
         rates_ct = cantera_soln.net_rates_of_progress
-        for i, rates_ in enumerate(rates_ct):
+        for i, rates in enumerate(rates_ct):
             assert inf_norm(rates_pm[i] - rates) < rate_tol
 
         # species production/destruction
