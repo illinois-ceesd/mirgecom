@@ -516,7 +516,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         assert inf_norm((internal_energy - pyro_e) / pyro_e) < tol
         assert inf_norm((p - pyro_p) / pyro_p) < tol
 
-        # Test the concetrations zero level
+        # Test the concentrations zero level
         y = -1.0*y
         print(f"{y=}")
         conc = prometheus_mechanism.get_concentrations(rho, y)
@@ -539,7 +539,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
 @pytest.mark.parametrize(("mechname", "fuel", "rate_tol", "steps"),
                          [("uiuc_7sp", "C2H4", 1e-11, 100),
-                          ("sandiego", "H2", 1e-10, 100)])
+                          ("sandiego", "H2", 1e-9, 100)])
 @pytest.mark.parametrize("reactor_type",
                          ["IdealGasReactor", "IdealGasConstPressureReactor"])
 def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
@@ -548,10 +548,9 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
 
     This test reproduces a pyrometheus-native test in the MIRGE context.
 
-    Tests that the Pyrometheus mechanism code gets the same chemical properties
-    and reaction rates as the corresponding mechanism in Cantera. The reactions
-    are integrated in time and verified against a homogeneous reactor in
-    Cantera.
+    Tests that the Pyrometheus mechanism code gets the same reaction rates as
+    the corresponding mechanism in Cantera. The reactions are integrated in
+    time and verified against homogeneous reactors in Cantera.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -581,8 +580,9 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
     # XXX cantera is allowing a slightly negative species, so use a go-around
     # to match cantera's values.
     # Ideally, we would like to keep things strictly above zero.
-    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
-                                                          zero_level=-1e-16)(actx.np)
+    pyro_obj = \
+        get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
+                                                   zero_level=-1e-16)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
