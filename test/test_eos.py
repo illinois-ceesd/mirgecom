@@ -338,7 +338,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
     actx = PyOpenCLArrayContext(queue)
 
     dim = 1
-    nel_1d = 4
+    nel_1d = 2
 
     mesh = generate_regular_rect_mesh(
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
@@ -564,7 +564,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
         a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
     )
 
-    order = 1
+    order = 4
 
     logger.info(f"Number of elements {mesh.nelements}")
 
@@ -605,13 +605,13 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
         reactor = cantera.IdealGasConstPressureReactor(cantera_soln,
                                                        name="Batch Reactor")
 
-    net = cantera.ReactorNet([reactor])
+    sim = cantera.ReactorNet([reactor])
 
     time = 0.0
     dt = 1e-6
     for _ in range(steps):
         time += dt
-        net.advance(time)
+        sim.advance(time)
 
         # Get state from Cantera
         can_t = reactor.T
@@ -624,7 +624,9 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
         pin = can_p * ones
         rhoin = can_rho * ones
         yin = can_y * ones
-        cin = pyro_obj.get_concentrations(rhoin, yin)
+
+        pyro_c = pyro_obj.get_concentrations(rhoin, yin)
+        print(f"pyro_conc = {pyro_c}")
 
         # forward rates
         kfd_pm = pyro_obj.get_fwd_rate_coefficients(tin, cin)
@@ -649,14 +651,14 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, steps,
         # reaction progress
         rates_pm = pyro_obj.get_net_rates_of_progress(pin, tin, cin)
         rates_ct = cantera_soln.net_rates_of_progress
-        for i, _ in enumerate(cantera_soln.reactions()):
-            assert inf_norm((rates_pm[i] - rates_ct[i])) < rate_tol
+        for i, rates_ in enumerate(rates_ct):
+            assert inf_norm(rates_pm[i] - rates) < rate_tol
 
         # species production/destruction
         omega_pm = pyro_obj.get_net_production_rates(rhoin, tin, yin)
         omega_ct = cantera_soln.net_production_rates
-        for i in range(cantera_soln.n_species):
-            assert inf_norm((omega_pm[i] - omega_ct[i])) < rate_tol
+        for i, omega in enumerate(omega_ct):
+            assert inf_norm(omega_pm[i] - omega) < rate_tol
 
     assert can_t > 2000.0
     assert can_t < 4000.0
