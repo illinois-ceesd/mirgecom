@@ -126,6 +126,14 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
                 The mixture temperature after a fixed number of Newton iterations.
             """
             num_iter = temperature_niter
+
+            # if calorically perfect gas (constant heat capacities)
+            if num_iter == 0:
+                cv_mass = self.get_mixture_specific_heat_cv_mass(
+                    temperature_guess*0.0, species_mass_fractions)
+                return energy/cv_mass
+
+            # if thermally perfect gas
             t_i = temperature_guess
             for _ in range(num_iter):
                 t_i = t_i + self.get_temperature_update_energy(
