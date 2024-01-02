@@ -257,12 +257,12 @@ reactions:
   type: three-body
   rate-constant: {A: 8.0e+15, b: 0.0, Ea: 0.0}
   efficiencies: {H2: 2.5, H2O: 12.0}
-#- equation: H + O2 (+ M) <=> HO2 (+ M)  # Reaction 10
-#  type: falloff
-#  low-P-rate-constant: {A: 5.75e+19, b: -1.4, Ea: 0.0}
-#  high-P-rate-constant: {A: 4.65e+12, b: 0.44, Ea: 0.0}
-#  Troe: {A: 0.5, T3: 1.0e-30, T1: 1.0e+30}
-#  efficiencies: {H2: 2.5, H2O: 16.0}
+- equation: H + O2 (+ M) <=> HO2 (+ M)  # Reaction 10
+  type: falloff
+  low-P-rate-constant: {A: 5.75e+19, b: -1.4, Ea: 0.0}
+  high-P-rate-constant: {A: 4.65e+12, b: 0.44, Ea: 0.0}
+  Troe: {A: 0.5, T3: 1.0e-30, T1: 1.0e+30}
+  efficiencies: {H2: 2.5, H2O: 16.0}
 - equation: HO2 + H <=> 2 OH  # Reaction 11
   rate-constant: {A: 7.08e+13, b: 0.0, Ea: 1.234}
 - equation: HO2 + H <=> H2 + O2  # Reaction 12
@@ -277,12 +277,12 @@ reactions:
 - equation: HO2 + OH <=> H2O + O2  # Reaction 16
   rate-constant: {A: 2.98e+13, b: 0.0, Ea: -2.08}
   duplicate: true
-#- equation: OH + OH (+ M) <=> H2O2 (+ M)  # Reaction 17
-#  type: falloff
-#  low-P-rate-constant: {A: 2.76e+25, b: -3.2, Ea: 0.0}
-#  high-P-rate-constant: {A: 9.55e+13, b: -0.27, Ea: 0.0}
-#  Troe: {A: 0.57, T3: 1.0e+30, T1: 1.0e-30}
-#  efficiencies: {H2: 2.5, H2O: 6.0}
+- equation: OH + OH (+ M) <=> H2O2 (+ M)  # Reaction 17
+  type: falloff
+  low-P-rate-constant: {A: 2.76e+25, b: -3.2, Ea: 0.0}
+  high-P-rate-constant: {A: 9.55e+13, b: -0.27, Ea: 0.0}
+  Troe: {A: 0.57, T3: 1.0e+30, T1: 1.0e-30}
+  efficiencies: {H2: 2.5, H2O: 6.0}
 - equation: HO2 + HO2 <=> H2O2 + O2  # Reaction 18
   rate-constant: {A: 1.94e+11, b: 0.0, Ea: -5.895}
   duplicate: true
