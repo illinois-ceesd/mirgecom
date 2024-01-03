@@ -630,10 +630,9 @@ class PyrometheusMixture(MixtureEOS):
     def heat_capacity_cv(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant volume."""
         y = cv.species_mass_fractions
-        return (
-            self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
-            / self.gamma(cv, temperature)
-        )
+        cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
+        rspec = self.gas_const(species_mass_fractions=y)
+        return cp - rspec
 
     def gamma(self, cv: ConservedVars,  # type: ignore[override]
             temperature: DOFArray) -> DOFArray:
