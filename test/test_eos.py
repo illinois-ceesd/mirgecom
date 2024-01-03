@@ -698,7 +698,8 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type):
     mech_input = get_mechanism_input(mechname)
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
 
-    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=5)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
@@ -735,13 +736,15 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type):
         tin = can_t * ones
         rhoin = reactor.density * ones
         yin = reactor.Y * ones
-        ein = eos.get_internal_energy(temperature=tin,
-                                      species_mass_fractions=yin)
+        ein = rhoin * eos.get_internal_energy(temperature=tin,
+                                              species_mass_fractions=yin)
 
         cv = make_conserved(dim=dim, mass=rhoin, energy=ein,
             momentum=make_obj_array([zeros]), species_mass=rhoin*yin)
 
-        omega_mc = eos.get_production_rates(cv, tin)
+        temp = temperature(cv=cv, temperature_seed=tin)
+
+        omega_mc = eos.get_production_rates(cv, temp)
         omega_ct = cantera_soln.net_production_rates
         for i in range(cantera_soln.n_species):
             assert inf_norm((omega_mc[i] - omega_ct[i])) < rate_tol
@@ -749,6 +752,62 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type):
     # check that the reactions progress far enough
     assert can_t > 2000.0
     assert can_t < 4000.0
+
+
+@pytest.mark.parametrize(("mechname", ["uiuc_7sp"])
+def test_temperature_constant_cv(ctx_factory, mechname):
+    """."""
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
+
+    dim = 1
+    nel_1d = 1
+
+    mesh = generate_regular_rect_mesh(
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+    )
+
+    order = 4
+
+    logger.info(f"Number of elements {mesh.nelements}")
+
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+    zeros = dcoll.zeros(actx)
+    ones = dcoll.zeros(actx) + 1.0
+
+    def inf_norm(x):
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
+
+    # Pyrometheus initialization
+    mech_input = get_mechanism_input(mechname)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+    cantera_soln.set_equivalence_ratio(phi=1.0, fuel=fuel+":1",
+                                       oxidizer="O2:1.0,N2:3.76")
+
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=0)(actx.np)
+
+    pressin = cantera.one_atm
+    eos = PyrometheusMixture(pyro_obj, temperature_guess=0.)  # XXX dummy
+    gas_model = GasModel(eos=eos)
+
+    for tin in ([300.0, 600.0, 900.0, 1200.0, 1500.0, 1800.0, 2100.0]):
+        cantera_soln.TP = tin, pressin
+        print(f"Testing (t,P) = ({tin}, {pressin})")
+        cantera_soln.equilibrate("TP")
+
+        rhoin = cantera_soln.density * ones
+        yin = cantera_soln.Y * ones
+        ein = rhoin*eos.get_internal_energy(temperature=tin,
+                                            species_mass_fractions=yin)
+
+        cv = make_conserved(dim=dim, mass=rhoin, energy=ein,
+            momentum=make_obj_array([zeros]), species_mass=rhoin*yin)
+
+        temp = temperature(cv=cv, temperature_seed=tin)
+
+        assert temp - tin > 1e-15
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])

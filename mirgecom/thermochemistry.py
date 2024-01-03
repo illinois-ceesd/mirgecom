@@ -1,4 +1,4 @@
-r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyrometheus`..
+r""":mod:`mirgecom.thermochemistry` provides a wrapper class for :mod:`pyrometheus`.
 
 This module provides an interface to the
 `Pyrometheus Thermochemistry <https://github.com/pyrometheus>`_ package's
@@ -151,7 +151,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
             heat_rls = state.cv.mass*0.0
             for i in range(self.num_species):
-                heat_rls = heat_rls - h_a[i]*w_dot[i]/(self.wts[i])
+                heat_rls = heat_rls - h_a[i]*w_dot[i]/(self.molecular_weights[i])
 
             return heat_rls*self.gas_constant*state.temperature
 
