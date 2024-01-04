@@ -426,10 +426,11 @@ def make_fluid_state(cv, gas_model,
             material_densities=material_densities,
             tau=tau,
             density=gas_model.solid_density(material_densities),
-            void_fraction=gas_model.wall_eos.void_fraction(tau),
-            emissivity=gas_model.wall_eos.emissivity(tau),
-            permeability=gas_model.wall_eos.permeability(tau),
-            tortuosity=gas_model.wall_eos.tortuosity(tau)
+            void_fraction=gas_model.wall_eos.void_fraction(tau=tau),
+            # FIXME emissivity as a function of temperature...
+            emissivity=gas_model.wall_eos.emissivity(tau=tau),
+            permeability=gas_model.wall_eos.permeability(tau=tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau=tau)
         )
 
         temperature = gas_model.get_temperature(cv=cv, wv=wv,

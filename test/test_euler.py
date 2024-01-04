@@ -228,11 +228,11 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [2, 3, 4])
-def test_uniform_rhs_esdg(actx_factory, nspecies, dim, order):
-    """Test the inviscid rhs using a trivial constant/uniform state.
+def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
+    """Test the entropy-to-conservative vars conversion utility.
 
-    This state should yield rhs = 0 to FP.  The test is performed for 1, 2,
-    and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
+    The test is performed for 1, 2, and 3 dimensions, with orders 2, 3, and 4,
+    with and without passive species.
     """
     actx = actx_factory()
 

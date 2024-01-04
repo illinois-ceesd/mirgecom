@@ -611,6 +611,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, rate_tol, y0):
     mech_input = get_mechanism_input(mechname)
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
+    # pyro_obj = pyro.get_thermochem_class(cantera_soln)(actx.np)
     pyro_obj = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
 
     nspecies = pyro_obj.num_species
