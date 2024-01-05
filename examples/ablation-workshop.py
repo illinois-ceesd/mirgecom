@@ -429,7 +429,7 @@ class TabulatedGasEOS(MixtureEOS):
         r"""Return the gas heat capacity at constant volume $C_{v_g}$."""
         return self.heat_capacity_cp(cv, temperature)/self.gamma(cv, temperature)
 
-    def gamma(self, cv: ConservedVars,
+    def gamma(self, cv: Optional[ConservedVars] = None,
               temperature: Optional[DOFArray] = None) -> DOFArray:
         r"""Return the heat of capacity ratios $\gamma$."""
         coeffs = self._cs_gamma.c
