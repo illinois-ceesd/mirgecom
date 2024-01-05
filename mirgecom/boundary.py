@@ -1318,7 +1318,8 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         # evaluate internal energy based on prescribed pressure
         pressure_plus = 2.0*self._pressure - state_minus.pressure
         if state_minus.is_mixture:
-            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            gas_const = gas_model.eos.gas_const(
+                species_mass_fractions=state_minus.cv.species_mass_fractions)
             temp_plus = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
                               state_minus.temperature,
@@ -1360,7 +1361,8 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         # evaluate internal energy based on prescribed pressure
         pressure_plus = self._pressure + actx.np.zeros_like(state_minus.pressure)
         if state_minus.is_mixture:
-            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            gas_const = gas_model.eos.gas_const(
+                species_mass_fractions=state_minus.cv.species_mass_fractions)
             temp_plus = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
                               state_minus.temperature,
@@ -1577,7 +1579,8 @@ class RiemannOutflowBoundary(MengaldoBoundaryCondition):
         if state_minus.is_mixture:
 
             # using gas constant based on state_minus species
-            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            gas_const = gas_model.eos.gas_const(
+                species_mass_fractions=state_minus.cv.species_mass_fractions)
             temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
 
             energy_boundary = rho_boundary * (
@@ -1946,7 +1949,8 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
 
         kin_energy = 0.5*mass*(u_x**2 + u_y**2)
         if state_minus.is_mixture:
-            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            gas_const = gas_model.eos.gas_const(
+                species_mass_fractions=state_minus.cv.species_mass_fractions)
             temperature = self._ref_pressure/(self._ref_mass*gas_const)
             int_energy = mass*gas_model.eos.get_internal_energy(
                 temperature, self._spec_mass_fracs)  # XXX use state_minus?
@@ -2084,7 +2088,8 @@ class LinearizedInflow2DBoundary(MengaldoBoundaryCondition):
 
         kin_energy = 0.5*mass*(u_x**2 + u_y**2)
         if state_minus.is_mixture:
-            gas_const = gas_model.eos.gas_const(state_minus.cv)
+            gas_const = gas_model.eos.gas_const(
+                species_mass_fractions=state_minus.cv.species_mass_fractions)
             temperature = self._ref_pressure/(self._ref_mass*gas_const)
             int_energy = mass*gas_model.eos.get_internal_energy(
                 temperature, self._spec_mass_fracs)
