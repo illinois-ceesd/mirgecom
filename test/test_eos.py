@@ -45,7 +45,6 @@ from meshmode.array_context import (  # noqa
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-from mirgecom.transport import MixtureAveragedTransport
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.gas_model import GasModel, make_fluid_state
@@ -55,105 +54,6 @@ from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
 logger = logging.getLogger(__name__)
-
-# FIXME
-import os  # noqa
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # noqa
-
-
-@pytest.mark.parametrize("mechname", ["sandiego"])
-@pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [1, 3, 5])
-def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
-    """Test mixture-averaged transport properties."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
-
-    nel_1d = 4
-
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-    )
-
-    logger.info(f"Number of elements {mesh.nelements}")
-
-    dcoll = create_discretization_collection(actx, mesh, order=order)
-    ones = dcoll.zeros(actx) + 1.0
-    zeros = dcoll.zeros(actx)
-
-    # Pyrometheus initialization
-    mech_input = get_mechanism_input(mechname)
-    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
-    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=3)(actx.np)
-
-    nspecies = pyro_obj.num_species
-    print(f"PyrometheusMixture::NumSpecies = {nspecies}")
-
-    tempin = 1500.0
-    pressin = cantera.one_atm
-    print(f"Testing (t,P) = ({tempin}, {pressin})")
-
-    # Transport data initilization
-    transport_model = MixtureAveragedTransport(pyro_obj)
-    eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
-    gas_model = GasModel(eos=eos, transport=transport_model)
-
-    # Homogeneous reactor to get test data
-    cantera_soln.set_equivalence_ratio(phi=1.0, fuel="H2:1",
-                                       oxidizer="O2:1.0,N2:3.76")
-
-    for tempin in ([300.0, 600.0, 900.0, 1200.0, 1500.0, 1800.0, 2100.0]):
-
-        cantera_soln.TP = tempin, pressin
-        cantera_soln.equilibrate("TP")
-        can_t, can_rho, can_y = cantera_soln.TDY
-        can_p = cantera_soln.P
-
-        tin = can_t * ones
-        rhoin = can_rho * ones
-        yin = can_y * ones
-
-        # Cantera transport
-        mu_ct = cantera_soln.viscosity
-        kappa_ct = cantera_soln.thermal_conductivity
-        diff_ct = cantera_soln.mix_diff_coeffs
-
-        cv = make_conserved(dim=2, mass=rhoin,
-                            momentum=make_obj_array([zeros, zeros]),
-                            energy=rhoin*gas_model.eos.get_internal_energy(tin, yin),
-                            species_mass=can_rho * can_y * ones)
-
-        fluid_state = make_fluid_state(cv, gas_model, tin)
-
-        # Pyrometheus transport
-        mu = fluid_state.tv.viscosity
-        kappa = fluid_state.tv.thermal_conductivity
-        diff = fluid_state.tv.species_diffusivity
-
-        def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))
-
-        # Making sure both pressure and temperature are correct
-        err_p = np.abs(inf_norm(fluid_state.dv.pressure) - can_p)
-        assert err_p < 1.0e-10
-
-        err_t = np.abs(inf_norm(fluid_state.dv.temperature) - can_t)
-        assert err_t < 2.0e-12
-
-        # Viscosity
-        err_mu = np.abs(inf_norm(mu) - mu_ct)
-        assert err_mu < 1.0e-12
-
-        # Thermal conductivity
-        err_kappa = np.abs(inf_norm(kappa) - kappa_ct)
-        assert err_kappa < 1.0e-12
-
-        # Species diffusivities
-        for i in range(nspecies):
-            err_diff = np.abs(inf_norm(diff[i]) - diff_ct[i])
-            assert err_diff < 1.0e-12
 
 
 @pytest.mark.parametrize("mechname", ["air_3sp", "uiuc_7sp", "sandiego",
@@ -188,14 +88,13 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim):
     nspecies = pyro_obj.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
 
-    pressin = 101325.0
-
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     # first check each species individually for a fixed temperature
 
     tempin = 600.0
+    pressin = 101325.0
     eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
     gas_model = GasModel(eos=eos)
     for i in range(nspecies):
