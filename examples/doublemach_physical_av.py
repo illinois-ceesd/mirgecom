@@ -292,8 +292,8 @@ def main(actx_class, use_esdg=False,
 
         # kappa_h = 1.5
         kappa_h = 5
-        gamma = gas_model.eos.gamma(cv)
-        r = gas_model.eos.gas_const(cv)
+        gamma = gas_model.eos.gamma()
+        r = gas_model.eos.gas_const()
         static_temp = 0.015
         c_star = actx.np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
         indicator = -kappa_h*length_scales*div_v/c_star
