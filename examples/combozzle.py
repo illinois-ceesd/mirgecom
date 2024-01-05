@@ -765,8 +765,10 @@ def main(actx_class, rst_filename=None,
         eos = IdealSingleGas()
     else:
         if use_cantera:
-            from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-            pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
+            from mirgecom.thermochemistry \
+                import get_pyrometheus_wrapper_class_from_cantera
+            pyro_mechanism = \
+                get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
             eos = PyrometheusMixture(pyro_mechanism,
                                      temperature_guess=temperature_seed)
         else:
