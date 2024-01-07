@@ -32,6 +32,15 @@ In some cases, it can be helpful to install certain packages from source, for de
 a git version. Most packages are straightforward to install from source. For pocl, you can follow this
 `installation script <https://gist.github.com/matthiasdiener/838ccbdb5d8f4e4917b58fe3da811777>`__.
 
+How can I use system OpenCL implementations, such as Nvidia CL or Apple CL?
+---------------------------------------------------------------------------
+
+To use OpenCL drivers other than pocl, you can access the ones installed on the
+system by installing the following conda packages::
+
+   $ conda install ocl-icd-system            # Linux
+   $ conda install ocl_icd_wrapper_apple     # MacOS
+
 .. _Pyopencl source installation:
 
 How can I build pyopencl from source?
@@ -46,9 +55,16 @@ You can build pyopencl against conda's OpenCL driver in the following way::
    $ conda install ocl-icd                    # Linux
    $ conda install khronos-opencl-icd-loader  # MacOS
    $ cd emirge/pyopencl
-   # Apply this patch on MacOS: https://raw.githubusercontent.com/conda-forge/pyopencl-feedstock/master/recipe/osx_flags.diff
-   $ ./configure.py --cl-inc-dir=$PWD/../miniforge3/envs/ceesd/include --cl-lib-dir=$PWD/../miniforge3/envs/ceesd/lib
+   
+   # Apply this patch on MacOS:
+   # https://raw.githubusercontent.com/conda-forge/pyopencl-feedstock/master/recipe/osx_flags.diff
+   
+   $ ./configure.py --cl-inc-dir=$CONDA_PREFIX/include --cl-lib-dir=$CONDA_PREFIX/lib
    $ pip install -e .
+   
+   # You may have to explicitly preload the OpenCL library:
+   # export LD_PRELOAD=$CONDA_PREFIX/lib/libOpenCL.so  # Linux
+   # export DYLD_INSERT_LIBRARIES=$CONDA_PREFIX/lib/libOpenCL.dylib  # MacOS
 
 .. _record pip packages:
 

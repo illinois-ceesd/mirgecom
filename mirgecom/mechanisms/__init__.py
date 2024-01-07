@@ -2,7 +2,7 @@
 
 .. autofunction:: get_mechanisms_pkgname
 .. autofunction:: get_mechanism_file_name
-.. autofunction:: get_mechanism_cti
+.. autofunction:: get_mechanism_input
 .. autofunction:: import_mechdata
 """
 
@@ -46,8 +46,8 @@ def get_mechanisms_pkgname() -> str:
 
 
 def get_mechanism_file_name(mechanism_name: str) -> str:
-    """Form the CTI file name for a mechanism."""
-    return f"{mechanism_name}.cti"
+    """Form the YAML file name for a mechanism."""
+    return f"{mechanism_name}.yaml"
 
 
 def import_mechdata():
@@ -55,15 +55,21 @@ def import_mechdata():
 
     Returns
     -------
-    :class:`importlib.abc.Traversable`
-        Object of type :class:`importlib.abc.Traversable` representing the container
-        (think directory) of the thermochemistry mechanism data (think CTI files).
+    :class:`importlib.resources.abc.Traversable`
+        Object of type :class:`importlib.resources.abc.Traversable` representing the
+        container (think directory) of the thermochemistry mechanism data
+        (think YAML files).
     """
     return importlib_resources.files(get_mechanisms_pkgname())
 
 
-def get_mechanism_cti(mechanism_name: str) -> str:
-    """Get the contents of a mechanism CTI file."""
+def get_mechanism_input(mechanism_name: str) -> str:
+    """Get the contents of a mechanism YAML input file."""
+    if mechanism_name == "uiuc":
+        mechanism_name = "uiuc_7sp"
+        from warnings import warn
+        warn("The uiuc mechanism was updated in Q3 2023. Use 'uiuc_7sp' instead.",
+             stacklevel=2)
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)
     return mech_file.read_text()

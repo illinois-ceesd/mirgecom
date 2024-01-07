@@ -3,6 +3,7 @@
 .. autofunction:: make_status_message
 .. autofunction:: make_rank_fname
 .. autofunction:: make_par_fname
+.. autofunction:: read_and_distribute_yaml_data
 """
 
 __copyright__ = """
@@ -28,21 +29,26 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+from functools import partial
+import grudge.op as op
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+from grudge.dof_desc import DD_VOLUME_ALL
 
 
 def make_init_message(*, dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
                       initname, eosname, casename,
-                      nelements=0, global_nelements=0):
+                      nelements=0, global_nelements=0,
+                      t_initial=0):
     """Create a summary of some general simulation parameters and inputs."""
-    return(
+    return (
         f"Initialization for Case({casename})\n"
         f"===\n"
         f"Num {dim}d order-{order} elements: {nelements}\n"
         f"Num global elements: {global_nelements}\n"
         f"Timestep:        {dt}\n"
+        f"Initial time:    {t_initial}\n"
         f"Final time:      {t_final}\n"
         f"CFL:             {cfl}\n"
         f"Constant CFL:    {constant_cfl}\n"
@@ -51,12 +57,12 @@ def make_init_message(*, dim, order, dt, t_final,
     )
 
 
-def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
+def make_status_message(
+        *, dcoll, t, step, dt, cfl, dependent_vars, fluid_dd=DD_VOLUME_ALL):
     r"""Make simulation status and health message."""
     dv = dependent_vars
-    from functools import partial
-    _min = partial(discr.nodal_min, "vol")
-    _max = partial(discr.nodal_max, "vol")
+    _min = partial(op.nodal_min, dcoll, fluid_dd)
+    _max = partial(op.nodal_max, dcoll, fluid_dd)
     statusmsg = (
         f"Status: {step=} {t=}\n"
         f"------- P({_min(dv.pressure):.3g}, {_max(dv.pressure):.3g})\n"
@@ -68,9 +74,32 @@ def make_status_message(*, discr, t, step, dt, cfl, dependent_vars):
 
 def make_rank_fname(basename, rank=0, step=0, t=0):
     """Create a rank-specific filename."""
-    return f"{basename}-{step:06d}-{{rank:04d}}.vtu"
+    return f"{basename}-{step:09d}-{{rank:04d}}.vtu"
 
 
 def make_par_fname(basename, step=0, t=0):
     r"""Make parallel visualization filename."""
-    return f"{basename}-{step:06d}.pvtu"
+    return f"{basename}-{step:09d}.pvtu"
+
+
+def read_and_distribute_yaml_data(mpi_comm=None, file_path=None):
+    """Read a YAML file on one rank, broadcast result to world."""
+    import yaml
+
+    input_data = None
+    if file_path is None:
+        return input_data
+
+    rank = 0
+
+    if mpi_comm is not None:
+        rank = mpi_comm.Get_rank()
+
+    if rank == 0:
+        with open(file_path) as f:
+            input_data = yaml.load(f, Loader=yaml.FullLoader)
+
+    if mpi_comm is not None:
+        input_data = mpi_comm.bcast(input_data, root=0)
+
+    return input_data

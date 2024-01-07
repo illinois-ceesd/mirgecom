@@ -1,21 +1,5 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# This file only contains a selection of the most common options. For a full
-# list see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Path setup --------------------------------------------------------------
-
-# If extensions (or modules to document with autodoc) are in another directory,
-# add these directories to sys.path here. If the directory is relative to the
-# documentation root, use os.path.abspath to make it absolute, like shown here.
-#
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
-
-
 # -- Project information -----------------------------------------------------
+import sys
 
 project = "mirgecom"
 copyright = ("2020, University of Illinois Board of Trustees")
@@ -66,33 +50,34 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 #
 html_theme = "furo"
 
-html_theme_options = {}
-
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 # html_static_path = ['_static']
 
 intersphinx_mapping = {
-    "https://docs.python.org/3/": None,
-    "https://numpy.org/doc/stable/": None,
-    "https://documen.tician.de/pyopencl/": None,
-    "https://documen.tician.de/modepy/": None,
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "pyopencl": ("https://documen.tician.de/pyopencl/", None),
+    "modepy": ("https://documen.tician.de/modepy/", None),
     "arraycontext": ("https://documen.tician.de/arraycontext/", None),
-    "https://documen.tician.de/meshmode/": None,
-    "https://documen.tician.de/grudge/": None,
-    "https://documen.tician.de/pytato/": None,
-    "https://documen.tician.de/loopy/": None,
-    "https://documen.tician.de/dagrt/": None,
-    "https://documen.tician.de/leap/": None,
-    "https://documen.tician.de/pymbolic/": None,
-    "https://documen.tician.de/pytools/": None,
-    "https://pyrometheus.readthedocs.io/en/latest": None,
-    "https://logpyle.readthedocs.io/en/latest/": None,
-    "https://psutil.readthedocs.io/en/latest/": None,
+    "meshmode": ("https://documen.tician.de/meshmode/", None),
+    "grudge": ("https://documen.tician.de/grudge/", None),
+    "pytato": ("https://documen.tician.de/pytato/", None),
+    "loopy": ("https://documen.tician.de/loopy/", None),
+    "dagrt": ("https://documen.tician.de/dagrt/", None),
+    "leap": ("https://documen.tician.de/leap/", None),
+    "pymbolic": ("https://documen.tician.de/pymbolic/", None),
+    "pytools": ("https://documen.tician.de/pytools/", None),
+    "pyrometheus": ("https://pyrometheus.readthedocs.io/en/latest", None),
+    "logpyle": ("https://logpyle.readthedocs.io/en/latest/", None),
+    "psutil": ("https://psutil.readthedocs.io/en/latest/", None),
+    "mpi4py": ("https://mpi4py.readthedocs.io/en/stable/", None),
+    "memray": ("https://bloomberg.github.io/memray", None),
     }
 
 autoclass_content = "class"
+autodoc_typehints = "description"
 
 todo_include_todos = True
 
@@ -108,3 +93,10 @@ mathjax3_config = {
 rst_prolog = """
 .. |mirgecom| replace:: *MIRGE-Com*
 """
+
+# FIXME: Remove when grudge#280 gets merged
+nitpick_ignore_regex = [
+    ("py:class", r".*BoundaryDomainTag.*")
+]
+
+sys._BUILDING_SPHINX_DOCS = True

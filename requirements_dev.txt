@@ -7,5 +7,11 @@ pudb
 pytest-pudb
 pyprof2calltree
 pyinstrument
+pylint
+pydocstyle
+pep8
+flake8-docstrings
 
-git+https://github.com/vmprof/vmprof-python.git; platform_machine == "x86_64" 
+git+https://github.com/matthiasdiener/vmprof-python.git@py311#egg=vmprof
+
+pyrasite

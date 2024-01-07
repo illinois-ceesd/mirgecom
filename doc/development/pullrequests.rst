@@ -206,6 +206,124 @@ commit, you can use a git hook such as the following one (save this script as
 
 While highly recommended, hooks can sometimes be annoying. After setting up your hooks, you can use ``git --no-verify`` or equivalently ``git -n`` to run ``git`` commands without triggering the hooks.
 
+Production Testing in CI
+------------------------
+
+The CI testing in mirgecom includes a set of "production" tests which help
+detect when a proposed change in a PR breaks the CEESD prediction capability
+toolchain.  Most developments and PRs do not require special considerations
+for the production tests, but any production test failures will require
+a bit of care to resolve.
+
+When PRs run afoul of the CI production tests, it indicates that if the PR
+change set merges to main, then the "production" capability of mirgecom will
+not function until the production capability and the change set are brought
+into accordance.
+
+To resolve CI production test failures for a development in PR, it is often useful
+to run the production tests manually. The production tests may be prepared and
+executed from anywhere by hand-executing the production test scripts found in
+``scripts/``.  Here is a quick-start summary of the commands needed to run
+the production tests.  These should be run from the top-level mirgecom source
+directory:
+
+.. code:: bash
+
+   $ . scripts/production-testing-env.sh
+   $ . scripts/merge-install-production-branch.sh
+   $ . scripts/install-production-drivers.sh
+   $ . scripts/run-driver-smoke-tests.sh
+
+The following is step-by-step example procedure adjacent to what CI itself
+does for executing the production tests.
+
+
+1. Check out the PR development (and optionally make a production branch)
+
+   The PR development is assumed to be in a mirgecom branch called ``branch-name``
+   and possibly in a fork called ``fork-name``.
+
+   .. code:: bash
+
+      $ # For ceesd-local branches:
+      $ git clone -b branch-name git@github.com:/illinois-ceesd/mirgecom
+      $ # Or for developer fork:
+      $ git clone -b branch-name git@github.com:/fork-name/mirgecom
+      $ cd mirgecom           # or loopy, meshmode, ...
+      $ git checkout -b branch-name-production  # Optional production branch
+
+2. Set up the production environment and capability
+   
+   .. code:: bash
+
+      $ # Load the customizable production environment
+      $ . scripts/production-testing-env.sh
+      $ # Merge the production branch
+      $ . scripts/merge-install-production-branch.sh
+
+   If Step 2 succeeds, then your development does not need a custom
+   production branch to pass production CI. Proceed to Step 3.
+
+   If Step 2 fails, i.e. if there are merge conflicts, then those must
+   be resolved. Resolve the conflicts by-hand in the usual way. Once the
+   conflicts are resolved, then proceed to Step 3, and iterate as needed
+   until Step 3 passes. Your development will require production environment
+   customization. After Step 3 passes, Push the conflict-resolved merged result
+   to CEESD or a fork as shown in Step 4, and indicate that version in the
+   PRODUCTION_FORK, and PRODUCTION_BRANCH env vars in
+   ``scripts/production-testing-env.sh`` as shown in Step 5.
+
+3. Grab and run the production tests
+
+   .. code:: bash
+
+      $ # Load env if needed
+      $ . scripts/production-testing-env.sh
+      $ # Get the production tests
+      $ . scripts/install-production-drivers.sh
+      $ # Run the production tests
+      $ . scripts/run-driver-smoke-tests.sh
+
+   Step 3 will clone the production driver repos to the current directory,
+   with each driver in its own directory. If any of the drivers fail to
+   work with the current development, then they may be modified into working
+   condition and then pushed to a repo/branch. Indicate the location of the working
+   drivers in the PRODUCTION_DRIVERS env var customization in
+   ``scripts/production-testing-env.sh``.
+
+4. Push your updated "production" branch to the repo (or to your fork):
+
+   .. code:: bash
+
+      $ git push -u origin branch-name-production
+      $ # Switch back to your development branch
+      $ git checkout branch-name
+
+5. Update the PR to reflect the change in production environment (if any)
+
+   Push the customized production ``scripts/production-testing-env.sh``
+   settings to the PR development branch. For example, set:
+
+   .. code:: bash
+
+      $ PRODUCTION_BRANCH="branch-name-production"
+
+   Upon push, mirgecom CI will try the production tests again,
+   now with the customized environment.
+
+If the PR development requires production environment customization in order to
+pass production tests, then care and coordination will be required to get these
+changes merged into the main mirgecom development.  PR reviewers will help
+with this process.  If the PR is accepted for merging to main, then mirgecom
+developers will update the production capabilities to be compatible with
+the changes before merging.
+
+ .. important::
+
+    Any production environment customizations must be backed out before
+    merging the PR development to main. Never merge a PR development with
+    production environment customizations in-place.
+
 Merging a pull request
 ----------------------
 

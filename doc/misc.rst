@@ -71,3 +71,28 @@ References
     `(DOI) <https://doi.org/10.1007/978-3-642-59721-3_14>`__
 .. [Ihme_2014] Yu Lv and Matthias Ihme (2014) Journal of Computationsl Physics 270 105 \
     `(DOI) <http://dx.doi.org/10.1016/j.jcp.2014.03.029>`__
+.. [Persson_2012] P. Persson and J. Peraire, AIAA 44 \
+    `(DOI) <https://doi.org/10.2514/6.2006-112>`__
+.. [Woodward_1984] Woodward and Colella, Journal of Computational Physics, 54 \
+    `(DOI) <https://doi.org/10.1016/0021-9991(84)90142-6>`__
+.. [Toro_2009] Eleuterio F. Toro (2009), Riemann Solvers and Numerical Methods for Fluid Dynamics, Springer \
+    `(DOI) <http://doi.org/10.1007/978-3-540-49834-6>`__
+.. [Mengaldo_2014] G. Mengaldo (2009), A Guide to the Implementation of Boundary Conditions in Compact \
+    High-Order Methods for Compressible Aerodynamics `(DOI) <https://doi.org/10.2514/6.2014-2923>`__
+.. [Zhang_2011] Z. Zhang and C.W. Shu (2011), Maximum-principle-satisfying and positivity-preserving \
+    high-order schemes for conservation laws, Proceedings of the Royal Society A, 467 2134 \
+    `(DOI) <https://doi.org/10.1098/rspa.2011.0153>`__
+.. [Kee_2003] Robert J. Kee, Michael E. Coltrin, Peter Glarborg (2003), Chemically Reacting Flow: Theory and Practice \
+    `(DOI) <https://doi.org/10.1002/0471461296>`__
+.. [Giles_1988] Michael Giles (1988), Non-Reflecting Boundary Conditions for the Euler \
+    Equations, CFDL-TR-88-1
+.. [Lachaud_2014] Jean Lachaud and Nagi Mansour (2014), Porous-Material Analysis Toolbox Based
+    on OpenFOAM and Applications, Journal of Thermophysics and Heat Transfer 28 2
+.. [Chandrashekar_2013] Praveen Chandrashekar, Kinetic Energy Preserving and Entropy Stable Finite Volume Schemes \
+   for Compressible Euler and Navier-Stokes Equations, Communications in Computational Physics 14, 5 \
+   `(DOI) <https://doi.org/10.4208/cicp.170712.010313a>`__
+.. [Renac_2021] Florent Renac, Entropy stable, robust and high-order DGSEM for the compressible multicomponent \
+   Euler equations, Journal of Computational Physics, 445 `(DOI) <https://doi.org/10.1016/j.jcp.2021.110584>`__
+.. [Ern_2008] Daniele A. Di Pietro, Alexandre Ern, Jean-Luc Guermond, Discontinuous Galerkin Methods for \
+   Anisotropic Semidefinite Diffusion with Advection, SIAM Journal on Numerical Analysis 46 2 \
+   `(DOI) <https://www.jstor.org/stable/40233233?seq=12>`__

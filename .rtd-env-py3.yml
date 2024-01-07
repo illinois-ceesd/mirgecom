@@ -1,22 +1,26 @@
+# Conda env file for the readthedocs build
 name: rtd-env-py3
 channels:
 - conda-forge
 - nodefaults
 dependencies:
-- python=3.8
+- python=3.11
 - mpi4py
 - islpy
 - pip
 - pyopencl
+- graphviz
+- scipy
 - pip:
   - "git+https://github.com/inducer/pymbolic.git#egg=pymbolic"
   - "git+https://github.com/inducer/loopy.git#egg=loopy"
   - "git+https://github.com/inducer/dagrt.git#egg=dagrt"
   - "git+https://github.com/inducer/leap.git#egg=leap"
   - "git+https://github.com/inducer/modepy.git#egg=modepy"
-  - "git+https://github.com/inducer/arraycontext.git#egg=arraycontext"
-  - "git+https://github.com/inducer/meshmode.git#egg=meshmode"
-  - "git+https://github.com/inducer/grudge.git#egg=grudge"
+  - "git+https://github.com/illinois-ceesd/arraycontext.git@production#egg=arraycontext"
+  - "git+https://github.com/illinois-ceesd/pytato.git@production#egg=pytato"
+  - "git+https://github.com/illinois-ceesd/meshmode.git@production#egg=meshmode"
+  - "git+https://github.com/illinois-ceesd/grudge.git@production#egg=grudge"
   - "sphinx-math-dollar"
   - "sphinx-copybutton"
   - "furo"

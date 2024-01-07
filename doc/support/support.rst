@@ -12,6 +12,8 @@ Simulation Support
    input-output
    tools
    symbolic
+   math
+   operators
    thermochem
    drivers
 

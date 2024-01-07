@@ -34,6 +34,7 @@ __doc__ = """
 .. autofunction:: logmgr_add_cl_device_info
 .. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
+.. autofunction:: logmgr_add_mempool_usage
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
 .. autofunction:: logmgr_set_time
@@ -42,27 +43,45 @@ __doc__ = """
 from logpyle import (LogQuantity, PostLogQuantity, LogManager,
     MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
+from arraycontext.container import get_container_context_recursively
 from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.discretization import Discretization
+from grudge.discretization import DiscretizationCollection
 import pyopencl as cl
 
-from typing import Optional, Callable
+from typing import Optional, Callable, Union, Tuple
 import numpy as np
+
+from grudge.dof_desc import DD_VOLUME_ALL
+import grudge.op as oper
+from typing import List
+
+MemPoolType = Union[cl.tools.MemoryPool, cl.tools.SVMPool]
 
 
 def initialize_logmgr(enable_logmgr: bool,
-                      filename: str = None, mode: str = "wu",
-                      mpi_comm=None) -> LogManager:
+                      filename: Optional[str] = None, mode: str = "wu",
+                      mpi_comm=None) -> Optional[LogManager]:
     """Create and initialize a mirgecom-specific :class:`logpyle.LogManager`."""
     if not enable_logmgr:
         return None
 
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
 
+    logmgr.add_quantity(PythonInitTime())
+    logmgr.enable_save_on_sigterm()
+
     add_run_info(logmgr)
     add_package_versions(logmgr)
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
+
+    try:
+        from logpyle import GCStats
+        logmgr.add_quantity(GCStats())
+    except ImportError:
+        from warnings import warn
+        warn("GCStats not found, not collecting GC statistics. Please update your "
+             "logpyle installation.")
 
     try:
         logmgr.add_quantity(PythonMemoryUsage())
@@ -74,12 +93,13 @@ def initialize_logmgr(enable_logmgr: bool,
     return logmgr
 
 
-def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue):
+def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> None:
     """Add information about the OpenCL device to the log."""
-    dev = queue.device
-    logmgr.set_constant("cl_device_name", str(dev))
-    logmgr.set_constant("cl_device_version", dev.version)
-    logmgr.set_constant("cl_platform_version", dev.platform.version)
+    if queue:
+        dev = queue.device
+        logmgr.set_constant("cl_device_name", str(dev))
+        logmgr.set_constant("cl_device_version", dev.version)
+        logmgr.set_constant("cl_platform_version", dev.platform.version)
 
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
@@ -91,34 +111,51 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa:
     logmgr_add_cl_device_info(logmgr, queue)
 
 
-def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue):
+def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue) \
+        -> None:
     """Add the OpenCL device memory usage to the log."""
-    if not (queue.device.type & cl.device_type.GPU):
+    if not queue or not (queue.device.type & cl.device_type.GPU):
         return
     logmgr.add_quantity(DeviceMemoryUsage())
 
 
-def logmgr_add_many_discretization_quantities(logmgr: LogManager, discr, dim,
-      extract_vars_for_logging, units_for_logging):
-    """Add default discretization quantities to the logmgr."""
-    for op in ["min", "max", "L2_norm"]:
-        for quantity in ["pressure", "temperature"]:
-            logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+def logmgr_add_mempool_usage(logmgr: LogManager, pool: MemPoolType) -> None:
+    """Add the memory pool usage to the log."""
+    if (not isinstance(pool, cl.tools.MemoryPool)
+            and not isinstance(pool, cl.tools.SVMPool)):
+        return
+    logmgr.add_quantity(MempoolMemoryUsage(pool))
 
-        for quantity in ["mass", "energy"]:
+
+def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
+        extract_vars_for_logging, units_for_logging, dd=DD_VOLUME_ALL) -> None:
+    """Add default discretization quantities to the logmgr."""
+    if dd != DD_VOLUME_ALL:
+        suffix = f"_{dd.domain_tag.tag}"
+    else:
+        suffix = ""
+
+    for reduction_op in ["min", "max", "L2_norm"]:
+        for quantity in ["pressure"+suffix, "temperature"+suffix]:
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, quantity, op, extract_vars_for_logging, units_for_logging))
+                dcoll, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging, dd=dd))
+
+        for quantity in ["mass"+suffix, "energy"+suffix]:
+            logmgr.add_quantity(DiscretizationBasedQuantity(
+                dcoll, quantity, reduction_op, extract_vars_for_logging,
+                units_for_logging, dd=dd))
 
         for d in range(dim):
             logmgr.add_quantity(DiscretizationBasedQuantity(
-                discr, "momentum", op, extract_vars_for_logging, units_for_logging,
-                axis=d))
+                dcoll, "momentum"+suffix, reduction_op, extract_vars_for_logging,
+                units_for_logging, axis=d, dd=dd))
 
 
 # {{{ Package versions
 
-def add_package_versions(mgr: LogManager, path_to_version_sh: str = None) -> None:
+def add_package_versions(mgr: LogManager, path_to_version_sh: Optional[str] = None) \
+        -> None:
     """Add the output of the emirge version.sh script to the log.
 
     Parameters
@@ -220,7 +257,7 @@ class StateConsumer:
             state.
         """
         self.extract_state_vars = extract_vars_for_logging
-        self.state_vars = None
+        self.state_vars: Optional[np.ndarray] = None
 
     def set_state_vars(self, state_vars: np.ndarray) -> None:
         """Update the state vector of the object."""
@@ -237,9 +274,9 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
     Possible rank aggregation operations (``op``) are: min, max, L2_norm.
     """
 
-    def __init__(self, discr: Discretization, quantity: str, op: str,
-                 extract_vars_for_logging, units_logging, name: str = None,
-                 axis: Optional[int] = None):
+    def __init__(self, dcoll: DiscretizationCollection, quantity: str, op: str,
+                 extract_vars_for_logging, units_logging, name: Optional[str] = None,
+                 axis: Optional[int] = None, dd=DD_VOLUME_ALL):
         unit = units_logging(quantity)
 
         if name is None:
@@ -248,7 +285,7 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         LogQuantity.__init__(self, name, unit)
         StateConsumer.__init__(self, extract_vars_for_logging)
 
-        self.discr = discr
+        self.dcoll = dcoll
 
         self.quantity = quantity
         self.axis = axis
@@ -256,13 +293,13 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
         from functools import partial
 
         if op == "min":
-            self._discr_reduction = partial(self.discr.nodal_min, "vol")
+            self._discr_reduction = partial(oper.nodal_min, self.dcoll, dd)
             self.rank_aggr = min
         elif op == "max":
-            self._discr_reduction = partial(self.discr.nodal_max, "vol")
+            self._discr_reduction = partial(oper.nodal_max, self.dcoll, dd)
             self.rank_aggr = max
         elif op == "L2_norm":
-            self._discr_reduction = partial(self.discr.norm, p=2)
+            self._discr_reduction = partial(oper.norm, self.dcoll, p=2, dd=dd)
             self.rank_aggr = max
         else:
             raise ValueError(f"unknown operation {op}")
@@ -279,10 +316,12 @@ class DiscretizationBasedQuantity(PostLogQuantity, StateConsumer):
 
         quantity = self.state_vars[self.quantity]
 
+        actx = get_container_context_recursively(quantity)
+
         if self.axis is not None:  # e.g. momentum
             quantity = quantity[self.axis]
 
-        return self._discr_reduction(quantity)
+        return actx.to_numpy(self._discr_reduction(quantity))[()]
 
 # }}}
 
@@ -324,7 +363,7 @@ class KernelProfile(MultiPostLogQuantity):
         self.kernel_name = kernel_name
         self.actx = actx
 
-    def __call__(self) -> list:
+    def __call__(self) -> List[Optional[float]]:
         """Return the requested kernel profile quantity."""
         r = self.actx.get_profiling_data_for_kernel(self.kernel_name)
         self.actx.reset_profiling_data_for_kernel(self.kernel_name)
@@ -343,7 +382,7 @@ class PythonMemoryUsage(PostLogQuantity):
     Uses :mod:`psutil` to track memory usage. Virtually no overhead.
     """
 
-    def __init__(self, name: str = None):
+    def __init__(self, name: Optional[str] = None):
 
         if name is None:
             name = "memory_usage_python"
@@ -361,7 +400,7 @@ class PythonMemoryUsage(PostLogQuantity):
 class DeviceMemoryUsage(PostLogQuantity):
     """Logging support for GPU memory usage (Nvidia only currently)."""
 
-    def __init__(self, name: str = None) -> None:
+    def __init__(self, name: Optional[str] = None) -> None:
 
         if name is None:
             name = "memory_usage_gpu"
@@ -369,30 +408,85 @@ class DeviceMemoryUsage(PostLogQuantity):
         super().__init__(name, "MByte", description="Memory usage (GPU)")
 
         import ctypes
-        self.free = ctypes.c_size_t()
-        self.total = ctypes.c_size_t()
 
         try:
             # See https://gist.github.com/f0k/63a664160d016a491b2cbea15913d549#gistcomment-3654335  # noqa
             # on why this calls cuMemGetInfo_v2 and not cuMemGetInfo
             libcuda = ctypes.cdll.LoadLibrary("libcuda.so")
-            self.mem_func = libcuda.cuMemGetInfo_v2
+            self.mem_func: Optional[Callable] = libcuda.cuMemGetInfo_v2
         except OSError:
             self.mem_func = None
 
-    def __call__(self) -> float:
+    def __call__(self) -> Optional[float]:
         """Return the memory usage in MByte."""
         if self.mem_func is None:
             return None
 
         import ctypes
-        ret = self.mem_func(ctypes.byref(self.free), ctypes.byref(self.total))
+        free = ctypes.c_size_t()
+        total = ctypes.c_size_t()
+        ret = self.mem_func(ctypes.byref(free), ctypes.byref(total))
 
         if ret != 0:
             from warnings import warn
-            warn(f"cudaMemGetInfo failed with error {ret}.")
+            warn(f"cuMemGetInfo failed with error {ret}.")
             return None
         else:
-            return (self.total.value - self.free.value) / 1024 / 1024
+            if free.value / total.value < 0.1:
+                from warnings import warn
+                warn(
+                    "The memory usage on the GPU is approaching the memory "
+                    f"size, with less than 10% free of "
+                    f"{total.value // 1024 // 1024} MByte total. "
+                    "This may lead to slowdowns or crashes.")
+            return (total.value - free.value) / 1024 / 1024
+
+
+class MempoolMemoryUsage(MultiPostLogQuantity):
+    """Logging support for memory pool usage."""
+
+    def __init__(self, pool: MemPoolType, names: Optional[List[str]] = None) -> None:
+        if names is None:
+            names = ["memory_usage_mempool_managed", "memory_usage_mempool_active"]
+
+        descs = ["Memory pool managed", "Memory pool active"]
+
+        super().__init__(names, ["MByte", "MByte"], descriptions=descs)
+
+        self.pool = pool
+
+    def __call__(self) -> Tuple[float, float]:
+        """Return the memory pool usage in MByte."""
+        return (self.pool.managed_bytes/1024/1024,
+                self.pool.active_bytes/1024/1024)
+
+
+class PythonInitTime(PostLogQuantity):
+    """Stores the Python startup time.
+
+    Measures the time from process start to when this quantity is initialized.
+    """
+
+    def __init__(self, name: str = "t_python_init") -> None:
+        LogQuantity.__init__(self, name, "s", "Python init time")
+
+        try:
+            import psutil
+        except ModuleNotFoundError:
+            from warnings import warn
+            warn("Measuring the Python init time requires the 'psutil' module.")
+            self.done = True
+        else:
+            from time import time
+            self.python_init_time = time() - psutil.Process().create_time()
+            self.done = False
+
+    def __call__(self) -> Optional[float]:
+        """Return the Python init time in seconds."""
+        if self.done:
+            return None
+
+        self.done = True
+        return self.python_init_time
 
 # }}}

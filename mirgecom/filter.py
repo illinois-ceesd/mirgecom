@@ -19,6 +19,10 @@ Applying Filters
 
 .. autofunction:: filter_modally
 
+Spectral Analysis Helpers
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: get_element_spectrum_from_modal_representation
 """
 
 __copyright__ = """
@@ -46,11 +50,64 @@ THE SOFTWARE.
 """
 
 import numpy as np
-import grudge.dof_desc as dof_desc
+from functools import partial
+
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    DISCR_TAG_BASE,
+    DISCR_TAG_MODAL,
+)
+
+from arraycontext import map_array_container
 
 from meshmode.dof_array import DOFArray
+
 from pytools import keyed_memoize_in
-from pytools.obj_array import obj_array_vectorized_n_args
+
+
+# TODO: Revisit for multi-group meshes
+def get_element_spectrum_from_modal_representation(actx, vol_discr, modal_fields,
+                                                   element_order):
+    """Get the Legendre Polynomial expansion for specified fields on elements.
+
+    Parameters
+    ----------
+    actx: :class:`arraycontext.ArrayContext`
+        A :class:`arraycontext.ArrayContext` associated with
+        an array of degrees of freedom
+    vol_discr: :class:`grudge.discretization.DiscretizationCollection`
+        Grudge discretization for volume elements only
+    modal_fields: numpy.ndarray
+        Array of DOFArrays with modal respresentations for each field
+    element_order: int
+        Polynomial order for the elements in the discretization
+    Returns
+    -------
+    numpy.ndarray
+        Array with the element modes accumulated into the corresponding
+        "modes" for the polynomial basis functions for each field.
+    """
+    modal_spectra = np.stack([
+        actx.to_numpy(ary)[0]
+        for ary in modal_fields])
+
+    numfields, numelem, nummodes = modal_spectra.shape
+
+    emodes_to_pmodes = np.array([0 for _ in range(nummodes)], dtype=np.uint32)
+
+    for group in vol_discr.groups:
+        mode_ids = group.mode_ids()
+        for modi, mode in enumerate(mode_ids):
+            emodes_to_pmodes[modi] = sum(mode)
+
+    accumulated_spectra = np.zeros(
+        (numfields, numelem, element_order+1), dtype=np.float64)
+
+    for i in range(nummodes):
+        accumulated_spectra[:, :, emodes_to_pmodes[i]] += np.abs(
+            modal_spectra[:, :, i])
+
+    return accumulated_spectra
 
 
 def exponential_mode_response_function(mode, alpha, cutoff, nfilt, filter_order):
@@ -163,8 +220,7 @@ def apply_spectral_filter(actx, modal_field, discr, cutoff,
     )
 
 
-@obj_array_vectorized_n_args
-def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
+def filter_modally(dcoll, cutoff, mode_resp_func, field, *, dd=DD_VOLUME_ALL):
     """Stand-alone procedural interface to spectral filtering.
 
     For each element group in the discretization, and restriction,
@@ -182,30 +238,38 @@ def filter_modally(dcoll, dd, cutoff, mode_resp_func, field):
     ----------
     dcoll: :class:`grudge.discretization.DiscretizationCollection`
         Grudge discretization with boundaries object
-    dd: :class:`grudge.dof_desc.DOFDesc` or as accepted by
-        :func:`grudge.dof_desc.as_dofdesc`
-        Describe the type of DOF vector on which to operate.
     cutoff: int
         Mode below which *field* will not be filtered
     mode_resp_func:
         Modal response function returns a filter coefficient for input mode id
-    field: :class:`numpy.ndarray`
-        DOFArray or object array of DOFArrays
+    field: :class:`mirgecom.fluid.ConservedVars`
+        An array container containing the relevant field(s) to filter.
+    dd: grudge.dof_desc.DOFDesc
+        Describe the type of DOF vector on which to operate. Must be on the base
+        discretization.
 
     Returns
     -------
-    result: numpy.ndarray
-        Filtered version of *field*.
+    result: :class:`mirgecom.fluid.ConservedVars`
+        An array container containing the filtered field(s).
     """
-    dd = dof_desc.as_dofdesc(dd)
-    dd_modal = dof_desc.DD_VOLUME_MODAL
-    discr = dcoll.discr_from_dd(dd)
+    if not isinstance(field, DOFArray):
+        return map_array_container(
+            partial(filter_modally, dcoll, cutoff, mode_resp_func, dd=dd), field
+        )
 
-    assert isinstance(field, DOFArray)
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_nodal = dd
+    dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
+
+    discr = dcoll.discr_from_dd(dd_nodal)
+
     actx = field.array_context
 
-    modal_map = dcoll.connection_from_dds(dd, dd_modal)
-    nodal_map = dcoll.connection_from_dds(dd_modal, dd)
+    modal_map = dcoll.connection_from_dds(dd_nodal, dd_modal)
+    nodal_map = dcoll.connection_from_dds(dd_modal, dd_nodal)
     field = modal_map(field)
     field = apply_spectral_filter(actx, field, discr, cutoff,
                                   mode_resp_func)
