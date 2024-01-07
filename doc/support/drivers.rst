@@ -7,7 +7,7 @@ is designed to introduce the tools, and recommended practices for
 designing drivers for :mod:`mirgecom` simulations.
 
 Timestepper callbacks
-------------------------
+---------------------
 User callbacks, specifically *pre_step_callback* and *post_step_callback*
 are used to inject user code into the main timestepping loop of :mod:`mirgecom`.
 
@@ -40,7 +40,21 @@ callbacks are typically used for the following:
    when using time integrators that carry the state history - because any change
    to the state invalidates the time integrator's historical version.
 
+   However, operations like positivity preserving limiter or filtering need a
+   state that satisfies realizibility. That is due to RK4 acting as an update to
+   the existing solution. Only acting on the state passed to the RHS is not
+   enough to ensure realizability, as observed from the snippet below:
+
+   | def rk4_step(state, t, dt, rhs):
+   |     """Take one step using the fourth-order Classical Runge-Kutta method."""
+   |     k1 = rhs(t, state)
+   |     k2 = rhs(t+dt/2, state + dt/2*k1)
+   |     k3 = rhs(t+dt/2, state + dt/2*k2)
+   |     k4 = rhs(t+dt, state + dt*k3)
+   |
+   |     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+
 All user callbacks *must* follow the signature provided above and in the documentation
-of :mod:`~mirgecom.steppers`.  That is, user callbacks must return the *state*, and
+of :mod:`~mirgecom.steppers`. That is, user callbacks must return the *state*, and
 *dt* to the stepper, even if it just returns the values passed in by the stepper.
 
