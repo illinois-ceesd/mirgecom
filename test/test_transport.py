@@ -126,7 +126,7 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
                 # Viscosity
                 mu = fluid_state.tv.viscosity
                 mu_ct = cantera_soln.species_viscosities
-                assert inf_norm(mu) - mu_ct[i] < 1.0e-12
+                assert inf_norm(mu - mu_ct[i]) < 1.0e-12
 
                 # Thermal conductivity
                 kappa = fluid_state.tv.thermal_conductivity
