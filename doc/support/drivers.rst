@@ -1,5 +1,5 @@
 Writing drivers for :mod:`mirgecom`
-==============================================
+===================================
 
 :mod:`mirgecom` provides a great deal of flexibility in what users
 are able to do with their drivers. This section of the documentation
@@ -50,7 +50,12 @@ of :mod:`~mirgecom.steppers`. That is, user callbacks must return the *state*, a
    to ensure that a limited or filtered state is both passed to the time integrator
    and used in the operators that make up the *RHS*.
 
-   Consider this snippet from the *RK4* time integrator:
+   Consider these snippets of an example *RHS* and an *RK4* time integrator:
+
+   | def rhs(state, t, dt, rhs):
+   |     """Return the *RHS* of the conservation system."""
+   |     filtered_state = apply_filter(state)
+   |     return rhs_operator(t, filtered_state)
 
    | def rk4_step(state, t, dt, rhs):
    |     """Take one step using the fourth-order Classical Runge-Kutta method."""
@@ -60,7 +65,7 @@ of :mod:`~mirgecom.steppers`. That is, user callbacks must return the *state*, a
    |     k4 = rhs(t+dt, state + dt*k3)
    |
    |     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
-   
+
    Applying the state-modification inside the *RHS* function ensures that each
    stage update is using a modified state, and applying the state-modification 
    in the *pre_step* or *post_step* callback ensures that the incoming *state*
