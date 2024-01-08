@@ -34,6 +34,10 @@ callbacks are typically used for the following:
 * Implement adaptive timestepping (i.e. modify *dt*)
 * Implement solution filtering or limiting (i.e. modify *state*)
 
+All user callbacks *must* follow the signature provided above and in the documentation
+of :mod:`~mirgecom.steppers`. That is, user callbacks must return the *state*, and
+*dt* to the stepper, even if it just returns the values passed in by the stepper.
+
 .. important::
    The modification of *state* carries inherent danger. Only do this if you know
    what you are doing. One should never modify the state in between time steps
@@ -61,8 +65,4 @@ callbacks are typically used for the following:
    stage update is using a modified state, and applying the state-modification 
    in the *pre_step* or *post_step* callback ensures that the incoming *state*
    or outgoing updated *state* are also properly modified.
-
-All user callbacks *must* follow the signature provided above and in the documentation
-of :mod:`~mirgecom.steppers`. That is, user callbacks must return the *state*, and
-*dt* to the stepper, even if it just returns the values passed in by the stepper.
 
