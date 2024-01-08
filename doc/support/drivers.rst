@@ -40,10 +40,13 @@ callbacks are typically used for the following:
    when using time integrators that carry the state history - because any change
    to the state invalidates the time integrator's historical version.
 
-   However, operations like positivity preserving limiter or filtering need a
-   state that satisfies realizibility. That is due to RK4 acting as an update to
-   the existing solution. Only acting on the state passed to the RHS is not
-   enough to ensure realizability, as observed from the snippet below:
+.. important::
+   Operations that modify the state like solution limiting and filtering must
+   be applied in the *pre_step* or *post_step* callback *and* inside the *RHS*
+   to ensure that a limited or filtered state is both passed to the time integrator
+   and used in the operators that make up the *RHS*.
+
+   Consider this snippet from the *RK4* time integrator:
 
    | def rk4_step(state, t, dt, rhs):
    |     """Take one step using the fourth-order Classical Runge-Kutta method."""
@@ -53,6 +56,11 @@ callbacks are typically used for the following:
    |     k4 = rhs(t+dt, state + dt*k3)
    |
    |     return state + dt/6*(k1 + 2*k2 + 2*k3 + k4)
+   
+   Applying the state-modification inside the *RHS* function ensures that each
+   stage update is using a modified state, and applying the state-modification 
+   in the *pre_step* or *post_step* callback ensures that the incoming *state*
+   or outgoing updated *state* are also properly modified.
 
 All user callbacks *must* follow the signature provided above and in the documentation
 of :mod:`~mirgecom.steppers`. That is, user callbacks must return the *state*, and
