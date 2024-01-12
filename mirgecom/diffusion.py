@@ -55,6 +55,7 @@ Boundary conditions
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
+.. autoclass:: RobinDiffusionBoundary
 .. autoclass:: PrescribedFluxDiffusionBoundary
 .. autoclass:: DummyDiffusionBoundary
 """
@@ -98,7 +99,7 @@ from grudge.trace_pair import (
     interior_trace_pairs,
     tracepair_with_discr_tag,
 )
-import grudge.op as op
+from grudge import op
 from mirgecom.math import harmonic_mean
 from mirgecom.utils import normalize_boundaries
 
@@ -431,19 +432,52 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
 
 class RobinDiffusionBoundary(DiffusionBoundary):
-    r"""Robin boundary condition for the diffusion operator."""
+    r"""Robin boundary condition for the diffusion operator.
 
-    def __init__(self, value, gamma):
+    The non-homogeneous boundary condition is a linear combination of $u$ and
+    its gradient $\nabla u$, given by
+
+    .. math::
+
+        (\alpha u - \nabla u \cdot \mathbf{\hat{n}})|_\Gamma = \alpha u_{ref}.
+
+    where $u_{ref}$ is the reference value of $u$ for $x \to \infty$ and
+    $\alpha$ is the weight for $u$. The weight for the gradient is the
+    conductivity (thermal) or the diffusivity (species).
+
+    The current implementation uses external data
+
+    .. math::
+
+        u^+ = u^-
+
+    when computing the boundary fluxes for $\nabla u$, and
+
+    .. math::
+
+        \nabla u\cdot\mathbf{\hat{n}} |_\Gamma =
+            \frac{\alpha}{\kappa}(u_{ref} - u^-)
+
+    when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
+
+    .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
+    """
+
+    def __init__(self, value, alpha):
         """
         Initialize the boundary condition.
 
         Parameters
         ----------
         value: float or meshmode.dof_array.DOFArray
-            the value(s) of $g$ along the boundary
+            the reference value(s) of $u$ along the boundary
+        alpha: float or meshmode.dof_array.DOFArray
+            the weight for the variable $u$ at the boundary
         """
         self.value = value
-        self.gamma = gamma
+        self.alpha = alpha
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
@@ -472,7 +506,7 @@ class RobinDiffusionBoundary(DiffusionBoundary):
         normal = actx.thaw(dcoll.normal(dd_bdry))
         grad_u_tpair = TracePair(dd_bdry,
             interior=grad_u_minus,
-            exterior=(-self.gamma*(u_minus - self.value)/kappa_minus) * normal)
+            exterior=(-self.alpha*(u_minus - self.value)/kappa_minus) * normal)
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
         return numerical_flux_func(
