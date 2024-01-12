@@ -174,22 +174,25 @@ def neighbor_list(dim, mesh):
     connections[:,0] = np.sort(adj[0].elements)
     connections[:,1] = adj[0].neighbors[np.argsort(adj[0].elements)]
 
+    #print(nconnections)
+
     neighbors = np.zeros((mesh.nelements,dim+2),dtype=np.int32)
     ii = 0
     for kk in range(0,mesh.nelements):
         neighbors[kk,:] = kk
         idx = 0
         while connections[ii,0] == kk:
-            idx += 1
+            idx = idx + 1
             neighbors[kk,idx] = connections[ii,1]
-            ii += 1
+            #print(ii, kk, idx, connections[ii,:])
+            ii = ii + 1
 
-        if ii == nconnections:
-            break
+            if ii == nconnections:
+                break
 
     return neighbors
 
-def limiter_liu_osher(dcoll: DiscretizationCollection, neig, field):
+def limiter_liu_osher(dcoll: DiscretizationCollection, neig, field, vizdata=False):
     """.
 
     Parameters
@@ -216,24 +219,24 @@ def limiter_liu_osher(dcoll: DiscretizationCollection, neig, field):
     mmax_i = actx.to_numpy(op.elementwise_max(dcoll, field)[0])[:,0]
     mmin_i = actx.to_numpy(op.elementwise_min(dcoll, field)[0])[:,0]
     
-#    # Cell gradient
-#    grad_i = op.local_grad(dcoll, field)
-#    grad_X = 1.0/volume*op.elementwise_integral(dcoll, grad_i[0])
-#    grad_Y = 1.0/volume*op.elementwise_integral(dcoll, grad_i[1])
-
-#    grad = np.sqrt( (actx.to_numpy( grad_X[0] )[:,0])**2 +
-#                    (actx.to_numpy( grad_Y[0] )[:,0])**2 )
-
     # Compute minmod factor (Eq. 2.9)
     nneighbors = neig.shape[1]
 
-    mmax = np.maximum( avgs[neig[:,0]], avgs[neig[:,1]] )
+    mmax = avgs[neig[:,1]]
     for i in range(2,nneighbors):
         mmax = np.maximum( mmax, avgs[neig[:,i]] )
 
-    mmin = np.minimum( avgs[neig[:,0]], avgs[neig[:,1]] )
+    mmin = avgs[neig[:,1]]
     for i in range(2,nneighbors):
         mmin = np.minimum( mmin, avgs[neig[:,i]] )
+
+#    mmax = np.maximum( avgs[neig[:,0]], avgs[neig[:,1]] )
+#    for i in range(2,nneighbors):
+#        mmax = np.maximum( mmax, avgs[neig[:,i]] )
+
+#    mmin = np.minimum( avgs[neig[:,0]], avgs[neig[:,1]] )
+#    for i in range(2,nneighbors):
+#        mmin = np.minimum( mmin, avgs[neig[:,i]] )
 
 #    #mmax = np.maximum( mmax_i[neig[:,0]], mmax_i[neig[:,1]] )
 #    mmax = mmax_i[neig[:,1]]
@@ -245,10 +248,13 @@ def limiter_liu_osher(dcoll: DiscretizationCollection, neig, field):
 #    for i in range(2,nneighbors):
 #        mmin = np.minimum( mmin, mmin_i[neig[:,i]] )
 
+    denom_max = np.where(np.abs(mmax_i-avgs) < 1e-14, 1.0, mmax_i-avgs)
+    denom_min = np.where(np.abs(mmin_i-avgs) < 1e-14, 1.0, mmin_i-avgs)
+
     _theta = np.minimum(
                 1., np.minimum(
-                abs( (mmax-avgs)/(mmax_i-avgs+1e-12) ),
-                abs( (mmin-avgs)/(mmin_i-avgs+1e-12) ) )
+                abs( (mmax-avgs)/(denom_max) ),
+                abs( (mmin-avgs)/(denom_min) ) )
              )
 
     # Transform back to array context
@@ -259,4 +265,18 @@ def limiter_liu_osher(dcoll: DiscretizationCollection, neig, field):
 
     theta = DOFArray(actx, data=(actx.from_numpy(np.array(dummy)), ))
   
+    minRatio = (mmin-avgs)/denom_min
+    dummy = np.zeros(cell_avgs[0].shape)       
+    for i in range(0,cell_avgs[0].shape[-1]):
+      dummy[:,i] = minRatio[:]
+    minRatio = DOFArray(actx, data=(actx.from_numpy(np.array(dummy)), ))
+
+    maxRatio = (mmax-avgs)/denom_max
+    dummy = np.zeros(cell_avgs[0].shape)       
+    for i in range(0,cell_avgs[0].shape[-1]):
+      dummy[:,i] = maxRatio[:]
+    maxRatio = DOFArray(actx, data=(actx.from_numpy(np.array(dummy)), ))
+
+    if vizdata:
+        return theta*(field - cell_avgs) + cell_avgs, theta, cell_avgs, minRatio, maxRatio
     return theta*(field - cell_avgs) + cell_avgs
