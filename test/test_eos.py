@@ -239,10 +239,8 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim):
 def test_pyrometheus_mechanisms(ctx_factory, mechname):
     """Test known pyrometheus mechanisms.
 
-    This test reproduces a pyrometheus-native test in the MIRGE context.
-
-    Tests that the Pyrometheus mechanism code gets the same thermo properties
-    as the corresponding mechanism in Cantera.
+    This test reproduces a pyrometheus-native test in the MIRGE context and
+    compare thermo properties to the corresponding mechanism in Cantera.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
