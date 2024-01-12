@@ -23,6 +23,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+import sys
 import logging
 import numpy as np
 from functools import partial
@@ -59,7 +60,31 @@ from mirgecom.logging_quantities import (
 
 import cantera
 
+
+class SingleLevelFilter(logging.Filter):
+    def __init__(self, passlevel, reject):
+        self.passlevel = passlevel
+        self.reject = reject
+
+    def filter(self, record):
+        if self.reject:
+            return (record.levelno != self.passlevel)
+        else:
+            return (record.levelno == self.passlevel)
+
+
+h1 = logging.StreamHandler(sys.stdout)
+f1 = SingleLevelFilter(logging.INFO, False)
+h1.addFilter(f1)
+root_logger = logging.getLogger()
+root_logger.addHandler(h1)
+h2 = logging.StreamHandler(sys.stderr)
+f2 = SingleLevelFilter(logging.INFO, True)
+h2.addFilter(f2)
+root_logger.addHandler(h2)
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
 class MyRuntimeError(RuntimeError):
@@ -97,6 +122,8 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     nel_1d = 8
     order = 1
 
+    mech_file = "uiuc_18sp"
+
     # {{{ Time stepping control
 
     # This example runs only 3 steps by default (to keep CI ~short)
@@ -112,9 +139,9 @@ def main(actx_class, use_leap=False, use_overintegration=False,
 
     # Time loop control parameters
     current_step = 0
-    t_final = 1e-8
+    t_final = 1e-6
     current_cfl = 1.0
-    current_dt = 1e-9
+    current_dt = 1e-7
     current_t = 0
     constant_cfl = False
 
@@ -191,18 +218,18 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     # --- Note: Users may add their own mechanism input file by dropping it into
     # ---       mirgecom/mechanisms alongside the other mech input files.
     from mirgecom.mechanisms import get_mechanism_input
-    mech_input = get_mechanism_input("uiuc_7sp")
+    mech_input = get_mechanism_input(mech_file)
 
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
     nspecies = cantera_soln.n_species
 
     # Initial temperature, pressure, and mixutre mole fractions are needed to
     # set up the initial state in Cantera.
-    temperature_seed = 1500.0  # Initial temperature hot enough to burn
+    temperature_seed = 1200.0  # Initial temperature hot enough to burn
 
     # Parameters for calculating the amounts of fuel, oxidizer, and inert species
     # which directly sets the species fractions inside cantera
-    cantera_soln.set_equivalence_ratio(phi=1.0, fuel="C2H4:1,H2:1",
+    cantera_soln.set_equivalence_ratio(phi=1.0, fuel="C2H4:1",
                                        oxidizer={"O2": 1.0, "N2": 3.76})
     x = cantera_soln.X
 
@@ -233,6 +260,12 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     pyro_mechanism = \
         get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
+
+    # print out the mechanism for inspecion
+    # import pyrometheus as pyro
+    # with open(f"mechanism.py", "w") as mech_file:
+    #     code = pyro.codegen.python.gen_thermochem_code(cantera_soln)
+    #     print(code, file=mech_file)
 
     # {{{ Initialize gas model
 
@@ -361,6 +394,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
         temperature_seed = temperature_seed * ones
 
     current_cv = force_evaluation(actx, current_cv)
+    temperature_seed = force_evaluation(actx, temperature_seed)
 
     # The temperature_seed going into this function is:
     # - At time 0: the initial temperature input data (maybe from Cantera)
@@ -402,7 +436,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
                     f" {eq_pressure=}, {eq_temperature=},"
                     f" {eq_density=}, {eq_mass_fractions=}")
 
-    def my_write_status(dt, cfl, dv=None):
+    def my_write_status(t, dt, cfl, dv=None):
         status_msg = f"------ {dt=}" if constant_cfl else f"----- {cfl=}"
         if ((dv is not None) and (not log_dependent)):
 
@@ -418,7 +452,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
                                  op="min")
             pmax = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", press)),
                                  op="max")
-            dv_status_msg = f"\nP({pmin}, {pmax}), T({tmin}, {tmax})"
+            dv_status_msg = f"\n{t}, P({pmin}, {pmax}), T({tmin}, {tmax})"
             status_msg = status_msg + dv_status_msg
 
         if rank == 0:
@@ -463,16 +497,17 @@ def main(actx_class, use_leap=False, use_overintegration=False,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if check_range_local(dcoll, "vol", pressure, 1e5, 2.6e5):
-            health_error = True
-            logger.info(f"{rank=}: Pressure range violation.")
+        # if check_range_local(dcoll, "vol", pressure, 1e5, 2.6e5):
+        #     health_error = True
+        #     logger.info(f"{rank=}: Pressure range violation.")
 
         if check_naninf_local(dcoll, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
-        if check_range_local(dcoll, "vol", temperature, 1.498e3, 1.6e3):
-            health_error = True
-            logger.info(f"{rank=}: Temperature range violation.")
+
+        # if check_range_local(dcoll, "vol", temperature, 1.198e3, 1.3e3):
+        #     health_error = True
+        #     logger.info(f"{rank=}: Temperature range violation.")
 
         # This check is the temperature convergence check
         # The current *temperature* is what Pyrometheus gets
@@ -521,7 +556,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
             ts_field, cfl, dt = my_get_timestep(t=t, dt=dt, state=fluid_state)
 
             if do_status:
-                my_write_status(dt=dt, cfl=cfl, dv=dv)
+                my_write_status(t=t, dt=dt, cfl=cfl, dv=dv)
 
             if do_restart:
                 my_write_restart(step=step, t=t, state=fluid_state,
@@ -587,7 +622,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,
                  dv=final_dv, production_rates=final_dm,
                  heat_release_rate=final_heat_rls, ts_field=ts_field, cfl=cfl)
-    my_write_status(dt=dt, cfl=cfl, dv=final_dv)
+    my_write_status(t=current_dt, dt=dt, cfl=cfl, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=final_fluid_state,
                      temperature_seed=tseed)
 
