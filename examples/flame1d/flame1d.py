@@ -181,7 +181,8 @@ class InitSponge:
 @mpi_entry_point
 def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
          use_leap=False, use_profiling=False, casename=None, lazy=False,
-         restart_file=None, use_overintegration=False):
+         restart_file=None, use_overintegration=False,
+         use_tensor_product_els=False):
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -190,12 +191,27 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
     nparts = comm.Get_size()
 
     logmgr = initialize_logmgr(use_logmgr, filename=(f"{casename}.sqlite"),
-                               mode="wo", mpi_comm=comm)
+                               mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    # actx = initialize_actx(actx_class, comm)
+    # use_profiling = actx_class_is_profiling(actx_class)
+    use_profiling = False
+    from grudge.array_context import (
+        TensorProductMPIFusionContractorArrayContext,
+        TensorProductMPIPyOpenCLArrayContext
+    )
+    from mirgecom.array_context import initialize_actx
+
+    if use_tensor_product_els:
+        # For lazy:
+        # actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
+        #                       comm)
+        # For eager:
+        actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
+    else:
+        actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
-    use_profiling = actx_class_is_profiling(actx_class)
 
     # ~~~~~~~~~~~~~~~~~~
 
@@ -277,9 +293,12 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         coords = tuple((xx,yy))
 
         from meshmode.mesh.generation import generate_box_mesh
+        from meshmode.mesh import TensorProductElementGroup
+        group_cls = TensorProductElementGroup if use_tensor_product_els else None
         generate_mesh = partial(generate_box_mesh,
                                 axis_coords=coords,
                                 periodic=(False, True),
+                                group_cls=group_cls,
                                 boundary_tag_to_face={
                                     "inlet": ["-x"],
                                     "outlet": ["+x"]})
@@ -289,6 +308,7 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         local_nelements = local_mesh.nelements
 
     else:  # Restart
+
         from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(actx, restart_file)
         restart_step = restart_data["step"]
@@ -300,8 +320,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
         assert comm.Get_size() == restart_data["num_parts"]
 
     from mirgecom.discretization import create_discretization_collection
-    dcoll = create_discretization_collection(actx, local_mesh, order,
-                                             mpi_communicator=comm)
+    dcoll = create_discretization_collection(
+        actx, local_mesh, order,
+        use_tensor_product_elements=use_tensor_product_els,
+        mpi_communicator=comm)
 
     nodes = actx.thaw(dcoll.nodes())
 
@@ -685,14 +707,15 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         fluid_state = get_fluid_state(cv, tseed)
 
-        if local_dt:
-            t = force_evaluation(actx, t)
-            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                gas_model, constant_cfl=constant_cfl, local_dt=local_dt)
-            dt = force_evaluation(actx, dt)
-            #dt = force_evaluation(actx, actx.np.minimum(dt, current_dt))
-        else:
-            if constant_cfl:
+        if not use_tensor_product_els:
+            if local_dt:
+                t = force_evaluation(actx, t)
+                dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
+                                      gas_model, constant_cfl=constant_cfl,
+                                      local_dt=local_dt)
+                dt = force_evaluation(actx, dt)
+                # dt = force_evaluation(actx, actx.np.minimum(dt, current_dt))
+            elif constant_cfl:
                 dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
                                       t_final, constant_cfl, local_dt)
 
@@ -791,11 +814,10 @@ def main(actx_class, ctx_factory=cl.create_some_context, use_logmgr=True,
 
         return state, dt
 
-##############################################################################
-
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-                                  current_cfl, t_final, constant_cfl)
-    current_dt = force_evaluation(actx, current_dt)
+    if not use_tensor_product_els:
+        current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+                                      current_cfl, t_final, constant_cfl)
+        current_dt = force_evaluation(actx, current_dt)
 
     if rank == 0:
         logging.info("Stepping.")
@@ -856,6 +878,7 @@ if __name__ == "__main__":
                         help="enable lazy evaluation [OFF]")
     parser.add_argument("--numpy", action="store_true",
                         help="use numpy-based eager actx.")
+    parser.add_argument("--use_tensor_product_elements", action="store_true")
 
     args = parser.parse_args()
 
@@ -895,6 +918,7 @@ if __name__ == "__main__":
         numpy=args.numpy)
 
     main(actx_class, use_logmgr=args.log, casename=casename,
-         restart_file=restart_file, use_overintegration=args.overintegration)
+         restart_file=restart_file, use_overintegration=args.overintegration,
+         use_tensor_product_els=args.use_tensor_product_elements)
 
 # vim: foldmethod=marker
