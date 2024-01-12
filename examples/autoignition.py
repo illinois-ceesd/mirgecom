@@ -122,7 +122,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     nel_1d = 8
     order = 1
 
-    mech_file = "uiuc_18sp"
+    mech_file = "uiuc_7sp"
 
     # {{{ Time stepping control
 
