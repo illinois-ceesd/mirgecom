@@ -497,17 +497,17 @@ def main(actx_class, use_leap=False, use_overintegration=False,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        # if check_range_local(dcoll, "vol", pressure, 1e5, 2.6e5):
-        #     health_error = True
-        #     logger.info(f"{rank=}: Pressure range violation.")
+        if check_range_local(dcoll, "vol", pressure, 1e5, 2.6e5):
+            health_error = True
+            logger.info(f"{rank=}: Pressure range violation.")
 
         if check_naninf_local(dcoll, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
 
-        # if check_range_local(dcoll, "vol", temperature, 1.198e3, 1.3e3):
-        #     health_error = True
-        #     logger.info(f"{rank=}: Temperature range violation.")
+        if check_range_local(dcoll, "vol", temperature, 1.198e3, 1.3e3):
+            health_error = True
+            logger.info(f"{rank=}: Temperature range violation.")
 
         # This check is the temperature convergence check
         # The current *temperature* is what Pyrometheus gets
