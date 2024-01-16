@@ -610,8 +610,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     # Create geometrically even partitions
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
-    print(f"{elem_to_rank=}")
-
     # map partition id to list of elements in that partition
     part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
                         for r in range(num_ranks)}
@@ -627,11 +625,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
 
         for r in range(num_ranks-1):
 
-            # find the element reservoir (next part with elements in it)
-            # adv_part = r + 1
-            # while nelem_part[adv_part] == 0:
-            #    adv_part = adv_part + 1
-
             num_elem_needed = aver_part_nelem - nelem_part[r]
             part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
@@ -646,8 +639,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
             moved_elements = set()
 
             adv_part = r + 1
-            # while ((part_imbalance > imbalance_tolerance)
-            #       and (adv_part < num_ranks)):
             while part_imbalance > imbalance_tolerance:
                 # This partition needs to keep changing in size until it meets the
                 # specified imbalance tolerance, or gives up trying
@@ -885,7 +876,7 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     warn(
         "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
         "Use distribute_mesh instead.", DeprecationWarning, stacklevel=2)
-    return distribute_mesh(comm, generate_mesh)
+    return distribute_mesh(comm, generate_mesh, **kwargs)
 
 
 def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=None):

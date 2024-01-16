@@ -389,7 +389,7 @@ if __name__ == "__main__":
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--overintegration", action="store_true",
-        help="use overintegration in the RHS computations"),
+        help="use overintegration in the RHS computations")
     parser.add_argument("--esdg", action="store_true",
         help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--numpy", action="store_true",

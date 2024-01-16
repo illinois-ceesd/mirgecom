@@ -73,8 +73,8 @@ class StatisticsAccumulator:
         scale_factor
             Scale returned statistics by this factor.
         """
+        # Number of values stored in the StatisticsAccumulator
         self.num_values: int = 0
-        """Number of values stored in the StatisticsAccumulator."""
 
         self._sum: float = 0
         self._min: Optional[float] = None

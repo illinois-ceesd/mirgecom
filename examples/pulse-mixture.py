@@ -1,4 +1,4 @@
-"""Demonstrate acoustic pulse, and adiabatic slip wall."""
+"""Demonstrate acoustic pulse for mixtures."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -25,32 +25,33 @@ THE SOFTWARE.
 """
 
 import logging
-import numpy as np
 from functools import partial
+import numpy as np
+import cantera
 
-from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD, DD_VOLUME_ALL
+from grudge import op
 
 from logpyle import IntervalTimer, set_dt
 
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
-from mirgecom.simutil import (
-    get_sim_timestep,
-    distribute_mesh
-)
+from mirgecom.simutil import generate_and_distribute_mesh
 from mirgecom.io import make_init_message
-
+from mirgecom.utils import force_evaluation
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary
-from mirgecom.initializers import (
-    Uniform,
-    AcousticPulse
+from mirgecom.boundary import (
+    LinearizedOutflow2DBoundary,
+    LinearizedInflow2DBoundary,
+    # RiemannInflowBoundary,
+    PressureOutflowBoundary,
+    AdiabaticSlipBoundary
 )
-from mirgecom.eos import IdealSingleGas
+from mirgecom.initializers import AcousticPulse, initialize_flow_solution
+from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
@@ -60,9 +61,9 @@ from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_device_memory_usage
 )
+from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
 logger = logging.getLogger(__name__)
 
@@ -104,17 +105,19 @@ def main(actx_class, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1.0
+    t_final = 5e-4
     current_cfl = 1.0
-    current_dt = .005
+    current_dt = 2.5e-5
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
     nstatus = 1
-    nrestart = 5
+    nrestart = 500
     nviz = 100
     nhealth = 1
+
+    order = 2
 
     dim = 2
     rst_path = "restart_data/"
@@ -137,15 +140,19 @@ def main(actx_class, use_esdg=False,
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
-            # periodic=(True,)*dim
-        )
-
-        local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
+            boundary_tag_to_face={
+                "outlet_top": ["+y"],
+                "outlet_bottom": ["-y"],
+                "outlet_right": ["+x"],
+                "inlet": ["-x"]}
+            )
+        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
+                                                                    generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     vis_timer = None
@@ -161,43 +168,61 @@ def main(actx_class, use_esdg=False,
 
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
-            ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
-            ("t_step.max", "------- step walltime: {value:6g} s, "),
+            ("t_sim.max", "sim time: {value:1.6e} s, "),
+            ("t_step.max", "step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
+    # ~~~~ gas model
+    from mirgecom.mechanisms import get_mechanism_input
+    mech_input = get_mechanism_input("air_3sp")
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=3)(actx.np)
+
+    eos = PyrometheusMixture(pyro_obj, temperature_guess=300.0)
     gas_model = GasModel(eos=eos)
+
+    def _get_fluid_state(cv, temp_seed):
+        return make_fluid_state(cv=cv, gas_model=gas_model,
+            temperature_seed=temp_seed)
+
+    get_fluid_state = actx.compile(_get_fluid_state)
+
+    # ~~~~ solution initilization
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.0
+    velocity[0] = 10.0
+    from pytools.obj_array import make_obj_array
+    aux = 0.5*(1.0 - actx.np.tanh(1.0/0.05*nodes[0]))
+    y = make_obj_array([aux, 1.0 - aux, aux*0.0])
     orig = np.zeros(shape=(dim,))
-    initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
-    uniform_state = initializer(nodes, eos=eos)
-
-    boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
-    # boundaries = {}
-
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
+    initial_cv = initialize_flow_solution(
+        actx, coords=nodes, eos=eos, pressure=101325.0, temperature=300.0,
+        velocity=velocity, species_mass_fractions=y)
+    initial_cv = force_evaluation(actx, initial_cv)
 
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
-    else:
-        # Set the current state from time 0
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
-    current_state = make_fluid_state(current_cv, gas_model)
+    else:
+        acoustic_pulse = AcousticPulse(dim=dim, amplitude=1000.0,
+                                       width=.1, center=orig)
+        current_cv = acoustic_pulse(x_vec=nodes, cv=initial_cv, eos=eos,
+                                    tseed=300.0)
+
+    current_cv = force_evaluation(actx, current_cv)
+    current_state = get_fluid_state(current_cv, 300.0)
 
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
         logmgr_set_time(logmgr, current_step, current_t)
 
+    # ~~~~
     visualizer = make_visualizer(dcoll)
 
-    initname = "pulse"
+    initname = "pulse-mix"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
@@ -209,11 +234,12 @@ def main(actx_class, use_esdg=False,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_viz(step, t, state, dv=None):
-        if dv is None:
-            dv = eos.dependent_vars(state)
-        viz_fields = [("cv", state),
-                      ("dv", dv)]
+    def my_write_viz(step, t, state):
+        viz_fields = [("cv", state.cv),
+                      ("dv", state.dv),
+                      ("u", state.velocity)]
+        viz_fields.extend(
+            ("Y_"+str(i), state.cv.species_mass_fractions[i]) for i in range(3))
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -224,7 +250,7 @@ def main(actx_class, use_esdg=False,
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "cv": state,
+                "cv": state.cv,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -236,21 +262,26 @@ def main(actx_class, use_esdg=False,
 
     def my_health_check(pressure):
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
+        from mirgecom.simutil import check_naninf_local
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        fluid_state = make_fluid_state(state, gas_model)
-        dv = fluid_state.dv
+
+        if logmgr:
+            logmgr.tick_before()
+
+        fluid_cv, tseed = state
+
+        fluid_state = get_fluid_state(fluid_cv, tseed)
+        fluid_cv = fluid_state.cv
+        fluid_dv = fluid_state.dv
+
+        state = make_obj_array([fluid_cv, fluid_state.temperature])
 
         try:
-
-            if logmgr:
-                logmgr.tick_before()
 
             from mirgecom.simutil import check_step
             do_viz = check_step(step=step, interval=nviz)
@@ -258,62 +289,109 @@ def main(actx_class, use_esdg=False,
             do_health = check_step(step=step, interval=nhealth)
 
             if do_health:
-                health_errors = global_reduce(my_health_check(dv.pressure), op="lor")
+                health_errors = \
+                    global_reduce(my_health_check(fluid_dv.pressure), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=state)
+                my_write_restart(step=step, t=t, state=fluid_state)
 
             if do_viz:
-                my_write_viz(step=step, t=t, state=state, dv=dv)
+                my_write_viz(step=step, t=t, state=fluid_state)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state)
-            my_write_restart(step=step, t=t, state=state)
+            my_write_viz(step=step, t=t, state=fluid_state)
+            my_write_restart(step=step, t=t, state=fluid_state)
             raise
 
-        dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
-                              constant_cfl)
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state, dt
 
     def my_rhs(t, state):
-        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return euler_operator(dcoll, state=fluid_state, time=t,
-                              boundaries=boundaries,
-                              gas_model=gas_model, use_esdg=use_esdg,
-                              quadrature_tag=quadrature_tag)
+        fluid_cv, tseed = state
+        fluid_state = make_fluid_state(cv=fluid_cv, gas_model=gas_model,
+                                       temperature_seed=tseed)
 
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-                                  current_cfl, t_final, constant_cfl)
+#        # ~~~~ boundary condition
+#        # Riemann inflow
+#        y_inlet = np.zeros((3,))
+#        y_inlet[0] = 1.0
+#        bnd_discr = dcoll.discr_from_dd(BoundaryDomainTag("inlet"))
+#        bnd_nodes = actx.thaw(bnd_discr.nodes())
+#        free_stream_cv = initialize_flow_solution(
+#            actx, coords=bnd_nodes, gas_model=gas_model, pressure=101325.0,
+#            temperature=300.0, velocity=velocity, species_mass_fractions=y_inlet)
+#        free_stream_cv = force_evaluation(actx, free_stream_cv)
 
-    current_step, current_t, current_cv = \
+#        riemann_inflow_bnd = RiemannInflowBoundary(cv=free_stream_cv,
+#                                                   temperature=300.0)
+
+        # Linearized inflow
+        y_inlet = np.zeros((3,))
+        y_inlet[0] = 1.0
+        mass = eos.get_density(pressure=101325.0, temperature=300.0,
+                               species_mass_fractions=y_inlet)
+        linear_inflow_bnd = LinearizedInflow2DBoundary(free_stream_density=mass,
+            free_stream_velocity=velocity, free_stream_pressure=101325.0,
+            free_stream_species_mass_fractions=y_inlet)
+
+        # Linearized outflow
+        y_outlet_right = op.project(dcoll, DD_VOLUME_ALL,
+                                    BoundaryDomainTag("outlet_right"),
+                                    fluid_state.cv.species_mass_fractions)
+        mass = eos.get_density(pressure=101325.0, temperature=300.0,
+                               species_mass_fractions=y_outlet_right)
+        linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=mass,
+            free_stream_velocity=velocity, free_stream_pressure=101325.0,
+            free_stream_species_mass_fractions=y_outlet_right)
+
+        # Pressure prescribed outflow boundary
+        pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=101325.0)
+
+        # boundaries
+        boundaries = {BoundaryDomainTag("inlet"): linear_inflow_bnd,
+                      # BoundaryDomainTag("inlet"): riemann_inflow_bnd,
+                      BoundaryDomainTag("outlet_top"): pressure_outflow_bnd,
+                      BoundaryDomainTag("outlet_right"): linear_outflow_bnd,
+                      BoundaryDomainTag("outlet_bottom"): AdiabaticSlipBoundary()}
+
+        rhs = euler_operator(dcoll, state=fluid_state, time=t,
+                             boundaries=boundaries,
+                             gas_model=gas_model, use_esdg=use_esdg,
+                             quadrature_tag=quadrature_tag)
+        return make_obj_array([rhs, tseed*0.0])
+
+    tseed = 300.0 + actx.np.zeros_like(current_cv.mass)
+
+    if rank == 0:
+        logging.info("Stepping.")
+
+    current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_cv, t=current_t, t_final=t_final)
+                      state=make_obj_array([current_cv, tseed]),
+                      t=current_t, t_final=t_final)
+
+    current_cv, current_tseed = current_state
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_state = make_fluid_state(current_cv, gas_model)
-    final_dv = final_state.dv
+    final_state = make_fluid_state(current_cv, gas_model, current_tseed)
 
-    my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_cv)
+    my_write_viz(step=current_step, t=current_t, state=final_state)
+    my_write_restart(step=current_step, t=current_t, state=final_state)
 
     if logmgr:
         logmgr.close()
@@ -326,7 +404,7 @@ def main(actx_class, use_esdg=False,
 
 if __name__ == "__main__":
     import argparse
-    casename = "pulse"
+    casename = "pulse-mix"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--overintegration", action="store_true",
         help="use overintegration in the RHS computations")

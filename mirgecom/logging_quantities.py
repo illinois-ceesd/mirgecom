@@ -68,6 +68,7 @@ def initialize_logmgr(enable_logmgr: bool,
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
 
     logmgr.add_quantity(PythonInitTime())
+    logmgr.enable_save_on_sigterm()
 
     add_run_info(logmgr)
     add_package_versions(logmgr)
