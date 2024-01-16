@@ -66,7 +66,8 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, use_overintegration=False, use_esdg=False,
-         use_leap=False, casename=None, rst_filename=None):
+         use_leap=False, casename=None, rst_filename=None,
+         use_tensor_product_els=False):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -84,8 +85,10 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
-    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
+    queue = getattr(actx, "queue", None)
+    # if not use_tensor_product_els:
+    #    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     if use_leap:
@@ -93,7 +96,8 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1e-4
+
+    t_final = 2.0
     current_cfl = 0.01
     current_dt = 1e-6
     current_t = 0
@@ -103,7 +107,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 1000
-    nviz = 1
+    nviz = 10
     nhealth = 1
 
     dim = 1
@@ -120,19 +124,23 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
+        from meshmode.mesh import TensorProductElementGroup
         from meshmode.mesh.generation import generate_regular_rect_mesh
         nel_1d = 32
         box_ll = 0.0
         box_ur = 1.0
+        grp_cls = TensorProductElementGroup if use_tensor_product_els else None
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim,
+                                group_cls=grp_cls)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
     order = 4
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             quadrature_order=order+2)
+    dcoll = create_discretization_collection(
+        actx, local_mesh, order=order,
+        use_tensor_product_elements=use_tensor_product_els)
     nodes = actx.thaw(dcoll.nodes())
 
     # TODO: Fix this wonky dt estimate
@@ -388,6 +396,7 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--use_tensor_product_elements", action="store_true")
     args = parser.parse_args()
 
     from warnings import warn
@@ -400,7 +409,8 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy,
+        tensor_product=args.use_tensor_product_elements)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -411,6 +421,7 @@ if __name__ == "__main__":
 
     main(actx_class, use_leap=args.leap,
          casename=casename, rst_filename=rst_filename,
-         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg)
+         use_overintegration=args.overintegration or args.esdg, use_esdg=args.esdg,
+         use_tensor_product_els=args.use_tensor_product_elements)
 
 # vim: foldmethod=marker

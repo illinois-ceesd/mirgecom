@@ -43,8 +43,9 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
     from mpi4py.MPI import Comm
 
 
-def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
-                        profiling: bool, numpy: bool = False) -> Type[ArrayContext]:
+def get_reasonable_array_context_class(
+        *, lazy: bool, distributed: bool, profiling: bool,
+        numpy: bool = False, tensor_product: bool = False) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
@@ -68,6 +69,16 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
     if profiling:
         from mirgecom.profiling import PyOpenCLProfilingArrayContext
         return PyOpenCLProfilingArrayContext
+
+    if tensor_product:
+        from grudge.array_context import (
+            TensorProductMPIFusionContractorArrayContext,
+            TensorProductMPIPyOpenCLArrayContext
+        )
+        if lazy:
+            return TensorProductMPIFusionContractorArrayContext
+        else:
+            return TensorProductMPIPyOpenCLArrayContext
 
     from grudge.array_context import \
         get_reasonable_array_context_class as grudge_get_reasonable_actx_class
