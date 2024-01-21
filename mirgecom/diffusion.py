@@ -434,15 +434,16 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 class RobinDiffusionBoundary(DiffusionBoundary):
     r"""Robin boundary condition for the diffusion operator.
 
-    The non-homogeneous boundary condition is a linear combination of $u$ and
-    its gradient $\nabla u$, given by
+    The non-homogeneous Robin boundary condition is a linear combination of
+    $u$ and its gradient $\nabla u$, given by
 
     .. math::
 
-        (\alpha u - \nabla u \cdot \mathbf{\hat{n}})|_\Gamma = \alpha u_{ref}.
+        (\alpha u - \kappa \nabla u \cdot \mathbf{\hat{n}})|_\Gamma =
+            \alpha u_{ref}.
 
     where $u_{ref}$ is the reference value of $u$ for $x \to \infty$ and
-    $\alpha$ is the weight for $u$. The weight for the gradient is the
+    $\alpha$ is the weight for $u$. The gradient weight $\kappa$ is the
     conductivity (thermal) or the diffusivity (species).
 
     The current implementation uses external data
@@ -506,7 +507,7 @@ class RobinDiffusionBoundary(DiffusionBoundary):
         normal = actx.thaw(dcoll.normal(dd_bdry))
         grad_u_tpair = TracePair(dd_bdry,
             interior=grad_u_minus,
-            exterior=(-self.alpha*(u_minus - self.value)/kappa_minus) * normal)
+            exterior=self.alpha*(self.value - u_minus)/kappa_minus * normal)
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
         return numerical_flux_func(
