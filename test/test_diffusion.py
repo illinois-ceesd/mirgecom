@@ -43,12 +43,55 @@ from mirgecom.diffusion import (
     diffusion_flux,
     diffusion_operator,
     grad_facial_flux_weighted,
+    PrescribedFluxDiffusionBoundary,
     DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary)
+    NeumannDiffusionBoundary,
+    RobinDiffusionBoundary)
+from mirgecom.integrators import rk4_step
 from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
 
 logger = logging.getLogger(__name__)
+
+
+def test_diffusion_boundary_conditions(actx_factory):
+    """Checks the boundary conditions for diffusion operator."""
+    actx = actx_factory()
+    dim = 2
+    n = 4
+    order = 4
+
+    mesh = get_box_mesh(dim, -1, 1, n)
+    dcoll = create_discretization_collection(actx, mesh, order)
+    nodes = actx.thaw(dcoll.nodes())
+
+    u_ref = -1.5
+    alpha = 0.5
+    kappa = 2
+    u = 0.5*nodes[0] + 1.0
+
+    def make_dirichlet_bc(btag):
+        bdry_u = op.project(dcoll, "vol", BoundaryDomainTag(btag), u)
+        return DirichletDiffusionBoundary(bdry_u)
+
+    boundaries = {
+        BoundaryDomainTag("-1"): RobinDiffusionBoundary(u_ref, alpha),
+        BoundaryDomainTag("+1"): NeumannDiffusionBoundary(0.5),
+        BoundaryDomainTag("-2"): make_dirichlet_bc("-2"),
+        BoundaryDomainTag("+2"): PrescribedFluxDiffusionBoundary(0.0),
+    }
+
+    rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
+            boundaries=boundaries, return_grad_u=True,
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
+
+    err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 0.5, np.inf))
+    err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 0.0, np.inf))
+    assert err_grad_x < 1.e-9
+    assert err_grad_y < 1.e-9
+
+    err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
+    assert err_rhs < 1.e-8
 
 
 class HeatProblem(metaclass=ABCMeta):
@@ -335,8 +378,6 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         u = p.get_solution(nodes, t)
 
-        from mirgecom.integrators import rk4_step
-
         for _ in range(nsteps):
             u = rk4_step(u, t, dt, get_rhs)
             t += dt
@@ -349,7 +390,6 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
-            from grudge.shortcuts import make_visualizer
             vis = make_visualizer(dcoll, order+3)
             vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
                 order=order, n=n), [
@@ -449,8 +489,6 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     dt = 1e-3 / order**2
     t = 0
-
-    from mirgecom.integrators import rk4_step
 
     for _ in range(50):
         u = rk4_step(u, t, dt, get_rhs)
@@ -644,6 +682,7 @@ def test_orthotropic_diffusion(actx_factory):
     kappa = make_obj_array([kappa0 + zeros, kappa1 + zeros])
     u = 30.0*nodes[0] + 60.0*nodes[1]
 
+    # exercise Neumann BC
     boundaries = {
         BoundaryDomainTag("-1"): NeumannDiffusionBoundary(-30.0),  # grad \cdot n
         BoundaryDomainTag("+1"): NeumannDiffusionBoundary(+30.0),  # grad \cdot n
@@ -671,6 +710,7 @@ def test_orthotropic_diffusion(actx_factory):
     err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
     assert err_rhs < 1.e-8
 
+    # exercise Dirichlet BC
     def make_dirichlet_bc(btag):
         bdry_u = op.project(dcoll, "vol", BoundaryDomainTag(btag), u)
         return DirichletDiffusionBoundary(bdry_u)
