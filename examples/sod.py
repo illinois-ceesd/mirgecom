@@ -87,8 +87,6 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     actx = initialize_actx(actx_class, comm)
     use_profiling = actx_class_is_profiling(actx_class)
     queue = getattr(actx, "queue", None)
-    # if not use_tensor_product_els:
-    #    use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     if use_leap:
@@ -140,7 +138,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     order = 4
     dcoll = create_discretization_collection(
         actx, local_mesh, order=order,
-        use_tensor_product_elements=use_tensor_product_els)
+        tensor_product_elements=use_tensor_product_els)
     nodes = actx.thaw(dcoll.nodes())
 
     # TODO: Fix this wonky dt estimate

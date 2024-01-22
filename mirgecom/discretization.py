@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 # when we want to change it.
 def create_discretization_collection(actx, volume_meshes, order, *,
                                      mpi_communicator=None, quadrature_order=-1,
-                                     use_tensor_product_elements=False):
+                                     tensor_product_elements=False):
     """Create and return a grudge DG discretization collection."""
     if mpi_communicator is not None:
         from warnings import warn
@@ -59,7 +59,7 @@ def create_discretization_collection(actx, volume_meshes, order, *,
     if quadrature_order < 0:
         quadrature_order = 2*order+1
 
-    if use_tensor_product_elements:
+    if tensor_product_elements:
         return make_discretization_collection(
             actx, volume_meshes,
             discr_tag_to_group_factory={

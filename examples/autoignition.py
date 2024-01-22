@@ -95,21 +95,16 @@ def main(actx_class, use_leap=False, use_overintegration=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    from grudge.array_context import (
-        TensorProductMPIFusionContractorArrayContext,
-        TensorProductMPIPyOpenCLArrayContext
-    )
-    from meshmode.mesh import TensorProductElementGroup
-    if use_tensor_product_els:
-        # For lazy:
-        actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
-                               comm)
-        # For eager:
-        # actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
-        use_profiling = False
-    else:
-        actx = initialize_actx(actx_class, comm)
-        use_profiling = actx_class_is_profiling(actx_class)
+    # if use_tensor_product_els:
+    #    # For lazy:
+    #    actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
+    #                           comm)
+    #    # For eager:
+    #    # actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
+    #    use_profiling = False
+    #else:
+    actx = initialize_actx(actx_class, comm)
+    use_profiling = actx_class_is_profiling(actx_class)
     queue = getattr(actx, "queue", None)
 
     # Some discretization parameters
@@ -168,17 +163,19 @@ def main(actx_class, use_leap=False, use_overintegration=False,
         from meshmode.mesh.generation import generate_regular_rect_mesh
         box_ll = -0.005
         box_ur = 0.005
+        from meshmode.mesh import TensorProductElementGroup
         grp_cls = TensorProductElementGroup if use_tensor_product_els else None
-        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim,
-                                group_cls=grp_cls)
+        generate_mesh = partial(
+            generate_regular_rect_mesh, a=(box_ll,)*dim,
+            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim,
+            group_cls=grp_cls)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
     dcoll = create_discretization_collection(
         actx, local_mesh, order=order,
-        use_tensor_product_elements=use_tensor_product_els)
+        tensor_product_elements=use_tensor_product_els)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.0
 
@@ -713,7 +710,8 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy,
+        tensor_product_elements=args.use_tensor_product_elements)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
