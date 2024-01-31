@@ -100,9 +100,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # timestepping control
     timestepper = rk4_step
-    t_final = 1e-5
+    t_final = 1.5e-7
     current_cfl = 0.05
-    current_dt = 1e-8
+    current_dt = 1e-10
     current_t = 0
     constant_cfl = False
     current_step = 0
@@ -135,16 +135,14 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
-        from meshmode.mesh import TensorProductElementGroup
-        n_refine = 2
-        nels_x = 9 * n_refine
-        nels_y = 5 * n_refine
+        n_refine = 16
+        nels_x = 5 * n_refine
+        nels_y = 2 * n_refine
         nels_axis = (nels_x, nels_y)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        group_cls = TensorProductElementGroup if use_tensor_product_els else None
         generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=nels_axis,
-                                group_cls=group_cls)
+                                tensor_product_elements=use_tensor_product_els)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
@@ -153,10 +151,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     # from meshmode.mesh.processing import rotate_mesh_around_axis
     # local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/4)
 
-    order = 2
+    order = 1
     dcoll = create_discretization_collection(
         actx, local_mesh, order=order,
-        use_tensor_product_elements=use_tensor_product_els,
+        tensor_product_elements=use_tensor_product_els,
         quadrature_order=order+2)
     nodes = actx.thaw(dcoll.nodes())
 
@@ -395,9 +393,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
             if do_viz:
                 my_write_viz(step=step, t=t, state=state, dv=dv)
 
-            # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-            #                      t_final, constant_cfl)
-            dt = current_dt
+            dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
+                                  t_final, constant_cfl)
+            # dt = current_dt
             if do_status:  # needed because logging fails to make output
                 if component_errors is None:
                     from mirgecom.simutil import compare_fluid_solutions
@@ -433,8 +431,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     from mirgecom.simutil import force_evaluation
     current_state = force_evaluation(actx, current_state)
 
-    # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-    #                              current_cfl, t_final, constant_cfl)
+    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+                                  current_cfl, t_final, constant_cfl)
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
@@ -449,9 +447,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         logger.info("Checkpointing final state ...")
 
     final_dv = current_state.dv
-    # final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-    #                            current_cfl, t_final, constant_cfl)
-    final_dt = current_dt
+    final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+                                current_cfl, t_final, constant_cfl)
+    # final_dt = current_dt
 
     from mirgecom.simutil import compare_fluid_solutions
     component_errors = compare_fluid_solutions(dcoll, current_state.cv, exact)
@@ -502,7 +500,7 @@ if __name__ == "__main__":
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
         lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy,
-        tensor_product=args.use_tensor_product_elements)
+        tensor_product_elements=args.use_tensor_product_elements)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
