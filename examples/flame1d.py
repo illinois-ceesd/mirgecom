@@ -241,11 +241,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         print(f"\tnhealth = {nhealth}")
         print(f"\tnstatus = {nstatus}")
         if constant_cfl:
-            print(f"\tconstant_cfl = {constant_cfl}")
             print(f"\tcurrent_cfl = {current_cfl}")
         else:
             print(f"\tcurrent_dt = {current_dt}")
-            print(f"\tt_final = {t_final}")
+        print(f"\tt_final = {t_final}")
         print(f"\tniter = {niter}")
         print(f"\torder = {order}")
         print(f"\tTime integration = {integrator}")
@@ -255,8 +254,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     restart_step = 0
     if rst_filename is None:
 
-        import mirgecom
-        path = mirgecom.__path__[0] + "/../examples/"
+#        import mirgecom
+#        path = mirgecom.__path__[0] + "/../examples/"
+        import os
+        path = os.path.abspath(os.getcwd()) + "/"
         xx = np.loadtxt(path + "flame1d_x_025um.dat")
         yy = np.loadtxt(path + "flame1d_y_025um.dat")
 
