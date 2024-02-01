@@ -211,7 +211,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     # default timestepping control
     integrator = "compiled_lsrk45"
     current_dt = 2.0e-9
-    t_final = 1.0e-8
+    t_final = 2.0e-8
 
     niter = 2000000
 
@@ -219,12 +219,12 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     reference_state = "flame_1D_025um_C2H4_p=4_uiuc_7sp-000000-0000.pkl"
 
     local_dt = False
-    constant_cfl = True
+    constant_cfl = False
     current_cfl = 0.4
 
-    dim = 2
-
 # ############################################################################
+
+    dim = 2
 
     def _compiled_stepper_wrapper(state, t, dt, rhs):
         return compiled_lsrk45_step(actx, state, t, dt, rhs)
