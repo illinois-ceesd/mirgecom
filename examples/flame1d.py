@@ -255,14 +255,12 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     restart_step = 0
     if rst_filename is None:
 
-        xx = np.loadtxt("x_025um.dat")
-        yy = np.loadtxt("y_025um.dat")
-
-        coords = tuple((xx, yy))  # noqa
+        xx = np.loadtxt("flame1d_x_025um.dat")
+        yy = np.loadtxt("flame1d_y_025um.dat")
 
         from meshmode.mesh.generation import generate_box_mesh
         generate_mesh = partial(generate_box_mesh,
-                                axis_coords=coords,
+                                axis_coords=(xx, yy),
                                 periodic=(False, True),
                                 boundary_tag_to_face={"inlet": ["-x"],
                                                       "outlet": ["+x"]})
