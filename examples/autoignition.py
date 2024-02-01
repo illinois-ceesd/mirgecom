@@ -622,7 +622,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     my_write_viz(step=current_step, t=current_t, dt=dt, state=final_cv,
                  dv=final_dv, production_rates=final_dm,
                  heat_release_rate=final_heat_rls, ts_field=ts_field, cfl=cfl)
-    my_write_status(t=current_dt, dt=dt, cfl=cfl, dv=final_dv)
+    my_write_status(t=current_t, dt=dt, cfl=cfl, dv=final_dv)
     my_write_restart(step=current_step, t=current_t, state=final_fluid_state,
                      temperature_seed=tseed)
 
