@@ -40,13 +40,10 @@ from grudge import op
 from logpyle import IntervalTimer, set_dt
 from mirgecom.navierstokes import ns_operator, grad_cv_operator, grad_t_operator
 from mirgecom.simutil import (
-    check_step,
+    check_step, check_naninf_local, check_range_local,
     get_sim_timestep,
     generate_and_distribute_mesh,
     write_visfile,
-    check_naninf_local,
-    check_range_local,
-    global_reduce
 )
 from mirgecom.utils import force_evaluation
 from mirgecom.restart import write_restart_file, read_restart_data
@@ -212,16 +209,15 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # default timestepping control
     integrator = "compiled_lsrk45"
+    local_dt = False
+    constant_cfl = True
+    current_cfl = 0.4
     current_dt = 1.0e-9
-    t_final = 1.0e-8
+    t_final = 2.5e-8
     niter = 2000000
 
     use_sponge = False
     use_cantera = True
-
-    local_dt = False
-    constant_cfl = True
-    current_cfl = 0.4
 
 # ############################################################################
 
@@ -257,8 +253,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
         import os
         path = os.path.dirname(os.path.abspath(__file__))
-        xx = np.loadtxt(f"{path}/flame1d_x_025um.dat")
-        yy = np.loadtxt(f"{path}/flame1d_y_025um.dat")
+        xx = np.loadtxt(f"{path}/flame1d_x_050um.dat")
+        yy = np.loadtxt(f"{path}/flame1d_y_050um.dat")
 
         from meshmode.mesh.generation import generate_box_mesh
         generate_mesh = partial(generate_box_mesh,
@@ -319,15 +315,15 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         f = cantera.FreeFlame(cantera_soln, width=0.02)
 
         # Solve with mixture-averaged transport model
-        f.transport_model = 'mixture-averaged'
+        f.transport_model = "mixture-averaged"
         f.set_refine_criteria(ratio=2, slope=0.15, curve=0.15)
         f.solve(loglevel=0, refine_grid=True, auto=True)
 
         temp_unburned = f.T[0]
         temp_burned = f.T[-1]
 
-        y_unburned = f.Y[:,0]
-        y_burned = f.Y[:,-1]
+        y_unburned = f.Y[:, 0]
+        y_burned = f.Y[:, -1]
 
         vel_unburned = f.velocity[0]
         vel_burned = f.velocity[-1]
@@ -479,7 +475,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         current_step = 0
         first_step = 0
 
-        tseed = 1234.56789
+        tseed = 1234.56789 + zeros
 
         if rank == 0:
             logging.info("Initializing soln.")
@@ -500,6 +496,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     if logmgr:
         logmgr_set_time(logmgr, current_step, current_t)
 
+    current_cv = force_evaluation(actx, current_cv)
     current_state = get_fluid_state(current_cv, tseed)
     current_state = force_evaluation(actx, current_state)
 
