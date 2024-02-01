@@ -7,6 +7,7 @@ The examples and the unique features they exercise are as follows:
 - `autoignition.py`: Chemistry verification case with Pyrometheus
 - `heat-source.py`: Diffusion operator
 - `lump.py`: Lump advection, advection verification case
+- `mixture.py`: Mixture EOS with Pyrometheus
 - `scalar-lump.py`: Scalar component lump advection verification case
 - `pulse.py`: Acoustic pulse in a box, wall boundary test case
 - `sod.py`: Sod's shock case: Fluid test case with strong shock
