@@ -211,7 +211,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     # default timestepping control
     integrator = "compiled_lsrk45"
     current_dt = 2.0e-9
-    t_final = 1.0
+    t_final = 1.0e-8
 
     niter = 2000000
 
