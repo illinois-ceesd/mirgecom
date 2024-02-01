@@ -254,12 +254,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     restart_step = 0
     if rst_filename is None:
 
-#        import mirgecom
-#        path = mirgecom.__path__[0] + "/../examples/"
         import os
-        path = os.path.abspath(os.getcwd()) + "/"
-        xx = np.loadtxt(path + "flame1d_x_025um.dat")
-        yy = np.loadtxt(path + "flame1d_y_025um.dat")
+        path = os.path.dirname(os.path.abspath(__file__))
+        xx = np.loadtxt(f"{path}/flame1d_x_025um.dat")
+        yy = np.loadtxt(f"{path}/flame1d_y_025um.dat")
 
         from meshmode.mesh.generation import generate_box_mesh
         generate_mesh = partial(generate_box_mesh,
