@@ -261,7 +261,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
         get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
     eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
 
-    # print out the mechanism for inspecion
+    # print out the mechanism for inspection
     # import pyrometheus as pyro
     # with open(f"mechanism.py", "w") as mech_file:
     #     code = pyro.codegen.python.gen_thermochem_code(cantera_soln)
