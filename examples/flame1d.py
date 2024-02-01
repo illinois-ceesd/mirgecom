@@ -32,7 +32,7 @@ import numpy as np
 import cantera
 from pytools.obj_array import make_obj_array
 
-from grudge.dof_desc import BoundaryDomainTag, DD_VOLUME_ALL
+from grudge.dof_desc import BoundaryDomainTag
 from grudge.shortcuts import compiled_lsrk45_step
 from grudge.shortcuts import make_visualizer
 from grudge import op
@@ -173,6 +173,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     rank = comm.Get_rank()
     nparts = comm.Get_size()
 
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
+
     logmgr = initialize_logmgr(True, filename=(f"{casename}.sqlite"),
                                mode="wu", mpi_comm=comm)
 
@@ -194,15 +197,14 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # default i/o frequencies
     ngarbage = 10
-    nviz = 25000
+    nviz = 10000
     nrestart = 25000
     nhealth = 1
     nstatus = 100
 
     my_mechanism = "uiuc_7sp"
 
-    order = 4
-    cantera_file = "adiabatic_flame_uiuc_7sp_phi1.00_p1.00_E:H0.0_Y.csv"
+    order = 2
 
     # transport = "power-law"
     # transport = "mix-lewis"
@@ -210,16 +212,15 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # default timestepping control
     integrator = "compiled_lsrk45"
-    current_dt = 2.0e-9
-    t_final = 2.0e-8
-
+    current_dt = 1.0e-9
+    t_final = 1.0e-8
     niter = 2000000
 
     use_sponge = False
-    reference_state = "flame_1D_025um_C2H4_p=4_uiuc_7sp-000000-0000.pkl"
+    use_cantera = True
 
     local_dt = False
-    constant_cfl = False
+    constant_cfl = True
     current_cfl = 0.4
 
 # ############################################################################
@@ -283,22 +284,19 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     from mirgecom.discretization import create_discretization_collection
     dcoll = create_discretization_collection(actx, local_mesh, order)
-
     nodes = actx.thaw(dcoll.nodes())
-
-    dd_vol = DD_VOLUME_ALL
-
     zeros = nodes[0]*0.0
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DD_VOLUME_ALL
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
+    dd_vol = DD_VOLUME_ALL
 
 # ############################################################################
 
     # {{{  Set up initial state using Cantera
 
     # Use Cantera for initialization
-    print("Using Cantera", cantera.__version__)
+    print("\nUsing Cantera", cantera.__version__)
 
     # import os
     # current_path = os.path.abspath(os.getcwd()) + "/"
@@ -316,7 +314,28 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # Initial temperature, pressure, and mixture mole fractions are needed to
     # set up the initial state in Cantera.
-    if rst_filename is None:
+    if use_cantera:
+        # Set up flame object
+        f = cantera.FreeFlame(cantera_soln, width=0.02)
+
+        # Solve with mixture-averaged transport model
+        f.transport_model = 'mixture-averaged'
+        f.set_refine_criteria(ratio=2, slope=0.15, curve=0.15)
+        f.solve(loglevel=0, refine_grid=True, auto=True)
+
+        temp_unburned = f.T[0]
+        temp_burned = f.T[-1]
+
+        y_unburned = f.Y[:,0]
+        y_burned = f.Y[:,-1]
+
+        vel_unburned = f.velocity[0]
+        vel_burned = f.velocity[-1]
+
+        mass_unburned = f.density[0]
+        mass_burned = f.density[-1]
+
+    else:
         temp_unburned = 300.0
 
         cantera_soln.TP = temp_unburned, 101325.0
@@ -330,21 +349,6 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
         vel_unburned = 0.5
         vel_burned = vel_unburned*mass_unburned/mass_burned
-
-    else:
-        cantera_data = np.genfromtxt(cantera_file, skip_header=1, delimiter=",")
-
-        temp_unburned = cantera_data[0, 2]
-        temp_burned = cantera_data[-1, 2]
-
-        y_unburned = cantera_data[0, 4:]
-        y_burned = cantera_data[-1, 4:]
-
-        vel_unburned = cantera_data[0, 1]
-        vel_burned = cantera_data[-1, 1]
-
-        mass_unburned = cantera_data[0, 3]
-        mass_burned = cantera_data[-1, 3]
 
     pres_unburned = cantera.one_atm  # pylint: disable=no-member
     pres_burned = cantera.one_atm  # pylint: disable=no-member
@@ -378,7 +382,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     gas_model = GasModel(eos=eos, transport=transport_model)
 
-    print("Pyrometheus mechanism species names {species_names}")
+    print(f"Pyrometheus mechanism species names {species_names}")
     print("Unburned:")
     print(f"T = {temp_unburned}")
     print(f"D = {mass_unburned}")
@@ -459,28 +463,27 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
 # ############################################################################
 
+    flame_start_loc = 0.0
+    from mirgecom.initializers import PlanarDiscontinuity
+    bulk_init = PlanarDiscontinuity(dim=dim, disc_location=flame_start_loc,
+        sigma=0.0005, nspecies=nspecies,
+        temperature_right=temp_burned, temperature_left=temp_unburned,
+        pressure_right=pres_burned, pressure_left=pres_unburned,
+        velocity_right=make_obj_array([vel_burned, 0.0]),
+        velocity_left=make_obj_array([vel_unburned, 0.0]),
+        species_mass_right=y_burned, species_mass_left=y_unburned)
+
     if rst_filename is None:
 
         current_t = 0.0
         current_step = 0
         first_step = 0
 
-        flame_start_loc = 0.0
-
         tseed = 1234.56789
-
-        from mirgecom.initializers import PlanarDiscontinuity
-        bulk_init = PlanarDiscontinuity(dim=dim, disc_location=flame_start_loc,
-            sigma=0.0005, nspecies=nspecies,
-            temperature_right=temp_burned, temperature_left=temp_unburned,
-            pressure_right=pres_burned, pressure_left=pres_unburned,
-            velocity_right=make_obj_array([vel_burned, 0.0]),
-            velocity_left=make_obj_array([vel_unburned, 0.0]),
-            species_mass_right=y_burned, species_mass_left=y_unburned)
 
         if rank == 0:
             logging.info("Initializing soln.")
-        # for discontinuous initial conditions
+
         current_cv = bulk_init(x_vec=nodes, eos=eos, time=0.)
 
     else:
@@ -508,11 +511,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     sponge_sigma = sponge_init(x_vec=nodes)
 
-    if use_sponge:
-        cantera_data = read_restart_data(actx, reference_state)
-        ref_cv = force_evaluation(actx, cantera_data["cv"])
-    else:
-        ref_cv = force_evaluation(actx, bulk_init(x_vec=nodes, eos=eos, time=0.))
+    ref_cv = bulk_init(x_vec=nodes, eos=eos, time=0.)
 
 # ############################################################################
 
@@ -591,7 +590,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         #     ("diff_"+species_names[i], state.tv.species_diffusivity[i])
         #     for i in range(nspecies))
 
-        print("Writing solution file...")
+        if rank == 0:
+            logger.info("Writing solution file...")
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
                       step=step, t=t, overwrite=True, comm=comm)
 
@@ -626,11 +626,11 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in temperature data.")
 
-        if check_range_local(dcoll, "vol", pressure, 99000., 103000.):
+        if check_range_local(dcoll, "vol", pressure, 101250., 101500.):
             health_error = True
             logger.info(f"{rank=}: Pressure range violation.")
 
-        if check_range_local(dcoll, "vol", temperature, 250., 3000.):
+        if check_range_local(dcoll, "vol", temperature, 290., 2450.):
             health_error = True
             logger.info(f"{rank=}: Temperature range violation.")
 
