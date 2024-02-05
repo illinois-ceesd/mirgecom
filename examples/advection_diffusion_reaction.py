@@ -35,6 +35,7 @@ from grudge import op
 
 from logpyle import set_dt
 
+from mirgecom.io import make_init_message
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
@@ -63,7 +64,7 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
-def utx(actx, nodes, t=0):
+def init_u_field(actx, nodes, t=0):
     """Initialize the field."""
     return actx.np.exp(-(nodes[0]+1.0)**2/0.1**2)*0.0
 
@@ -72,11 +73,7 @@ def _facial_flux(dcoll, u_tpair):
 
     actx = u_tpair.int.array_context
     normal = normal_vector(actx, dcoll, u_tpair.dd)
-    u_pair = TracePair(dd=u_tpair.dd,
-                       interior=u_tpair.int,
-                       exterior=u_tpair.ext)
-
-    flux_weak = u_pair.avg*normal[0]
+    flux_weak = u_tpair.avg*normal[0]
 
     return op.project(dcoll, u_tpair.dd, "all_faces", flux_weak)
 
@@ -121,7 +118,6 @@ def linear_advection_operator(dcoll, u, u_bc, *, comm_tag=None):
 
 def get_source(actx, u, x):
     return -10.0*u
-    # return 5.0*actx.np.exp(-(x+0.9)**2/0.1**2)
 
 
 @mpi_entry_point
@@ -144,10 +140,14 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
 
     t_final = 0.1
     nviz = 100
+    nstatus = 100
 
     dim = 1
     order = 2
     nel_1d = 100
+
+    if dim != 1:
+        raise NotImplementedError("Only works in 1D.")
 
     # ~~~
     if rst_filename is None:
@@ -163,41 +163,30 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
             boundary_tag_to_face={"inlet": ["-x"], "outlet": ["+x"]})
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
-
-        dcoll = create_discretization_collection(actx, local_mesh, order=order)
-        nodes = actx.thaw(dcoll.nodes())
-
-        # solution
-        u = utx(actx, nodes, t=0)
-
     else:
         from mirgecom.restart import read_restart_data
         rst_filename = f"{rst_filename}-{rank:04d}.pkl"
         restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
-        nel_1d = restart_data["nel_1d"]
         assert comm.Get_size() == restart_data["nparts"]
-
-        dcoll = create_discretization_collection(actx, local_mesh, order=order)
-        nodes = actx.thaw(dcoll.nodes())
 
         current_t = restart_data["t"]
         current_step = restart_data["step"]
-        restart_u = restart_data["u"]
-        old_order = restart_data["order"]
-        if old_order != order:
-            old_dcoll = create_discretization_collection(
-                actx, local_mesh, order=old_order)
-            from meshmode.discretization.connection import make_same_mesh_connection
-            connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
-                                                   old_dcoll.discr_from_dd("vol"))
-            u = connection(restart_u)
-        else:
-            u = restart_u
+        order = restart_data["order"]
+
+    local_nelements = local_mesh.nelements
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    nodes = actx.thaw(dcoll.nodes())
+
+    if rst_filename is None:
+        u = init_u_field(actx, nodes, t=0)
+    else:
+        u = restart_data["u"]
 
     u = force_evaluation(actx, u)
 
     # ~~~
+    constant_cfl = False
     inviscid_cfl = 0.485
     viscous_cfl = 0.15
     wave_speed = 1.0
@@ -211,6 +200,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     dt_i = inviscid_cfl * inv_dt
     dt_v = viscous_cfl * visc_dt
     current_dt = np.minimum(dt_i, dt_v)
+    current_cfl = inviscid_cfl if dt_i < dt_v else viscous_cfl
 
     # ~~~
     presc_value = 1.0
@@ -222,12 +212,17 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     # ~~~
     visualizer = make_visualizer(dcoll)
 
-#    init_message = make_init_message(
-#        dim=dim, order=order,
-#        nelements=local_nelements, global_nelements=global_nelements,
-#        dt=current_dt, t_final=t_final, nstatus=nstatus, nviz=nviz,
-#        t_initial=current_t, cfl=current_cfl, constant_cfl=constant_cfl,
-#        initname=initname, eosname=eosname, casename=casename)
+    eosname = None
+    initname = "advection-diffusion-reaction"
+    init_message = make_init_message(
+        dim=dim, order=order,
+        nelements=local_nelements, global_nelements=global_nelements,
+        dt=current_dt, t_final=t_final, nstatus=nstatus, nviz=nviz,
+        t_initial=current_t, cfl=current_cfl, constant_cfl=constant_cfl,
+        initname=initname, eosname=eosname, casename=casename)
+
+    if rank == 0:
+        logger.info(init_message)
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
@@ -249,7 +244,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
         health_error = False
         if check_naninf_local(dcoll, "vol", u):
             health_error = True
-            logger.info(f"{rank=}: Invalid pressure data found.")
+            logger.info(f"{rank=}: Invalid field data found.")
 
         return health_error
 
@@ -305,6 +300,17 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
                       pre_step_callback=my_pre_step, dt=current_dt,
                       post_step_callback=my_post_step,
                       istep=current_step, t=current_t, t_final=t_final)
+
+    # ~~~ compute BC error
+    dd = DD_VOLUME_ALL
+    visc, grad = diffusion_operator(dcoll, kappa=kappa, boundaries=boundaries,
+                                    u=current_cv, penalty_amount=0.0,
+                                    return_grad_u=True)
+
+    u_inlet = op.project(dcoll, "vol", dd.trace("inlet").domain_tag, current_cv)
+    grad_u_inlet = op.project(dcoll, "vol", dd.trace("inlet").domain_tag, grad)
+    kappa_inlet = op.project(dcoll, "vol", dd.trace("inlet").domain_tag, kappa)
+    print(grad_u_inlet*kappa_inlet - (u_inlet - presc_value))
 
     if logmgr:
         logmgr.close()

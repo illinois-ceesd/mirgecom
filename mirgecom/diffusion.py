@@ -466,18 +466,18 @@ class RobinDiffusionBoundary(DiffusionBoundary):
     .. automethod:: get_diffusion_flux
     """
 
-    def __init__(self, value, alpha):
+    def __init__(self, u_ref, alpha):
         """
         Initialize the boundary condition.
 
         Parameters
         ----------
-        value: float or meshmode.dof_array.DOFArray
+        u_ref: float or meshmode.dof_array.DOFArray
             the reference value(s) of $u$ along the boundary
         alpha: float or meshmode.dof_array.DOFArray
             the weight for the variable $u$ at the boundary
         """
-        self.value = value
+        self.u_ref = u_ref
         self.alpha = alpha
 
     def get_grad_flux(
@@ -507,7 +507,11 @@ class RobinDiffusionBoundary(DiffusionBoundary):
         normal = actx.thaw(dcoll.normal(dd_bdry))
         grad_u_tpair = TracePair(dd_bdry,
             interior=grad_u_minus,
-            exterior=self.alpha*(self.value - u_minus)/kappa_minus * normal)
+            exterior=self.alpha*(self.u_ref - u_minus)/kappa_minus * normal)
+        # dudn_bc = self.alpha * (self.u_ref - u_minus)/kappa_minus
+        # grad_u_tpair = TracePair(dd_bdry,
+        #     interior=grad_u_minus,
+        #     exterior=(2 * dudn_bc - grad_u_minus@normal) * normal)
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
         return numerical_flux_func(

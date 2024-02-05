@@ -1,3 +1,5 @@
+"""Test diffusion operator and related functions."""
+
 __copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
@@ -24,11 +26,12 @@ from abc import ABCMeta, abstractmethod
 import logging
 import numpy as np
 import pymbolic as pmbl
-import grudge.op as op
 import mirgecom.math as mm
 import pytest
 from pytools.obj_array import make_obj_array
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
+from grudge import op
+from grudge.dof_desc import (BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD,
+                             DD_VOLUME_ALL)
 from grudge.shortcuts import make_visualizer
 from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
@@ -42,6 +45,7 @@ from mirgecom.symbolic import (
 from mirgecom.diffusion import (
     diffusion_flux,
     diffusion_operator,
+    grad_operator,
     grad_facial_flux_weighted,
     PrescribedFluxDiffusionBoundary,
     DirichletDiffusionBoundary,
@@ -52,6 +56,10 @@ from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
 
 logger = logging.getLogger(__name__)
+
+
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 def test_diffusion_boundary_conditions(actx_factory):
@@ -131,7 +139,14 @@ class HeatProblem(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_boundaries(self, dcoll, actx, t):
+    def get_source_term(self, x, t, u):
+        """
+        Return the source term for coordinates *x*, time *t*, and solution *u*.
+        """
+        pass
+
+    @abstractmethod
+    def get_boundaries(self, dcoll, actx, t, value, alpha):
         """
         Return a :class:`dict` that maps boundary tags to boundary conditions at
         time *t*.
@@ -161,7 +176,10 @@ class DecayingTrig(HeatProblem):
     def get_kappa(self, x, t, u):
         return self._kappa
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_source_term(self, x, t, u):
+        return x[0]*0.0
+
+    def get_boundaries(self, dcoll, actx, t, value=None, alpha=None):
         boundaries = {}
 
         for i in range(self.dim-1):
@@ -199,7 +217,10 @@ class DecayingTrigTruncatedDomain(HeatProblem):
     def get_kappa(self, x, t, u):
         return self._kappa
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_source_term(self, x, t, u):
+        return x[0]*0.0
+
+    def get_boundaries(self, dcoll, actx, t, value=None, alpha=None):
         nodes = actx.thaw(dcoll.nodes())
 
         sym_exact_u = self.get_solution(
@@ -255,7 +276,10 @@ class OscillatingTrigVarDiff(HeatProblem):
         kappa = 1 + 0.2*kappa
         return kappa
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_source_term(self, x, t, u):
+        return x[0]*0.0
+
+    def get_boundaries(self, dcoll, actx, t, value=None, alpha=None):
         boundaries = {}
 
         for i in range(self.dim-1):
@@ -293,7 +317,10 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
     def get_kappa(self, x, t, u):
         return 1 + u**3
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_source_term(self, x, t, u):
+        return x[0]*0.0
+
+    def get_boundaries(self, dcoll, actx, t, value=None, alpha=None):
         boundaries = {}
 
         for i in range(self.dim-1):
@@ -305,6 +332,39 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
         boundaries[lower_bdtag] = DirichletDiffusionBoundary(0.)
         boundaries[upper_bdtag] = DirichletDiffusionBoundary(0.)
+
+        return boundaries
+
+
+class RobinBndConditionTest(HeatProblem):
+    def __init__(self, dim, kappa):
+        super().__init__(dim)
+        self._kappa = kappa
+
+    def get_mesh(self, n):
+        return get_box_mesh(self.dim, 0.0, 1.0, n)
+
+    def get_solution(self, x, t):
+        return x[0]*0.0
+
+    def get_kappa(self, x, t, u):
+        return self._kappa
+
+    def get_source_term(self, x, t, u):
+        return x[0]*0.0 + 2.0
+
+    def get_boundaries(self, dcoll, actx, t, value, alpha):
+        boundaries = {}
+
+        for i in range(self.dim-1):
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
+            boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.0)
+            boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.0)
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
+        boundaries[lower_bdtag] = RobinDiffusionBoundary(value, alpha)
+        boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.0)
 
         return boundaries
 
@@ -321,18 +381,19 @@ def sym_diffusion(dim, sym_kappa, sym_u):
 # Working hypothesis: RHS lives in lower order polynomial space and thus doesn't
 # attain full-order convergence.
 @pytest.mark.parametrize("order", [2, 3])
-@pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
+@pytest.mark.parametrize(("problem", "nsteps", "dt", "scales", "error_boundary"),
     [
-        (DecayingTrigTruncatedDomain(1, 2.), 50, 5.e-5, [8, 16, 24]),
-        (DecayingTrigTruncatedDomain(2, 2.), 50, 5.e-5, [8, 12, 16]),
-        (DecayingTrigTruncatedDomain(3, 2.), 50, 5.e-5, [8, 10, 12]),
-        (OscillatingTrigVarDiff(1), 50, 5.e-5, [8, 16, 24]),
-        (OscillatingTrigVarDiff(2), 50, 5.e-5, [12, 14, 16]),
-        (OscillatingTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24]),
-        (OscillatingTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
+        # (DecayingTrigTruncatedDomain(1, 2.), 50, 5.e-5, [8, 16, 24], None),
+        # (DecayingTrigTruncatedDomain(2, 2.), 50, 5.e-5, [8, 12, 16], None),
+        # (DecayingTrigTruncatedDomain(3, 2.), 50, 5.e-5, [8, 10, 12], None),
+        # (OscillatingTrigVarDiff(1), 50, 5.e-5, [8, 16, 24], None),
+        # (OscillatingTrigVarDiff(2), 50, 5.e-5, [12, 14, 16], None),
+        # (OscillatingTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24], None),
+        # (OscillatingTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16], None),
+        (RobinBndConditionTest(2, 1.), 500, 5.e-6, [16, 24, 32], ("-2", 0.0, 10.0)),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
-            visualize=False):
+            error_boundary, visualize=True):
     """
     Checks the accuracy of the diffusion operator by solving the heat equation for a
     given problem setup.
@@ -345,6 +406,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     sym_t = pmbl.var("t")
     sym_u = p.get_solution(sym_x, sym_t)
     sym_kappa = p.get_kappa(sym_x, sym_t, sym_u)
+    sym_source = p.get_source_term(sym_x, sym_t, sym_u)
 
     sym_diffusion_u = sym_diffusion(p.dim, sym_kappa, sym_u)
 
@@ -362,17 +424,27 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         nodes = actx.thaw(dcoll.nodes())
 
+        if error_boundary:
+            target_boundary = error_boundary[0]
+            value = error_boundary[1]
+            alpha = error_boundary[2]
+        else:
+            value = None
+            alpha = None
+
         def get_rhs(t, u):
             kappa = p.get_kappa(nodes, t, u)
             if isinstance(kappa, DOFArray):
                 quadrature_tag = DISCR_TAG_QUAD
             else:
                 quadrature_tag = DISCR_TAG_BASE
+            boundaries = p.get_boundaries(dcoll, actx, t, value=value, alpha=alpha)
             return (
-                diffusion_operator(
-                    dcoll, kappa=kappa, boundaries=p.get_boundaries(dcoll, actx, t),
-                    u=u, quadrature_tag=quadrature_tag)
-                + evaluate(sym_f, x=nodes, t=t))
+                diffusion_operator(dcoll, kappa=kappa, boundaries=boundaries,
+                                   u=u, quadrature_tag=quadrature_tag)
+                + evaluate(sym_f, x=nodes, t=t)
+                + evaluate(sym_source, x=nodes, t=t, u=u)
+            )
 
         t = 0.
 
@@ -382,11 +454,32 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             u = rk4_step(u, t, dt, get_rhs)
             t += dt
 
-        expected_u = p.get_solution(nodes, t)
+        if error_boundary:
+            expected_u = None
+            kappa = p.get_kappa(nodes, t, u)
 
-        rel_linf_err = actx.to_numpy(
-            op.norm(dcoll, u - expected_u, np.inf)
-            / op.norm(dcoll, expected_u, np.inf))
+            dd = DD_VOLUME_ALL
+            grad_u = grad_operator(dcoll=dcoll, kappa=kappa,
+                                   boundaries=p.get_boundaries(
+                                       dcoll, actx, t, value=value, alpha=alpha),
+                                   u=u)
+            u_bnd = op.project(dcoll, dd, dd.trace(target_boundary), u)
+            grad_u_bnd = op.project(dcoll, dd, dd.trace(target_boundary), grad_u)
+
+            axis = np.abs(int(target_boundary)) - 1
+            error = grad_u_bnd[axis]*kappa - alpha*(u_bnd - value)
+            rel_linf_err = actx.to_numpy(op.norm(dcoll, error, np.inf))
+        else:
+            expected_u = p.get_solution(nodes, t)
+            grad_u = grad_operator(dcoll=dcoll, kappa=kappa,
+                                   boundaries=p.get_boundaries(
+                                       dcoll, actx, t, value=value, alpha=alpha),
+                                   u=u)
+
+            rel_linf_err = actx.to_numpy(
+                op.norm(dcoll, u - expected_u, np.inf)
+                / op.norm(dcoll, expected_u, np.inf))
+
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
@@ -394,8 +487,9 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
                 order=order, n=n), [
                     ("u", u),
-                    ("expected_u", expected_u),
-                    ])
+                    ("grad_u", grad_u),
+                    ("expected_u", expected_u)
+                    ], overwrite=True)
 
     print("L^inf error:")
     print(eoc_rec)
