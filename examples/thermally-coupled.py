@@ -113,9 +113,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-7
+    current_dt = 1e-8
+    nsteps = 2000
+    t_final = nsteps * current_dt
     current_cfl = 1.0
-    current_dt = 1e-10
     current_t = 0
     constant_cfl = False
 
