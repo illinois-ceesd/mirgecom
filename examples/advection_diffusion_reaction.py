@@ -104,15 +104,14 @@ def linear_advection_operator(dcoll, u, u_bc, *, comm_tag=None):
 
     dd = DD_VOLUME_ALL
 
-    # inviscid flux
+    # boundary flux
     el_bnd_flux = (
         _facial_flux(dcoll, u_tpair=TracePair(dd=dd.with_domain_tag(BTAG_ALL),
                                               interior=u_bnd, exterior=u_bc))
         + sum([_facial_flux(dcoll, u_tpair=tpair) for tpair in itp]))
 
-    # FIXME use weak_local_d_dx instead if 1D
-    # FIXME use weal_local_div instead if dim >= 2
-    vol_flux = op.weak_local_grad(dcoll, u)[0]
+    # volume term
+    vol_flux = op.weak_local_d_dx(dcoll, 0, u)
     return op.inverse_mass(dcoll, vol_flux - op.face_mass(dcoll, el_bnd_flux))
 
 
