@@ -65,11 +65,15 @@ def import_mechdata():
 
 def get_mechanism_input(mechanism_name: str) -> str:
     """Get the contents of a mechanism YAML input file."""
-    if mechanism_name == "uiuc":
-        mechanism_name = "uiuc_7sp"
-        from warnings import warn
-        warn("The uiuc mechanism was updated in Q3 2023. Use 'uiuc_7sp' instead.",
-             stacklevel=2)
+    import os
+    from pathlib import Path
+
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)
+    if not os.path.isfile(mech_file):
+        from warnings import warn
+        warn("Mechanism not found in default location.", stacklevel=2)
+        current_path = os.path.abspath(os.getcwd()) + "/"
+        mech_file = Path(current_path + get_mechanism_file_name(mechanism_name))
+        warn("Trying " + current_path, stacklevel=2)
     return mech_file.read_text()
