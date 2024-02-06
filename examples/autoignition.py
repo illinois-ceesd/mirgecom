@@ -355,8 +355,6 @@ def main(actx_class, use_leap=False, use_overintegration=False,
                               momentum=mass_lim*cv.velocity,
                               species_mass=mass_lim*spec_lim)
 
-    # limit_fluid_cv = actx.compile(_limit_fluid_cv)
-
     def get_temperature_update(cv, temperature):
         y = cv.species_mass_fractions
         e = gas_model.eos.internal_energy(cv) / cv.mass
@@ -595,8 +593,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
                                        limiter_func=_limit_fluid_cv)
 
         chem_rhs = eos.get_species_source_terms(cv, fluid_state.temperature)
-        tseed_rhs = fluid_state.temperature - tseed
-        return make_obj_array([chem_rhs, tseed_rhs])
+        return make_obj_array([chem_rhs, fluid_state.temperature*0.0])
 
     current_dt = get_sim_timestep(dcoll, current_fluid_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
