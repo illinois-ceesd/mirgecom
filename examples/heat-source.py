@@ -183,7 +183,7 @@ def main(actx_class, use_esdg=False,
             health_errors = global_reduce(my_health_check(state), op="lor")
             if health_errors:
                 if rank == 0:
-                    logger.info("Fluid solution failed health check.")
+                    logger.info("Solution failed health check.")
                 raise MyRuntimeError("Failed simulation health check.")
 
             do_viz = check_step(step=step, interval=nviz)
