@@ -507,7 +507,7 @@ class RobinDiffusionBoundary(DiffusionBoundary):
             interior=u_minus,
             exterior=u_minus)
         normal = actx.thaw(dcoll.normal(dd_bdry))
-        dudn_bc = self.alpha * (self.value - u_minus)/kappa_minus
+        dudn_bc = self.alpha * (self.u_ref - u_minus)/kappa_minus
         grad_u_tpair = TracePair(dd_bdry,
             interior=grad_u_minus,
             exterior=(
