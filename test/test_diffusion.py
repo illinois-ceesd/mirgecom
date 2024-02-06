@@ -44,7 +44,6 @@ from mirgecom.symbolic import (
 from mirgecom.diffusion import (
     diffusion_flux,
     diffusion_operator,
-    grad_operator,
     grad_facial_flux_weighted,
     PrescribedFluxDiffusionBoundary,
     DirichletDiffusionBoundary,
@@ -447,7 +446,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             vis.write_vtk_file("diffusion_accuracy_{dim}_{order}_{n}.vtu".format(
                 dim=p.dim, order=order, n=n), [
                     ("u", u),
-                    ("x", nodes[0] if dim == 1 else None),
+                    ("x", nodes[0] if p.dim == 1 else None),
                     ("expected_u", expected_u)
                     ], overwrite=True)
 

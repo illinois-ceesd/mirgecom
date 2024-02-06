@@ -511,7 +511,7 @@ class RobinDiffusionBoundary(DiffusionBoundary):
         grad_u_tpair = TracePair(dd_bdry,
             interior=grad_u_minus,
             exterior=(
-                grad_u_minus 
+                grad_u_minus
                 + 2 * (dudn_bc - np.dot(grad_u_minus, normal)) * normal))
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
