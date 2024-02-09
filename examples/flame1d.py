@@ -283,9 +283,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     nodes = actx.thaw(dcoll.nodes())
     zeros = nodes[0]*0.0
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DD_VOLUME_ALL
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
-    dd_vol = DD_VOLUME_ALL
 
 # ############################################################################
 
@@ -520,6 +519,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     ref_cv = bulk_init(x_vec=nodes, eos=eos, time=0.)
 
 # ############################################################################
+
+    # from grudge.dof_desc import DD_VOLUME_ALL
+    # dd_vol = DD_VOLUME_ALL
 
     # inflow_cv_cond = op.project(dcoll, dd_vol, dd_vol.trace("inlet"), ref_cv)
 
