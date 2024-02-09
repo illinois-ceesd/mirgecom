@@ -199,7 +199,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     nhealth = 1
     nstatus = 100
 
-    my_mechanism = "uiuc_7sp"
+    mechanism_file = "uiuc_7sp"
 
     order = 2
 
@@ -274,8 +274,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        # restart_order = int(restart_data["order"])
+        restart_order = int(restart_data["order"])
 
+        assert restart_order == order
         assert comm.Get_size() == restart_data["num_parts"]
 
     from mirgecom.discretization import create_discretization_collection
@@ -292,11 +293,6 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # Use Cantera for initialization
     print("\nUsing Cantera", cantera.__version__)
-
-    # import os
-    # current_path = os.path.abspath(os.getcwd()) + "/"
-    # mechanism_file = current_path + my_mechanism
-    mechanism_file = my_mechanism
 
     from mirgecom.mechanisms import get_mechanism_input
     mech_input = get_mechanism_input(mechanism_file)
@@ -790,8 +786,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
                       istep=current_step, dt=current_dt, t=current_t,
                       t_final=t_final, max_steps=niter, local_dt=local_dt,
                       force_eval=force_eval_stepper,
-                      state=make_obj_array([current_state.cv, tseed]),
-                      # compile_rhs=False
+                      state=make_obj_array([current_state.cv, tseed])
                       )
     current_cv, tseed = stepper_state
     current_state = make_fluid_state(current_cv, gas_model, tseed)
