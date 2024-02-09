@@ -378,10 +378,9 @@ def make_fluid_state(cv, gas_model,
         pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
 
         if limiter_func:
-            temperature, pressure, cv = limiter_func(cv=cv,
-                                           pressure=pressure,
-                                           temperature=temperature,
-                                           dd=limiter_dd)
+            temperature, pressure, cv = limiter_func(
+                cv=cv, pressure=pressure, temperature=temperature,
+                temperature_seed=temperature_seed, dd=limiter_dd)
 
         dv = GasDependentVars(
             temperature=temperature,

@@ -138,8 +138,16 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
             t_i = temperature_guess
             for _ in range(num_iter):
                 t_i = t_i + self.get_temperature_update_energy(
-                    energy, t_i, species_mass_fractions
-                )
+                    energy, t_i, species_mass_fractions)
+                """
+                t_u = self.get_temperature_update_energy(
+                    energy, t_i, species_mass_fractions)
+                t_i = self.usr_np.where(self.usr_np.greater(t_i+t_u, zero_level),
+                                  t_i+t_u, t_i/2.)
+                """
+
+                #t_i = self.usr_np.where(self.usr_np.less(t_i, zero_level),
+                                     #zero_level, t_i)
             return t_i
 
         # Compute heat release rate due to chemistry.
