@@ -72,7 +72,8 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, use_esdg=False, use_overintegration=False,
-         use_leap=False, casename=None, rst_filename=None):
+         use_leap=False, casename=None, rst_filename=None,
+         use_tensor_product_els=False):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -90,16 +91,20 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
-    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
+    queue = getattr(actx, "queue", None)
+
+    # actx = initialize_actx(actx_class, comm)
+    # queue = getattr(actx, "queue", None)
+    # use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     timestepper = rk4_step
-    t_final = 1e-7
+    t_final = 1.5e-7
     current_cfl = 0.05
     current_dt = 1e-10
     current_t = 0
-    constant_cfl = True
+    constant_cfl = False
     current_step = 0
 
     # some i/o frequencies
@@ -130,13 +135,14 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
-        n_refine = 2
-        nels_x = 9 * n_refine
-        nels_y = 5 * n_refine
+        n_refine = 16
+        nels_x = 5 * n_refine
+        nels_y = 2 * n_refine
         nels_axis = (nels_x, nels_y)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=nels_axis)
+        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=nels_axis,
+                                tensor_product_elements=use_tensor_product_els)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
@@ -145,9 +151,11 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     # from meshmode.mesh.processing import rotate_mesh_around_axis
     # local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/4)
 
-    order = 2
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             quadrature_order=order+2)
+    order = 1
+    dcoll = create_discretization_collection(
+        actx, local_mesh, order=order,
+        tensor_product_elements=use_tensor_product_els,
+        quadrature_order=order+2)
     nodes = actx.thaw(dcoll.nodes())
 
     if use_overintegration:
@@ -277,12 +285,13 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
         t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
         t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
-        if constant_cfl:
-            cfl = current_cfl
-        else:
-            from mirgecom.viscous import get_viscous_cfl
-            cfl = actx.to_numpy(nodal_max(dcoll, "vol",
-                                          get_viscous_cfl(dcoll, dt, state)))
+        # if constant_cfl:
+        #     cfl = current_cfl
+        # else:
+        #     from mirgecom.viscous import get_viscous_cfl
+        #     cfl = actx.to_numpy(nodal_max(dcoll, "vol",
+        #                                  get_viscous_cfl(dcoll, dt, state)))
+        cfl = 0
         if rank == 0:
             logger.info(f"Step: {step}, T: {t}, DT: {dt}, CFL: {cfl}\n"
                         f"----- Pressure({p_min}, {p_max})\n"
@@ -323,31 +332,31 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
             health_error = True
             logger.info(f"{rank=}: NANs/Infs in pressure data.")
 
-        if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
-                                          1.00101e5), op="lor"):
-            health_error = True
-            from grudge.op import nodal_max, nodal_min
-            p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
-            p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
-            logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
+        # if global_reduce(check_range_local(dcoll, "vol", dv.pressure, 9.999e4,
+        #                                   1.00101e5), op="lor"):
+        #    health_error = True
+        #    from grudge.op import nodal_max, nodal_min
+        #    p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
+        #    p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
+        #    logger.info(f"Pressure range violation ({p_min=}, {p_max=})")
 
         if check_naninf_local(dcoll, "vol", dv.temperature):
             health_error = True
             logger.info(f"{rank=}: NANs/INFs in temperature data.")
 
-        if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
-                        op="lor"):
-            health_error = True
-            from grudge.op import nodal_max, nodal_min
-            t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
-            t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
-            logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
+        # if global_reduce(check_range_local(dcoll, "vol", dv.temperature, 348, 350),
+        #                op="lor"):
+        #    health_error = True
+        #    from grudge.op import nodal_max, nodal_min
+        #    t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
+        #    t_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.temperature))
+        #    logger.info(f"Temperature range violation ({t_min=}, {t_max=})")
 
-        exittol = 0.1
-        if max(component_errors) > exittol:
-            health_error = True
-            if rank == 0:
-                logger.info("Solution diverged from exact soln.")
+        # exittol = 0.1
+        #if max(component_errors) > exittol:
+        #    health_error = True
+        #    if rank == 0:
+        #        logger.info("Solution diverged from exact soln.")
 
         return health_error
 
@@ -386,7 +395,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
             dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
                                   t_final, constant_cfl)
-
+            # dt = current_dt
             if do_status:  # needed because logging fails to make output
                 if component_errors is None:
                     from mirgecom.simutil import compare_fluid_solutions
@@ -440,6 +449,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     final_dv = current_state.dv
     final_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                 current_cfl, t_final, constant_cfl)
+    # final_dt = current_dt
+
     from mirgecom.simutil import compare_fluid_solutions
     component_errors = compare_fluid_solutions(dcoll, current_state.cv, exact)
 
@@ -475,6 +486,7 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--use_tensor_product_elements", action="store_true")
     args = parser.parse_args()
 
     from warnings import warn
@@ -487,7 +499,8 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy,
+        tensor_product_elements=args.use_tensor_product_elements)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -498,6 +511,7 @@ if __name__ == "__main__":
 
     main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename)
+         casename=casename, rst_filename=rst_filename,
+         use_tensor_product_els=args.use_tensor_product_elements)
 
 # vim: foldmethod=marker

@@ -96,7 +96,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, use_leap=False, use_overintegration=False,
          casename=None, rst_filename=None, log_dependent=True,
-         viscous_terms_on=False, use_esdg=False):
+         viscous_terms_on=False, use_esdg=False,
+         use_tensor_product_els=False):
     """Drive example."""
     if casename is None:
         casename = "mirgecom"
@@ -113,9 +114,17 @@ def main(actx_class, use_leap=False, use_overintegration=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    # if use_tensor_product_els:
+    #    # For lazy:
+    #    actx = initialize_actx(TensorProductMPIFusionContractorArrayContext,
+    #                           comm)
+    #    # For eager:
+    #    # actx = initialize_actx(TensorProductMPIPyOpenCLArrayContext, comm)
+    #    use_profiling = False
+    #else:
     actx = initialize_actx(actx_class, comm)
-    queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
+    queue = getattr(actx, "queue", None)
 
     # Some discretization parameters
     dim = 2
@@ -175,13 +184,19 @@ def main(actx_class, use_leap=False, use_overintegration=False,
         from meshmode.mesh.generation import generate_regular_rect_mesh
         box_ll = -0.005
         box_ur = 0.005
-        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        from meshmode.mesh import TensorProductElementGroup
+        grp_cls = TensorProductElementGroup if use_tensor_product_els else None
+        generate_mesh = partial(
+            generate_regular_rect_mesh, a=(box_ll,)*dim,
+            b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim,
+            group_cls=grp_cls)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(
+        actx, local_mesh, order=order,
+        tensor_product_elements=use_tensor_product_els)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.0
 
@@ -309,6 +324,9 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     compute_heat_release_rate = actx.compile(get_heat_release_rate)
 
     def my_get_timestep(t, dt, state):
+        if use_tensor_product_els:
+            return 0*state.mass_density, 0, current_dt
+
         #  richer interface to calculate {dt,cfl} returns node-local estimates
         t_remaining = max(0, t_final - t)
 
@@ -652,6 +670,7 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--use_tensor_product_elements", action="store_true")
     args = parser.parse_args()
     from warnings import warn
     warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
@@ -667,7 +686,8 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy,
+        tensor_product_elements=args.use_tensor_product_elements)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -679,6 +699,7 @@ if __name__ == "__main__":
     main(actx_class, use_leap=args.leap,
          use_overintegration=args.overintegration or args.esdg,
          casename=casename, rst_filename=rst_filename, use_esdg=args.esdg,
-         log_dependent=log_dependent, viscous_terms_on=args.navierstokes)
+         log_dependent=log_dependent, viscous_terms_on=args.navierstokes,
+         use_tensor_product_els=args.use_tensor_product_elements)
 
 # vim: foldmethod=marker
