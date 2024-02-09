@@ -428,6 +428,15 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     get_fluid_state = actx.compile(_get_fluid_state)
 
+    def get_temperature_update(cv, temperature):
+        y = cv.species_mass_fractions
+        e = eos.internal_energy(cv) / cv.mass
+        return make_obj_array(
+            [pyrometheus_mechanism.get_temperature_update_energy(e, temperature, y)]
+        )
+
+    compute_temperature_update = actx.compile(get_temperature_update)
+
 # ############################################################################
 
     vis_timer = None
@@ -512,27 +521,27 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
 # ############################################################################
 
-    inflow_cv_cond = op.project(dcoll, dd_vol, dd_vol.trace("inlet"), ref_cv)
+    # inflow_cv_cond = op.project(dcoll, dd_vol, dd_vol.trace("inlet"), ref_cv)
 
-    def inlet_bnd_state_func(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        return make_fluid_state(cv=inflow_cv_cond, gas_model=gas_model,
-                                temperature_seed=300.0)
-
-    from mirgecom.boundary import (
-        PrescribedFluidBoundary, LinearizedOutflow2DBoundary)
-    inflow_bnd = PrescribedFluidBoundary(boundary_state_func=inlet_bnd_state_func)
-    outflow_bnd = LinearizedOutflow2DBoundary(
-        free_stream_density=mass_burned, free_stream_pressure=101325.0,
-        free_stream_velocity=make_obj_array([vel_burned, 0.0]),
-        free_stream_species_mass_fractions=y_burned)
+    # def inlet_bnd_state_func(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+    #     return make_fluid_state(cv=inflow_cv_cond, gas_model=gas_model,
+    #                             temperature_seed=300.0)
 
     # from mirgecom.boundary import (
-    #     LinearizedInflow2DBoundary, PressureOutflowBoundary)
-    # inflow_bnd = LinearizedInflow2DBoundary(
-    #     free_stream_density=mass_unburned, free_stream_pressure=101325.0,
-    #     free_stream_velocity=make_obj_array([vel_unburned, 0.0]),
-    #     free_stream_species_mass_fractions=y_unburned)
-    # outflow_bnd = PressureOutflowBoundary(boundary_pressure=101325.0)
+    #     PrescribedFluidBoundary, LinearizedOutflow2DBoundary)
+    # inflow_bnd = PrescribedFluidBoundary(boundary_state_func=inlet_bnd_state_func)
+    # outflow_bnd = LinearizedOutflow2DBoundary(
+    #     free_stream_density=mass_burned, free_stream_pressure=101325.0,
+    #     free_stream_velocity=make_obj_array([vel_burned, 0.0]),
+    #     free_stream_species_mass_fractions=y_burned)
+
+    from mirgecom.boundary import (
+        LinearizedInflow2DBoundary, PressureOutflowBoundary)
+    inflow_bnd = LinearizedInflow2DBoundary(
+        free_stream_density=mass_unburned, free_stream_pressure=101325.0,
+        free_stream_velocity=make_obj_array([vel_unburned, 0.0]),
+        free_stream_species_mass_fractions=y_unburned)
+    outflow_bnd = PressureOutflowBoundary(boundary_pressure=101325.0)
 
     boundaries = {BoundaryDomainTag("inlet"): inflow_bnd,
                   BoundaryDomainTag("outlet"): outflow_bnd}
@@ -554,29 +563,29 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
 # ############################################################################
 
-    # def get_production_rates(cv, temperature):
-    #     return make_obj_array([eos.get_production_rates(cv, temperature)])
-    # compute_production_rates = actx.compile(get_production_rates)
+    def get_production_rates(cv, temperature):
+        return make_obj_array([eos.get_production_rates(cv, temperature)])
+    compute_production_rates = actx.compile(get_production_rates)
 
     def my_write_viz(step, t, dt, state):
 
         y = state.cv.species_mass_fractions
-        gas_const = gas_model.eos.gas_const(species_mass_fractions=y)
+        # gas_const = gas_model.eos.gas_const(species_mass_fractions=y)
+        # gamma = eos.gamma(state.cv, state.temperature)
 
-        # reaction_rates, = compute_production_rates(state.cv, state.temperature)
+        reaction_rates, = compute_production_rates(state.cv, state.temperature)
         viz_fields = [("CV_rho", state.cv.mass),
                       ("CV_rhoU", state.cv.momentum),
                       ("CV_rhoE", state.cv.energy),
                       ("DV_P", state.pressure),
                       ("DV_T", state.temperature),
-                      ("DV_U", state.velocity[0]),
-                      ("DV_V", state.velocity[1]),
-                      ("sponge", sponge_sigma),
-                      ("R", gas_const),
-                      ("gamma", eos.gamma(state.cv, state.temperature)),
-                      ("dt", dt),
-                      ("mu", state.tv.viscosity),
-                      ("kappa", state.tv.thermal_conductivity),
+                      ("reaction_rates", reaction_rates),
+                      # ("sponge", sponge_sigma),
+                      # ("R", gas_const),
+                      # ("gamma", gamma),
+                      # ("dt", dt),
+                      # ("mu", state.tv.viscosity),
+                      # ("kappa", state.tv.thermal_conductivity),
                       ]
 
         # species mass fractions
@@ -630,6 +639,19 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         if check_range_local(dcoll, "vol", temperature, 290., 2450.):
             health_error = True
             logger.info(f"{rank=}: Temperature range violation.")
+
+        # temperature_update is the next temperature update in the
+        # `get_temperature` Newton solve. The relative size of this
+        # update is used to gauge convergence of the current temperature
+        # after a fixed number of Newton iters.
+        # Note: The local max jig below works around a very long compile
+        # in lazy mode.
+        temp_update, = compute_temperature_update(cv, temperature)
+        temp_resid = force_evaluation(actx, temp_update) / temperature
+        temp_resid = (actx.to_numpy(op.nodal_max_loc(dcoll, "vol", temp_resid)))
+        if temp_resid > 1e-8:
+            health_error = True
+            logger.info(f"{rank=}: Temperature is not converged {temp_resid=}.")
 
         return health_error
 
