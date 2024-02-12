@@ -148,8 +148,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    # from meshmode.mesh.processing import rotate_mesh_around_axis
-    # local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/4)
+    from meshmode.mesh.processing import rotate_mesh_around_axis
+    local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/3)
 
     order = 1
     dcoll = create_discretization_collection(

@@ -74,7 +74,7 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_esdg=False,
+def main(actx_class, use_esdg=False, use_tpe=False,
          use_overintegration=False, use_leap=False,
          casename=None, rst_filename=None):
     """Drive the example."""
@@ -131,20 +131,27 @@ def main(actx_class, use_esdg=False,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
+        from meshmode.mesh import TensorProductElementGroup
+        grp_cls = TensorProductElementGroup if use_tpe else None
         box_ll = -1
         box_ur = 1
         nel_1d = 16
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
+            group_cls=grp_cls
             # periodic=(True,)*dim
         )
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
+    from meshmode.mesh.processing import rotate_mesh_around_axis
+    local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/3)
+
     order = 1
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
@@ -342,6 +349,7 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--tpe", action="store_true")
     args = parser.parse_args()
 
     from warnings import warn
@@ -354,7 +362,8 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy,
+        tensor_product_elements=args.tpe)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -365,7 +374,7 @@ if __name__ == "__main__":
 
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap,
+         use_leap=args.leap, use_tpe=args.tpe,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
