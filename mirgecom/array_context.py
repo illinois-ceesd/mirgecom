@@ -48,6 +48,10 @@ def get_reasonable_array_context_class(
         numpy: bool = False,
         tensor_product_elements: bool = False) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
+    if tensor_product_elements:
+        warn("Tensor product elements no longer require a specialized array context."
+             "tensor_product_elements argument is deprecated.")
+
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
 
@@ -70,16 +74,6 @@ def get_reasonable_array_context_class(
     if profiling:
         from mirgecom.profiling import PyOpenCLProfilingArrayContext
         return PyOpenCLProfilingArrayContext
-
-    if tensor_product_elements:
-        from grudge.array_context import (
-            TensorProductMPIFusionContractorArrayContext,
-            TensorProductMPIPyOpenCLArrayContext
-        )
-        if lazy:
-            return TensorProductMPIFusionContractorArrayContext
-        else:
-            return TensorProductMPIPyOpenCLArrayContext
 
     from grudge.array_context import \
         get_reasonable_array_context_class as grudge_get_reasonable_actx_class
