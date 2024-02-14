@@ -143,7 +143,7 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(actx_class, rst_filename=None,use_tpe=False,
+def main(actx_class, rst_filename=None, use_tpe=False,
          use_overintegration=False, casename=None,
          log_dependent=False, input_file=None,
          force_eval=True, use_esdg=False):
@@ -1290,7 +1290,7 @@ if __name__ == "__main__":
 
     main(actx_class, input_file=input_file,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename,use_tpe=args.tpe,
+         casename=casename, rst_filename=rst_filename, use_tpe=args.tpe,
          log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
 
 # vim: foldmethod=marker
