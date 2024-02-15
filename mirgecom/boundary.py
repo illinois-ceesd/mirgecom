@@ -1594,7 +1594,8 @@ class RiemannOutflowBoundary(MengaldoBoundaryCondition):
             energy_boundary = (
                 pressure_boundary / (gamma_boundary - 1)
                 + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary))
-            species_mass_boundary = rho_boundary * state_minus.species_mass_fractions
+            #species_mass_boundary = rho_boundary * state_minus.species_mass_fractions
+            species_mass_boundary = rho_boundary * self._cv_plus.species_mass_fractions
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
                                      energy=energy_boundary,
@@ -1987,30 +1988,8 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
 
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
                    normal, **kwargs):
-        """Return external grad(CV) used in the boundary calculation of viscous flux.
-
-        The normal gradients of velocity, temperature and species are forced
-        to zero in order to recover the inviscid equations.
-        """
-        dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
-        state_bc = self.state_bc(
-            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
-            state_minus=state_minus, **kwargs)
-
-        grad_v_bc = self._slip.grad_velocity_bc(
-            state_minus, state_bc, grad_cv_minus, normal)
-
-        grad_mom_bc = (
-            state_bc.mass_density * grad_v_bc
-            + np.outer(state_bc.velocity, grad_cv_minus.mass))
-
-        grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
-            state_minus, grad_cv_minus, normal)
-
-        return grad_cv_minus.replace(
-            momentum=grad_mom_bc,
-            species_mass=grad_species_mass_bc)
+        """Return grad(CV) to be used in the boundary calculation of viscous flux."""
+        return grad_cv_minus
 
 
 class LinearizedInflow2DBoundary(MengaldoBoundaryCondition):
