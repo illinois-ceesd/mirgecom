@@ -1591,10 +1591,10 @@ class RiemannOutflowBoundary(MengaldoBoundaryCondition):
             # extrapolate species
             species_mass_boundary = rho_boundary * state_minus.species_mass_fractions
         else:
-            species_mass_boundary = None
             energy_boundary = (
                 pressure_boundary / (gamma_boundary - 1)
                 + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary))
+            species_mass_boundary = rho_boundary * state_minus.species_mass_fractions
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
                                      energy=energy_boundary,
