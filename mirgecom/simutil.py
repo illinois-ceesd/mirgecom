@@ -124,7 +124,8 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     return nnodes
 
 
-def get_box_mesh(dim, a, b, n, t=None, periodic=None):
+def get_box_mesh(dim, a, b, n, t=None, periodic=None,
+                 tensor_product_elements=False, **kwargs):
     """
     Create a rectangular "box" like mesh with tagged boundary faces.
 
@@ -174,10 +175,13 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None):
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
 
+    from meshmode.mesh import TensorProductElementGroup
+    group_cls = TensorProductElementGroup if tensor_product_elements else None
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
     return gen(a=a, b=b, nelements_per_axis=n,
                boundary_tag_to_face=bttf,
-               mesh_type=t, periodic=periodic)
+               mesh_type=t, periodic=periodic, group_cls=group_cls,
+               **kwargs)
 
 
 def check_step(step, interval):
