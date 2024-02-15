@@ -161,8 +161,8 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
     # This comes from array_context
     actx = actx_factory()
 
-    if tpe: # TPE requires *grudge* array context, not array_context
-        if dim == 1: # TPE does not support dim=1
+    if tpe:  # TPE requires *grudge* array context, not array_context
+        if dim == 1:  # TPE does not support dim=1
             pytest.skip()
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)

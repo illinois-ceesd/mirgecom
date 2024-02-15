@@ -42,11 +42,14 @@ def create_discretization_collection(actx, volume_meshes, order, *,
                                      mpi_communicator=None, quadrature_order=-1,
                                      tensor_product_elements=False):
     """Create and return a grudge DG discretization collection."""
+    from warnings import warn
     if mpi_communicator is not None:
-        from warnings import warn
         warn(
             "mpi_communicator argument is deprecated and will disappear in Q4 2022.",
             DeprecationWarning, stacklevel=2)
+
+    if tensor_product_elements:
+        warn("Overintegration is not supported for tensor product elements.")
 
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     from grudge.discretization import make_discretization_collection
