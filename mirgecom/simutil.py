@@ -510,12 +510,14 @@ def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
                          1: DiscretizationDOFAxisTag()
                      }, red_state - blue_state)
     resid_errs = actx.to_numpy(
-            tag_axes(actx,
-                     {
-                         0: DiscretizationElementAxisTag()
-                     },
-                     flatten(componentwise_norms(dcoll, resid,
-                                                 order=np.inf, dd=dd), actx)))
+        tag_axes(actx,
+                 {
+                     0: DiscretizationElementAxisTag()
+                 },
+                 flatten(
+                     componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx)
+                 )
+    )
 
     return resid_errs.tolist()
 
