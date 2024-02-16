@@ -497,20 +497,25 @@ def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    # added tag_axes calls to eliminate fallback warnings at compile time
     from arraycontext import tag_axes
     from meshmode.transform_metadata import (
         DiscretizationElementAxisTag,
         DiscretizationDOFAxisTag
     )
     actx = red_state.array_context
-    resid = tag_axes(actx, {
-            0: DiscretizationElementAxisTag(),
-            1: DiscretizationDOFAxisTag()
-    }, red_state - blue_state)
+    resid = tag_axes(actx,
+                     {
+                         0: DiscretizationElementAxisTag(),
+                         1: DiscretizationDOFAxisTag()
+                     }, red_state - blue_state)
     resid_errs = actx.to_numpy(
-            tag_axes(actx,{
-                0: DiscretizationElementAxisTag()
-            },flatten(componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx)))
+            tag_axes(actx,
+                     {
+                         0: DiscretizationElementAxisTag()
+                     },
+                     flatten(componentwise_norms(dcoll, resid,
+                                                 order=np.inf, dd=dd), actx)))
 
     return resid_errs.tolist()
 
