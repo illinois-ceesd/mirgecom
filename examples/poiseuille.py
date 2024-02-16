@@ -88,9 +88,6 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    import pytato as pt
-    pt.enable_traceback_tag()
-
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
