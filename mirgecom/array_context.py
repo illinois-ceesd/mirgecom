@@ -44,10 +44,30 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
 
 
 def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
-                        profiling: bool, numpy: bool = False) -> Type[ArrayContext]:
+                        profiling: bool, numpy: bool = False,
+                        cupy: bool = False) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
+
+    if numpy and cupy:
+        raise ValueError("Can't specify both numpy and cupy")
+
+    if cupy:
+        if profiling:
+            raise ValueError("Can't specify both cupy and profiling")
+        if lazy:
+            raise ValueError("Can't specify both cupy and lazy")
+
+        from warnings import warn
+        warn("The CupyArrayContext is still under development")
+
+        if distributed:
+            from grudge.array_context import MPICupyArrayContext
+            return MPICupyArrayContext
+        else:
+            from grudge.array_context import CupyArrayContext
+            return CupyArrayContext
 
     if numpy:
         if profiling:
