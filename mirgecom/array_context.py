@@ -63,10 +63,12 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
         warn("The CupyArrayContext is still under development")
 
         if distributed:
-            from grudge.array_context import MPICupyArrayContext
+            from grudge.array_context import (  # pylint: disable=no-name-in-module
+                MPICupyArrayContext)
             return MPICupyArrayContext
         else:
-            from grudge.array_context import CupyArrayContext
+            from grudge.array_context import (  # pylint: disable=no-name-in-module
+                CupyArrayContext)
             return CupyArrayContext
 
     if numpy:
