@@ -125,6 +125,18 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
         return False
 
 
+def actx_class_is_cupy(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is cupy-based."""
+    try:
+        from grudge.array_context import CupyArrayContext
+        if issubclass(actx_class, CupyArrayContext):
+            return True
+        else:
+            return False
+    except ImportError:
+        return False
+
+
 def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
         -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
@@ -133,7 +145,7 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
                                       MPIPytatoArrayContext)
 
     # Special handling for NumpyArrayContext since it needs no CL context
-    if actx_class_is_numpy(actx_class):
+    if actx_class_is_numpy(actx_class) or actx_class_is_cupy(actx_class):
         if comm:
             return actx_class(mpi_communicator=comm)  # type: ignore[call-arg]
         else:
