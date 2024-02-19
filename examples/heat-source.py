@@ -172,6 +172,7 @@ def main(actx_class, use_esdg=False,
         return health_error
 
     from mirgecom.simutil import componentwise_norms
+
     def my_pre_step(step, t, dt, state):
         if logmgr:
             logmgr.tick_before()
