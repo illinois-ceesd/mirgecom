@@ -161,7 +161,7 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(actx_class, use_esdg=False, use_overintegration=False,
+def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
          use_leap=False, casename=None, rst_filename=None):
 
     from mpi4py import MPI
@@ -199,7 +199,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     nhealth = 1
     nstatus = 100
 
-    mechanism_file = "uiuc_7sp"
+    mechanism_file = "wang99_reduced"
 
     order = 2
 
@@ -217,7 +217,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     niter = 2000000
 
     use_sponge = False
-    use_cantera = True
+
+    # use Cantera's 1D flame solution to prescribe the BC and an
+    # approximated initial condition with hyperbolic tangent profile
+    use_flame_from_cantera = True
 
 # ############################################################################
 
@@ -256,12 +259,16 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         xx = np.loadtxt(f"{path}/flame1d_x_050um.dat")
         yy = np.loadtxt(f"{path}/flame1d_y_050um.dat")
 
+        from meshmode.mesh import TensorProductElementGroup
+        grp_cls = TensorProductElementGroup if use_tpe else None
+
         from meshmode.mesh.generation import generate_box_mesh
         generate_mesh = partial(generate_box_mesh,
                                 axis_coords=(xx, yy),
                                 periodic=(False, True),
                                 boundary_tag_to_face={"inlet": ["-x"],
-                                                      "outlet": ["+x"]})
+                                                      "outlet": ["+x"]},
+                                group_cls=grp_cls)
 
         local_mesh, global_nelements = (
             generate_and_distribute_mesh(comm, generate_mesh))
@@ -280,7 +287,8 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         assert comm.Get_size() == restart_data["num_parts"]
 
     from mirgecom.discretization import create_discretization_collection
-    dcoll = create_discretization_collection(actx, local_mesh, order)
+    dcoll = create_discretization_collection(actx, local_mesh, order,
+                                             tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
     zeros = nodes[0]*0.0
 
@@ -305,7 +313,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # Initial temperature, pressure, and mixture mole fractions are needed to
     # set up the initial state in Cantera.
-    if use_cantera:
+    if use_flame_from_cantera:
         # Set up flame object
         f = cantera.FreeFlame(cantera_soln, width=0.02)
 
@@ -350,11 +358,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     # Import Pyrometheus EOS
     from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
-    pyrometheus_mechanism = \
-        get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
-    eos = PyrometheusMixture(pyrometheus_mechanism, temperature_guess=1350.0)
+    pyro_mech = get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
+    eos = PyrometheusMixture(pyro_mech, temperature_guess=1234.56789)
 
-    species_names = pyrometheus_mechanism.species_names
+    species_names = pyro_mech.species_names
 
     # }}}
 
@@ -365,11 +372,11 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     if transport == "mix-lewis":
         from mirgecom.transport import MixtureAveragedTransport
-        transport_model = MixtureAveragedTransport(pyrometheus_mechanism,
+        transport_model = MixtureAveragedTransport(pyro_mech,
                                                    lewis=np.ones(nspecies,))
     if transport == "mix":
         from mirgecom.transport import MixtureAveragedTransport
-        transport_model = MixtureAveragedTransport(pyrometheus_mechanism)
+        transport_model = MixtureAveragedTransport(pyro_mech)
 
     gas_model = GasModel(eos=eos, transport=transport_model)
 
@@ -427,39 +434,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         y = cv.species_mass_fractions
         e = eos.internal_energy(cv) / cv.mass
         return make_obj_array(
-            [pyrometheus_mechanism.get_temperature_update_energy(e, temperature, y)]
+            [pyro_mech.get_temperature_update_energy(e, temperature, y)]
         )
 
     compute_temperature_update = actx.compile(get_temperature_update)
-
-# ############################################################################
-
-    vis_timer = None
-    if logmgr:
-        logmgr_add_cl_device_info(logmgr, queue)
-        logmgr_add_device_memory_usage(logmgr, queue)
-
-        logmgr.add_watches([
-            ("step.max", "step = {value}, "),
-            ("dt.max", "dt: {value:1.6e} s, "),
-            ("t_sim.max", "sim time: {value:1.6e} s, "),
-            ("t_step.max", "------- step walltime: {value:6g} s\n")
-            ])
-
-        try:
-            logmgr.add_watches(["memory_usage_python.max",
-                                "memory_usage_gpu.max"])
-        except KeyError:
-            pass
-
-        if use_profiling:
-            logmgr.add_watches(["pyopencl_array_time.max"])
-
-        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
-        logmgr.add_quantity(vis_timer)
-
-        gc_timer = IntervalTimer("t_gc", "Time spent garbage collecting")
-        logmgr.add_quantity(gc_timer)
 
 # ############################################################################
 
@@ -474,7 +452,6 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         species_mass_right=y_burned, species_mass_left=y_unburned)
 
     if rst_filename is None:
-
         current_t = 0.0
         current_step = 0
         first_step = 0
@@ -497,14 +474,39 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         current_cv = restart_data["cv"]
         tseed = restart_data["temperature_seed"]
 
-    if logmgr:
-        logmgr_set_time(logmgr, current_step, current_t)
-
+    tseed = force_evaluation(actx, tseed)
     current_cv = force_evaluation(actx, current_cv)
     current_state = get_fluid_state(current_cv, tseed)
-    current_state = force_evaluation(actx, current_state)
 
 # ############################################################################
+
+    vis_timer = None
+    if logmgr:
+        logmgr_add_cl_device_info(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+        logmgr_set_time(logmgr, current_step, current_t)
+
+        logmgr.add_watches([
+            ("step.max", "step = {value}, "),
+            ("dt.max", "dt: {value:1.6e} s, "),
+            ("t_sim.max", "sim time: {value:1.6e} s, "),
+            ("t_step.max", "------- step walltime: {value:6g} s\n")
+            ])
+
+        try:
+            logmgr.add_watches(["memory_usage_python.max",
+                                "memory_usage_gpu.max"])
+        except KeyError:
+            pass
+
+        if use_profiling:
+            logmgr.add_watches(["pyopencl_array_time.max"])
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
+        gc_timer = IntervalTimer("t_gc", "Time spent garbage collecting")
+        logmgr.add_quantity(gc_timer)
 
     # initialize the sponge field
     sponge_init = InitSponge(x_max=+0.100, x_min=-0.100, x_thickness=0.065,
@@ -669,7 +671,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         if local_dt:
             t = force_evaluation(actx, t)
             dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                gas_model, constant_cfl=constant_cfl, local_dt=local_dt)
+                constant_cfl=constant_cfl, local_dt=local_dt)
             dt = force_evaluation(actx, dt)
         else:
             if constant_cfl:
@@ -809,7 +811,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        level=logging.INFO)
 
     import argparse
     parser = argparse.ArgumentParser(description="MIRGE-Com 1D Flame Driver")
@@ -836,6 +840,7 @@ if __name__ == "__main__":
                         help="enable lazy evaluation [OFF]")
     parser.add_argument("--numpy", action="store_true",
                         help="use numpy-based eager actx.")
+    parser.add_argument("--tpe", action="store_true")
 
     args = parser.parse_args()
 
@@ -872,7 +877,7 @@ if __name__ == "__main__":
     actx_class = get_reasonable_array_context_class(
         lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
-    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
+    main(actx_class, use_leap=args.leap, use_esdg=args.esdg, use_tpe=args.tpe,
          use_overintegration=args.overintegration or args.esdg,
          casename=casename, rst_filename=rst_filename)
 
