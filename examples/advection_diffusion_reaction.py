@@ -309,8 +309,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     u_inlet = op.project(dcoll, "vol", dd.trace("inlet").domain_tag, current_cv)
     grad_u_inlet = op.project(dcoll, "vol", dd.trace("inlet").domain_tag, grad)
     kappa_inlet = op.project(dcoll, "vol", dd.trace("inlet").domain_tag, kappa)
-    result = grad_u_inlet*kappa_inlet - (u_inlet - presc_value)
-    print(actx.to_numpy(result))
+    print(grad_u_inlet*kappa_inlet - (u_inlet - presc_value))
 
     if logmgr:
         logmgr.close()
