@@ -42,7 +42,7 @@ from mirgecom.navierstokes import ns_operator, grad_cv_operator, grad_t_operator
 from mirgecom.simutil import (
     check_step, check_naninf_local, check_range_local,
     get_sim_timestep,
-    generate_and_distribute_mesh,
+    distribute_mesh,
     write_visfile,
 )
 from mirgecom.utils import force_evaluation
@@ -199,7 +199,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
     nhealth = 1
     nstatus = 100
 
-    mechanism_file = "wang99_reduced"
+    mechanism_file = "uiuc_7sp"
 
     order = 2
 
@@ -209,11 +209,10 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
 
     # default timestepping control
     integrator = "compiled_lsrk45"
-    local_dt = False
-    constant_cfl = True
+    constant_cfl = False
     current_cfl = 0.4
     current_dt = 1.0e-9
-    t_final = 2.5e-8
+    t_final = 1.0e-8
     niter = 2000000
 
     use_sponge = False
@@ -270,8 +269,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
                                                       "outlet": ["+x"]},
                                 group_cls=grp_cls)
 
-        local_mesh, global_nelements = (
-            generate_and_distribute_mesh(comm, generate_mesh))
+        local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
     else:
@@ -290,7 +288,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
     dcoll = create_discretization_collection(actx, local_mesh, order,
                                              tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
-    zeros = nodes[0]*0.0
+    zeros = actx.np.zeros_like(nodes[0])
 
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
@@ -405,7 +403,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
             for i in range(nspecies)])
 
         # normalize to ensure sum_Yi = 1.0
-        aux = cv.mass*0.0
+        aux = actx.np.zeros_like(cv.mass)
         for i in range(0, nspecies):
             aux = aux + spec_lim[i]
         spec_lim = spec_lim/aux
@@ -464,10 +462,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
         current_cv = bulk_init(x_vec=nodes, eos=eos, time=0.)
 
     else:
-        if local_dt:
-            current_t = np.min(actx.to_numpy(restart_data["t"]))
-        else:
-            current_t = restart_data["t"]
+        current_t = restart_data["t"]
         current_step = restart_step
         first_step = restart_step + 0
 
@@ -563,9 +558,9 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
 
 # ############################################################################
 
-    def get_production_rates(cv, temperature):
-        return make_obj_array([eos.get_production_rates(cv, temperature)])
-    compute_production_rates = actx.compile(get_production_rates)
+    # def get_production_rates(cv, temperature):
+    #     return make_obj_array([eos.get_production_rates(cv, temperature)])
+    # compute_production_rates = actx.compile(get_production_rates)
 
     def my_write_viz(step, t, dt, state):
 
@@ -573,13 +568,13 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
         # gas_const = gas_model.eos.gas_const(species_mass_fractions=y)
         # gamma = eos.gamma(state.cv, state.temperature)
 
-        reaction_rates, = compute_production_rates(state.cv, state.temperature)
+        # reaction_rates, = compute_production_rates(state.cv, state.temperature)
         viz_fields = [("CV_rho", state.cv.mass),
                       ("CV_rhoU", state.cv.momentum),
                       ("CV_rhoE", state.cv.energy),
                       ("DV_P", state.pressure),
                       ("DV_T", state.temperature),
-                      ("reaction_rates", reaction_rates),
+                      # ("reaction_rates", reaction_rates),
                       # ("sponge", sponge_sigma),
                       # ("R", gas_const),
                       # ("gamma", gamma),
@@ -668,15 +663,9 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
 
         fluid_state = get_fluid_state(cv, tseed)
 
-        if local_dt:
-            t = force_evaluation(actx, t)
+        if constant_cfl:
             dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                constant_cfl=constant_cfl, local_dt=local_dt)
-            dt = force_evaluation(actx, dt)
-        else:
-            if constant_cfl:
-                dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                                      t_final, constant_cfl, local_dt)
+                                  t_final, constant_cfl)
 
         try:
             do_viz = check_step(step=step, interval=nviz)
@@ -686,9 +675,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
 
             t_elapsed = time.time() - t_start
             if t_shutdown - t_elapsed < 300.0:
-                my_write_restart(step=step, t=t, cv=fluid_state.cv,
-                                 tseed=tseed)
-                sys.exit()
+                my_write_restart(step=step, t=t, cv=fluid_state.cv, tseed=tseed)
 
             if do_garbage:
                 with gc_timer.start_sub_timer():
@@ -704,8 +691,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
                     raise MyRuntimeError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, cv=fluid_state.cv,
-                                 tseed=tseed)
+                my_write_restart(step=step, t=t, cv=fluid_state.cv, tseed=tseed)
 
             if do_viz:
                 my_write_viz(step=step, t=t, dt=dt, state=fluid_state)
@@ -765,31 +751,28 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
                             "future GC collections")
                 gc.freeze()
 
-        min_dt = np.min(actx.to_numpy(dt)) if local_dt else dt
         if logmgr:
-            set_dt(logmgr, min_dt)
+            set_dt(logmgr, dt)
             logmgr.tick_after()
 
         return state, dt
 
 # ############################################################################
 
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
-                                  current_cfl, t_final, constant_cfl)
-    current_dt = force_evaluation(actx, current_dt)
+    if constant_cfl:
+        current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+                                      current_cfl, t_final, constant_cfl)
 
     if rank == 0:
         logging.info("Stepping.")
 
-    (current_step, current_t, stepper_state) = \
+    current_step, current_t, stepper_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step,
                       istep=current_step, dt=current_dt, t=current_t,
-                      t_final=t_final, max_steps=niter, local_dt=local_dt,
-                      force_eval=force_eval_stepper,
-                      state=make_obj_array([current_state.cv, tseed])
-                      )
+                      t_final=t_final, force_eval=force_eval_stepper,
+                      state=make_obj_array([current_state.cv, tseed]))
     current_cv, tseed = stepper_state
     current_state = make_fluid_state(current_cv, gas_model, tseed)
 
