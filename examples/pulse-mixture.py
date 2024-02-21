@@ -341,7 +341,8 @@ def main(actx_class, use_esdg=False,
         y_inlet[0] = 1.0
         mass = eos.get_density(pressure=101325.0, temperature=300.0,
                                species_mass_fractions=y_inlet)
-        linear_inflow_bnd = LinearizedInflow2DBoundary(free_stream_density=mass,
+        linear_inflow_bnd = LinearizedInflow2DBoundary(
+            dim=dim, free_stream_density=mass,
             free_stream_velocity=velocity, free_stream_pressure=101325.0,
             free_stream_species_mass_fractions=y_inlet)
 
@@ -351,7 +352,8 @@ def main(actx_class, use_esdg=False,
                                     fluid_state.cv.species_mass_fractions)
         mass = eos.get_density(pressure=101325.0, temperature=300.0,
                                species_mass_fractions=y_outlet_right)
-        linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=mass,
+        linear_outflow_bnd = LinearizedOutflow2DBoundary(
+            dim=dim, free_stream_density=mass,
             free_stream_velocity=velocity, free_stream_pressure=101325.0,
             free_stream_species_mass_fractions=y_outlet_right)
 
