@@ -162,13 +162,16 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         print(f"Main start: {time.ctime(time.time())}")
     comm.Barrier()
 
+    from pytato import enable_traceback_tag
+    enable_traceback_tag()
+
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
     # {{{ Some discretization parameters
 
-    dim = 2
-    order = 3
+    dim = 3
+    order = 1
 
     # - scales the size of the domain
     x_scale = 1
@@ -213,7 +216,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
 
     dummy_rhs_only = 0
     timestepping_on = 1
-    av_on = 1
+    av_on = 0
     sponge_on = 1
     health_pres_min = 0.
     health_pres_max = 10000000.

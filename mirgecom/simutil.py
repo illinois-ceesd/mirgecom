@@ -79,6 +79,11 @@ from logpyle import IntervalTimer
 import grudge.op as op
 import numpy as np
 import pyopencl as cl
+from arraycontext import tag_axes
+from meshmode.transform_metadata import (
+    DiscretizationElementAxisTag,
+    DiscretizationDOFAxisTag
+)
 from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
@@ -271,15 +276,16 @@ def get_sim_timestep(
     float or :class:`~meshmode.dof_array.DOFArray`
         The global maximum stable DT based on a viscous fluid.
     """
+    actx = state.array_context
     if local_dt:
-        actx = state.array_context
         data_shape = (state.cv.mass[0]).shape
         if actx.supports_nonscalar_broadcasting:
+            vdt = tag_axes(actx, {
+                0: DiscretizationElementAxisTag(),
+                1: DiscretizationDOFAxisTag()
+            }, get_viscous_timestep(dcoll, state, dd=fluid_dd))
             return cfl * actx.np.broadcast_to(
-                op.elementwise_min(
-                    dcoll, fluid_dd,
-                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
-                data_shape)
+                op.elementwise_min(dcoll, fluid_dd, vdt), data_shape)
         else:
             return cfl * op.elementwise_min(
                 dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
@@ -498,11 +504,6 @@ def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
         This is a collective routine and must be called by all MPI ranks.
     """
     # added tag_axes calls to eliminate fallback warnings at compile time
-    from arraycontext import tag_axes
-    from meshmode.transform_metadata import (
-        DiscretizationElementAxisTag,
-        DiscretizationDOFAxisTag
-    )
     actx = red_state.array_context
     resid = tag_axes(actx,
                      {
