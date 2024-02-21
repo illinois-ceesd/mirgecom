@@ -80,7 +80,7 @@ class Initializer:
 
     def __call__(self, x_vec, eos):
         actx = get_container_context_recursively(x_vec)
-        zeros = actx.zeros_like(x_vec[0])
+        zeros = actx.np.zeros_like(x_vec[0])
         temp_y = 1.0 + actx.np.tanh(1.0/0.01*x_vec[1])
         temp_x = 1.0 + 0.5*(1.0 - actx.np.tanh(1.0/0.01*(x_vec[0]+0.02)))
         temperature = actx.np.maximum(temp_y, temp_x)
