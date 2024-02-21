@@ -246,10 +246,12 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     velocity[0] = 0.3*np.sqrt(1.4*1.0*2.0)
     flow_init = Initializer(dim=2, velocity=velocity)
 
-    linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=0.5,
+    linear_outflow_bnd = LinearizedOutflow2DBoundary(
+        dim=dim, free_stream_density=0.5,
         free_stream_pressure=1.0, free_stream_velocity=velocity)
 
-    linear_inflow_bnd = LinearizedInflow2DBoundary(free_stream_density=0.5,
+    linear_inflow_bnd = LinearizedInflow2DBoundary(
+        dim=dim, free_stream_density=0.5,
         free_stream_pressure=1.0, free_stream_velocity=velocity)
 
     boundaries = {
