@@ -213,7 +213,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
 
     dummy_rhs_only = 0
     timestepping_on = 1
-    av_on = 0
+    av_on = 1
     sponge_on = 1
     health_pres_min = 0.
     health_pres_max = 10000000.
