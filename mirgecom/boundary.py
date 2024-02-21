@@ -1875,9 +1875,7 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
     of propagations and enable the creation of non-reflecting outflow boundaries.
 
     This can also be applied for Navier-Stokes equations in regions where
-    viscous effects are not dominant, such as the far-field. Thus, the normal
-    gradients of velocity, temperature and species are forced to be null in
-    order to recover the inviscid behavior.
+    viscous effects are not dominant, such as the far-field.
 
     .. automethod:: __init__
     .. automethod:: state_plus
