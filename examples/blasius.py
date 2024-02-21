@@ -84,7 +84,7 @@ class Initializer:
         temp_y = 1.0 + actx.np.tanh(1.0/0.01*x_vec[1])
         temp_x = 1.0 + 0.5*(1.0 - actx.np.tanh(1.0/0.01*(x_vec[0]+0.02)))
         temperature = actx.np.maximum(temp_y, temp_x)
-        pressure = 1.0 + zeros 
+        pressure = 1.0 + zeros
         mass = pressure / (eos.gas_const()*temperature)
         velocity = self._velocity
         energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
