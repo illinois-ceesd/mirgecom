@@ -162,9 +162,6 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         print(f"Main start: {time.ctime(time.time())}")
     comm.Barrier()
 
-    from pytato import enable_traceback_tag
-    enable_traceback_tag()
-
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
