@@ -2032,10 +2032,10 @@ class LinearizedInflow2DBoundary(MengaldoBoundaryCondition):
         nhat = -1.0*actx.thaw(dcoll.normal(dd_bdry))
 
         # rtilde = state_minus.cv.mass - self._ref_mass
-        ptilde = state_minus.dv.pressure - self._ref_pressure
         utilde = state_minus.velocity - self._ref_velocity
+        ptilde = state_minus.dv.pressure - self._ref_pressure
 
-        # only works with the normal component. The tangent one is useless.
+        # get the normal component of velocity. The tangential is not required.
         un_tilde = utilde@nhat
 
         a = state_minus.speed_of_sound
