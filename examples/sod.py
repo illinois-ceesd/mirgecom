@@ -140,9 +140,8 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     import grudge.op as op
     from grudge.dt_utils import characteristic_lengthscales
     nodal_h = characteristic_lengthscales(actx, dcoll) / cn
-    current_dt = actx.to_numpy(current_cfl
-                               * op.nodal_min(dcoll,
-                                              "vol", nodal_h))[()]  # type: ignore[index]
+    current_dt = actx.to_numpy(
+        current_cfl * op.nodal_min(dcoll, "vol", nodal_h))[()]  # type: ignore[index]
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:

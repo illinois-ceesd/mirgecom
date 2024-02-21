@@ -88,7 +88,7 @@ class Initializer:
         from arraycontext import tag_axes
         from meshmode.transform_metadata import DiscretizationElementAxisTag
 
-        mass = tag_axes(actx, { 0: DiscretizationElementAxisTag()},
+        mass = tag_axes(actx, {0: DiscretizationElementAxisTag()},
                         pressure/(eos.gas_const()*temperature))
         velocity = self._velocity
         energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
