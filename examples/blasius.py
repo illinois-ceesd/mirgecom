@@ -62,7 +62,7 @@ from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info, logmgr_set_time,
 )
-
+from arraycontext import get_container_context_recursively
 
 logger = logging.getLogger(__name__)
 
@@ -79,17 +79,13 @@ class Initializer:
         self._velocity = velocity
 
     def __call__(self, x_vec, eos):
-        actx = x_vec[0].array_context
-
+        actx = get_container_context_recursively(x_vec)
+        zeros = actx.zeros_like(x_vec[0])
         temp_y = 1.0 + actx.np.tanh(1.0/0.01*x_vec[1])
         temp_x = 1.0 + 0.5*(1.0 - actx.np.tanh(1.0/0.01*(x_vec[0]+0.02)))
         temperature = actx.np.maximum(temp_y, temp_x)
-        pressure = 1.0
-        from arraycontext import tag_axes
-        from meshmode.transform_metadata import DiscretizationElementAxisTag
-
-        mass = tag_axes(actx, {0: DiscretizationElementAxisTag()},
-                        pressure/(eos.gas_const()*temperature))
+        pressure = 1.0 + zeros 
+        mass = pressure / (eos.gas_const()*temperature)
         velocity = self._velocity
         energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
