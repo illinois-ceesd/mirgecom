@@ -76,9 +76,6 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
 
-    from pytato import enable_traceback_tag
-    enable_traceback_tag()
-
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
@@ -139,16 +136,13 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     nodes = actx.thaw(dcoll.nodes())
 
     # TODO: Fix this wonky dt estimate
-    from arraycontext import tag_axes
-    from meshmode.transform_metadata import (
-        DiscretizationElementAxisTag,
-        DiscretizationDOFAxisTag
-    )    
-    from grudge.dt_utils import h_min_from_volume
-    # h_min = tag_axes(actx, {0: DiscretizationElementAxisTag()}, h_min_from_volume(dcoll))
     cn = 0.5*(order + 1)**2
-    current_dt = current_cfl * actx.to_numpy(h_min_from_volume(dcoll)) / cn
-    # current_dt = 1e-10
+    import grudge.op as op
+    from grudge.dt_utils import characteristic_lengthscales
+    nodal_h = characteristic_lengthscales(actx, dcoll) / cn
+    current_dt = actx.to_numpy(current_cfl
+                               * op.nodal_min(dcoll,
+                                              "vol", nodal_h))[()]  # type: ignore[index]
 
     from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
@@ -290,10 +284,8 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
             from mirgecom.simutil import check_step
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
-            # do_health = check_step(step=step, interval=nhealth)
-            do_health = False
-            # do_status = check_step(step=step, interval=nstatus)
-            do_status = False
+            do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
