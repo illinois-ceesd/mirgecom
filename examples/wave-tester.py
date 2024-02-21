@@ -40,7 +40,7 @@ from mirgecom.logging_quantities import (initialize_logmgr,
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.utils import force_evaluation
 from mirgecom.wave import wave_operator
-
+from mirgecom.continuity import continuity_operator
 
 def bump(actx, nodes, t=0):
     """Create a bump."""
@@ -80,9 +80,9 @@ def main(actx_class, casename="wave",
 
     snapshot_pattern = casename + "-{step:04d}-{rank:04d}.pkl"
     vizfile_pattern = casename + "-%03d-%04d.vtu"
-
+    logfile_pattern = casename + "-mpi.sqlite"
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
+        filename=logfile_pattern, mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
@@ -129,7 +129,11 @@ def main(actx_class, casename="wave",
     nodes = actx.thaw(dcoll.nodes())
 
     current_cfl = 0.485
-    wave_speed = 1.0
+
+    velocity = np.zeros(shape=(dim,))
+    velocity[0] = 1.0
+    wave_speed = np.sqrt(np.dot(velocity, velocity))
+
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
 
@@ -142,11 +146,13 @@ def main(actx_class, casename="wave",
     if restart_step is None:
         t = 0
         istep = 0
-
-        fields = flat_obj_array(
-            bump(actx, nodes),
-            [dcoll.zeros(actx) for i in range(dim)]
+        if casename == "wave":
+            fields = flat_obj_array(
+                bump(actx, nodes),
+                [dcoll.zeros(actx) for i in range(dim)]
             )
+        else:
+            fields = bump(actx, nodes)
 
     else:
         t = restart_data["t"]
@@ -190,9 +196,9 @@ def main(actx_class, casename="wave",
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    # rhs_const = -1
+    rhs_const = -1
     # rhs_const = 1
-    rhs_const = 0
+    # rhs_const = 0
 
     def wave_rhs(t, w):
         return wave_operator(dcoll, c=wave_speed, w=w)
@@ -200,13 +206,19 @@ def main(actx_class, casename="wave",
     def simple_rhs(t, w):
         return rhs_const * w
 
+    def continuity_rhs(t, w):
+        return continuity_operator(dcoll, v=velocity, u=w)
+
     nviz = 0
     nrestart = 0
     nstatus = 1
     vis = make_visualizer(dcoll) if nviz else None
 
     if rhs_const < 0:
-        compiled_rhs = actx.compile(wave_rhs)
+        if casename == "wave":
+            compiled_rhs = actx.compile(wave_rhs)
+        else:
+            compiled_rhs = actx.compile(continuity_rhs)
     else:
         compiled_rhs = actx.compile(simple_rhs)
 
@@ -214,7 +226,11 @@ def main(actx_class, casename="wave",
 
     while t < t_final:
         if istep % nstatus == 0:
-            print(f"{istep=}, {t=}, soln={actx.to_numpy(op.norm(dcoll, fields[0], 2))}")
+            if casename == "wave":
+                soln = fields[0]
+            else:
+                soln = fields
+            print(f"{istep=}, {t=}, soln={actx.to_numpy(op.norm(dcoll, soln, 2))}")
 
         if logmgr:
             logmgr.tick_before()
@@ -232,19 +248,24 @@ def main(actx_class, casename="wave",
                     "t": t,
                     "step": istep,
                     "nel_1d": nel_1d,
-                    "num_parts": num_parts},
+                    "num_parts": num_parts,
+                    "casename": casename},
                 filename=snapshot_pattern.format(step=istep, rank=rank),
                 comm=comm
             )
 
         if (nviz > 0) and (istep % nviz == 0):
+            if casename == "wave":
+                viz_q = [
+                    ("u", fields[0]),
+                    ("v", fields[1:]),
+                ]
+            else:
+                viz_q = [("u", fields)]
             vis.write_parallel_vtk_file(
                 comm,
                 vizfile_pattern % (rank, istep),
-                [
-                    ("u", fields[0]),
-                    ("v", fields[1:]),
-                ], overwrite=True
+                viz_q, overwrite=True
             )
 
         fields = rk4_step(fields, t, dt, compiled_rhs)
@@ -260,8 +281,13 @@ def main(actx_class, casename="wave",
     if logmgr:
         logmgr.close()
 
-    final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
-    if rhs_const < 0:
+    if casename == "wave":
+        soln = fields[0]
+    else:
+        soln = fields
+
+    final_soln = actx.to_numpy(op.norm(dcoll, soln, 2))
+    if casename == "wave" and (rhs_const < 0):
         assert np.abs(final_soln - 0.04409852463947439) < 1e-14  # type: ignore[operator]
 
     if mpi:
