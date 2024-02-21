@@ -111,9 +111,6 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     rank = comm.Get_rank()
     nparts = comm.Get_size()
 
-    from pytato import enable_traceback_tag
-    enable_traceback_tag()
-
     logmgr = initialize_logmgr(True, filename=(f"{casename}.sqlite"),
                                mode="wu", mpi_comm=comm)
 
@@ -133,7 +130,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     order = 2
 
     # default i/o frequencies
-    nviz = 1000
+    nviz = 1
     nrestart = 1000
     nhealth = 1
     nstatus = 100
@@ -142,13 +139,15 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     integrator = "compiled_lsrk45"
 
     use_overintegration = False
-    local_dt = False
+    local_dt = True
     constant_cfl = True
 
-    current_dt = 1e-10
     niter = 10
-
-    t_final = 2e-9
+    current_dt = 1e-9
+    t_final = 2e-8
+    if local_dt:
+        current_dt = 1e-1
+        t_final = 0
 
     dim = 2
     current_cfl = 0.08

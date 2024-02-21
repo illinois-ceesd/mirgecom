@@ -277,18 +277,12 @@ def get_sim_timestep(
         The global maximum stable DT based on a viscous fluid.
     """
     actx = state.array_context
+
     if local_dt:
-        data_shape = (state.cv.mass[0]).shape
-        if actx.supports_nonscalar_broadcasting:
-            vdt = tag_axes(actx, {
-                0: DiscretizationElementAxisTag(),
-                1: DiscretizationDOFAxisTag()
-            }, get_viscous_timestep(dcoll, state, dd=fluid_dd))
-            return cfl * actx.np.broadcast_to(
-                op.elementwise_min(dcoll, fluid_dd, vdt), data_shape)
-        else:
-            return cfl * op.elementwise_min(
-                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
+        ones = dcoll.zeros(actx) + 1.0
+        vdt = get_viscous_timestep(dcoll, state, dd=fluid_dd)
+        emin = op.elementwise_min(dcoll, fluid_dd, vdt)
+        return cfl * ones * emin
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
