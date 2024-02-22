@@ -89,11 +89,10 @@ def main(actx_class, casename="wave",
     queue = getattr(actx, "queue", None)
     alloc = getattr(actx, "allocator", None)
     use_profiling = actx_class_is_profiling(actx_class)
+    dim = 2
+    nel_1d = 2
 
     if restart_step is None:
-
-        dim = 2
-        nel_1d = 16
 
         from functools import partial
         from meshmode.mesh.generation import generate_regular_rect_mesh

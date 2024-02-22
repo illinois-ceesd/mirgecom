@@ -37,10 +37,10 @@ from arraycontext import get_container_context_recursively
 def _flux(dcoll, v, w_tpair):
 
     actx = get_container_context_recursively(w_tpair.int)
-    normal = actx.thaw(dcoll.normal(w_tpair.dd))
+    # normal = actx.thaw(dcoll.normal(w_tpair.dd))
 
-    flux_weak = np.dot(w_tpair.avg*v, normal)
-
+    # flux_weak = np.dot(w_tpair.avg*v, normal)
+    flux_weak = w_tpair.diff
     return op.project(dcoll, w_tpair.dd, "all_faces", flux_weak)
 
 
@@ -75,11 +75,14 @@ def continuity_operator(dcoll, v, u, *, comm_tag=None):
     vol_term = -op.weak_local_div(dcoll, transport_flux)
 
     interior_facial_flux = sum(_flux(dcoll, v=v, w_tpair=tpair) for tpair in itp)
-    boundary_facial_flux = _flux(dcoll, v=v,
-                                 w_tpair=TracePair(BTAG_ALL, interior=dir_u,
-                                                   exterior=dir_bc))
-    surface_fluxes = interior_facial_flux + boundary_facial_flux
+    print(f"{interior_facial_flux=}")
+
+    # boundary_facial_flux = _flux(dcoll, v=v,
+    #                             w_tpair=TracePair(BTAG_ALL, interior=dir_u,
+    #                                               exterior=dir_bc))
+    surface_fluxes = interior_facial_flux # + boundary_facial_flux
     surf_term = op.face_mass(dcoll, surface_fluxes)
 
-    rhs = op.inverse_mass(dcoll, vol_term + surf_term)
+    rhs = surf_term
+    # rhs = op.inverse_mass(dcoll, vol_term + surf_term)
     return rhs
