@@ -167,8 +167,8 @@ def main(actx_class, rst_filename=None, use_tpe=False,
 
     # {{{ Some discretization parameters
 
-    dim = 2
-    order = 3
+    dim = 3
+    order = 1
 
     # - scales the size of the domain
     x_scale = 1
