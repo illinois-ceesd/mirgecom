@@ -189,7 +189,7 @@ def main(actx_class, use_esdg=False,
 
     get_fluid_state = actx.compile(_get_fluid_state)
 
-    # ~~~~ solution initilization
+    # ~~~~ solution initialization
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 10.0
     from pytools.obj_array import make_obj_array

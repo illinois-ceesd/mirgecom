@@ -755,7 +755,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
 
         This method returns the boundary flux to be used by the gradient
         operator when computing the gradient of the fluid temperature at a
-        domain boundary.  The Mengaldo boundary treatment sends back
+        domain boundary. The Mengaldo boundary treatment sends back
         $T_bc~\mathbf{\hat{n}}$.
 
         Parameters
@@ -1857,14 +1857,14 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
 
     Implement non-reflecting outflow based on characteristic variables for
     the Euler equations assuming small perturbations based on [Giles_1988]_.
-    The equations assume an uniform, steady flow and linerize the Euler eqs.
-    in this reference state, yielding a linear equation in the form
+    The implementation assume an uniform, steady flow and linerize the Euler
+    equations in this reference state, yielding a linear equation in the form
 
     .. math::
         \frac{\partial U}{\partial t} + A \frac{\partial U}{\partial x} +
         B \frac{\partial U}{\partial y} = 0
 
-    where where U is the vector of perturbation (primitive) variables and
+    where U is the vector of perturbation (primitive) variables and
     the coefficient matrices A and B are constant matrices based on the
     uniform, steady variables.
 
@@ -1909,7 +1909,9 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
             raise ValueError(f"Expected {dim}-dimensional inputs, got {vel_shape}.")
 
         if free_stream_species_mass_fractions is None:
-            self._spec_mass_fracs = np.empty((0,), dtype=object)
+            from warnings import warn
+            warn("Species mass fractions set to None; "
+                 "using internal values.", stacklevel=2)
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Non-reflecting outflow."""
@@ -1946,22 +1948,26 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
         mass = r_tilde_bnd + self._ref_mass
         pressure = p_tilde_bnd + self._ref_pressure
 
+        if self._spec_mass_fracs is None:
+            species_mass_fracs = state_minus.cv.species_mass_fractions
+        else:
+            species_mass_fracs = self._spec_mass_fracs
+
         kin_energy = 0.5*mass*np.dot(velocity, velocity)
         if state_minus.is_mixture:
             gas_const = gas_model.eos.gas_const(
-                species_mass_fractions=state_minus.cv.species_mass_fractions)
+                species_mass_fractions=species_mass_fracs)
             temperature = pressure/(mass*gas_const)
             int_energy = mass*gas_model.eos.get_internal_energy(
-                temperature, state_minus.cv.species_mass_fractions)
+                temperature, species_mass_fracs)
         else:
             int_energy = pressure/(gas_model.eos.gamma() - 1.0)
 
-        boundary_cv = make_conserved(
-            dim=dim,
-            mass=mass,
-            energy=kin_energy + int_energy,
-            momentum=mass*velocity,
-            species_mass=mass*state_minus.cv.species_mass_fractions)
+        boundary_cv = make_conserved(dim=dim,
+                                     mass=mass,
+                                     energy=kin_energy + int_energy,
+                                     momentum=mass*velocity,
+                                     species_mass=mass*species_mass_fracs)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
