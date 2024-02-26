@@ -90,7 +90,7 @@ def main(actx_class, casename="wave",
     alloc = getattr(actx, "allocator", None)
     use_profiling = actx_class_is_profiling(actx_class)
     dim = 2
-    nel_1d = 2
+    nel_1d = 16
 
     if restart_step is None:
 
@@ -140,7 +140,7 @@ def main(actx_class, casename="wave",
                        * op.nodal_min(dcoll,
                                       "vol", nodal_dt))[()]  # type: ignore[index]
 
-    t_final = 1
+    t_final = 0.01
 
     if restart_step is None:
         t = 0
