@@ -298,7 +298,8 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
     # {{{  Set up initial state using Cantera
 
     # Use Cantera for initialization
-    print("\nUsing Cantera", cantera.__version__)
+    if rank == 0:
+        logging.info("\nUsing Cantera " + cantera.__version__)
 
     from mirgecom.mechanisms import get_mechanism_input
     mech_input = get_mechanism_input(mechanism_file)
