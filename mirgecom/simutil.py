@@ -279,7 +279,7 @@ def get_sim_timestep(
     actx = state.array_context
 
     if local_dt:
-        ones = dcoll.zeros(actx) + 1.0
+        ones = actx.np.zeros_like(state.cv.mass) + 1.0
         vdt = get_viscous_timestep(dcoll, state, dd=fluid_dd)
         emin = op.elementwise_min(dcoll, fluid_dd, vdt)
         return cfl * ones * emin
