@@ -107,7 +107,9 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
 
 def initialize_actx(
         actx_class: Type[ArrayContext],
-        comm: Optional["Comm"] = None) -> ArrayContext:
+        comm: Optional["Comm"] = None, *,
+        use_axis_tag_inference_fallback: bool = False,
+        use_einsum_inference_fallback: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
     from grudge.array_context import (MPIPyOpenCLArrayContext,
@@ -139,6 +141,10 @@ def initialize_actx(
 
         if actx_class_is_lazy(actx_class):
             assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
+            actx_kwargs["use_axis_tag_inference_fallback"] = \
+                use_axis_tag_inference_fallback
+            actx_kwargs["use_einsum_inference_fallback"] = \
+                use_einsum_inference_fallback
             if comm:
                 assert issubclass(actx_class, MPIPytatoArrayContext)
                 actx_kwargs["mpi_base_tag"] = 12000
