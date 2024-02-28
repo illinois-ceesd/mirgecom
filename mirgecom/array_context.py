@@ -44,10 +44,32 @@ if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
 
 
 def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
-                        profiling: bool, numpy: bool = False) -> Type[ArrayContext]:
+                        profiling: bool, numpy: bool = False,
+                        cupy: bool = False) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
+
+    if numpy and cupy:
+        raise ValueError("Can't specify both numpy and cupy")
+
+    if cupy:
+        if profiling:
+            raise ValueError("Can't specify both cupy and profiling")
+        if lazy:
+            raise ValueError("Can't specify both cupy and lazy")
+
+        from warnings import warn
+        warn("The CupyArrayContext is still under development")
+
+        if distributed:
+            from grudge.array_context import (  # pylint: disable=no-name-in-module
+                MPICupyArrayContext)
+            return MPICupyArrayContext
+        else:
+            from grudge.array_context import (  # pylint: disable=no-name-in-module
+                CupyArrayContext)
+            return CupyArrayContext
 
     if numpy:
         if profiling:
@@ -105,6 +127,18 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
         return False
 
 
+def actx_class_is_cupy(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is cupy-based."""
+    try:
+        from grudge.array_context import CupyArrayContext
+        if issubclass(actx_class, CupyArrayContext):
+            return True
+        else:
+            return False
+    except ImportError:
+        return False
+
+
 def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
         -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
@@ -113,7 +147,7 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
                                       MPIPytatoArrayContext)
 
     # Special handling for NumpyArrayContext since it needs no CL context
-    if actx_class_is_numpy(actx_class):
+    if actx_class_is_numpy(actx_class) or actx_class_is_cupy(actx_class):
         if comm:
             return actx_class(mpi_communicator=comm)  # type: ignore[call-arg]
         else:
