@@ -348,6 +348,62 @@ def viscous_facial_flux_central(dcoll, state_pair, grad_cv_pair, grad_t_pair,
     return num_flux_central(f_int, f_ext)@normal
 
 
+def viscous_facial_flux_central_ip(dcoll, state_pair, grad_cv_pair, grad_t_pair,
+                                   ipfac=0.0, gas_model=None):
+    r"""Return a central facial flux for the divergence operator.
+
+    The flux is defined as:
+
+    .. math::
+
+        f_{\text{face}} = \frac{1}{2}\left(\mathbf{f}_v^+
+        + \mathbf{f}_v^-\right)\cdot\hat{\mathbf{n}},
+
+    with viscous fluxes ($\mathbf{f}_v$), and the outward pointing
+    face normal ($\hat{\mathbf{n}}$).
+
+    Parameters
+    ----------
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
+
+        The discretization collection to use
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+        The physical model for the gas. Unused for this numerical flux function.
+
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` with the full fluid
+        conserved and thermal state on the faces
+
+    grad_cv_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.fluid.ConservedVars` with the gradient of the
+        fluid solution on the faces
+
+    grad_t_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of temperature gradient on the faces.
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        The viscous transport flux in the face-normal direction on "all_faces" or
+        local to the sub-discretization depending on *local* input parameter
+    """
+    from mirgecom.flux import num_flux_central
+    actx = state_pair.int.array_context
+    normal = actx.thaw(dcoll.normal(state_pair.dd))
+
+    f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
+                         grad_t_pair.int)
+    f_ext = viscous_flux(state_pair.ext, grad_cv_pair.ext,
+                         grad_t_pair.ext)
+
+    ipterm = (ipfac * (f_ext - f_int))@normal
+    return num_flux_central(f_int, f_ext)@normal + ipterm
+
 def viscous_facial_flux_harmonic(dcoll, state_pair, grad_cv_pair, grad_t_pair,
                                  gas_model=None):
     r"""
