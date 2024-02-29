@@ -162,6 +162,7 @@ def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
         actx_kwargs["force_device_scalars"] = True
         if comm:
             assert issubclass(actx_class, MPIPyOpenCLArrayContext)
+            actx_kwargs["mpi_communicator"] = comm
             # actx = actx_class(mpi_communicator=comm, queue=queue, allocator=alloc,
             #                  force_device_scalars=True)  # type: ignore[call-arg]
         else:
