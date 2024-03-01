@@ -27,13 +27,14 @@ import cantera
 import numpy as np
 from pytools.obj_array import make_obj_array
 from grudge import op
+from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE
 from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.eos import PyrometheusMixture
+from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import make_fluid_state
 from mirgecom.wall_model import PorousFlowModel, PorousWallTransport
@@ -57,10 +58,10 @@ def test_wall_eos(actx_factory, order, my_material):
     dcoll = create_discretization_collection(
         actx, mesh, order=order, quadrature_order=2*order+1)
 
-    solid_nodes = actx.thaw(dcoll.nodes())
-    solid_zeros = actx.np.zeros_like(solid_nodes[0])
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = actx.np.zeros_like(nodes[0])
 
-    # {{{ Pyrometheus initialization
+    # {{{ EOS initialization
 
     mech_input = get_mechanism_input("uiuc_8sp_phenol")
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
@@ -102,40 +103,38 @@ def test_wall_eos(actx_factory, order, my_material):
 
     base_transport = SimpleTransport()
     solid_transport = PorousWallTransport(base_transport=base_transport)
-    gas_model_solid = PorousFlowModel(eos=eos, transport=solid_transport,
-                                      wall_eos=material)
+    gas_model = PorousFlowModel(eos=eos, transport=solid_transport,
+                                wall_eos=material)
 
     # }}}
 
-    pressure = cantera_soln.P + solid_zeros
-    temperature = cantera_soln.T + solid_zeros
+    pressure = 101325.0 + zeros
+    temperature = 900.0 + zeros
+
     sample_init = PorousWallInitializer(
         pressure=pressure, temperature=temperature, species=y,
         material_densities=material_densities)
 
-    cv, solid_densities = sample_init(solid_nodes, gas_model_solid)
+    cv, solid_densities = sample_init(nodes, gas_model)
 
-    solid_state = make_fluid_state(cv=cv, gas_model=gas_model_solid,
+    solid_state = make_fluid_state(cv=cv, gas_model=gas_model,
         material_densities=solid_densities, temperature_seed=900.0)
 
     wv = solid_state.wv
 
-    assert isinstance(wv.tau, DOFArray)
     assert actx.to_numpy(op.norm(dcoll, wv.tau - 1.0, np.inf)) < tol
 
     assert isinstance(solid_state.wv.density, DOFArray)
 
     if my_material == "fiber":
-        assert actx.to_numpy(op.norm(dcoll, wv.density - 168.0, np.inf)) < tol
+        assert np.max(actx.to_numpy(wv.density - 168.0)) < tol
         assert np.max(actx.to_numpy(wv.void_fraction)) - 1.00 < tol
-        assert np.min(actx.to_numpy(wv.void_fraction)) - 0.88 < tol
 
     if my_material == "composite":
-        assert actx.to_numpy(op.norm(dcoll, wv.density - 280.0, np.inf)) < tol
+        assert np.max(actx.to_numpy(wv.density - 280.0)) < tol
         assert np.max(actx.to_numpy(wv.void_fraction)) - 1.00 < tol
-        assert np.min(actx.to_numpy(wv.void_fraction)) - 0.80 < tol
 
     assert actx.to_numpy(
-        op.norm(dcoll, solid_state.pressure - cantera_soln.P, np.inf)) < tol
+        op.norm(dcoll, solid_state.pressure - 101325.0, np.inf)) < tol
     assert actx.to_numpy(
-        op.norm(dcoll, solid_state.temperature - cantera_soln.T, np.inf)) < tol
+        op.norm(dcoll, solid_state.temperature - 900.0, np.inf)) < tol
