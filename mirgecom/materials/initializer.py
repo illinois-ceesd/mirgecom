@@ -74,7 +74,7 @@ class PorousWallInitializer:
         self._temp = temperature
         self._wall_density = material_densities
 
-    def __call__(self, dim, x_vec, gas_model):
+    def __call__(self, x_vec, gas_model):
         """Evaluate the wall+gas properties for porous materials.
 
         Parameters
@@ -83,27 +83,33 @@ class PorousWallInitializer:
             Nodal coordinates
         gas_model: :class:`mirgecom.wall_model.PorousFlowModel`
             Equation of state class
+
+        Returns
+        -------
+        cv: :class:`mirgecom.fluid.ConservedVars`
+            The conserved variables for porous flows.
+        wall_density: numpy.ndarray or :class:`meshmode.dof_array.DOFArray`
+            The densities of each one of the materials
         """
         actx = x_vec[0].array_context
         zeros = actx.np.zeros_like(x_vec[0])
+        dim = x_vec.shape[0]
 
         temperature = self._temp + zeros
-        species_mass_frac = self._y + zeros
-        wall_density = self._wall_density + zeros
 
+        species_mass_frac = self._y + zeros
+
+        wall_density = self._wall_density + zeros
         tau = gas_model.decomposition_progress(wall_density)
+        eps_rho_solid = gas_model.solid_density(wall_density)
 
         eps_gas = gas_model.wall_eos.void_fraction(tau)
         if self._mass is None:
             pressure = self._pres + zeros
-            eps_rho_gas = eps_gas*gas_model.eos.get_density(pressure,
-                temperature, species_mass_frac)
+            eps_rho_gas = eps_gas*gas_model.eos.get_density(
+                pressure, temperature, species_mass_frac)
         else:
-            density = self._mass + zeros
-            eps_rho_gas = eps_gas*density
-
-        # internal energy (kinetic energy is neglected)
-        eps_rho_solid = gas_model.solid_density(wall_density)
+            eps_rho_gas = eps_gas*self._mass
 
         bulk_energy = (
             eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
@@ -115,5 +121,7 @@ class PorousWallInitializer:
 
         species_mass = eps_rho_gas*species_mass_frac
 
-        return make_conserved(dim=dim, mass=eps_rho_gas, energy=bulk_energy,
-            momentum=momentum, species_mass=species_mass)
+        cv = make_conserved(dim=dim, mass=eps_rho_gas, energy=bulk_energy,
+                            momentum=momentum, species_mass=species_mass)
+
+        return cv, wall_density
