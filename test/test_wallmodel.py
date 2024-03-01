@@ -27,7 +27,6 @@ import cantera
 import numpy as np
 from pytools.obj_array import make_obj_array
 from grudge import op
-from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
