@@ -1857,8 +1857,8 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
 
     Implement non-reflecting outflow based on characteristic variables for
     the Euler equations assuming small perturbations based on [Giles_1988]_.
-    The implementation assume an uniform, steady flow and linerize the Euler
-    equations in this reference state, yielding a linear equation in the form
+    The implementation assumes an uniform, steady flow in which the Euler
+    equations are linearized about, yielding
 
     .. math::
         \frac{\partial U}{\partial t} + A \frac{\partial U}{\partial x} +
