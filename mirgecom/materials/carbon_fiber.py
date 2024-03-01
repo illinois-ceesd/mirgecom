@@ -30,9 +30,9 @@ THE SOFTWARE.
 
 from abc import abstractmethod
 import numpy as np
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallEOS
-from pytools.obj_array import make_obj_array
 
 
 class Oxidation:
@@ -135,8 +135,8 @@ class FiberEOS(PorousWallEOS):
         self._dim = dim
         self._anisotropic_dir = anisotropic_direction
 
-        if anisotropic_direction > dim:
-            raise ValueError("Anisotropic axis must be less or equal than dim.")
+        if anisotropic_direction >= dim:
+            raise ValueError("Anisotropic axis must be less than dim.")
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -198,8 +198,8 @@ class FiberEOS(PorousWallEOS):
         r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
         actx = tau.array_context
-        permeability = np.zeros(self._dim,)
-        permeability[:] = 5.57e-11 + actx.np.zeros_like(tau)
+        permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
+                                       for _ in range(0, self._dim)])
         permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
         return permeability
 

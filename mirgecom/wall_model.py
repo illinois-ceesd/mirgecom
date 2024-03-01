@@ -107,10 +107,12 @@ class SolidWallConservedVars:
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SolidWallDependentVars:
     """Wall dependent variables for heat conduction only materials."""
 
+    tau: DOFArray
+    density: Union[DOFArray, np.ndarray]
     thermal_conductivity: DOFArray
     temperature: DOFArray
 
@@ -132,7 +134,7 @@ class SolidWallModel:
     driver-defined functions that prescribe the actual properties and their
     spatial distribution.
 
-    .. automethod:: density
+    .. automethod:: solid_density
     .. automethod:: heat_capacity
     .. automethod:: enthalpy
     .. automethod:: thermal_diffusivity
@@ -141,55 +143,71 @@ class SolidWallModel:
     .. automethod:: dependent_vars
     """
 
-    def __init__(self, density_func, enthalpy_func, heat_capacity_func,
-                 thermal_conductivity_func):
-        self._density_func = density_func
+    def __init__(self, enthalpy_func, heat_capacity_func,
+                 thermal_conductivity_func, decomposition_func=None):
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
         self._thermal_conductivity_func = thermal_conductivity_func
+        self._decomposition_func = decomposition_func
 
-    def density(self) -> DOFArray:
-        """Return the wall density for all components."""
-        return self._density_func()
+    def solid_density(self, material_densities) -> DOFArray:
+        r"""Return the solid density $\rho_s$."""
+        if isinstance(material_densities, DOFArray):
+            return material_densities
+        return sum(material_densities)
 
-    def heat_capacity(self, temperature: DOFArray = None) -> DOFArray:
-        """Return the wall heat_capacity for all components."""
-        return self._heat_capacity_func(temperature)
+    def heat_capacity(self, temperature: DOFArray = None, tau=None) -> DOFArray:
+        """Return the wall heat_capacity."""
+        return self._heat_capacity_func(temperature=temperature, tau=tau)
 
-    def enthalpy(self, temperature: DOFArray) -> DOFArray:
-        """Return the wall enthalpy for all components."""
-        return self._enthalpy_func(temperature)
+    def enthalpy(self, temperature: DOFArray, tau=None) -> DOFArray:
+        """Return the wall enthalpy."""
+        return self._enthalpy_func(temperature=temperature, tau=tau)
 
-    def thermal_diffusivity(self, mass: DOFArray, temperature: DOFArray,
-            thermal_conductivity: DOFArray = None) -> DOFArray:
+    def thermal_diffusivity(self, solid_state: SolidWallState) -> DOFArray:
         """Return the wall thermal diffusivity for all components."""
-        if thermal_conductivity is None:
-            thermal_conductivity = self.thermal_conductivity(temperature)
-        return thermal_conductivity/(mass * self.heat_capacity(temperature))
+        tau = self.decomposition_progress(solid_state.cv.mass)
+        density = self.solid_density(solid_state.cv.mass)
+        kappa = self.thermal_conductivity(solid_state.dv.temperature, tau)
+        cp = self.heat_capacity(solid_state.dv.temperature, tau)
+        return kappa/(density * cp)
 
-    def thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
-        """Return the wall thermal conductivity for all components."""
-        return self._thermal_conductivity_func(temperature)
+    def thermal_conductivity(self, temperature: DOFArray, tau=None) -> DOFArray:
+        """Return the wall thermal conductivity."""
+        return self._thermal_conductivity_func(temperature=temperature, tau=tau)
+
+    def decomposition_progress(self, material_densities) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the decomposition."""
+        mass = self.solid_density(material_densities)
+        if self._decomposition_func:
+            return self._decomposition_func(mass)
+        actx = mass.array_context
+        return actx.np.zeros_like(mass) + 1.0
 
     def get_temperature(self, wv: SolidWallConservedVars,
             tseed: DOFArray = None, niter: int = 3) -> DOFArray:
         """Evaluate the temperature based on the energy."""
         if tseed is not None:
+            tau = self.decomposition_progress(wv.mass)
             temp = tseed*1.0
             for _ in range(0, niter):
-                h = self.enthalpy(temp)
-                cp = self.heat_capacity(temp)
-                temp = temp - (h - wv.energy/wv.mass)/cp
+                h = self.enthalpy(temperature=temp, tau=tau)
+                cp = self.heat_capacity(temperature=temp, tau=tau)
+                temp = temp - (h - wv.energy/self.solid_density(wv.mass))/cp
             return temp
 
-        return wv.energy/(self.density()*self.heat_capacity())
+        return wv.energy/(self.solid_density(wv.mass)*self.heat_capacity())
 
     def dependent_vars(self, wv: SolidWallConservedVars,
             tseed: DOFArray = None, niter: int = 3) -> SolidWallDependentVars:
         """Return solid wall dependent variables."""
+        tau = self.decomposition_progress(wv.mass)
+        density = self.solid_density(wv.mass)
         temperature = self.get_temperature(wv, tseed, niter)
-        kappa = self.thermal_conductivity(temperature)
+        kappa = self.thermal_conductivity(temperature=temperature, tau=tau)
         return SolidWallDependentVars(
+            tau=tau,
+            density=density,
             thermal_conductivity=kappa,
             temperature=temperature)
 
@@ -206,7 +224,6 @@ class PorousWallVars:
     .. attribute:: material_densities
     .. attribute:: tau
     .. attribute:: void_fraction
-    .. attribute:: emissivity
     .. attribute:: permeability
     .. attribute:: tortuosity
     .. attribute:: density
@@ -215,7 +232,6 @@ class PorousWallVars:
     material_densities: Union[DOFArray, np.ndarray]
     tau: DOFArray
     void_fraction: DOFArray
-    emissivity: DOFArray
     permeability: DOFArray
     tortuosity: DOFArray
     density: DOFArray
@@ -292,8 +308,8 @@ class PorousWallEOS:
 class PorousWallTransport:
     r"""Transport model for porous media flow.
 
-    Takes any transport model and modifies it to consider the interaction
-    with the porous materials.
+    Takes any gas-only transport model and modifies it to consider the
+    interaction with the porous materials.
 
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
@@ -321,8 +337,9 @@ class PorousWallTransport:
     def viscosity(self, cv: ConservedVars, dv: GasDependentVars,
             wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         """Viscosity of the gas through the porous wall."""
-        return 1.0/wv.void_fraction*(
-            self.base_transport.viscosity(cv, dv, eos))
+#        return 1.0/wv.void_fraction*(
+#            self.base_transport.viscosity(cv, dv, eos))
+        return self.base_transport.viscosity(cv, dv, eos)
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
             wv: PorousWallVars, eos: GasEOS, wall_eos: PorousWallEOS) -> DOFArray:
@@ -383,6 +400,11 @@ class PorousFlowModel:
         Transport class that governs how the gas flows through the porous
         media. This is accounted for in :class:`PorousWallTransport`
 
+    .. attribute:: temperature_iteration
+
+        Number of iterations for temperature evaluation using Newton's method.
+        Defaults to 3 if not specified.
+
     It also include functions that combine the properties of the porous
     material and the gas that permeates, yielding the actual porous flow EOS:
 
@@ -434,7 +456,7 @@ class PorousFlowModel:
             T^{n+1} = T^n -
                 \frac
                 {\epsilon_g \rho_g e_g + \rho_s h_s - \rho e}
-                {\epsilon_g \rho_g C_{p_g} + \epsilon_s \rho_s C_{p_s}}
+                {\epsilon_g \rho_g C_{v_g} + \epsilon_s \rho_s C_{p_s}}
 
         """
         if isinstance(tseed, DOFArray) is False:
@@ -469,7 +491,7 @@ class PorousFlowModel:
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
-        r"""Return the enthalpy of the gas+solid material.
+        r"""Return the internal energy of the gas+solid material.
 
         .. math::
             \rho e = \epsilon_s \rho_s e_s + \epsilon_g \rho_g e_g
@@ -483,7 +505,7 @@ class PorousFlowModel:
         r"""Return the heat capacity of the gas+solid material.
 
         .. math::
-            \rho e = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
+            \rho C_v = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
         """
         return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
                 + wv.density*self.wall_eos.heat_capacity(temperature, wv.tau))

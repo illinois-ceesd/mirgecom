@@ -90,8 +90,8 @@ class Pyrolysis:
                 0.0, (
                     -(30.*((chi[0] - 0.00)/30.)**3)*12000.
                     * actx.np.exp(-8556.000/temperature))),
-            actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
             # reaction 2
+            actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
                 0.0, (
                     -(90.*((chi[1] - 60.0)/90.)**3)*4.48e9
                     * actx.np.exp(-20444.44/temperature))),
