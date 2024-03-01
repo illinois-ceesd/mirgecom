@@ -44,8 +44,8 @@ from mirgecom.utils import force_evaluation
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    LinearizedOutflow2DBoundary,
-    LinearizedInflow2DBoundary,
+    LinearizedOutflowBoundary,
+    LinearizedInflowBoundary,
     # RiemannInflowBoundary,
     PressureOutflowBoundary,
     AdiabaticSlipBoundary
@@ -341,10 +341,9 @@ def main(actx_class, use_esdg=False,
         y_inlet[0] = 1.0
         mass = eos.get_density(pressure=101325.0, temperature=300.0,
                                species_mass_fractions=y_inlet)
-        linear_inflow_bnd = LinearizedInflow2DBoundary(
-            dim=dim, free_stream_density=mass,
-            free_stream_velocity=velocity, free_stream_pressure=101325.0,
-            free_stream_species_mass_fractions=y_inlet)
+        linear_inflow_bnd = LinearizedInflowBoundary(
+            free_stream_density=mass, free_stream_species_mass_fractions=y_inlet,
+            free_stream_velocity=velocity, free_stream_pressure=101325.)
 
         # Linearized outflow
         y_outlet_right = op.project(dcoll, DD_VOLUME_ALL,
@@ -352,9 +351,9 @@ def main(actx_class, use_esdg=False,
                                     fluid_state.cv.species_mass_fractions)
         mass = eos.get_density(pressure=101325.0, temperature=300.0,
                                species_mass_fractions=y_outlet_right)
-        linear_outflow_bnd = LinearizedOutflow2DBoundary(
-            dim=dim, free_stream_density=mass,
-            free_stream_velocity=velocity, free_stream_pressure=101325.0,
+        linear_outflow_bnd = LinearizedOutflowBoundary(
+            free_stream_density=mass, free_stream_velocity=velocity,
+            free_stream_pressure=101325.0,
             free_stream_species_mass_fractions=y_outlet_right)
 
         # Pressure prescribed outflow boundary

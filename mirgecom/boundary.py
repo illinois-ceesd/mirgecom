@@ -23,8 +23,8 @@ Boundary Conditions
 .. autoclass:: IsothermalWallBoundary
 .. autoclass:: AdiabaticSlipBoundary
 .. autoclass:: AdiabaticNoslipWallBoundary
-.. autoclass:: LinearizedOutflow2DBoundary
-.. autoclass:: LinearizedInflow2DBoundary
+.. autoclass:: LinearizedOutflowBoundary
+.. autoclass:: LinearizedInflowBoundary
 """
 
 __copyright__ = """
@@ -1852,13 +1852,13 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
 
-class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
+class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
     r"""Characteristics outflow BCs for linearized Euler equations.
 
     Implement non-reflecting outflow based on characteristic variables for
     the Euler equations assuming small perturbations based on [Giles_1988]_.
-    The implementation assume an uniform, steady flow and linerize the Euler
-    equations in this reference state, yielding a linear equation in the form
+    The implementation assumes an uniform, steady flow in which the Euler
+    equations are linearized about, yielding
 
     .. math::
         \frac{\partial U}{\partial t} + A \frac{\partial U}{\partial x} +
@@ -1886,7 +1886,7 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
     """
 
     def __init__(
-            self, dim=None, free_stream_state=None, free_stream_density=None,
+            self, free_stream_state=None, free_stream_density=None,
             free_stream_velocity=None, free_stream_pressure=None,
             free_stream_species_mass_fractions=None):
         """Initialize the BC object."""
@@ -1901,12 +1901,8 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
             self._ref_pressure = free_stream_state.pressure
             self._spec_mass_fracs = free_stream_state.cv.species_mass_fractions
 
-        if dim == 3:
+        if self._ref_velocity.shape[0] > 2:
             raise ValueError("This BC only supports 1 or 2-dimensional inputs.")
-
-        if self._ref_velocity.shape[0] != dim:
-            vel_shape = self._ref_velocity.shape[0]
-            raise ValueError(f"Expected {dim}-dimensional inputs, got {vel_shape}.")
 
         if free_stream_species_mass_fractions is None:
             from warnings import warn
@@ -1993,7 +1989,7 @@ class LinearizedOutflow2DBoundary(MengaldoBoundaryCondition):
         return grad_cv_minus
 
 
-class LinearizedInflow2DBoundary(MengaldoBoundaryCondition):
+class LinearizedInflowBoundary(MengaldoBoundaryCondition):
     r"""Characteristics inflow BCs for linearized Euler equations.
 
     .. automethod:: __init__
@@ -2005,7 +2001,7 @@ class LinearizedInflow2DBoundary(MengaldoBoundaryCondition):
     """
 
     def __init__(
-            self, dim=None, free_stream_state=None, free_stream_velocity=None,
+            self, free_stream_state=None, free_stream_velocity=None,
             free_stream_pressure=None, free_stream_density=None,
             free_stream_species_mass_fractions=None):
         """Initialize the BC object."""
@@ -2020,12 +2016,8 @@ class LinearizedInflow2DBoundary(MengaldoBoundaryCondition):
             self._ref_pressure = free_stream_state.pressure
             self._spec_mass_fracs = free_stream_state.cv.species_mass_fractions
 
-        if dim == 3:
+        if self._ref_velocity.shape[0] > 2:
             raise ValueError("This BC only supports 1 or 2-dimensional inputs.")
-
-        if self._ref_velocity.shape[0] != dim:
-            vel_shape = self._ref_velocity.shape[0]
-            raise ValueError(f"Expected {dim}-dimensional inputs, got {vel_shape}.")
 
         if free_stream_species_mass_fractions is None:
             self._spec_mass_fracs = np.empty((0,), dtype=object)
