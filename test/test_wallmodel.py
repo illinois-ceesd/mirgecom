@@ -76,7 +76,7 @@ def test_wall_eos(actx_factory, order, my_material):
     cantera_soln.TPX = 900.0, 101325.0, x
     _, _, y = cantera_soln.TDY
 
-    eos = PyrometheusMixture(pyro_obj, temperature_guess=900.0)
+    eos = PyrometheusMixture(pyro_obj, temperature_guess=cantera_soln.T)
 
     # }}}
 
