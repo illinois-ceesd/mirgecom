@@ -256,20 +256,18 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
 
-#    def kappa_plus(self, dcoll, dd_bdry):
-
-##        actx = self._t_plus.array_context
-##        normal = actx.thaw(dcoll.normal(dd_bdry))
-##        if isinstance(kappa_plus, np.ndarray):
-##            kappa_plus = np.dot(normal, self._kappa_plus*normal)
-
-#        kappa_plus = self._kappa_plus
-
-#        return kappa_plus
+    def kappa_plus(self, dcoll, dd_bdry):
+        # orthotropic materials
+        actx = self._t_plus.array_context
+        normal = actx.thaw(dcoll.normal(dd_bdry))
+        if isinstance(self._kappa_plus, np.ndarray):
+            return np.dot(normal, self._kappa_plus*normal)
+        return self._kappa_plus
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
         kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
+        # orthotropic materials
         actx = self._t_plus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
         if isinstance(kappa_minus, np.ndarray):
@@ -287,7 +285,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         actx = t_minus.array_context
         kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
-        # XXX
+        # orthotropic materials
         normal = actx.thaw(dcoll.normal(dd_bdry))
         if isinstance(kappa_minus, np.ndarray):
             kappa_minus = np.dot(normal, kappa_minus*normal)
@@ -624,7 +622,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
 
-        # XXX
+        # orthotropic materials
         if isinstance(kappa_minus, np.ndarray):
             kappa_minus = np.dot(normal, kappa_minus*normal)
         if isinstance(kappa_plus, np.ndarray):
@@ -651,7 +649,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
 
-        # XXX
+        # orthotropic materials
         if isinstance(kappa_minus, np.ndarray):
             kappa_minus = np.dot(normal, kappa_minus*normal)
         if isinstance(kappa_plus, np.ndarray):
@@ -739,7 +737,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        # XXX
+        # orthotropic materials
         if isinstance(kappa_minus, np.ndarray):
             kappa_minus = np.dot(normal, kappa_minus*normal)
 
