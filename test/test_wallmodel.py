@@ -27,14 +27,13 @@ import cantera
 import numpy as np
 from pytools.obj_array import make_obj_array
 from grudge import op
-from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE
 from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.eos import IdealSingleGas, PyrometheusMixture
+from mirgecom.eos import PyrometheusMixture
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import make_fluid_state
 from mirgecom.wall_model import PorousFlowModel, PorousWallTransport
