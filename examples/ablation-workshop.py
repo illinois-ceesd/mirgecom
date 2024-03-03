@@ -77,6 +77,7 @@ from mirgecom.wall_model import (
     PorousWallTransport
 )
 from mirgecom.fluid import ConservedVars
+from mirgecom.materials.tacot import TacotEOS as OriginalTacotEOS
 from logpyle import IntervalTimer, set_dt
 from typing import Optional, Union
 from pytools.obj_array import make_obj_array
@@ -566,7 +567,6 @@ class PorousFlowModel(BasePorousFlowModel):
         return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
 
 
-from mirgecom.materials.tacot import TacotEOS as OriginalTacotEOS
 class TacotEOS(OriginalTacotEOS):
     """Inherits and modified the original TACOT material."""
 
