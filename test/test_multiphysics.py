@@ -26,7 +26,11 @@ from functools import partial
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
+import pymbolic as pmbl
 import grudge.op as op
+from mirgecom.symbolic import (
+    grad as sym_grad,
+    evaluate)
 from mirgecom.simutil import (
     max_component_norm,
     get_box_mesh
@@ -150,10 +154,8 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-@pytest.mark.parametrize("orthotropic_kappa", [False, True])
 def test_thermally_coupled_fluid_wall(
-        actx_factory, order, use_overintegration, orthotropic_kappa,
-        visualize=False):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
     actx = actx_factory()
 
@@ -220,12 +222,7 @@ def test_thermally_coupled_fluid_wall(
         # Made-up wall material
         wall_density = 10*fluid_density
         wall_heat_capacity = fluid_heat_capacity
-        if orthotropic_kappa:
-            wall_kappa = make_obj_array([10*fluid_kappa, 10*fluid_kappa])
-            _wall_kappa = wall_kappa[0]  # dummy variable to simplify the test
-        else:
-            wall_kappa = 10*fluid_kappa
-            _wall_kappa = wall_kappa  # dummy variable to simplify the test
+        wall_kappa = 10*fluid_kappa
 
         base_wall_temp = 600
 
@@ -244,20 +241,19 @@ def test_thermally_coupled_fluid_wall(
         }
 
         interface_temp = (
-            (fluid_kappa * base_fluid_temp + _wall_kappa * base_wall_temp)
-            / (fluid_kappa + _wall_kappa))
+            (fluid_kappa * base_fluid_temp + wall_kappa * base_wall_temp)
+            / (fluid_kappa + wall_kappa))
         interface_flux = (
-            -fluid_kappa * _wall_kappa / (fluid_kappa + _wall_kappa)
+            -fluid_kappa * wall_kappa / (fluid_kappa + wall_kappa)
             * (base_fluid_temp - base_wall_temp))
-
         fluid_alpha = fluid_kappa/(fluid_density * fluid_heat_capacity)
-        wall_alpha = _wall_kappa/(wall_density * wall_heat_capacity)
+        wall_alpha = wall_kappa/(wall_density * wall_heat_capacity)
 
         def steady_func(kappa, x, t):
             return interface_temp - interface_flux/kappa * x[1]
 
         fluid_steady_func = partial(steady_func, fluid_kappa)
-        wall_steady_func = partial(steady_func, _wall_kappa)
+        wall_steady_func = partial(steady_func, wall_kappa)
 
         def perturb_func(alpha, x, t):
             w = 1.5 * np.pi
@@ -266,7 +262,7 @@ def test_thermally_coupled_fluid_wall(
         # This perturbation function is nonzero at the interface, so the two alphas
         # need to be the same (otherwise the perturbations will decay at different
         # rates and a discontinuity will form)
-        assert abs(fluid_alpha - np.max(actx.to_numpy(wall_alpha))) < 1e-12
+        assert abs(fluid_alpha - wall_alpha) < 1e-12
 
         fluid_perturb_func = partial(perturb_func, fluid_alpha)
         wall_perturb_func = partial(perturb_func, wall_alpha)
@@ -301,6 +297,14 @@ def test_thermally_coupled_fluid_wall(
                     ("temp", wall_temp),
                     ])
 
+        # Add a source term to the momentum equations to cancel out the pressure term
+        sym_fluid_temp = fluid_func(pmbl.var("x"), pmbl.var("t"))
+        sym_fluid_pressure = fluid_density * r * sym_fluid_temp
+        sym_momentum_source = sym_grad(2, sym_fluid_pressure)
+
+        def momentum_source_func(x, t):
+            return evaluate(sym_momentum_source, x=x, t=t)
+
         def get_rhs(t, state):
             fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
             wall_temperature = state[1]
@@ -311,8 +315,10 @@ def test_thermally_coupled_fluid_wall(
                 fluid_boundaries, wall_boundaries,
                 fluid_state, wall_kappa, wall_temperature,
                 time=t,
-                quadrature_tag=quadrature_tag,
-                inviscid_terms_on=False)
+                quadrature_tag=quadrature_tag)
+            fluid_rhs = replace(
+                fluid_rhs,
+                momentum=fluid_rhs.momentum + momentum_source_func(fluid_nodes, t))
             wall_rhs = wall_energy_rhs / (wall_density * wall_heat_capacity)
             return make_obj_array([fluid_rhs, wall_rhs])
 
@@ -404,6 +410,7 @@ def test_thermally_coupled_fluid_wall(
                 expected_fluid_temp = fluid_func(fluid_nodes, t)
                 expected_wall_temp = wall_func(wall_nodes, t)
                 rhs = get_rhs(t, state)
+                momentum_source = momentum_source_func(fluid_nodes, t)
                 viz_fluid.write_vtk_file(
                     "thermally_coupled_accuracy_"
                     f"{viz_suffix}_fluid_{step}.vtu", [
@@ -411,6 +418,7 @@ def test_thermally_coupled_fluid_wall(
                         ("dv", fluid_state.dv),
                         ("expected_temp", expected_fluid_temp),
                         ("rhs", rhs[0]),
+                        ("momentum_source", momentum_source),
                         ])
                 viz_wall.write_vtk_file(
                     "thermally_coupled_accuracy_"
@@ -453,12 +461,10 @@ def test_thermally_coupled_fluid_wall(
         or eoc_rec_wall.max_error() < 1e-11)
 
 
-@pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-@pytest.mark.parametrize("orthotropic_kappa", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
-        actx_factory, order, use_overintegration, orthotropic_kappa,
-        visualize=False):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface with radiation.
 
     Analytic solution prescribed as initial condition, then the RHS is assessed
@@ -517,7 +523,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     # Made-up wall material
     wall_rho = 1.0
     wall_cp = 1000.0
-    wall_kappa = make_obj_array([1.0, 1.0]) if orthotropic_kappa else 1.0
+    wall_kappa = 1.0
     wall_emissivity = 1.0
 
     base_fluid_temp = 2.0

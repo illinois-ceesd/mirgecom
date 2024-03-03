@@ -257,24 +257,10 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._grad_t_plus = grad_t_plus
 
     def kappa_plus(self, dcoll, dd_bdry):
-        # orthotropic materials
-        actx = self._t_plus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        if isinstance(self._kappa_plus, np.ndarray):
-            return np.dot(normal, self._kappa_plus*normal)
-        return self._kappa_plus
+        return project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
         kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
-
-        # orthotropic materials
-        actx = self._t_plus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        if isinstance(kappa_minus, np.ndarray):
-            kappa_minus = np.dot(normal, kappa_minus*normal)
-        if isinstance(kappa_plus, np.ndarray):
-            kappa_plus = np.dot(normal, kappa_plus*normal)
-
         return harmonic_mean(kappa_minus, kappa_plus)
 
     def temperature_plus(self, dcoll, dd_bdry):
@@ -284,14 +270,6 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
         actx = t_minus.array_context
         kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
-
-        # orthotropic materials
-        normal = actx.thaw(dcoll.normal(dd_bdry))
-        if isinstance(kappa_minus, np.ndarray):
-            kappa_minus = np.dot(normal, kappa_minus*normal)
-        if isinstance(kappa_plus, np.ndarray):
-            kappa_plus = np.dot(normal, kappa_plus*normal)
-
         kappa_sum = actx.np.where(
             actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
             kappa_minus + kappa_plus,
@@ -621,13 +599,6 @@ class InterfaceWallBoundary(DiffusionBoundary):
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
-
-        # orthotropic materials
-        if isinstance(kappa_minus, np.ndarray):
-            kappa_minus = np.dot(normal, kappa_minus*normal)
-        if isinstance(kappa_plus, np.ndarray):
-            kappa_plus = np.dot(normal, kappa_plus*normal)
-
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
 
@@ -648,13 +619,6 @@ class InterfaceWallBoundary(DiffusionBoundary):
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
-
-        # orthotropic materials
-        if isinstance(kappa_minus, np.ndarray):
-            kappa_minus = np.dot(normal, kappa_minus*normal)
-        if isinstance(kappa_plus, np.ndarray):
-            kappa_plus = np.dot(normal, kappa_plus*normal)
-
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
 
@@ -730,16 +694,11 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
         self.u_ambient = u_ambient
         self.grad_u_plus = grad_u_plus
 
-    # XXX is the result of this function not used?
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
             numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
-
-        # orthotropic materials
-        if isinstance(kappa_minus, np.ndarray):
-            kappa_minus = np.dot(normal, kappa_minus*normal)
 
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_minus)
@@ -1637,8 +1596,7 @@ def basic_coupled_ns_heat_operator(
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
         return_gradients=False,
-        use_esdg=False,
-        inviscid_terms_on=True):
+        use_esdg=False):
     r"""
     Simple implementation of a thermally-coupled fluid/wall operator.
 
@@ -1818,7 +1776,7 @@ def basic_coupled_ns_heat_operator(
 
     my_ns_operator = partial(ns_operator,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
-        use_esdg=use_esdg, inviscid_terms_on=inviscid_terms_on)
+        use_esdg=use_esdg)
     ns_result = my_ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,
