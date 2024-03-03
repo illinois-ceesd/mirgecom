@@ -610,12 +610,6 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
 
-#        # orthotropic materials
-#        if isinstance(kappa_minus, np.ndarray):
-#            kappa_minus = np.dot(normal, kappa_minus*normal)
-#        if isinstance(kappa_plus, np.ndarray):
-#            kappa_plus = np.dot(normal, kappa_plus*normal)
-
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
 
@@ -636,12 +630,6 @@ class InterfaceWallBoundary(DiffusionBoundary):
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
-
-#        # orthotropic materials
-#        if isinstance(kappa_minus, np.ndarray):
-#            kappa_minus = np.dot(normal, kappa_minus*normal)
-#        if isinstance(kappa_plus, np.ndarray):
-#            kappa_plus = np.dot(normal, kappa_plus*normal)
 
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
@@ -723,10 +711,6 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
-
-#        # orthotropic materials
-#        if isinstance(kappa_minus, np.ndarray):
-#            kappa_minus = np.dot(normal, kappa_minus*normal)
 
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_minus)
