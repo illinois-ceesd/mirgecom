@@ -77,7 +77,6 @@ from mirgecom.wall_model import (
     PorousWallTransport
 )
 from mirgecom.fluid import ConservedVars
-from mirgecom.materials.tacot import TacotEOS as OriginalTacotEOS
 from logpyle import IntervalTimer, set_dt
 from typing import Optional, Union
 from pytools.obj_array import make_obj_array
@@ -567,6 +566,7 @@ class PorousFlowModel(BasePorousFlowModel):
         return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
 
 
+from mirgecom.materials.tacot import TacotEOS as OriginalTacotEOS
 class TacotEOS(OriginalTacotEOS):
     """Inherits and modified the original TACOT material."""
 
@@ -612,7 +612,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     dt = 2.0e-8
     pressure_scaling_factor = 1.0  # noqa N806
 
-    nviz = 1000
+    nviz = 200
     ngarbage = 50
     nrestart = 10000
     nhealth = 10
@@ -899,13 +899,11 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
 
         temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, dv.temperature)
-        tau_bc = op.project(dcoll, dd_wall, dd_bdry_quad, wv.tau)
-
         m_dot_g = np.dot(op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity),
                          normal_vec)
 
         # time-dependent function
-        weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-10, 1.0)
+        weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-7, 1.0)
 
         h_e = 1.5e6*weight
         conv_coeff_0 = 0.3*weight
@@ -953,6 +951,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         flux = -(conv_coeff*(h_e - h_w) - m_dot*h_w + m_dot_g*h_g)
 
+        tau_bc = op.project(dcoll, dd_wall, dd_bdry_quad, wv.tau)
         emissivity = my_material.emissivity(tau=tau_bc)
         radiation = emissivity*5.67e-8*(temperature_bc**4 - 300**4)
 
