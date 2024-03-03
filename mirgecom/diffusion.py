@@ -695,6 +695,9 @@ def grad_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
+    # Make sure it has an array context
+    kappa = kappa + dcoll.zeros(array_context=actx, dd=dd_vol)
+
     if kappa_tpairs is None:
         kappa_tpairs = interior_trace_pairs(
             dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag, comm_tag))
@@ -828,6 +831,9 @@ def diffusion_operator(
     dd_vol = dd
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
+
+    # Make sure it has an array context
+    kappa = kappa + dcoll.zeros(array_context=actx, dd=dd_vol)
 
     kappa_tpairs = interior_trace_pairs(
         dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag, comm_tag))
