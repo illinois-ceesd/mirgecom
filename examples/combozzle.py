@@ -143,7 +143,7 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(actx_class, rst_filename=None,
+def main(actx_class, rst_filename=None, use_tpe=False,
          use_overintegration=False, casename=None,
          log_dependent=False, input_file=None,
          force_eval=True, use_esdg=False):
@@ -167,8 +167,8 @@ def main(actx_class, rst_filename=None,
 
     # {{{ Some discretization parameters
 
-    dim = 2
-    order = 3
+    dim = 3
+    order = 1
 
     # - scales the size of the domain
     x_scale = 1
@@ -602,7 +602,7 @@ def main(actx_class, rst_filename=None,
         rst_order = restart_data["order"]
     else:  # generate the grid from scratch
         generate_mesh = partial(get_box_mesh, dim, a=box_ll, b=box_ur, n=nels_axis,
-                                periodic=periodic)
+                                periodic=periodic, tensor_product_elements=use_tpe)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
@@ -612,7 +612,8 @@ def main(actx_class, rst_filename=None,
     if grid_only:
         return 0
 
-    dcoll = create_discretization_collection(actx, local_mesh, order)
+    dcoll = create_discretization_collection(actx, local_mesh, order,
+                                             tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.0
 
@@ -1251,6 +1252,8 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--tpe", action="store_true",
+                        help="Use tensor product elements (quads/hexes).")
     args = parser.parse_args()
 
     from warnings import warn
@@ -1287,7 +1290,7 @@ if __name__ == "__main__":
 
     main(actx_class, input_file=input_file,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename,
+         casename=casename, rst_filename=rst_filename, use_tpe=args.tpe,
          log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

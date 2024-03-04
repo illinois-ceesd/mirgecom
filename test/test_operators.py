@@ -143,6 +143,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
+@pytest.mark.parametrize("tpe", [False, True])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("sym_test_func_factory", [
@@ -153,8 +154,9 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     _trig_test_func,
     _cv_test_func
 ])
+
 @pytest.mark.parametrize("use_overintegration", [False, True])
-def test_grad_operator(actx_factory, dim, order, sym_test_func_factory,
+def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory,
                        use_overintegration):
     """Test the gradient operator for sanity.
 
@@ -166,7 +168,18 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory,
     - trig funcs
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
+    import pyopencl as cl
+    from grudge.array_context import PyOpenCLArrayContext
+
+    # This comes from array_context
     actx = actx_factory()
+
+    if tpe:  # TPE requires *grudge* array context, not array_context
+        if dim == 1:  # TPE does not support dim=1
+            pytest.skip()
+        ctx = cl.create_some_context()
+        queue = cl.CommandQueue(ctx)
+        actx = PyOpenCLArrayContext(queue)
 
     sym_test_func = sym_test_func_factory(dim)
 
@@ -176,14 +189,15 @@ def test_grad_operator(actx_factory, dim, order, sym_test_func_factory,
 
     for nfac in [1, 2, 4]:
 
-        mesh = get_box_mesh(dim, a=0, b=1, n=nfac*3)
+        mesh = get_box_mesh(dim, a=0, b=1, n=nfac*3, tensor_product_elements=tpe)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                 quadrature_order=2*order+1)
+        dcoll = create_discretization_collection(
+            actx, mesh, order=order, tensor_product_elements=tpe,
+            quadrature_order=2*order+1)
         quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
         # compute max element size

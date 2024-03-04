@@ -79,6 +79,11 @@ from logpyle import IntervalTimer
 import grudge.op as op
 import numpy as np
 import pyopencl as cl
+from arraycontext import tag_axes
+from meshmode.transform_metadata import (
+    DiscretizationElementAxisTag,
+    DiscretizationDOFAxisTag
+)
 from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
@@ -124,7 +129,8 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     return nnodes
 
 
-def get_box_mesh(dim, a, b, n, t=None, periodic=None):
+def get_box_mesh(dim, a, b, n, t=None, periodic=None,
+                 tensor_product_elements=False, **kwargs):
     """
     Create a rectangular "box" like mesh with tagged boundary faces.
 
@@ -174,10 +180,13 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None):
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
 
+    from meshmode.mesh import TensorProductElementGroup
+    group_cls = TensorProductElementGroup if tensor_product_elements else None
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
     return gen(a=a, b=b, nelements_per_axis=n,
                boundary_tag_to_face=bttf,
-               mesh_type=t, periodic=periodic)
+               mesh_type=t, periodic=periodic, group_cls=group_cls,
+               **kwargs)
 
 
 def check_step(step, interval):
@@ -267,18 +276,13 @@ def get_sim_timestep(
     float or :class:`~meshmode.dof_array.DOFArray`
         The global maximum stable DT based on a viscous fluid.
     """
+    actx = state.array_context
+
     if local_dt:
-        actx = state.array_context
-        data_shape = (state.cv.mass[0]).shape
-        if actx.supports_nonscalar_broadcasting:
-            return cfl * actx.np.broadcast_to(
-                op.elementwise_min(
-                    dcoll, fluid_dd,
-                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
-                data_shape)
-        else:
-            return cfl * op.elementwise_min(
-                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
+        ones = actx.np.zeros_like(state.cv.mass) + 1.0
+        vdt = get_viscous_timestep(dcoll, state, dd=fluid_dd)
+        emin = op.elementwise_min(dcoll, fluid_dd, vdt)
+        return cfl * ones * emin
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
@@ -493,10 +497,22 @@ def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    # added tag_axes calls to eliminate fallback warnings at compile time
     actx = red_state.array_context
-    resid = red_state - blue_state
+    resid = tag_axes(actx,
+                     {
+                         0: DiscretizationElementAxisTag(),
+                         1: DiscretizationDOFAxisTag()
+                     }, red_state - blue_state)
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx))
+        tag_axes(actx,
+                 {
+                     0: DiscretizationElementAxisTag()
+                 },
+                 flatten(
+                     componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx)
+                 )
+    )
 
     return resid_errs.tolist()
 
