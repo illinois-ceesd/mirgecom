@@ -126,7 +126,6 @@ jobs:
             mamba install vtk  # needed for the accuracy comparison
 
             # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
-            [[ $(hostname) == "porter" ]] && conda uninstall --yes ocl-icd-system
 
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
 
@@ -228,6 +227,5 @@ jobs:
             source ../config/activate_env.sh
 
             # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
-            [[ $(hostname) == "porter" ]] && conda uninstall --yes ocl-icd-system
 
             scripts/run-integrated-tests.sh --production
