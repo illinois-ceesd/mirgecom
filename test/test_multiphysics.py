@@ -61,10 +61,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-import os  # noqa
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # noqa
-
-
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_independent_volumes(actx_factory, order, visualize=False):
     """Check multi-volume machinery by setting up two independent volumes."""
@@ -457,7 +453,7 @@ def test_thermally_coupled_fluid_wall(
         or eoc_rec_wall.max_error() < 1e-11)
 
 
-@pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 @pytest.mark.parametrize("orthotropic_kappa", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
