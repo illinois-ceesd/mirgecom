@@ -236,7 +236,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
 
         if isinstance(state_bc.thermal_conductivity, np.ndarray):
             # orthotropic materials
-            actx = self._t_plus.array_context
+            actx = state_minus.array_context
             normal = actx.thaw(dcoll.normal(dd_bdry))
             kappa_bc = np.dot(normal, state_bc.thermal_conductivity*normal)
         else:
