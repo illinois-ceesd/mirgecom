@@ -234,9 +234,15 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         lengthscales_minus = project_from_base(
             dcoll, dd_bdry, self._lengthscales_minus)
 
-        tau = (
-            self._penalty_amount * state_bc.thermal_conductivity
-            / lengthscales_minus)
+        if isinstance(state_bc.thermal_conductivity, np.ndarray):
+            # orthotropic materials
+            actx = self._t_plus.array_context
+            normal = actx.thaw(dcoll.normal(dd_bdry))
+            kappa_bc = np.dot(normal, state_bc.thermal_conductivity*normal)
+        else:
+            kappa_bc = state_bc.thermal_conductivity
+
+        tau = self._penalty_amount * kappa_bc / lengthscales_minus
 
         t_minus = state_minus.temperature
         t_plus = self.temperature_plus(
@@ -276,8 +282,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         return kappa
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
-        return harmonic_mean(self.proj_kappa_minus(dcoll, dd_bdry, kappa_minus),
-                             self.proj_kappa_plus(dcoll, dd_bdry))
+        return harmonic_mean(kappa_minus, self.proj_kappa_plus(dcoll, dd_bdry))
 
     def temperature_plus(self, dcoll, dd_bdry):
         return project_from_base(dcoll, dd_bdry, self._t_plus)
