@@ -492,14 +492,14 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
                     DiscretizationDOFAxisTag(),
                     actx.np.broadcast_to(
                         ((actx.einsum("ek,k->e",
-                                      uhat[grp.index]**2,
+                                      uhat[igrp]**2,
                                       highest_mode(grp))
                           / (actx.einsum("ej->e",
-                                         (uhat[grp.index]**2+(1e-12/grp.nunit_dofs))
+                                         (uhat[igrp]**2+(1e-12/grp.nunit_dofs))
                                          )))
                          .reshape(-1, 1)),
-                        uhat[grp.index].shape))
-                for grp in dcoll.discr_from_dd(dd_vol).groups
+                        uhat[igrp].shape))
+                for igrp, grp in enumerate(dcoll.discr_from_dd(dd_vol).groups)
             )
         )
     else:
