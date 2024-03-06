@@ -4,7 +4,7 @@ fluid and wall.
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
 (:mod:`mirgecom.navierstokes`) with a wall subdomain governed by the heat
 equation (:mod:`mirgecom.diffusion`) through temperature and heat flux. This
-radiation can optionally include a sink term representing emitted radiation.
+coupling can optionally include a sink term representing emitted radiation.
 In the non-radiating case, coupling enforces continuity of temperature and heat flux
 
 .. math::
@@ -82,6 +82,7 @@ from grudge.dof_desc import (
 )
 import grudge.op as op
 
+from pytools.obj_array import make_obj_array
 from mirgecom.math import harmonic_mean
 from mirgecom.boundary import (
     MengaldoBoundaryCondition,
@@ -262,7 +263,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
 
-    def proj_kappa_plus(self, dcoll, dd_bdry):
+    def get_normal_kappa_plus(self, dcoll, dd_bdry):
         # project kappa plus in case of overintegration
         if isinstance(self._kappa_plus, np.ndarray):
             # orthotropic materials
@@ -272,7 +273,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
             return np.dot(normal, kappa_plus*normal)
         return project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
-    def proj_kappa_minus(self, dcoll, dd_bdry, kappa):
+    def get_normal_kappa_minus(self, dcoll, dd_bdry, kappa):
         # state minus is already in the quadrature domain
         if isinstance(kappa, np.ndarray):
             # orthotropic materials
@@ -282,7 +283,10 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         return kappa
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
-        return harmonic_mean(kappa_minus, self.proj_kappa_plus(dcoll, dd_bdry))
+        kappa_plus = make_obj_array([
+            project_from_base(dcoll, dd_bdry, self._kappa_plus[i])
+            for i in range(self._kappa_plus.shape[0])])
+        return harmonic_mean(kappa_minus, kappa_plus)
 
     def temperature_plus(self, dcoll, dd_bdry):
         return project_from_base(dcoll, dd_bdry, self._t_plus)
@@ -290,9 +294,9 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
         actx = t_minus.array_context
-        kappa_plus = self.proj_kappa_plus(dcoll, dd_bdry)
-        kappa_minus = self.proj_kappa_minus(dcoll, dd_bdry,
-                                            kappa_minus + t_minus*0.0)
+        kappa_plus = self.get_normal_kappa_plus(dcoll, dd_bdry)
+        kappa_minus = self.get_normal_kappa_minus(dcoll, dd_bdry,
+                                                  kappa_minus + t_minus*0.0)
         kappa_sum = actx.np.where(
             actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
             kappa_minus + kappa_plus,

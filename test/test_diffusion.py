@@ -731,7 +731,6 @@ def test_orthotropic_diffusion(actx_factory):
     dcoll = create_discretization_collection(actx, mesh, order)
     nodes = actx.thaw(dcoll.nodes())
 
-    zeros = actx.np.zeros_like(nodes[0])
     kappa = make_obj_array([kappa0, kappa1])
     u = 30.0*nodes[0] + 60.0*nodes[1]
 

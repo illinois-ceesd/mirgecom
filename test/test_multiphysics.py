@@ -150,10 +150,8 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-@pytest.mark.parametrize("orthotropic_kappa", [False, True])
 def test_thermally_coupled_fluid_wall(
-        actx_factory, order, use_overintegration, orthotropic_kappa,
-        visualize=False):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
     actx = actx_factory()
 
@@ -220,13 +218,7 @@ def test_thermally_coupled_fluid_wall(
         # Made-up wall material
         wall_density = 10*fluid_density
         wall_heat_capacity = fluid_heat_capacity
-        if orthotropic_kappa:
-            wall_kappa = make_obj_array([10*fluid_kappa, 10*fluid_kappa])
-            _wall_kappa = wall_kappa[0]  # dummy variable to simplify the test
-        else:
-            wall_kappa = 10*fluid_kappa
-            _wall_kappa = wall_kappa  # dummy variable to simplify the test
-
+        wall_kappa = 10*fluid_kappa
         base_wall_temp = 600
 
         fluid_boundaries = {
@@ -244,20 +236,20 @@ def test_thermally_coupled_fluid_wall(
         }
 
         interface_temp = (
-            (fluid_kappa * base_fluid_temp + _wall_kappa * base_wall_temp)
-            / (fluid_kappa + _wall_kappa))
+            (fluid_kappa * base_fluid_temp + wall_kappa * base_wall_temp)
+            / (fluid_kappa + wall_kappa))
         interface_flux = (
-            -fluid_kappa * _wall_kappa / (fluid_kappa + _wall_kappa)
+            -fluid_kappa * wall_kappa / (fluid_kappa + wall_kappa)
             * (base_fluid_temp - base_wall_temp))
 
         fluid_alpha = fluid_kappa/(fluid_density * fluid_heat_capacity)
-        wall_alpha = _wall_kappa/(wall_density * wall_heat_capacity)
+        wall_alpha = wall_kappa/(wall_density * wall_heat_capacity)
 
         def steady_func(kappa, x, t):
             return interface_temp - interface_flux/kappa * x[1]
 
         fluid_steady_func = partial(steady_func, fluid_kappa)
-        wall_steady_func = partial(steady_func, _wall_kappa)
+        wall_steady_func = partial(steady_func, wall_kappa)
 
         def perturb_func(alpha, x, t):
             w = 1.5 * np.pi
@@ -552,8 +544,95 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     fluid_rhs = fluid_rhs.energy
     solid_rhs = wall_energy_rhs/(wall_cp*wall_rho)
 
+    # FIXME check convergence instead?
     assert actx.to_numpy(op.norm(dcoll, fluid_rhs, np.inf)) < 1e-4
     assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-4
+
+
+@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+@pytest.mark.parametrize("use_noslip", [False, True])
+@pytest.mark.parametrize("use_radiation", [False, True])
+def test_orthotropic_flux(
+        actx_factory, order, use_overintegration, use_radiation, use_noslip,
+        visualize=False):
+    """Check the RHS shape for orthotropic kappa cases."""
+    actx = actx_factory()
+
+    dim = 2
+    nelems = 48
+
+    global_mesh = get_box_mesh(dim, -2, 1, nelems)
+
+    mgrp, = global_mesh.groups
+    x = global_mesh.vertices[0, mgrp.vertex_indices]
+    x_elem_avg = np.sum(x, axis=1)/x.shape[0]
+    volume_to_elements = {
+        "Fluid": np.where(x_elem_avg > 0)[0],
+        "Solid": np.where(x_elem_avg <= 0)[0]}
+
+    from meshmode.mesh.processing import partition_mesh
+    volume_meshes = partition_mesh(global_mesh, volume_to_elements)
+
+    dcoll = create_discretization_collection(
+        actx, volume_meshes, order=order, quadrature_order=2*order+1)
+
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+
+    dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
+    dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
+
+    fluid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_fluid))
+    solid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_solid))
+
+    eos = IdealSingleGas()
+    transport = SimpleTransport(viscosity=0.0, thermal_conductivity=10.0)
+    gas_model = GasModel(eos=eos, transport=transport)
+
+    # Fluid cv
+
+    mom_x = 0.0*fluid_nodes[0]
+    mom_y = 0.0*fluid_nodes[0]
+    momentum = make_obj_array([mom_x, mom_y])
+
+    temperature = 2.0 + 0.0*fluid_nodes[0]
+    mass = 1.0 + 0.0*fluid_nodes[0]
+    energy = mass*eos.get_internal_energy(temperature)
+
+    fluid_cv = make_conserved(dim=dim, mass=mass, energy=energy,
+                              momentum=momentum)
+
+    fluid_state = make_fluid_state(cv=fluid_cv, gas_model=gas_model)
+
+    # Made-up wall material
+    wall_kappa = make_obj_array([1.0, 1.0])
+    wall_emissivity = 1.0
+    wall_temperature = 1.0 + 0.0*solid_nodes[0]
+
+    fluid_boundaries = {
+        dd_vol_fluid.trace("-2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+2").domain_tag: AdiabaticNoslipWallBoundary(),
+        dd_vol_fluid.trace("+1").domain_tag:
+            IsothermalWallBoundary(wall_temperature=2.0),
+    }
+
+    solid_boundaries = {
+        dd_vol_solid.trace("-2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol_solid.trace("+2").domain_tag: NeumannDiffusionBoundary(0.),
+        dd_vol_solid.trace("-1").domain_tag: DirichletDiffusionBoundary(1.0),
+    }
+
+    fluid_rhs, wall_energy_rhs = coupled_ns_heat_operator(
+        dcoll, gas_model, dd_vol_fluid, dd_vol_solid, fluid_boundaries,
+        solid_boundaries, fluid_state, wall_kappa, wall_temperature,
+        time=0.0, quadrature_tag=quadrature_tag, interface_noslip=use_noslip,
+        interface_radiation=use_radiation, sigma=2.0,
+        ambient_temperature=0.0, wall_emissivity=wall_emissivity,
+        inviscid_terms_on=False
+    )
+
+    from meshmode.dof_array import DOFArray
+    assert isinstance(fluid_rhs.energy, DOFArray)
 
 
 if __name__ == "__main__":
