@@ -633,6 +633,7 @@ def test_orthotropic_flux(
 
     from meshmode.dof_array import DOFArray
     assert isinstance(fluid_rhs.energy, DOFArray)
+    assert isinstance(wall_energy_rhs, DOFArray)
 
 
 if __name__ == "__main__":
