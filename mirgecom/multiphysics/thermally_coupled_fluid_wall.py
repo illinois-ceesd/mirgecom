@@ -283,10 +283,8 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         return kappa
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
-        kappa_plus = make_obj_array([
-            project_from_base(dcoll, dd_bdry, self._kappa_plus[i])
-            for i in range(self._kappa_plus.shape[0])])
-        return harmonic_mean(kappa_minus, kappa_plus)
+        return harmonic_mean(kappa_minus,
+                             project_from_base(dcoll, dd_bdry, self._kappa_plus))
 
     def temperature_plus(self, dcoll, dd_bdry):
         return project_from_base(dcoll, dd_bdry, self._t_plus)
