@@ -262,7 +262,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
 
-    def get_normal_kappa_plus(self, dcoll, dd_bdry):
+    def _normal_kappa_plus(self, dcoll, dd_bdry):
         # project kappa plus in case of overintegration
         if isinstance(self._kappa_plus, np.ndarray):
             # orthotropic materials
@@ -272,7 +272,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
             return np.dot(normal, kappa_plus*normal)
         return project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
-    def get_normal_kappa_minus(self, dcoll, dd_bdry, kappa):
+    def _normal_kappa_minus(self, dcoll, dd_bdry, kappa):
         # state minus is already in the quadrature domain
         if isinstance(kappa, np.ndarray):
             # orthotropic materials

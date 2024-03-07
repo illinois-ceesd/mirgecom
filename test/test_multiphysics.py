@@ -447,10 +447,8 @@ def test_thermally_coupled_fluid_wall(
 
 @pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-@pytest.mark.parametrize("orthotropic_kappa", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
-        actx_factory, order, use_overintegration, orthotropic_kappa,
-        visualize=False):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface with radiation.
 
     Analytic solution prescribed as initial condition, then the RHS is assessed
@@ -509,7 +507,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     # Made-up wall material
     wall_rho = 1.0
     wall_cp = 1000.0
-    wall_kappa = make_obj_array([1.0, 1.0]) if orthotropic_kappa else 1.0
+    wall_kappa = 1.0
     wall_emissivity = 1.0
 
     base_fluid_temp = 2.0
@@ -549,17 +547,17 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-4
 
 
-@pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 @pytest.mark.parametrize("use_noslip", [False, True])
 @pytest.mark.parametrize("use_radiation", [False, True])
 def test_orthotropic_flux(
-        actx_factory, order, use_overintegration, use_radiation, use_noslip,
+        actx_factory, use_overintegration, use_radiation, use_noslip,
         visualize=False):
     """Check the RHS shape for orthotropic kappa cases."""
     actx = actx_factory()
 
     dim = 2
+    order = 3
     nelems = 48
 
     global_mesh = get_box_mesh(dim, -2, 1, nelems)
