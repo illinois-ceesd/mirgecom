@@ -241,7 +241,7 @@ class PowerLawTransport(TransportModel):
             thermal conductivity and the species diffusivities. The input array
             must have a shape of "nspecies".
 
-        pressure_dependent_diffusivity: boolean
+        pressure_dependent_diffusivity: bool
             If True, scales the species mass diffusivities by the pressure
             relative to 1 atm.
         """
