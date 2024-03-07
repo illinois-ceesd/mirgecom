@@ -4,7 +4,7 @@ r"""
 Transport Models
 ^^^^^^^^^^^^^^^^
 This module is designed provide Transport Model objects used to compute and
-manage the transport properties in viscous flows.  The transport properties
+manage the transport properties in viscous flows. The transport properties
 currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
 ($d_{\alpha}$).
@@ -51,7 +51,6 @@ from typing import Optional
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
 import numpy as np
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS, GasDependentVars
@@ -77,9 +76,9 @@ class GasTransportVars:
     .. attribute:: species_diffusivity
     """
 
-    bulk_viscosity: np.ndarray
-    viscosity: np.ndarray
-    thermal_conductivity: np.ndarray
+    bulk_viscosity: DOFArray
+    viscosity: DOFArray
+    thermal_conductivity: DOFArray
     species_diffusivity: np.ndarray
 
 
@@ -241,6 +240,10 @@ class PowerLawTransport(TransportModel):
             If required, the Lewis number specify the relation between the
             thermal conductivity and the species diffusivities. The input array
             must have a shape of "nspecies".
+
+        pressure_dependent_diffusivity: boolean
+            If True, scales the species mass diffusivities by the pressure
+            relative to 1 atm.
         """
         if species_diffusivity is None and lewis is None:
             species_diffusivity = np.empty((0,), dtype=object)
@@ -292,6 +295,7 @@ class PowerLawTransport(TransportModel):
                              dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal conductivity, $\kappa$.
 
+        The thermal conductivity is obtained by the Chapman-Enskog approach:
         .. math::
 
             \kappa = \sigma\mu{C}_{v}
@@ -315,6 +319,9 @@ class PowerLawTransport(TransportModel):
         .. math::
 
             d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
+
+        Since the species diffusivities are pressure-dependent, it can be scaled
+        using the `pressure_dependent_diffusivity` argument.
         """
         scaling = 101325.0/dv.pressure if self._scale_diff_by_pressure else 1.0
         if self._lewis is not None:
