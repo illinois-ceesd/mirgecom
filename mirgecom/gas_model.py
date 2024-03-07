@@ -782,7 +782,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_mu, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessMuTag, comm_tag))]
+                comm_tag=(_FluidSmoothnessMuTag, comm_tag))]
 
     smoothness_kappa_interior_pairs = None
     if volume_state.smoothness_kappa is not None:
@@ -790,7 +790,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_kappa, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessKappaTag, comm_tag))]
+                comm_tag=(_FluidSmoothnessKappaTag, comm_tag))]
 
     smoothness_d_interior_pairs = None
     if volume_state.smoothness_d is not None:
@@ -798,7 +798,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_d, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessDiffTag, comm_tag))]
+                comm_tag=(_FluidSmoothnessDiffTag, comm_tag))]
 
     smoothness_beta_interior_pairs = None
     if volume_state.smoothness_beta is not None:
@@ -806,7 +806,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_beta, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessBetaTag, comm_tag))]
+                comm_tag=(_FluidSmoothnessBetaTag, comm_tag))]
 
     material_densities_interior_pairs = None
     if isinstance(gas_model, PorousFlowModel):
@@ -814,7 +814,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.wv.material_densities, volume_dd=dd_vol,
-                tag=(_WallDensityTag, comm_tag))]
+                comm_tag=(_WallDensityTag, comm_tag))]
 
     interior_boundary_states_quad = make_fluid_state_trace_pairs(
         cv_pairs=cv_interior_pairs,
