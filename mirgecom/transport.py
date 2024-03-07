@@ -218,7 +218,8 @@ class PowerLawTransport(TransportModel):
 
     # air-like defaults here
     def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
-                 species_diffusivity=None, lewis=None):
+                 species_diffusivity=None, lewis=None,
+                 pressure_dependent_diffusivity=False):
         """Initialize power law coefficients and parameters.
 
         Parameters
@@ -249,6 +250,7 @@ class PowerLawTransport(TransportModel):
         self._n = n
         self._d_alpha = species_diffusivity
         self._lewis = lewis
+        self._scale_diff_by_pressure = pressure_dependent_diffusivity
 
     def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                        dv: GasDependentVars,
@@ -314,8 +316,9 @@ class PowerLawTransport(TransportModel):
 
             d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
         """
+        scaling = 101325.0/dv.pressure if self._scale_diff_by_pressure else 1.0
         if self._lewis is not None:
-            return (self._sigma * self.viscosity(cv, dv)/(
+            return scaling * (self._sigma * self.viscosity(cv, dv)/(
                 cv.mass*self._lewis*eos.gamma(cv, dv.temperature))
             )
         return self._d_alpha*(0*cv.mass + 1.)
