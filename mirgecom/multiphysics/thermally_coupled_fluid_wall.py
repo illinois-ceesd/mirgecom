@@ -291,9 +291,9 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
         actx = t_minus.array_context
-        kappa_plus = self.get_normal_kappa_plus(dcoll, dd_bdry)
-        kappa_minus = self.get_normal_kappa_minus(dcoll, dd_bdry,
-                                                  kappa_minus + t_minus*0.0)
+        kappa_plus = self._normal_kappa_plus(dcoll, dd_bdry)
+        kappa_minus = self._normal_kappa_minus(dcoll, dd_bdry,
+                                               kappa_minus + t_minus*0.0)
         kappa_sum = actx.np.where(
             actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
             kappa_minus + kappa_plus,
