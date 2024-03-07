@@ -82,7 +82,6 @@ from grudge.dof_desc import (
 )
 import grudge.op as op
 
-from pytools.obj_array import make_obj_array
 from mirgecom.math import harmonic_mean
 from mirgecom.boundary import (
     MengaldoBoundaryCondition,
