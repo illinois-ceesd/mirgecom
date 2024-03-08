@@ -4,7 +4,7 @@ r"""
 Transport Models
 ^^^^^^^^^^^^^^^^
 This module is designed provide Transport Model objects used to compute and
-manage the transport properties in viscous flows. The transport properties
+manage the transport properties in viscous flows.  The transport properties
 currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
 ($d_{\alpha}$).
@@ -51,6 +51,7 @@ from typing import Optional
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
 import numpy as np
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS, GasDependentVars
@@ -76,9 +77,9 @@ class GasTransportVars:
     .. attribute:: species_diffusivity
     """
 
-    bulk_viscosity: DOFArray
-    viscosity: DOFArray
-    thermal_conductivity: DOFArray
+    bulk_viscosity: np.ndarray
+    viscosity: np.ndarray
+    thermal_conductivity: np.ndarray
     species_diffusivity: np.ndarray
 
 
@@ -217,8 +218,7 @@ class PowerLawTransport(TransportModel):
 
     # air-like defaults here
     def __init__(self, alpha=0.6, beta=4.093e-7, sigma=2.5, n=.666,
-                 species_diffusivity=None, lewis=None,
-                 pressure_dependent_diffusivity=False):
+                 species_diffusivity=None, lewis=None):
         """Initialize power law coefficients and parameters.
 
         Parameters
@@ -240,10 +240,6 @@ class PowerLawTransport(TransportModel):
             If required, the Lewis number specify the relation between the
             thermal conductivity and the species diffusivities. The input array
             must have a shape of "nspecies".
-
-        pressure_dependent_diffusivity: bool
-            If True, scales the species mass diffusivities by the pressure
-            relative to 1 atm.
         """
         if species_diffusivity is None and lewis is None:
             species_diffusivity = np.empty((0,), dtype=object)
@@ -253,7 +249,6 @@ class PowerLawTransport(TransportModel):
         self._n = n
         self._d_alpha = species_diffusivity
         self._lewis = lewis
-        self._scale_diff_by_pressure = pressure_dependent_diffusivity
 
     def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
                        dv: GasDependentVars,
@@ -295,7 +290,6 @@ class PowerLawTransport(TransportModel):
                              dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal conductivity, $\kappa$.
 
-        The thermal conductivity is obtained by the Chapman-Enskog approach:
         .. math::
 
             \kappa = \sigma\mu{C}_{v}
@@ -319,13 +313,9 @@ class PowerLawTransport(TransportModel):
         .. math::
 
             d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
-
-        Since the species diffusivities are pressure-dependent, it can be scaled
-        using the `pressure_dependent_diffusivity` argument.
         """
-        scaling = 101325.0/dv.pressure if self._scale_diff_by_pressure else 1.0
         if self._lewis is not None:
-            return scaling * (self._sigma * self.viscosity(cv, dv)/(
+            return (self._sigma * self.viscosity(cv, dv)/(
                 cv.mass*self._lewis*eos.gamma(cv, dv.temperature))
             )
         return self._d_alpha*(0*cv.mass + 1.)
