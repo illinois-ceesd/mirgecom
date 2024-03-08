@@ -28,58 +28,59 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+from typing import Optional
 from abc import abstractmethod
-import numpy as np
-from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallEOS
+from pytools.obj_array import make_obj_array
 
 
 class Oxidation:
     """Abstract interface for wall oxidation model.
 
+    .. automethod:: effective_surface_area_fiber
     .. automethod:: get_source_terms
     """
 
     @abstractmethod
-    def get_source_terms(self, temperature: DOFArray,
-            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+    def effective_surface_area_fiber(self, progress: DOFArray) -> DOFArray:
+        r"""Evaluate the effective surface of the fibers."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
+            rhoY_o2: Optional[DOFArray] = None) -> DOFArray:  # noqa N803
         r"""Source terms of fiber oxidation."""
         raise NotImplementedError()
 
 
-# TODO per MTC review, can we generalize the oxidation model?
-# should we keep this in the driver?
-class Y2_Oxidation_Model(Oxidation):  # noqa N801
+class OxidationModel(Oxidation):
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
-    .. automethod:: puma_effective_surface_area
+    The user must specify in the driver the functions for oxidation.
+    (Tentatively) Generalizing this class makes it easier for adding new,
+    more complex models and for UQ runs.
+
+    .. automethod:: effective_surface_area_fiber
     .. automethod:: get_source_terms
     """
 
-    def puma_effective_surface_area(self, progress) -> DOFArray:
-        """Polynomial fit based on PUMA data.
+    def __init__(self, surface_area_func, oxidation_func):
+        self._surface_func = surface_area_func
+        self._oxidation_func = oxidation_func
+
+    def effective_surface_area_fiber(self, progress: DOFArray) -> DOFArray:
+        r"""Evaluate the effective surface of the fibers.
 
         Parameters
         ----------
         progress: meshmode.dof_array.DOFArray
-            the rate of decomposition of the fibers
+            the rate of decomposition of the fibers, defined as 1.0 - $\tau$.
         """
-        # Original fit function: -1.1012e5*x**2 - 0.0646e5*x + 1.1794e5
-        # Rescale by x==0 value and rearrange
-        return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
+        return self._surface_func(progress)
 
-    def _get_wall_effective_surface_area_fiber(self, progress) -> DOFArray:
-        """Evaluate the effective surface of the fibers.
-
-        Parameters
-        ----------
-        progress: meshmode.dof_array.DOFArray
-            the rate of decomposition of the fibers
-        """
-        return self.puma_effective_surface_area(progress)
-
-    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:  # noqa N803
+    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
+            rhoY_o2: Optional[DOFArray] = None) -> DOFArray:  # noqa N803
         """Return the effective source terms for the oxidation.
 
         Parameters
@@ -87,23 +88,14 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         temperature: meshmode.dof_array.DOFArray
         tau: meshmode.dof_array.DOFArray
             the progress ratio of the oxidation
-        ox_mass: meshmode.dof_array.DOFArray
+        rhoY_o2: meshmode.dof_array.DOFArray
             the mass fraction of oxygen
         """
-        actx = temperature.array_context
-
-        mw_o = 15.999
-        mw_o2 = mw_o*2
-        mw_co = 28.010
-        univ_gas_const = 8314.46261815324
-
-        eff_surf_area = self._get_wall_effective_surface_area_fiber(1.0-tau)
-        alpha = (
-            (0.00143+0.01*actx.np.exp(-1450.0/temperature))
-            / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
-        k = alpha*actx.np.sqrt(
-            (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
-        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
+        area = self.effective_surface_area_fiber(1.0-tau)
+        if rhoY_o2:
+            return self._oxidation_func(temperature=temperature, fiber_area=area,
+                                        rhoY_o2=rhoY_o2)
+        return self._oxidation_func(temperature=temperature, fiber_area=area)
 
 
 class FiberEOS(PorousWallEOS):
@@ -129,7 +121,20 @@ class FiberEOS(PorousWallEOS):
     """
 
     def __init__(self, dim, anisotropic_direction, char_mass, virgin_mass):
-        """Bulk density considering the porosity and intrinsic density."""
+        """Bulk density considering the porosity and intrinsic density.
+
+        Parameters
+        ----------
+        dim: int
+            geometrical dimension of the problem.
+        virgin_mass: float
+            initial mass of the material.
+        char_mass: float
+            final mass when the decomposition is complete.
+        anisotropic_direction: int
+            For orthotropic materials, this indicates the normal direction
+            where the properties are different than in-plane.
+        """
         self._char_mass = char_mass
         self._virgin_mass = virgin_mass
         self._dim = dim
@@ -197,6 +202,7 @@ class FiberEOS(PorousWallEOS):
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
+        # TODO: the relation depends on the coupling model. Postpone it for now.
         actx = tau.array_context
         permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
                                        for _ in range(0, self._dim)])
@@ -212,9 +218,7 @@ class FiberEOS(PorousWallEOS):
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
-        # FIXME find a relation to make it change as a function of "tau"
-        actx = tau.array_context
-        return 1.1 + actx.np.zeros_like(tau)
+        return 1.1*tau + 1.0*(1.0 - tau)
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation."""

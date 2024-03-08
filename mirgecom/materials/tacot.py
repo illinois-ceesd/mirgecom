@@ -38,9 +38,8 @@ from pytools.obj_array import make_obj_array
 from mirgecom.wall_model import PorousWallEOS
 
 
-# TODO generalize? define only abstract class and keep this in the driver?
 class Pyrolysis:
-    r"""Evaluate the source terms for the pyrolysis decomposition.
+    r"""Evaluate the source terms for the pyrolysis decomposition of TACOT.
 
     The source terms follow as Arrhenius-like equation given by
 

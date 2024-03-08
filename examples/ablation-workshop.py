@@ -899,8 +899,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
 
         temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, dv.temperature)
-        m_dot_g = np.dot(op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity),
-                         normal_vec)
+        momentum_bc = op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity)
+        m_dot_g = np.dot(momentum_bc, normal_vec)
 
         # time-dependent function
         weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-7, 1.0)

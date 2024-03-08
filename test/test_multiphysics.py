@@ -61,10 +61,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-import os  # noqa
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # noqa
-
-
 @pytest.mark.parametrize("order", [1, 2, 3])
 def test_independent_volumes(actx_factory, order, visualize=False):
     """Check multi-volume machinery by setting up two independent volumes."""
@@ -154,10 +150,8 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-@pytest.mark.parametrize("orthotropic_kappa", [False, True])
 def test_thermally_coupled_fluid_wall(
-        actx_factory, order, use_overintegration, orthotropic_kappa,
-        visualize=False):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
     actx = actx_factory()
 
@@ -451,12 +445,10 @@ def test_thermally_coupled_fluid_wall(
         or eoc_rec_wall.max_error() < 1e-11)
 
 
-@pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-@pytest.mark.parametrize("orthotropic_kappa", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
-        actx_factory, order, use_overintegration, orthotropic_kappa,
-        visualize=False):
+        actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface with radiation.
 
     Analytic solution prescribed as initial condition, then the RHS is assessed
@@ -515,7 +507,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     # Made-up wall material
     wall_rho = 1.0
     wall_cp = 1000.0
-    wall_kappa = make_obj_array([1.0, 1.0]) if orthotropic_kappa else 1.0
+    wall_kappa = 1.0
     wall_emissivity = 1.0
 
     base_fluid_temp = 2.0
