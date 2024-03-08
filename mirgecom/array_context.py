@@ -32,15 +32,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Type, Optional, Dict, Any, TYPE_CHECKING
+from typing import Type, Dict, Any
 
 import pyopencl as cl
 from arraycontext import ArrayContext
-import sys
-
-if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
-    # pylint: disable=no-name-in-module
-    from mpi4py.MPI import Comm
 
 
 def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
@@ -107,7 +102,7 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
 
 def initialize_actx(
         actx_class: Type[ArrayContext],
-        comm: Optional["Comm"] = None, *,
+        comm=None, *,
         use_axis_tag_inference_fallback: bool = False,
         use_einsum_inference_fallback: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
