@@ -107,7 +107,7 @@ class SolidWallConservedVars:
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SolidWallDependentVars:
     """Wall dependent variables for heat conduction only materials."""
 
@@ -206,7 +206,6 @@ class PorousWallVars:
     .. attribute:: material_densities
     .. attribute:: tau
     .. attribute:: void_fraction
-    .. attribute:: emissivity
     .. attribute:: permeability
     .. attribute:: tortuosity
     .. attribute:: density
@@ -215,7 +214,6 @@ class PorousWallVars:
     material_densities: Union[DOFArray, np.ndarray]
     tau: DOFArray
     void_fraction: DOFArray
-    emissivity: DOFArray
     permeability: DOFArray
     tortuosity: DOFArray
     density: DOFArray
@@ -288,12 +286,13 @@ class PorousWallEOS:
 
 
 # FIXME: Generalize TransportModel interface to accept state variables
-# other than fluid cv
+# other than fluid cv following
+# https://github.com/illinois-ceesd/mirgecom/pull/935#discussion_r1298730910
 class PorousWallTransport:
     r"""Transport model for porous media flow.
 
-    Takes any transport model and modifies it to consider the interaction
-    with the porous materials.
+    Takes any gas-only transport model and modifies it to consider the
+    interaction with the porous materials.
 
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
@@ -383,6 +382,11 @@ class PorousFlowModel:
         Transport class that governs how the gas flows through the porous
         media. This is accounted for in :class:`PorousWallTransport`
 
+    .. attribute:: temperature_iteration
+
+        Number of iterations for temperature evaluation using Newton's method.
+        Defaults to 3 if not specified.
+
     It also include functions that combine the properties of the porous
     material and the gas that permeates, yielding the actual porous flow EOS:
 
@@ -434,7 +438,7 @@ class PorousFlowModel:
             T^{n+1} = T^n -
                 \frac
                 {\epsilon_g \rho_g e_g + \rho_s h_s - \rho e}
-                {\epsilon_g \rho_g C_{p_g} + \epsilon_s \rho_s C_{p_s}}
+                {\epsilon_g \rho_g C_{v_g} + \epsilon_s \rho_s C_{p_s}}
 
         """
         if isinstance(tseed, DOFArray) is False:
@@ -469,7 +473,7 @@ class PorousFlowModel:
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
-        r"""Return the enthalpy of the gas+solid material.
+        r"""Return the internal energy of the gas+solid material.
 
         .. math::
             \rho e = \epsilon_s \rho_s e_s + \epsilon_g \rho_g e_g
@@ -483,7 +487,7 @@ class PorousFlowModel:
         r"""Return the heat capacity of the gas+solid material.
 
         .. math::
-            \rho e = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
+            \rho C_v = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
         """
         return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
                 + wv.density*self.wall_eos.heat_capacity(temperature, wv.tau))
