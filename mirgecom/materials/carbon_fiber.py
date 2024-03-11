@@ -55,7 +55,7 @@ class Oxidation:
 
 
 class OxidationModel(Oxidation):
-    """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
+    """Evaluate the source terms for the carbon fiber oxidation.
 
     The user must specify in the driver the functions for oxidation.
     (Tentatively) Generalizing this class makes it easier for adding new,
