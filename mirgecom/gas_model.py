@@ -417,7 +417,6 @@ def make_fluid_state(cv, gas_model,
         # FIXME per previous review, think of a way to de-couple wall and fluid.
         # ~~~ we need to squeeze wall_eos in gas_model because this is easily
         # accessible everywhere in the code
-
         tau = gas_model.decomposition_progress(material_densities)
         wv = PorousWallVars(
             material_densities=material_densities,
@@ -437,16 +436,28 @@ def make_fluid_state(cv, gas_model,
             cv = limiter_func(cv=cv, wv=wv, pressure=pressure,
                               temperature=temperature, dd=limiter_dd)
 
-        dv = MixtureDependentVars(
-            temperature=temperature,
-            pressure=pressure,
-            speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
-            smoothness_mu=smoothness_mu,
-            smoothness_kappa=smoothness_kappa,
-            smoothness_d=smoothness_d,
-            smoothness_beta=smoothness_beta,
-            species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
-        )
+        from mirgecom.eos import MixtureEOS
+        if isinstance(gas_model.eos, MixtureEOS):
+            dv = MixtureDependentVars(
+                temperature=temperature,
+                pressure=pressure,
+                speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
+                smoothness_mu=smoothness_mu,
+                smoothness_kappa=smoothness_kappa,
+                smoothness_d=smoothness_d,
+                smoothness_beta=smoothness_beta,
+                species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
+            )
+        else:
+            dv = GasDependentVars(
+                temperature=temperature,
+                pressure=pressure,
+                speed_of_sound=gas_model.eos.sound_speed(cv, temperature),
+                smoothness_mu=smoothness_mu,
+                smoothness_kappa=smoothness_kappa,
+                smoothness_d=smoothness_d,
+                smoothness_beta=smoothness_beta
+            )
 
         tv = gas_model.transport.transport_vars(cv=cv, dv=dv, wv=wv,
             eos=gas_model.eos, wall_eos=gas_model.wall_eos)
@@ -504,7 +515,7 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     cv_sd = op.project(dcoll, src, tgt, state.cv)
 
     temperature_seed = None
-    if state.is_mixture:
+    if state.is_mixture or isinstance(gas_model, PorousFlowModel):
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
 
     if entropy_stable:
@@ -760,7 +771,7 @@ def make_operator_fluid_states(
     ]
 
     tseed_interior_pairs = None
-    if volume_state.is_mixture:
+    if volume_state.is_mixture or isinstance(gas_model, PorousFlowModel):
         # If this is a mixture, we need to exchange the temperature field because
         # mixture pressure (used in the inviscid flux calculations) depends on
         # temperature and we need to seed the temperature calculation for the
