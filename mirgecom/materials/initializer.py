@@ -63,16 +63,30 @@ class SolidWallInitializer:
 
 
 class PorousWallInitializer:
-    """Initializer for porous materials."""
+    """State initializer for porous materials."""
 
-    def __init__(self, temperature, species, material_densities,
-                 pressure=None, density=None):
+    def __init__(self, temperature, material_densities, species=None,
+                 pressure=None, density=None, porous_region=None):
+        """Initialize the object for porous materials.
 
+        Parameters
+        ----------
+        porous_region:
+            Field describing the homogeneous fluid (0) and porous material (1)
+            portions of the flow. Only used for unified-domain solver without
+            explicit coupling.
+        """
         self._pres = pressure
         self._mass = density
-        self._y = species
         self._temp = temperature
         self._wall_density = material_densities
+        self._porous_region = porous_region
+
+        if species is not None:
+            self._y = species
+        else:
+            import numpy as np
+            self._y = np.empty((0,), dtype=object)
 
     def __call__(self, x_vec, gas_model):
         """Evaluate the wall+gas properties for porous materials.
@@ -93,9 +107,20 @@ class PorousWallInitializer:
         """
         actx = x_vec[0].array_context
         zeros = actx.np.zeros_like(x_vec[0])
+        ones = zeros + 1.0
         dim = x_vec.shape[0]
 
         temperature = self._temp + zeros
+
+        nspecies = len(self._y)
+        if nspecies > 0:
+            species_mass_frac = make_obj_array([self._y[i] + zeros
+                                                for i in range(nspecies)])
+        else:
+            species_mass_frac = self._y
+
+        porous_region = ones if self._porous_region is None else self._porous_region
+        wall_density = self._wall_density * porous_region
 
         species_mass_frac = self._y + zeros
 
