@@ -30,7 +30,7 @@ export XDG_CACHE_HOME_ROOT="$(pwd)/xdg-scratch/rank"
 
 # Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
 # (each rank needs its own POCL cache dir)
-export POCL_CACHE_DIR_ROOT="$(pwd)/pocl-cache/rank"
+export POCL_CACHE_DIR_ROOT="$(pwd)/pocl-scratch/rank"
 
 # Print task allocation
 $jsrun_cmd js_task_info
