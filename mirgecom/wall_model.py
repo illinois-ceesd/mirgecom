@@ -393,8 +393,7 @@ class PorousFlowModel:
 
     .. attribute:: eos
 
-        The thermophysical properties of the gas and its EOS. For now, only
-        mixtures are considered.
+        The thermophysical properties of the gas and its EOS.
 
     .. attribute:: transport
 
@@ -417,7 +416,7 @@ class PorousFlowModel:
     .. automethod:: heat_capacity
     """
 
-    eos: MixtureEOS
+    eos: Union[GasEOS, MixtureEOS]
     wall_eos: PorousWallEOS
     transport: PorousWallTransport
     temperature_iteration: int = 3
@@ -488,7 +487,9 @@ class PorousFlowModel:
         where $\epsilon \rho$ is stored in :class:`~mirgecom.fluid.ConservedVars`
         and $M$ is the molar mass of the mixture.
         """
-        return self.eos.pressure(cv, temperature)/wv.void_fraction
+        if isinstance(self.eos, MixtureEOS):
+            return self.eos.pressure(cv, temperature)/wv.void_fraction
+        return cv.mass*self.eos.gas_const()*temperature/wv.void_fraction
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
