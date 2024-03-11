@@ -4,7 +4,7 @@ fluid and wall.
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
 (:mod:`mirgecom.navierstokes`) with a wall subdomain governed by the heat
 equation (:mod:`mirgecom.diffusion`) through temperature and heat flux. This
-radiation can optionally include a sink term representing emitted radiation.
+coupling can optionally include a sink term representing emitted radiation.
 In the non-radiating case, coupling enforces continuity of temperature and heat flux
 
 .. math::
@@ -234,9 +234,15 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         lengthscales_minus = project_from_base(
             dcoll, dd_bdry, self._lengthscales_minus)
 
-        tau = (
-            self._penalty_amount * state_bc.thermal_conductivity
-            / lengthscales_minus)
+        if isinstance(state_bc.thermal_conductivity, np.ndarray):
+            # orthotropic materials
+            actx = state_minus.array_context
+            normal = actx.thaw(dcoll.normal(dd_bdry))
+            kappa_bc = np.dot(normal, state_bc.thermal_conductivity*normal)
+        else:
+            kappa_bc = state_bc.thermal_conductivity
+
+        tau = self._penalty_amount * kappa_bc / lengthscales_minus
 
         t_minus = state_minus.temperature
         t_plus = self.temperature_plus(
@@ -256,7 +262,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
 
-    def proj_kappa_plus(self, dcoll, dd_bdry):
+    def _normal_kappa_plus(self, dcoll, dd_bdry):
         # project kappa plus in case of overintegration
         if isinstance(self._kappa_plus, np.ndarray):
             # orthotropic materials
@@ -266,7 +272,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
             return np.dot(normal, kappa_plus*normal)
         return project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
-    def proj_kappa_minus(self, dcoll, dd_bdry, kappa):
+    def _normal_kappa_minus(self, dcoll, dd_bdry, kappa):
         # state minus is already in the quadrature domain
         if isinstance(kappa, np.ndarray):
             # orthotropic materials
@@ -276,8 +282,8 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         return kappa
 
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
-        return harmonic_mean(self.proj_kappa_minus(dcoll, dd_bdry, kappa_minus),
-                             self.proj_kappa_plus(dcoll, dd_bdry))
+        return harmonic_mean(kappa_minus,
+                             project_from_base(dcoll, dd_bdry, self._kappa_plus))
 
     def temperature_plus(self, dcoll, dd_bdry):
         return project_from_base(dcoll, dd_bdry, self._t_plus)
@@ -285,9 +291,9 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
         actx = t_minus.array_context
-        kappa_plus = self.proj_kappa_plus(dcoll, dd_bdry)
-        kappa_minus = self.proj_kappa_minus(dcoll, dd_bdry,
-                                            kappa_minus + t_minus*0.0)
+        kappa_plus = self._normal_kappa_plus(dcoll, dd_bdry)
+        kappa_minus = self._normal_kappa_minus(dcoll, dd_bdry,
+                                               kappa_minus + t_minus*0.0)
         kappa_sum = actx.np.where(
             actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
             kappa_minus + kappa_plus,
