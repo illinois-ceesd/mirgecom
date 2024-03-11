@@ -48,3 +48,9 @@ test/nodal-dg
 # Emacs backups
 .\#*
 \#*
+
+
+# disk caches
+xdg-scratch/
+pocl-scratch/
+cuda-scratch/
