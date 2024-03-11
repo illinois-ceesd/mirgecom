@@ -109,6 +109,7 @@ class FiberEOS(PorousWallEOS):
         \tau = \frac{m}{m_0} = \frac{\rho_i \epsilon}{\rho_i \epsilon_0}
              = \frac{r^2}{r_0^2}
 
+    .. automethod:: __init__
     .. automethod:: void_fraction
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
@@ -120,7 +121,8 @@ class FiberEOS(PorousWallEOS):
     .. automethod:: decomposition_progress
     """
 
-    def __init__(self, dim, anisotropic_direction, char_mass, virgin_mass):
+    def __init__(self, dim, anisotropic_direction, char_mass, virgin_mass,
+                 timescale=1.0):
         """Bulk density considering the porosity and intrinsic density.
 
         Parameters
@@ -129,16 +131,21 @@ class FiberEOS(PorousWallEOS):
             geometrical dimension of the problem.
         virgin_mass: float
             initial mass of the material.
+
         char_mass: float
             final mass when the decomposition is complete.
         anisotropic_direction: int
             For orthotropic materials, this indicates the normal direction
             where the properties are different than in-plane.
+        timescale: float
+            Modifies the thermal conductivity and the radiation emission to
+            increase/decrease the wall time-scale. Defaults to 1.0 (no changes).
         """
         self._char_mass = char_mass
         self._virgin_mass = virgin_mass
         self._dim = dim
         self._anisotropic_dir = anisotropic_direction
+        self._timescale = timescale
 
         if anisotropic_direction >= dim:
             raise ValueError("Anisotropic axis must be less than dim.")
@@ -186,13 +193,12 @@ class FiberEOS(PorousWallEOS):
             + 1.93072961e-10*temperature**3 - 3.52595953e-07*temperature**2
             + 4.54935976e-04*temperature**1 + 5.08960039e-02)
 
-        # initialize with the in-plane value
+        # initialize with the in-plane value then modify the normal direction
         kappa = make_obj_array([kappa_ij for _ in range(self._dim)])
-        # modify only the normal direction
         kappa[self._anisotropic_dir] = kappa_k
 
         # account for fiber shrinkage via "tau"
-        return kappa*tau
+        return kappa*tau*self._timescale
 
     # ~~~~~~~~ other properties
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
@@ -207,11 +213,12 @@ class FiberEOS(PorousWallEOS):
         permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
                                        for _ in range(0, self._dim)])
         permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
+
         return permeability
 
     def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
-        return (
+        return self._timescale * (
             + 2.26413679e-18*temperature**5 - 2.03008004e-14*temperature**4
             + 7.05300324e-11*temperature**3 - 1.22131715e-07*temperature**2
             + 1.21137817e-04*temperature**1 + 8.66656964e-01)
