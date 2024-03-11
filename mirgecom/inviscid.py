@@ -44,6 +44,8 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from arraycontext import outer
+from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -56,12 +58,10 @@ from mirgecom.fluid import (
     ConservedVars
 )
 from mirgecom.utils import normalize_boundaries
-
-from arraycontext import outer
-from meshmode.dof_array import DOFArray
+from mirgecom.gas_model import PorousFlowFluidState
 
 
-def inviscid_flux(state):
+def inviscid_flux(state, gas_model=None):
     r"""Compute the inviscid flux vectors from fluid conserved vars *cv*.
 
     The inviscid fluxes are
@@ -89,11 +89,25 @@ def inviscid_flux(state):
         conservation equation.
     """
     mass_flux = state.momentum_density
-    energy_flux = state.velocity * (state.energy_density + state.pressure)
+
+    # only the gas part goes into the energy flux
+    if isinstance(state, PorousFlowFluidState):
+        gas_energy = state.mass_density*(
+            gas_model.eos.get_internal_energy(
+                temperature=state.temperature,
+                species_mass_fractions=state.cv.species_mass_fractions)
+            + 0.5*np.dot(state.velocity, state.velocity)
+        )
+        energy_flux = state.velocity * (gas_energy
+                                        + state.wv.void_fraction*state.pressure)
+    else:
+        energy_flux = state.velocity * (state.energy_density + state.pressure)
+
     mom_flux = (
         state.mass_density * np.outer(state.velocity, state.velocity)
         + np.eye(state.dim)*state.pressure
     )
+
     species_mass_flux = \
         state.velocity*state.species_mass_density.reshape(-1, 1)
 
@@ -145,16 +159,17 @@ def inviscid_facial_flux_rusanov(state_pair, gas_model, normal):
     actx = state_pair.int.array_context
     lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
     from mirgecom.flux import num_flux_lfr
-    return num_flux_lfr(f_minus_normal=inviscid_flux(state_pair.int)@normal,
-                        f_plus_normal=inviscid_flux(state_pair.ext)@normal,
-                        q_minus=state_pair.int.cv,
-                        q_plus=state_pair.ext.cv, lam=lam)
+    return num_flux_lfr(
+        f_minus_normal=inviscid_flux(state_pair.int, gas_model=gas_model)@normal,
+        f_plus_normal=inviscid_flux(state_pair.ext, gas_model=gas_model)@normal,
+        q_minus=state_pair.int.cv,
+        q_plus=state_pair.ext.cv, lam=lam)
 
 
 def inviscid_facial_flux_hll(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
-    The Harten, Lax, van Leer approximate riemann numerical flux is calculated as:
+    The Harten, Lax, van Leer approximate Riemann numerical flux is calculated as:
 
     .. math::
 
