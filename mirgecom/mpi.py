@@ -56,7 +56,7 @@ def shared_split_comm_world() -> Generator["Comm", None, None]:
         comm.Free()
 
 
-def _check_cache_dirs() -> None:
+def _check_cache_dirs_node() -> None:
     """Check whether multiple ranks share cache directories on the same node."""
     from mpi4py import MPI
 
@@ -121,6 +121,8 @@ def _check_gpu_oversubscription() -> None:
     if size <= 1:
         return
 
+    # This may unnecessarily require pyopencl in case we run with a
+    # NumpyArrayContext or CupyArrayContext
     cl_ctx = cl.create_some_context()
     dev = cl_ctx.devices
 
@@ -162,6 +164,50 @@ def _check_gpu_oversubscription() -> None:
                 from warnings import warn
                 warn(f"Multiple ranks are sharing GPUs on node '{hostname}'. "
                      f"Duplicate PCIe IDs: {dup}.")
+
+
+def log_disk_cache_config() -> None:
+    """Log the disk cache configuration."""
+    from mpi4py import MPI
+    rank = MPI.COMM_WORLD.Get_rank()
+    res = f"Rank {rank} disk cache config: "
+
+    # This may unnecessarily require pyopencl in case we run with a
+    # NumpyArrayContext or CupyArrayContext
+    import pyopencl as cl
+    from pyopencl.characterize import nv_compute_capability, get_pocl_version
+    cl_ctx = cl.create_some_context()
+    dev = cl_ctx.devices[0]
+
+    # Variables set any to any value => cache is disabled
+    loopy_cache_enabled = bool(os.getenv("LOOPY_NO_CACHE", True))
+    pyopencl_cache_enabled = bool(os.getenv("PYOPENCL_NO_CACHE", True))
+
+    loopy_cache_dir = ("(" + os.getenv("XDG_CACHE_HOME", "default dir") + ")"
+                       if loopy_cache_enabled else "")
+    pyopencl_cache_dir = ("(" + os.getenv("XDG_CACHE_HOME", "default dir") + ")"
+                          if pyopencl_cache_enabled else "")
+
+    res += f"loopy: {loopy_cache_enabled} {loopy_cache_dir}; "
+    res += f"pyopencl: {pyopencl_cache_enabled} {pyopencl_cache_dir}; "
+
+    if get_pocl_version(dev.platform) is not None:
+        # Variable set to '0' => cache is disabled
+        pocl_cache_enabled = os.getenv("POCL_KERNEL_CACHE", "1") != "0"
+        pocl_cache_dir = ("(" + os.getenv("POCL_CACHE_DIR", "default dir") + ")"
+                        if pocl_cache_enabled else "")
+
+        res += f"pocl: {pocl_cache_enabled} {pocl_cache_dir}; "
+
+    if nv_compute_capability(dev) is not None:
+        # Variable set to '1' => cache is disabled
+        cuda_cache_enabled = os.getenv("CUDA_CACHE_DISABLE", "0") != "1"
+        cuda_cache_dir = ("(" + os.getenv("CUDA_CACHE_PATH", "default dir") + ")"
+                          if cuda_cache_enabled else "")
+        res += f"cuda: {cuda_cache_enabled} {cuda_cache_dir};"
+
+    res += "\n"
+    logger.info(res)
 
 
 def _check_isl_version() -> None:
@@ -242,9 +288,10 @@ def mpi_entry_point(func) -> Callable:
         from mpi4py import MPI  # noqa
 
         _check_gpu_oversubscription()
-        _check_cache_dirs()
+        _check_cache_dirs_node()
         _check_isl_version()
         _check_mpi4py_version()
+        log_disk_cache_config()
 
         func(*args, **kwargs)
 
