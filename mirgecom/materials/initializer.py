@@ -56,7 +56,7 @@ class SolidWallInitializer:
 
 
 class PorousWallInitializer:
-    """Initializer for porous materials."""
+    """State initializer for porous materials."""
 
     def __init__(self, temperature, species, material_densities,
                  pressure=None, density=None):
