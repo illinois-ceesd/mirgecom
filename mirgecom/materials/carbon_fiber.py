@@ -131,7 +131,6 @@ class FiberEOS(PorousWallEOS):
             geometrical dimension of the problem.
         virgin_mass: float
             initial mass of the material.
-
         char_mass: float
             final mass when the decomposition is complete.
         anisotropic_direction: int

@@ -44,8 +44,6 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from arraycontext import outer
-from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -59,6 +57,9 @@ from mirgecom.fluid import (
 )
 from mirgecom.utils import normalize_boundaries
 from mirgecom.gas_model import PorousFlowFluidState
+
+from arraycontext import outer
+from meshmode.dof_array import DOFArray
 
 
 def inviscid_flux(state, gas_model=None):
@@ -80,6 +81,12 @@ def inviscid_flux(state, gas_model=None):
     state: :class:`~mirgecom.gas_model.FluidState`
 
         Full fluid conserved and thermal state.
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state.
+        Only necessary for porous media flows using the unified-domain.
 
     Returns
     -------
