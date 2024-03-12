@@ -70,6 +70,7 @@ from mirgecom.inviscid import (  # noqa
     entropy_stable_inviscid_facial_flux_rusanov,
     entropy_stable_inviscid_facial_flux,
     entropy_conserving_flux_chandrashekar,
+    entropy_conserving_flux_Kawai,
     entropy_conserving_flux_renac
 )
 
@@ -196,7 +197,7 @@ def entropy_stable_euler_operator(
     if entropy_conserving_flux_func is None:
         entropy_conserving_flux_func = \
             (entropy_conserving_flux_renac if state.is_mixture
-             else entropy_conserving_flux_chandrashekar)
+             else entropy_conserving_flux_Kawai)
         flux_func = "renac" if state.is_mixture else "chandrashekar"
         warn("No entropy_conserving_flux_func was given for ESDG. "
              f"Setting EC flux to entropy_conserving_flux_{flux_func}.")

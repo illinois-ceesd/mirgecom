@@ -399,6 +399,65 @@ def get_inviscid_cfl(dcoll, state, dt):
     """
     return dt / get_inviscid_timestep(dcoll, state=state)
 
+def entropy_conserving_flux_Kawai(gas_model, state_ll, state_rr):
+    """Compute the entropy conservative fluxes from states *state_ll* and *state_rr*.
+
+    This routine implements the two-point volume flux based on the entropy
+    conserving and kinetic energy preserving two-point KEEPQ flux in
+    "Comprehensive analysis of entropy conservation property of non-dissipative 
+    schemes for compressible ﬂows: KEEP scheme redeﬁned" This scheme is locally 
+    conserved for entropy, which is more suitable for DG
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+        A CV object containing the matrix-valued two-point flux vectors
+        for each conservation equation.
+    """
+    dim = state_ll.dim
+    actx = state_ll.array_context
+    gamma_ll = gas_model.eos.gamma(state_ll.cv, state_ll.temperature)
+    gamma_rr = gas_model.eos.gamma(state_rr.cv, state_rr.temperature)
+    rho_ll = state_ll.mass_density
+    u_ll = state_ll.velocity
+    p_ll = state_ll.pressure
+    y_ll = state_ll.species_mass_fractions
+
+    rho_rr = state_rr.mass_density
+    u_rr = state_rr.velocity
+    p_rr = state_rr.pressure
+    y_rr = state_rr.species_mass_fractions
+    def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
+        return actx.np.where(
+            actx.np.less(f2, epsilon),
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
+            (y - x) / actx.np.log(y / x)
+        )
+
+    rhoavg = (rho_ll+rho_rr)/2
+    uavg   = (u_ll+u_rr)/2
+    pavg   = (p_ll+p_rr)/2
+    gamma  = (gamma_ll+gamma_rr)/2
+
+    mass_flux = rhoavg * uavg
+    momentum_flux = outer(mass_flux, uavg) + np.eye(dim) * pavg
+
+    Ke = mass_flux*np.dot(u_ll, u_rr)/2
+    Ie = mass_flux*(p_ll/rho_ll+p_rr/rho_rr)/(2*(gamma-1))
+    We = (u_ll*p_rr+u_rr*p_ll)/2
+
+    energy_flux = Ke+Ie+We
+    rho_mean = ln_mean(rho_ll,  rho_rr)
+    y_mean = 0.5 * (y_ll + y_rr)
+    rho_species_mean = rho_mean * y_mean
+    species_mass_flux = rho_species_mean.reshape(-1, 1) * uavg
+
+    return ConservedVars(mass=mass_flux,
+                         energy=energy_flux,
+                         momentum=momentum_flux,
+                         species_mass=species_mass_flux)
+
 
 def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     """Compute the entropy conservative fluxes from states *state_ll* and *state_rr*.
