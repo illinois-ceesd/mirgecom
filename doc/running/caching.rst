@@ -1,11 +1,12 @@
 OpenCL kernel caching
 =====================
 
-OpenCL kernels are cached on hard disk on multiple levels during a |mirgecom|
-execution. This has the advantage of reducing the compilation time of kernels
-when running the same driver multiple times.
+OpenCL kernels are cached in memory and on hard disk on multiple levels during
+a |mirgecom| execution. This has the advantage of reducing the compilation time
+of kernels when running the same driver multiple times.
 
-The following sections discuss |mirgecom|-related packages that use caching.
+The following sections discuss |mirgecom|-related packages that use caching,
+with a focus on configuring the disk-based caching.
 
 .. note::
 
@@ -23,7 +24,7 @@ The following sections discuss |mirgecom|-related packages that use caching.
 Loopy
 -----
 
-:mod:`loopy` stores the source of generated PyOpenCL kernels and their
+On Linux, :mod:`loopy` stores the source of generated PyOpenCL kernels and their
 invokers in ``$XDG_CACHE_HOME/pytools/pdict-*-loopy`` by default. You can export
 ``LOOPY_NO_CACHE=1`` to disable caching. See `here
 <https://github.com/inducer/loopy/blob/e21e8f85d289abbca27ac6abfd71874155fa49da/loopy/__init__.py#L402-L406>`__
@@ -38,13 +39,19 @@ for details.
 .. note::
 
    When ``$XDG_CACHE_HOME`` is not set, the cache dir defaults to
-   ``~/.cache`` on Linux and ``~/Library/Caches/`` on MacOS.
+   ``~/.cache`` on Linux.
+
+.. warning::
+
+   On MacOS, the disk cache is always located in ``~/Library/Caches/pytools/pdict-*-loopy``.
+   Its location can not be changed.
+
 
 
 PyOpenCL
 --------
 
-:mod:`pyopencl` caches in ``$XDG_CACHE_HOME/pyopencl`` (kernel source
+On Linux, :mod:`pyopencl` caches in ``$XDG_CACHE_HOME/pyopencl`` (kernel source
 code and binaries returned by the OpenCL runtime) and
 ``$XDG_CACHE_HOME/pytools/pdict-*-pyopencl`` (invokers, generated source code)
 by default. You can export ``PYOPENCL_NO_CACHE=1`` to disable caching. See `here
@@ -64,22 +71,34 @@ for details.
    PyOpenCL uses ``clCreateProgramWithSource`` on the first compilation and
    caches the OpenCL binary it retrieves. The second time the same source
    is compiled, it uses ``clCreateProgramWithBinary`` to hand the binary
-   to the CL runtime (such as PoCL). This can lead to different caching behaviors on the first three compilations depending on how the CL runtime
+   to the CL runtime (such as PoCL). This can lead to different caching
+   behaviors on the first three compilations depending on how the CL runtime
    itself performs caching.
+
+.. warning::
+
+   On MacOS, the disk caches are always located in ``~/Library/Caches/pyopencl/``
+   and ``~/Library/Caches/pytools/pdict-*-pyopencl``.
+   Their locations can not be changed.
 
 
 PoCL
 ----
 
-PoCL stores compilation results (LLVM bitcode and shared libraries) in
-``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME/pocl`` by default. You can export
-``POCL_KERNEL_CACHE=0`` to disable caching. See `here
+On Linux and MacOS, PoCL stores compilation results (LLVM bitcode and shared
+libraries) in ``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME/pocl`` by default. You
+can export ``POCL_KERNEL_CACHE=0`` to disable caching. See `here
 <http://portablecl.org/docs/html/using.html#tuning-pocl-behavior-with-env-variables>`__ for details.
 
 .. note::
 
    When ``$POCL_CACHE_DIR`` and ``$XDG_CACHE_HOME`` are not set, PoCL's cache
    dir defaults to ``~/.cache/pocl`` on Linux and MacOS.
+
+.. warning::
+
+   In contrast to the :mod:`loopy` and :mod:`pyopencl` disk caches, PoCL honors
+   ``$XDG_CACHE_HOME`` even on MacOS.
 
 
 CUDA
