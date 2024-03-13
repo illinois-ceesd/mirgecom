@@ -20,6 +20,12 @@ with a focus on configuring the disk-based caching.
    ~/.cache/pyopencl  ~/Library/Caches/pyopencl $POCL_CACHE_DIR
    $XDG_CACHE_HOME/pocl ~/.cache/pocl ~/.nv/ComputeCache $CUDA_CACHE_PATH``
 
+.. note::
+
+   Disabling disk caching for a specific package only affects
+   that particular package. For example, disabling disk caching for :mod:`loopy`
+   does not affect the caching behavior of :mod:`pyopencl` or *PoCL*.
+
 
 Loopy
 -----
@@ -43,7 +49,7 @@ for details.
 
 .. warning::
 
-   On MacOS, the disk cache is always located in ``~/Library/Caches/pytools/pdict-*-loopy``.
+   On MacOS, :mod:`loopy`'s disk cache is always located in ``~/Library/Caches/pytools/pdict-*-loopy``.
    Its location can not be changed.
 
 
@@ -77,7 +83,7 @@ for details.
 
 .. warning::
 
-   On MacOS, the disk caches are always located in ``~/Library/Caches/pyopencl/``
+   On MacOS, :mod:`pyopencl`'s disk caches are always located in ``~/Library/Caches/pyopencl/``
    and ``~/Library/Caches/pytools/pdict-*-pyopencl``.
    Their locations can not be changed.
 
@@ -85,19 +91,19 @@ for details.
 PoCL
 ----
 
-On Linux and MacOS, PoCL stores compilation results (LLVM bitcode and shared
+On Linux and MacOS, *PoCL* stores compilation results (LLVM bitcode and shared
 libraries) in ``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME/pocl`` by default. You
 can export ``POCL_KERNEL_CACHE=0`` to disable caching. See `here
 <http://portablecl.org/docs/html/using.html#tuning-pocl-behavior-with-env-variables>`__ for details.
 
 .. note::
 
-   When ``$POCL_CACHE_DIR`` and ``$XDG_CACHE_HOME`` are not set, PoCL's cache
+   When ``$POCL_CACHE_DIR`` and ``$XDG_CACHE_HOME`` are not set, *PoCL*'s cache
    dir defaults to ``~/.cache/pocl`` on Linux and MacOS.
 
 .. warning::
 
-   In contrast to the :mod:`loopy` and :mod:`pyopencl` disk caches, PoCL honors
+   In contrast to the :mod:`loopy` and :mod:`pyopencl` disk caches, *PoCL* honors
    ``$XDG_CACHE_HOME`` even on MacOS.
 
 
