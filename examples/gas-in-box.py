@@ -1,0 +1,526 @@
+"""Demonstrate a gas in a box with an acoustic pulse."""
+
+__copyright__ = """
+Copyright (C) 2020 University of Illinois Board of Trustees
+"""
+
+__license__ = """
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+"""
+
+import logging
+import numpy as np
+from functools import partial
+
+from meshmode.mesh import BTAG_ALL
+from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
+
+from logpyle import IntervalTimer, set_dt
+from pytools.obj_array import make_obj_array
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.euler import (
+    euler_operator,
+    extract_vars_for_logging,
+    units_for_logging
+)
+from mirgecom.navierstokes import ns_operator
+from mirgecom.simutil import (
+    get_sim_timestep,
+    distribute_mesh
+)
+from mirgecom.utils import force_evaluation
+from mirgecom.io import make_init_message
+
+from mirgecom.integrators import rk4_step
+from mirgecom.steppers import advance_state
+from mirgecom.boundary import (
+    AdiabaticSlipBoundary,
+    IsothermalWallBoundary
+)
+from mirgecom.initializers import (
+    Uniform,
+    AcousticPulse
+)
+from mirgecom.eos import (
+    IdealSingleGas,
+    PyrometheusMixture
+)
+from mirgecom.gas_model import (
+    GasModel,
+    make_fluid_state
+)
+from mirgecom.transport import SimpleTransport
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    # logmgr_add_many_discretization_quantities,
+    logmgr_add_cl_device_info,
+    logmgr_add_device_memory_usage,
+    set_sim_state
+)
+import cantera
+
+logger = logging.getLogger(__name__)
+
+
+class MyRuntimeError(RuntimeError):
+    """Simple exception to kill the simulation."""
+
+    pass
+
+
+@mpi_entry_point
+def main(actx_class, use_esdg=False, use_tpe=False,
+         use_overintegration=False, use_leap=False,
+         casename=None, rst_filename=None, dim=2,
+         periodic_mesh=False, multiple_boundaries=False,
+         use_navierstokes=False, use_mixture=False,
+         use_reactions=False, newton_iters=3,
+         mech_name="uiuc_7sp"):
+    """Drive the example."""
+    if casename is None:
+        casename = "mirgecom"
+
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    num_parts = comm.Get_size()
+
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
+
+    logmgr = initialize_logmgr(True,
+        filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+
+    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    actx = initialize_actx(actx_class, comm)
+    queue = getattr(actx, "queue", None)
+    use_profiling = actx_class_is_profiling(actx_class)
+
+    # timestepping control
+    current_step = 0
+    if use_leap:
+        from leap.rk import RK4MethodBuilder
+        timestepper = RK4MethodBuilder("state")
+    else:
+        timestepper = rk4_step
+    t_final = 2e-7
+    current_cfl = 1.0
+    current_dt = 1e-8
+    current_t = 0
+    constant_cfl = False
+
+    # some i/o frequencies
+    nstatus = 1
+    nrestart = 5
+    nviz = 100
+    nhealth = 1
+
+    rst_path = "restart_data/"
+    rst_pattern = (
+        rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
+    )
+    if rst_filename:  # read the grid from restart data
+        rst_filename = f"{rst_filename}-{rank:04d}.pkl"
+        from mirgecom.restart import read_restart_data
+        restart_data = read_restart_data(actx, rst_filename)
+        local_mesh = restart_data["local_mesh"]
+        local_nelements = local_mesh.nelements
+        global_nelements = restart_data["global_nelements"]
+        assert restart_data["num_parts"] == num_parts
+    else:  # generate the grid from scratch
+        from mirgecom.simutil import get_box_mesh
+        box_ll = -1
+        box_ur = 1
+        nel_1d = 16
+        generate_mesh = partial(
+            get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
+            n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
+            tensor_product_elements=use_tpe)
+        local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
+        local_nelements = local_mesh.nelements
+
+    from meshmode.mesh.processing import rotate_mesh_around_axis
+    local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/3)
+
+    order = 1
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             tensor_product_elements=use_tpe)
+    nodes = actx.thaw(dcoll.nodes())
+    ones = dcoll.zeros(actx) + 1.
+
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+
+    vis_timer = None
+
+    if logmgr:
+        logmgr_add_cl_device_info(logmgr, queue)
+        logmgr_add_device_memory_usage(logmgr, queue)
+
+        vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
+        logmgr.add_quantity(vis_timer)
+
+        logmgr.add_watches([
+            ("step.max", "step = {value}, "),
+            ("t_sim.max", "sim time: {value:1.6e} s\n"),
+            ("t_step.max", "------- step walltime: {value:6g} s, "),
+            ("t_log.max", "log walltime: {value:6g} s")
+        ])
+
+    velocity = np.zeros(shape=(dim,))
+    species_diffusivty = None
+    thermal_conductivity = 1e-5
+    viscosity = 1.0e-5
+
+    if use_mixture:
+        # {{{  Set up initial state using Cantera
+
+        # Use Cantera for initialization
+        # -- Pick up the input data for the thermochemistry mechanism
+        # --- Note: Users may add their own mechanism input file by dropping it into
+        # ---       mirgecom/mechanisms alongside the other mech input files.
+        from mirgecom.mechanisms import get_mechanism_input
+        mech_input = get_mechanism_input(mech_name)
+
+        cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+        nspecies = cantera_soln.n_species
+
+        species_diffusivity = 1e-5 * np.ones(nspecies)
+        # Initial temperature, pressure, and mixutre mole fractions are needed to
+        # set up the initial state in Cantera.
+        temperature_seed = 1200.0  # Initial temperature hot enough to burn
+
+        # Parameters for calculating the amounts of fuel, oxidizer, and inert species
+        # which directly sets the species fractions inside cantera
+        cantera_soln.set_equivalence_ratio(phi=1.0, fuel="C2H4:1",
+                                           oxidizer={"O2": 1.0, "N2": 3.76})
+        x = cantera_soln.X
+
+        one_atm = cantera.one_atm
+
+        # Let the user know about how Cantera is being initilized
+        print(f"Input state (T,P,X) = ({temperature_seed}, {one_atm}, {x}")
+        # Set Cantera internal gas temperature, pressure, and mole fractios
+        cantera_soln.TP = temperature_seed, one_atm
+        # Pull temperature, total density, mass fractions, and pressure from Cantera
+        # We need total density, and mass fractions to initialize the fluid/gas state.
+        can_t, can_rho, can_y = cantera_soln.TDY
+        can_p = cantera_soln.P
+        # *can_t*, *can_p* should not differ (significantly) from user's initial data,
+        # but we want to ensure that we use exactly the same starting point as Cantera,
+        # so we use Cantera's version of these data.
+        
+        # }}}
+
+        # {{{ Create Pyrometheus thermochemistry object & EOS
+
+        # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
+        # generates a set of methods to calculate chemothermomechanical properties and
+        # states for this particular mechanism.
+        from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+        pyro_mechanism = \
+            get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
+                                                       temperature_niter=newton_iters)(actx.np)
+        eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
+        initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
+                              species_mass_fractions=can_y, velocity=velocity)
+        temperature_seed = can_t * ones
+    else:
+        use_reactions = False
+        eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
+        initializer = Uniform(velocity=velocity, pressure=101325, rho=1.2039086127319172)
+        temperature_seed = 293.15 * ones
+
+    temperature_seed = force_evaluation(actx, temperature_seed)
+    wall_bc = IsothermalWallBoundary() if use_navierstokes else AdiabaticSlipBoundary()
+    transport = None
+    if use_navierstokes:
+        transport = SimpleTransport(viscosity=viscosity,
+                                    thermal_conductivity=thermal_conductivity,
+                                    species_diffusivity=species_diffusivity)
+    gas_model = GasModel(eos=eos, transport=transport)
+    fluid_operator = ns_operator if use_navierstokes else euler_operator
+    orig = np.zeros(shape=(dim,))
+    uniform_cv = initializer(nodes, eos=eos)
+    limter_func = None
+
+    def stepper_state_to_gas_state(stepper_state):
+        if use_mixture:
+            cv, tseed = stepper_state
+            return make_fluid_state(cv=cv, gas_model=gas_model,
+                                    temperature_seed=tseed)
+        else:
+            return make_fluid_state(cv=stepper_state, gas_model=gas_model)
+
+    def gas_rhs_to_stepper_rhs(gas_rhs, gas_temperature):
+        if use_mixture:
+            return make_obj_array([gas_rhs, 0.*gas_temperature])
+        else:
+            return gas_rhs
+
+    def gas_state_to_stepper_state(gas_state):
+        if use_mixture:
+            return make_obj_array([gas_state.cv, gas_state.temperature])
+        else:
+            return gas_state.cv
+
+    boundaries = {}
+    if not periodic_mesh:
+        if multiple_boundaries:
+            for idir in range(dim):
+                boundaries[BoundaryDomainTag(f"+{idir+1}")] = wall_bc
+                boundaries[BoundaryDomainTag(f"-{idir+1}")] = wall_bc
+        else:
+            boundaries = {BTAG_ALL: wall_bc}
+
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1, center=orig)
+
+    def mfs(cv, tseed):
+        return make_fluid_state(cv, gas_model, temperature_seed=tseed)
+
+    mfs_compiled = actx.compile(mfs)
+
+    if rst_filename:
+        current_t = restart_data["t"]
+        current_step = restart_data["step"]
+        current_cv = restart_data["cv"]
+        rst_temperature = restart_data["temperature"]
+        current_cv = force_evaluation(actx, current_cv)
+        current_gas_state = mfs_compiled(current_cv, rst_temperature)
+    else:
+        # Set the current state from time 0
+        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
+                                    tseed=temperature_seed)
+        current_cv = force_evaluation(actx, current_cv)
+        # current_gas_state = make_fluid_state(current_cv, gas_model,
+        #                                     temperature_seed=temperature_seed)
+        current_gas_state = mfs_compiled(current_cv, temperature_seed)
+        # force_evaluation(actx, make_fluid_state(current_cv, gas_model,
+        #                                        temperature_seed=temperature_seed))
+
+    if logmgr:
+        from mirgecom.logging_quantities import logmgr_set_time
+        logmgr_set_time(logmgr, current_step, current_t)
+
+    visualizer = make_visualizer(dcoll)
+
+    initname = "pulse"
+    eosname = eos.__class__.__name__
+    init_message = make_init_message(dim=dim, order=order,
+                                     nelements=local_nelements,
+                                     global_nelements=global_nelements,
+                                     dt=current_dt, t_final=t_final, nstatus=nstatus,
+                                     nviz=nviz, cfl=current_cfl,
+                                     constant_cfl=constant_cfl, initname=initname,
+                                     eosname=eosname, casename=casename)
+    if rank == 0:
+        logger.info(init_message)
+
+    def my_write_viz(step, t, gas_state):
+        dv = gas_state.dv
+        cv = gas_state.cv
+        viz_fields = [("cv", cv),
+                      ("dv", dv)]
+        from mirgecom.simutil import write_visfile
+        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
+                      comm=comm)
+
+    def my_write_restart(step, t, gas_state):
+        rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
+        if rst_fname != rst_filename:
+            rst_data = {
+                "local_mesh": local_mesh,
+                "cv": gas_state.cv,
+                "temperature": gas_state.temperature,
+                "t": t,
+                "step": step,
+                "order": order,
+                "global_nelements": global_nelements,
+                "num_parts": num_parts
+            }
+            from mirgecom.restart import write_restart_file
+            write_restart_file(actx, rst_data, rst_fname, comm)
+
+    def my_health_check(gas_state):
+        pressure = gas_state.pressure
+        temperature = gas_state.temperature
+
+        health_error = False
+        from mirgecom.simutil import check_naninf_local, check_range_local
+        if check_naninf_local(dcoll, "vol", pressure):
+            health_error = True
+            logger.info(f"{rank=}: Invalid pressure data found.")
+        if check_naninf_local(dcoll, "vol", temperature):
+            health_error = True
+            logger.info(f"{rank=}: Invalid temperature data found.")
+
+        return health_error
+
+    def my_pre_step(step, t, dt, state):
+
+        if logmgr:
+            logmgr.tick_before()
+
+        stepper_state = state
+        gas_state = stepper_state_to_gas_state(stepper_state)
+        gas_state = force_evaluation(actx, gas_state)
+
+        try:
+
+            from mirgecom.simutil import check_step
+            do_viz = check_step(step=step, interval=nviz)
+            do_restart = check_step(step=step, interval=nrestart)
+            do_health = check_step(step=step, interval=nhealth)
+
+            if do_health:
+                health_errors = global_reduce(my_health_check(gas_state), op="lor")
+                if health_errors:
+                    if rank == 0:
+                        logger.info("Fluid solution failed health check.")
+                    raise MyRuntimeError("Failed simulation health check.")
+
+            if do_restart:
+                my_write_restart(step=step, t=t, gas_state=gas_state)
+
+            if do_viz:
+                my_write_viz(step=step, t=t, gas_state=gas_state)
+
+        except MyRuntimeError:
+            if rank == 0:
+                logger.info("Errors detected; attempting graceful exit.")
+            my_write_viz(step=step, t=t, gas_state=gas_state)
+            my_write_restart(step=step, t=t, gas_state=gas_state)
+            raise
+
+        dt = get_sim_timestep(dcoll, gas_state.cv, t, dt, current_cfl, t_final,
+                              constant_cfl)
+        return gas_state_to_stepper_state(gas_state), dt
+
+    def my_post_step(step, t, dt, state):
+        if logmgr:
+            set_dt(logmgr, dt)
+            logmgr.tick_after()
+        return state, dt
+
+    def my_rhs(t, stepper_state):
+        gas_state = stepper_state_to_gas_state(stepper_state)
+        gas_rhs = fluid_operator(dcoll, state=gas_state, time=t,
+                                   boundaries=boundaries,
+                                   gas_model=gas_model, use_esdg=use_esdg,
+                                   quadrature_tag=quadrature_tag)
+        if use_reactions:
+            gas_rhs = \
+                gas_rhs + eos.get_species_source_terms(gas_state.cv,
+                                                       gas_state.temperature)
+        return gas_rhs_to_stepper_rhs(gas_rhs, gas_state.temperature)
+
+    current_dt = get_sim_timestep(dcoll, current_gas_state.cv, current_t, current_dt,
+                                  current_cfl, t_final, constant_cfl)
+
+    current_stepper_state = gas_state_to_stepper_state(current_gas_state)
+    current_step, current_t, current_stepper_state = \
+        advance_state(rhs=my_rhs, timestepper=timestepper,
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step, dt=current_dt,
+                      state=current_stepper_state, t=current_t, t_final=t_final)
+
+    # Dump the final data
+    if rank == 0:
+        logger.info("Checkpointing final state ...")
+    final_gas_state = stepper_state_to_gas_state(current_stepper_state)
+
+    my_write_viz(step=current_step, t=current_t, gas_state=final_gas_state)
+    my_write_restart(step=current_step, t=current_t, gas_state=final_gas_state)
+
+    if logmgr:
+        logmgr.close()
+    elif use_profiling:
+        print(actx.tabulate_profiling_data())
+
+    finish_tol = 1e-16
+    assert np.abs(current_t - t_final) < finish_tol
+
+
+if __name__ == "__main__":
+    import argparse
+    casename = "pulse"
+    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("-o", "--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
+    parser.add_argument("-l", "--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed performance profiling")
+    parser.add_argument("--leap", action="store_true",
+        help="use leap timestepper")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable dg for inviscid terms.")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
+    parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
+                        default=2, help="spatial dimension of simulation")
+    parser.add_argument("-i", "--iters", type=int, default=3,
+                        help="number of Newton iterations for mixture temperature")
+    parser.add_argument("-r", "--restart_file", help="root name of restart file")
+    parser.add_argument("-c", "--casename", help="casename to use for i/o")
+    parser.add_argument("-p", "--periodic", action="store_true",
+                        help="use periodic boundaries")
+    parser.add_argument("-n", "--navierstokes", action="store_true",
+                        help="use Navier-Stokes operator")
+    parser.add_argument("-b", "--boundaries", action="store_true",
+                        help="use multiple (2*ndim) boundaries")
+    parser.add_argument("-m", "--mixture", action="store_true",
+                        help="use gas mixture EOS")
+    parser.add_argument("-f", "--flame", action="store_true",
+                        help="use combustion chemistry")
+    parser.add_argument("-t", "--tpe", action="store_true",
+                        help="use tensor-product elements (quads/hexes)")
+    args = parser.parse_args()
+
+    from warnings import warn
+    from mirgecom.simutil import ApplicationOptionsError
+    if args.esdg:
+        if not args.lazy and not args.numpy:
+            raise ApplicationOptionsError("ESDG requires lazy or numpy context.")
+        if not args.overintegration:
+            warn("ESDG requires overintegration, enabling --overintegration.")
+
+    from mirgecom.array_context import get_reasonable_array_context_class
+    actx_class = get_reasonable_array_context_class(
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
+    if args.casename:
+        casename = args.casename
+    rst_filename = None
+    if args.restart_file:
+        rst_filename = args.restart_file
+
+    main(actx_class, use_esdg=args.esdg, dim=args.dimension,
+         use_overintegration=args.overintegration or args.esdg,
+         use_leap=args.leap, use_tpe=args.tpe,
+         casename=casename, rst_filename=rst_filename,
+         periodic_mesh=args.periodic, use_mixture=args.mixture,
+         multiple_boundaries=args.boundaries,
+         use_reactions=args.flame, newton_iters=args.iters,
+         use_navierstokes=args.navierstokes)
+
+# vim: foldmethod=marker
