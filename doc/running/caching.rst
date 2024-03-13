@@ -22,6 +22,15 @@ with a focus on configuring the disk-based caching.
 
 .. note::
 
+   The following bash code can be used to disable all disk caches::
+
+      $ export LOOPY_NO_CACHE=1
+      $ export PYOPENCL_NO_CACHE=1
+      $ export POCL_KERNEL_CACHE=0
+      $ export CUDA_CACHE_DISABLE=1
+
+.. note::
+
    Disabling disk caching for a specific package only affects
    that particular package. For example, disabling disk caching for :mod:`loopy`
    does not affect the caching behavior of :mod:`pyopencl` or *PoCL*.
