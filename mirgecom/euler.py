@@ -410,6 +410,15 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
     return -div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
                          inviscid_flux_vol, inviscid_flux_bnd)
 
+    # return -op.inverse_mass(
+    #    dcoll, dd_vol_quad.with_discr_tag(DISCR_TAG_BASE),
+    #    op.weak_local_div(dcoll, dd_vol_quad, inviscid_flux_vol))
+
+    # return op.inverse_mass(
+    #    dcoll, dd_vol_quad.with_discr_tag(DISCR_TAG_BASE),
+    #    op.weak_local_div(dcoll, dd_vol_quad, inviscid_flux_vol)
+    #    - op.face_mass(dcoll, dd_allfaces_quad, inviscid_flux_bnd))
+
 
 # By default, run unitless
 NAME_TO_UNITS = {

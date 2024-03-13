@@ -1,4 +1,4 @@
-"""Demonstrate acoustic pulse, and adiabatic slip wall."""
+"""Demonstrate a gas in a box with an acoustic pulse."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -33,7 +33,7 @@ from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
 
 from logpyle import IntervalTimer, set_dt
-
+from pytools.obj_array import make_obj_array
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import (
@@ -46,6 +46,7 @@ from mirgecom.simutil import (
     get_sim_timestep,
     distribute_mesh
 )
+from mirgecom.utils import force_evaluation
 from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
@@ -58,7 +59,10 @@ from mirgecom.initializers import (
     Uniform,
     AcousticPulse
 )
-from mirgecom.eos import IdealSingleGas
+from mirgecom.eos import (
+    IdealSingleGas,
+    PyrometheusMixture
+)
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
@@ -66,11 +70,12 @@ from mirgecom.gas_model import (
 from mirgecom.transport import SimpleTransport
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
+    # logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
     set_sim_state
 )
+import cantera
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +91,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          use_overintegration=False, use_leap=False,
          casename=None, rst_filename=None, dim=2,
          periodic_mesh=False, multiple_boundaries=False,
-         use_navierstokes=False):
+         use_navierstokes=False, use_mixture=False,
+         use_reactions=False, newton_iters=3,
+         mech_name="uiuc_7sp"):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -114,9 +121,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1.0
+    t_final = 2e-7
     current_cfl = 1.0
-    current_dt = .005
+    current_dt = 1e-8
     current_t = 0
     constant_cfl = False
 
@@ -157,6 +164,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
+    ones = dcoll.zeros(actx) + 1.
+
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     vis_timer = None
@@ -164,8 +173,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
-                             extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -173,23 +180,106 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
+    velocity = np.zeros(shape=(dim,))
+    species_diffusivty = None
+    thermal_conductivity = 1e-5
     viscosity = 1.0e-5
+
+    if use_mixture:
+        # {{{  Set up initial state using Cantera
+
+        # Use Cantera for initialization
+        # -- Pick up the input data for the thermochemistry mechanism
+        # --- Note: Users may add their own mechanism input file by dropping it into
+        # ---       mirgecom/mechanisms alongside the other mech input files.
+        from mirgecom.mechanisms import get_mechanism_input
+        mech_input = get_mechanism_input(mech_name)
+
+        cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+        nspecies = cantera_soln.n_species
+
+        species_diffusivity = 1e-5 * np.ones(nspecies)
+        # Initial temperature, pressure, and mixutre mole fractions are needed to
+        # set up the initial state in Cantera.
+        temperature_seed = 1200.0  # Initial temperature hot enough to burn
+
+        # Parameters for calculating the amounts of fuel, oxidizer, and inert species
+        # which directly sets the species fractions inside cantera
+        cantera_soln.set_equivalence_ratio(phi=1.0, fuel="C2H4:1",
+                                           oxidizer={"O2": 1.0, "N2": 3.76})
+        x = cantera_soln.X
+
+        one_atm = cantera.one_atm
+
+        # Let the user know about how Cantera is being initilized
+        print(f"Input state (T,P,X) = ({temperature_seed}, {one_atm}, {x}")
+        # Set Cantera internal gas temperature, pressure, and mole fractios
+        cantera_soln.TP = temperature_seed, one_atm
+        # Pull temperature, total density, mass fractions, and pressure from Cantera
+        # We need total density, and mass fractions to initialize the fluid/gas state.
+        can_t, can_rho, can_y = cantera_soln.TDY
+        can_p = cantera_soln.P
+        # *can_t*, *can_p* should not differ (significantly) from user's initial data,
+        # but we want to ensure that we use exactly the same starting point as Cantera,
+        # so we use Cantera's version of these data.
+        
+        # }}}
+
+        # {{{ Create Pyrometheus thermochemistry object & EOS
+
+        # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
+        # generates a set of methods to calculate chemothermomechanical properties and
+        # states for this particular mechanism.
+        from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+        pyro_mechanism = \
+            get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
+                                                       temperature_niter=newton_iters)(actx.np)
+        eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
+        initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
+                              species_mass_fractions=can_y, velocity=velocity)
+        temperature_seed = can_t * ones
+    else:
+        use_reactions = False
+        eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
+        initializer = Uniform(velocity=velocity, pressure=101325, rho=1.2039086127319172)
+        temperature_seed = 293.15 * ones
+
+    temperature_seed = force_evaluation(actx, temperature_seed)
     wall_bc = IsothermalWallBoundary() if use_navierstokes else AdiabaticSlipBoundary()
-    eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
-    transport = SimpleTransport(viscosity=viscosity) if use_navierstokes else None
+    transport = None
+    if use_navierstokes:
+        transport = SimpleTransport(viscosity=viscosity,
+                                    thermal_conductivity=thermal_conductivity,
+                                    species_diffusivity=species_diffusivity)
     gas_model = GasModel(eos=eos, transport=transport)
     fluid_operator = ns_operator if use_navierstokes else euler_operator
-    velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.0
     orig = np.zeros(shape=(dim,))
-    initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
-    uniform_state = initializer(nodes, eos=eos)
+    uniform_cv = initializer(nodes, eos=eos)
+    limter_func = None
+
+    def stepper_state_to_gas_state(stepper_state):
+        if use_mixture:
+            cv, tseed = stepper_state
+            return make_fluid_state(cv=cv, gas_model=gas_model,
+                                    temperature_seed=tseed)
+        else:
+            return make_fluid_state(cv=stepper_state, gas_model=gas_model)
+
+    def gas_rhs_to_stepper_rhs(gas_rhs, gas_temperature):
+        if use_mixture:
+            return make_obj_array([gas_rhs, 0.*gas_temperature])
+        else:
+            return gas_rhs
+
+    def gas_state_to_stepper_state(gas_state):
+        if use_mixture:
+            return make_obj_array([gas_state.cv, gas_state.temperature])
+        else:
+            return gas_state.cv
 
     boundaries = {}
     if not periodic_mesh:
@@ -200,17 +290,30 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         else:
             boundaries = {BTAG_ALL: wall_bc}
 
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
+    acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1, center=orig)
+
+    def mfs(cv, tseed):
+        return make_fluid_state(cv, gas_model, temperature_seed=tseed)
+
+    mfs_compiled = actx.compile(mfs)
 
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
+        rst_temperature = restart_data["temperature"]
+        current_cv = force_evaluation(actx, current_cv)
+        current_gas_state = mfs_compiled(current_cv, rst_temperature)
     else:
         # Set the current state from time 0
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
-
-    current_state = make_fluid_state(current_cv, gas_model)
+        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
+                                    tseed=temperature_seed)
+        current_cv = force_evaluation(actx, current_cv)
+        # current_gas_state = make_fluid_state(current_cv, gas_model,
+        #                                     temperature_seed=temperature_seed)
+        current_gas_state = mfs_compiled(current_cv, temperature_seed)
+        # force_evaluation(actx, make_fluid_state(current_cv, gas_model,
+        #                                        temperature_seed=temperature_seed))
 
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
@@ -230,22 +333,23 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_viz(step, t, state, dv=None):
-        if dv is None:
-            dv = eos.dependent_vars(state)
-        viz_fields = [("cv", state),
+    def my_write_viz(step, t, gas_state):
+        dv = gas_state.dv
+        cv = gas_state.cv
+        viz_fields = [("cv", cv),
                       ("dv", dv)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
 
-    def my_write_restart(step, t, state):
+    def my_write_restart(step, t, gas_state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "cv": state,
+                "cv": gas_state.cv,
+                "temperature": gas_state.temperature,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -255,23 +359,31 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(pressure):
+    def my_health_check(gas_state):
+        pressure = gas_state.pressure
+        temperature = gas_state.temperature
+
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
+        if check_naninf_local(dcoll, "vol", temperature):
+            health_error = True
+            logger.info(f"{rank=}: Invalid temperature data found.")
+
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        fluid_state = make_fluid_state(state, gas_model)
-        dv = fluid_state.dv
+
+        if logmgr:
+            logmgr.tick_before()
+
+        stepper_state = state
+        gas_state = stepper_state_to_gas_state(stepper_state)
+        gas_state = force_evaluation(actx, gas_state)
 
         try:
-
-            if logmgr:
-                logmgr.tick_before()
 
             from mirgecom.simutil import check_step
             do_viz = check_step(step=step, interval=nviz)
@@ -279,62 +391,64 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             do_health = check_step(step=step, interval=nhealth)
 
             if do_health:
-                health_errors = global_reduce(my_health_check(dv.pressure), op="lor")
+                health_errors = global_reduce(my_health_check(gas_state), op="lor")
                 if health_errors:
                     if rank == 0:
                         logger.info("Fluid solution failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, state=state)
+                my_write_restart(step=step, t=t, gas_state=gas_state)
 
             if do_viz:
-                my_write_viz(step=step, t=t, state=state, dv=dv)
+                my_write_viz(step=step, t=t, gas_state=gas_state)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
-            my_write_viz(step=step, t=t, state=state)
-            my_write_restart(step=step, t=t, state=state)
+            my_write_viz(step=step, t=t, gas_state=gas_state)
+            my_write_restart(step=step, t=t, gas_state=gas_state)
             raise
 
-        dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
+        dt = get_sim_timestep(dcoll, gas_state.cv, t, dt, current_cfl, t_final,
                               constant_cfl)
-        return state, dt
+        return gas_state_to_stepper_state(gas_state), dt
 
     def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
-        fluid_state = make_fluid_state(cv=state, gas_model=gas_model)
-        return fluid_operator(dcoll, state=fluid_state, time=t,
-                              boundaries=boundaries,
-                              gas_model=gas_model, use_esdg=use_esdg,
-                              quadrature_tag=quadrature_tag)
+    def my_rhs(t, stepper_state):
+        gas_state = stepper_state_to_gas_state(stepper_state)
+        gas_rhs = fluid_operator(dcoll, state=gas_state, time=t,
+                                   boundaries=boundaries,
+                                   gas_model=gas_model, use_esdg=use_esdg,
+                                   quadrature_tag=quadrature_tag)
+        if use_reactions:
+            gas_rhs = \
+                gas_rhs + eos.get_species_source_terms(gas_state.cv,
+                                                       gas_state.temperature)
+        return gas_rhs_to_stepper_rhs(gas_rhs, gas_state.temperature)
 
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+    current_dt = get_sim_timestep(dcoll, current_gas_state.cv, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
-    current_step, current_t, current_cv = \
+    current_stepper_state = gas_state_to_stepper_state(current_gas_state)
+    current_step, current_t, current_stepper_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_cv, t=current_t, t_final=t_final)
+                      state=current_stepper_state, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
-    final_state = make_fluid_state(current_cv, gas_model)
-    final_dv = final_state.dv
+    final_gas_state = stepper_state_to_gas_state(current_stepper_state)
 
-    my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv)
-    my_write_restart(step=current_step, t=current_t, state=current_cv)
+    my_write_viz(step=current_step, t=current_t, gas_state=final_gas_state)
+    my_write_restart(step=current_step, t=current_t, gas_state=final_gas_state)
 
     if logmgr:
         logmgr.close()
@@ -362,7 +476,9 @@ if __name__ == "__main__":
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
-                        default=2, help="increase output verbosity")
+                        default=2, help="spatial dimension of simulation")
+    parser.add_argument("-i", "--iters", type=int, default=3,
+                        help="number of Newton iterations for mixture temperature")
     parser.add_argument("-r", "--restart_file", help="root name of restart file")
     parser.add_argument("-c", "--casename", help="casename to use for i/o")
     parser.add_argument("-p", "--periodic", action="store_true",
@@ -370,8 +486,13 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--navierstokes", action="store_true",
                         help="use Navier-Stokes operator")
     parser.add_argument("-b", "--boundaries", action="store_true",
-                        help="use multiple (2*ndim) boundaries [No]")
-    parser.add_argument("-t", "--tpe", action="store_true")
+                        help="use multiple (2*ndim) boundaries")
+    parser.add_argument("-m", "--mixture", action="store_true",
+                        help="use gas mixture EOS")
+    parser.add_argument("-f", "--flame", action="store_true",
+                        help="use combustion chemistry")
+    parser.add_argument("-t", "--tpe", action="store_true",
+                        help="use tensor-product elements (quads/hexes)")
     args = parser.parse_args()
 
     from warnings import warn
@@ -397,8 +518,9 @@ if __name__ == "__main__":
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, use_tpe=args.tpe,
          casename=casename, rst_filename=rst_filename,
-         periodic_mesh=args.periodic,
+         periodic_mesh=args.periodic, use_mixture=args.mixture,
          multiple_boundaries=args.boundaries,
+         use_reactions=args.flame, newton_iters=args.iters,
          use_navierstokes=args.navierstokes)
 
 # vim: foldmethod=marker

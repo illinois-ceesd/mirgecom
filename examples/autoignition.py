@@ -686,8 +686,7 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy,
-        tensor_product_elements=args.use_tensor_product_elements)
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
