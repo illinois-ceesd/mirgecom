@@ -76,7 +76,7 @@ class PorousWallInitializer:
         self._temp = temperature
         self._wall_density = material_densities
 
-    def __call__(self, dim, x_vec, gas_model):
+    def __call__(self, x_vec, gas_model):
         """Evaluate the wall+gas properties for porous materials.
 
         Parameters
@@ -94,6 +94,7 @@ class PorousWallInitializer:
         """
         actx = x_vec[0].array_context
         zeros = actx.np.zeros_like(x_vec[0])
+        dim = x_vec.shape[0]
 
         # wall-only properties
         wall_density = self._wall_density + zeros
@@ -112,7 +113,7 @@ class PorousWallInitializer:
         else:
             eps_rho_gas = eps_gas*self._mass
 
-        # FIXME: for now, let's always start without velocity
+        # FIXME: for now, let's always start with zero velocity
         momentum = make_obj_array([zeros for _ in range(dim)])
 
         # internal energy (kinetic energy is absent in here)
