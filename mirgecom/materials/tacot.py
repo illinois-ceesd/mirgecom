@@ -105,6 +105,7 @@ class TacotEOS(PorousWallEOS):
     yield the material properties. Polynomials were generated offline to avoid
     interpolation and they are not valid for temperatures above 3200K.
 
+    .. automethod:: __init__
     .. automethod:: void_fraction
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
@@ -119,7 +120,14 @@ class TacotEOS(PorousWallEOS):
     def __init__(self, char_mass, virgin_mass):
         """Bulk density considering the porosity and intrinsic density.
 
-        The fiber and all resin components must be considered.
+        Parameters
+        ----------
+
+        virgin_mass: float
+            initial mass of the material. The fiber and all resin components
+            must be considered.
+        char_mass: float
+            final mass when the resin decomposition is complete.
         """
         self._char_mass = char_mass
         self._virgin_mass = virgin_mass
