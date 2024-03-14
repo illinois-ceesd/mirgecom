@@ -34,7 +34,11 @@ from mirgecom.wall_model import SolidWallConservedVars
 
 
 class SolidWallInitializer:
-    """Initializer for heat conduction only materials."""
+    """State initializer for wall models solving heat-diffusion equation.
+
+    This class computes the initial condition for either solid or porous
+    materials, and/or their combination, subject or not to ablation.
+    """
 
     def __init__(self, temperature, material_densities):
         self._temp = temperature
@@ -49,6 +53,11 @@ class SolidWallInitializer:
             Nodal coordinates
         wall_model: :class:`mirgecom.wall_model.SolidWallModel`
             Equation of state class
+
+        Returns
+        -------
+        wv: :class:`mirgecom.wall_model.SolidWallConservedVars`
+            The conserved variables for heat-conduction only materials.
         """
         actx = x_vec[0].array_context
 
@@ -63,7 +72,7 @@ class SolidWallInitializer:
 
 
 class PorousWallInitializer:
-    """State initializer for porous materials."""
+    """State initializer for porous materials in the unified-domain solver."""
 
     def __init__(self, temperature, material_densities, species=None,
                  pressure=None, density=None, porous_region=None):
@@ -101,7 +110,8 @@ class PorousWallInitializer:
         Returns
         -------
         cv: :class:`mirgecom.fluid.ConservedVars`
-            The conserved variables for porous flows.
+            The conserved variables for porous-media flows. It depends on
+            both gas and porous material properties.
         wall_density: numpy.ndarray or :class:`meshmode.dof_array.DOFArray`
             The densities of each one of the materials
         """
@@ -110,6 +120,14 @@ class PorousWallInitializer:
         ones = zeros + 1.0
         dim = x_vec.shape[0]
 
+        porous_region = ones if self._porous_region is None else self._porous_region
+
+        # wall-only properties
+        wall_density = self._wall_density * porous_region
+        tau = gas_model.decomposition_progress(wall_density)
+        eps_rho_solid = gas_model.solid_density(wall_density)
+
+        # coupled properties
         temperature = self._temp + zeros
 
         nspecies = len(self._y)
@@ -119,15 +137,6 @@ class PorousWallInitializer:
         else:
             species_mass_frac = self._y
 
-        porous_region = ones if self._porous_region is None else self._porous_region
-        wall_density = self._wall_density * porous_region
-
-        species_mass_frac = self._y + zeros
-
-        wall_density = self._wall_density + zeros
-        tau = gas_model.decomposition_progress(wall_density)
-        eps_rho_solid = gas_model.solid_density(wall_density)
-
         eps_gas = gas_model.wall_eos.void_fraction(tau)
         if self._mass is None:
             pressure = self._pres + zeros
@@ -136,13 +145,15 @@ class PorousWallInitializer:
         else:
             eps_rho_gas = eps_gas*self._mass
 
+        # FIXME: for now, let's always start with zero velocity
+        momentum = make_obj_array([zeros for _ in range(dim)])
+
+        # internal energy (kinetic energy is absent in here)
         bulk_energy = (
             eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
             + eps_rho_gas*gas_model.eos.get_internal_energy(temperature,
                                                             species_mass_frac)
         )
-
-        momentum = make_obj_array([zeros for _ in range(dim)])
 
         species_mass = eps_rho_gas*species_mass_frac
 
