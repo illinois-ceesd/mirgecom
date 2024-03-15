@@ -67,7 +67,10 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import (
+    SimpleTransport,
+    MixtureAveragedTransport
+)
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     # logmgr_add_many_discretization_quantities,
@@ -93,7 +96,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          periodic_mesh=False, multiple_boundaries=False,
          use_navierstokes=False, use_mixture=False,
          use_reactions=False, newton_iters=3,
-         mech_name="uiuc_7sp"):
+         mech_name="uiuc_7sp", use_mix_transport=False,
+         use_av=0, use_limiter=False):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -189,6 +193,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     thermal_conductivity = 1e-5
     viscosity = 1.0e-5
 
+    speedup_factor = 1.0
+
     if use_mixture:
         # {{{  Set up initial state using Cantera
 
@@ -250,21 +256,63 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     temperature_seed = force_evaluation(actx, temperature_seed)
     wall_bc = IsothermalWallBoundary() if use_navierstokes else AdiabaticSlipBoundary()
+
     transport = None
     if use_navierstokes:
-        transport = SimpleTransport(viscosity=viscosity,
-                                    thermal_conductivity=thermal_conductivity,
-                                    species_diffusivity=species_diffusivity)
+        if use_mix_transport and use_mixture:
+            transport = MixtureAveragedTransport(pyro_mechanism,
+                                                 factor=speedup_factor)
+        else:
+            transport = SimpleTransport(viscosity=viscosity,
+                                        thermal_conductivity=thermal_conductivity,
+                                        species_diffusivity=species_diffusivity)
+
     gas_model = GasModel(eos=eos, transport=transport)
     fluid_operator = ns_operator if use_navierstokes else euler_operator
     orig = np.zeros(shape=(dim,))
     uniform_cv = initializer(nodes, eos=eos)
     limter_func = None
 
+    def mixture_mass_fraction_limiter(cv, pressure, temperature, dd=None):
+
+        # limit species
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
+                                     mmin=0.0, mmax=1.0, modify_average=True,
+                                     dd=dd)
+            for i in range(nspecies)
+        ])
+
+        # normalize to ensure sum_Yi = 1.0
+        aux = cv.mass*0.0
+        for i in range(0, nspecies):
+            aux = aux + spec_lim[i]
+        spec_lim = spec_lim/aux
+
+        # recompute density
+        mass_lim = eos.get_density(pressure=pressure,
+                                   temperature=temperature,
+                                   species_mass_fractions=spec_lim)
+
+        # recompute energy
+        energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
+            temperature, species_mass_fractions=spec_lim)
+            + 0.5*np.dot(cv.velocity, cv.velocity)
+        )
+
+        # make a new CV with the limited variables
+        return make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+                            momentum=mass_lim*cv.velocity,
+                            species_mass=mass_lim*spec_lim)
+
+
+    limiter_func = mixture_mass_fraction_limiter if use_limiter else None
+
     def stepper_state_to_gas_state(stepper_state):
         if use_mixture:
             cv, tseed = stepper_state
             return make_fluid_state(cv=cv, gas_model=gas_model,
+                                    limiter_func=limiter_func,
                                     temperature_seed=tseed)
         else:
             return make_fluid_state(cv=stepper_state, gas_model=gas_model)
@@ -293,9 +341,73 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1, center=orig)
 
     def mfs(cv, tseed):
-        return make_fluid_state(cv, gas_model, temperature_seed=tseed)
+        return make_fluid_state(cv, gas_model, limiter_func=limiter_func,
+                                temperature_seed=tseed)
 
     mfs_compiled = actx.compile(mfs)
+
+    av2_mu0 = 0.1
+    av2_beta0 = 6.0
+    av2_kappa0 = 1.0
+    av2_d0 = 0.1
+    av2_prandtl0 = 0.9
+    av2_mu_s0 = 0.
+    av2_kappa_s0 = 0.
+    av2_beta_s0 = .01
+    av2_d_s0 = 0.
+
+    # use_av=1 specific parameters
+    # flow stagnation temperature
+    static_temp = 2076.43
+    # steepness of the smoothed function
+    theta_sc = 100
+    # cutoff, smoothness below this value is ignored
+    beta_sc = 0.01
+    gamma_sc = 1.5
+    alpha_sc = 0.3
+    kappa_sc = 0.5
+    s0_sc = -5.0
+    s0_sc = np.log10(1.0e-4 / np.power(order, 4))
+
+    smoothness_alpha = 0.1
+    smoothness_tau = .01
+
+    if rank == 0 and use_navierstokes and use_av > 0:
+        print(f"Shock capturing parameters: alpha {alpha_sc}, "
+              f"s0 {s0_sc}, kappa {kappa_sc}")
+        print(f"Artificial viscosity {smoothness_alpha=}")
+        print(f"Artificial viscosity {smoothness_tau=}")
+
+        if use_av == 1:
+            print("Artificial viscosity using modified physical viscosity")
+            print("Using velocity divergence indicator")
+            print(f"Shock capturing parameters: alpha {alpha_sc}, "
+                  f"gamma_sc {gamma_sc}"
+                  f"theta_sc {theta_sc}, beta_sc {beta_sc}, Pr 0.75, "
+                  f"stagnation temperature {static_temp}")
+        elif use_av == 2:
+            print("Artificial viscosity using modified transport properties")
+            print("\t mu, beta, kappa")
+            # MJA update this
+            print(f"Shock capturing parameters:"
+                  f"\n\tav_mu {av2_mu0}"
+                  f"\n\tav_beta {av2_beta0}"
+                  f"\n\tav_kappa {av2_kappa0}"
+                  f"\n\tav_prantdl {av2_prandtl0}"
+                  f"\nstagnation temperature {static_temp}")
+        elif use_av == 3:
+            print("Artificial viscosity using modified transport properties")
+            print("\t mu, beta, kappa, D")
+            print(f"Shock capturing parameters:"
+                  f"\tav_mu {av2_mu0}"
+                  f"\tav_beta {av2_beta0}"
+                  f"\tav_kappa {av2_kappa0}"
+                  f"\tav_d {av2_d0}"
+                  f"\tav_prantdl {av2_prandtl0}"
+                  f"stagnation temperature {static_temp}")
+        else:
+            error_message = "Unknown artifical viscosity model {}".format(use_av)
+            raise RuntimeError(error_message)
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -485,12 +597,18 @@ if __name__ == "__main__":
                         help="use periodic boundaries")
     parser.add_argument("-n", "--navierstokes", action="store_true",
                         help="use Navier-Stokes operator")
+    parser.add_argument("-a", "--artificial-viscosity", type=int, choices=[0, 1, 2, 3],
+                        default=0, help="use artificial viscosity")
     parser.add_argument("-b", "--boundaries", action="store_true",
                         help="use multiple (2*ndim) boundaries")
     parser.add_argument("-m", "--mixture", action="store_true",
                         help="use gas mixture EOS")
     parser.add_argument("-f", "--flame", action="store_true",
                         help="use combustion chemistry")
+    parser.add_argument("-x", "--mixture-transport", action="store_true",
+                        help="use mixture-averged transport")
+    parser.add_argument("-s", "--limiter", action="store_true",
+                        help="use limiter to limit fluid state")
     parser.add_argument("-t", "--tpe", action="store_true",
                         help="use tensor-product elements (quads/hexes)")
     args = parser.parse_args()
@@ -520,6 +638,8 @@ if __name__ == "__main__":
          casename=casename, rst_filename=rst_filename,
          periodic_mesh=args.periodic, use_mixture=args.mixture,
          multiple_boundaries=args.boundaries,
+         use_mix_transport=args.mixture_transport,
+         use_limiter=args.limiter, use_av=args.artificial_viscosity,
          use_reactions=args.flame, newton_iters=args.iters,
          use_navierstokes=args.navierstokes)
 
