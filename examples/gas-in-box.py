@@ -71,6 +71,8 @@ from mirgecom.transport import (
     SimpleTransport,
     MixtureAveragedTransport
 )
+from mirgecom.limiter import bound_preserving_limiter
+from mirgecom.fluid import make_conserved
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     # logmgr_add_many_discretization_quantities,
@@ -96,7 +98,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          periodic_mesh=False, multiple_boundaries=False,
          use_navierstokes=False, use_mixture=False,
          use_reactions=False, newton_iters=3,
-         mech_name="uiuc_7sp", use_mix_transport=False,
+         mech_name="uiuc_7sp", transport_type=0,
          use_av=0, use_limiter=False):
     """Drive the example."""
     if casename is None:
@@ -189,7 +191,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    species_diffusivty = None
+    species_diffusivity = None
     thermal_conductivity = 1e-5
     viscosity = 1.0e-5
 
@@ -258,14 +260,128 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     wall_bc = IsothermalWallBoundary() if use_navierstokes else AdiabaticSlipBoundary()
 
     transport = None
+    # initialize the transport model
+    transport_alpha = 0.6
+    transport_beta = 4.093e-7
+    transport_sigma = 2.0
+    transport_n = 0.666
+
     if use_navierstokes:
-        if use_mix_transport and use_mixture:
-            transport = MixtureAveragedTransport(pyro_mechanism,
-                                                 factor=speedup_factor)
+        if transport_type == 2:
+            if not use_mixture:
+                error_message = "Invalid transport_type {} for single gas.".format(transport_type)
+                raise RuntimeError(error_message)
+            if rank == 0:
+                print("Pyrometheus transport model:")
+                print("\t temperature/mass fraction dependence")
+            physical_transport_model = MixtureAveragedTransport(pyro_mechanism,
+                                                                    factor=speedup_factor)
+        elif transport_type == 0:
+            if rank == 0:
+                print("Simple transport model:")
+                print("\tconstant viscosity, species diffusivity")
+                print(f"\tmu = {mu}")
+                print(f"\tkappa = {kappa}")
+                print(f"\tspecies diffusivity = {spec_diff}")
+            physical_transport_model = SimpleTransport(
+                viscosity=viscosity, thermal_conductivity=thermal_conductivity,
+                species_diffusivity=species_diffusivity)
+        elif transport_type == 1:
+            if rank == 0:
+                print("Power law transport model:")
+                print("\ttemperature dependent viscosity, species diffusivity")
+                print(f"\ttransport_alpha = {transport_alpha}")
+                print(f"\ttransport_beta = {transport_beta}")
+                print(f"\ttransport_sigma = {transport_sigma}")
+                print(f"\ttransport_n = {transport_n}")
+                print(f"\tspecies diffusivity = {species_diffusivity}")
+            physical_transport_model = PowerLawTransport(
+                alpha=transport_alpha, beta=transport_beta,
+                sigma=transport_sigma, n=transport_n,
+                species_diffusivity=species_diffusivity)
         else:
-            transport = SimpleTransport(viscosity=viscosity,
-                                        thermal_conductivity=thermal_conductivity,
-                                        species_diffusivity=species_diffusivity)
+            error_message = "Unknown transport_type {}".format(transport_type)
+            raise RuntimeError(error_message)
+
+    transport = physical_transport_model
+    if use_av == 1:
+        transport = ArtificialViscosityTransportDiv(
+            physical_transport=physical_transport_model,
+            av_mu=alpha_sc, av_prandtl=0.75)
+    elif use_av == 2:
+        transport = ArtificialViscosityTransportDiv2(
+            physical_transport=physical_transport_model,
+            av_mu=av2_mu0, av_beta=av2_beta0, av_kappa=av2_kappa0,
+            av_prandtl=av2_prandtl0)
+    elif use_av == 3:
+        transport = ArtificialViscosityTransportDiv3(
+            physical_transport=physical_transport_model,
+            av_mu=av2_mu0, av_beta=av2_beta0,
+            av_kappa=av2_kappa0, av_d=av2_d0,
+            av_prandtl=av2_prandtl0)
+
+    av2_mu0 = 0.1
+    av2_beta0 = 6.0
+    av2_kappa0 = 1.0
+    av2_d0 = 0.1
+    av2_prandtl0 = 0.9
+    av2_mu_s0 = 0.
+    av2_kappa_s0 = 0.
+    av2_beta_s0 = .01
+    av2_d_s0 = 0.
+
+    # use_av=1 specific parameters
+    # flow stagnation temperature
+    static_temp = 2076.43
+    # steepness of the smoothed function
+    theta_sc = 100
+    # cutoff, smoothness below this value is ignored
+    beta_sc = 0.01
+    gamma_sc = 1.5
+    alpha_sc = 0.3
+    kappa_sc = 0.5
+    s0_sc = -5.0
+    s0_sc = np.log10(1.0e-4 / np.power(order, 4))
+
+    smoothness_alpha = 0.1
+    smoothness_tau = .01
+
+    if rank == 0 and use_navierstokes and use_av > 0:
+        print(f"Shock capturing parameters: alpha {alpha_sc}, "
+              f"s0 {s0_sc}, kappa {kappa_sc}")
+        print(f"Artificial viscosity {smoothness_alpha=}")
+        print(f"Artificial viscosity {smoothness_tau=}")
+
+        if use_av == 1:
+            print("Artificial viscosity using modified physical viscosity")
+            print("Using velocity divergence indicator")
+            print(f"Shock capturing parameters: alpha {alpha_sc}, "
+                  f"gamma_sc {gamma_sc}"
+                  f"theta_sc {theta_sc}, beta_sc {beta_sc}, Pr 0.75, "
+                  f"stagnation temperature {static_temp}")
+        elif use_av == 2:
+            print("Artificial viscosity using modified transport properties")
+            print("\t mu, beta, kappa")
+            # MJA update this
+            print(f"Shock capturing parameters:"
+                  f"\n\tav_mu {av2_mu0}"
+                  f"\n\tav_beta {av2_beta0}"
+                  f"\n\tav_kappa {av2_kappa0}"
+                  f"\n\tav_prantdl {av2_prandtl0}"
+                  f"\nstagnation temperature {static_temp}")
+        elif use_av == 3:
+            print("Artificial viscosity using modified transport properties")
+            print("\t mu, beta, kappa, D")
+            print(f"Shock capturing parameters:"
+                  f"\tav_mu {av2_mu0}"
+                  f"\tav_beta {av2_beta0}"
+                  f"\tav_kappa {av2_kappa0}"
+                  f"\tav_d {av2_d0}"
+                  f"\tav_prantdl {av2_prandtl0}"
+                  f"stagnation temperature {static_temp}")
+        else:
+            error_message = "Unknown artifical viscosity model {}".format(use_av)
+            raise RuntimeError(error_message)
 
     gas_model = GasModel(eos=eos, transport=transport)
     fluid_operator = ns_operator if use_navierstokes else euler_operator
@@ -345,69 +461,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                                 temperature_seed=tseed)
 
     mfs_compiled = actx.compile(mfs)
-
-    av2_mu0 = 0.1
-    av2_beta0 = 6.0
-    av2_kappa0 = 1.0
-    av2_d0 = 0.1
-    av2_prandtl0 = 0.9
-    av2_mu_s0 = 0.
-    av2_kappa_s0 = 0.
-    av2_beta_s0 = .01
-    av2_d_s0 = 0.
-
-    # use_av=1 specific parameters
-    # flow stagnation temperature
-    static_temp = 2076.43
-    # steepness of the smoothed function
-    theta_sc = 100
-    # cutoff, smoothness below this value is ignored
-    beta_sc = 0.01
-    gamma_sc = 1.5
-    alpha_sc = 0.3
-    kappa_sc = 0.5
-    s0_sc = -5.0
-    s0_sc = np.log10(1.0e-4 / np.power(order, 4))
-
-    smoothness_alpha = 0.1
-    smoothness_tau = .01
-
-    if rank == 0 and use_navierstokes and use_av > 0:
-        print(f"Shock capturing parameters: alpha {alpha_sc}, "
-              f"s0 {s0_sc}, kappa {kappa_sc}")
-        print(f"Artificial viscosity {smoothness_alpha=}")
-        print(f"Artificial viscosity {smoothness_tau=}")
-
-        if use_av == 1:
-            print("Artificial viscosity using modified physical viscosity")
-            print("Using velocity divergence indicator")
-            print(f"Shock capturing parameters: alpha {alpha_sc}, "
-                  f"gamma_sc {gamma_sc}"
-                  f"theta_sc {theta_sc}, beta_sc {beta_sc}, Pr 0.75, "
-                  f"stagnation temperature {static_temp}")
-        elif use_av == 2:
-            print("Artificial viscosity using modified transport properties")
-            print("\t mu, beta, kappa")
-            # MJA update this
-            print(f"Shock capturing parameters:"
-                  f"\n\tav_mu {av2_mu0}"
-                  f"\n\tav_beta {av2_beta0}"
-                  f"\n\tav_kappa {av2_kappa0}"
-                  f"\n\tav_prantdl {av2_prandtl0}"
-                  f"\nstagnation temperature {static_temp}")
-        elif use_av == 3:
-            print("Artificial viscosity using modified transport properties")
-            print("\t mu, beta, kappa, D")
-            print(f"Shock capturing parameters:"
-                  f"\tav_mu {av2_mu0}"
-                  f"\tav_beta {av2_beta0}"
-                  f"\tav_kappa {av2_kappa0}"
-                  f"\tav_d {av2_d0}"
-                  f"\tav_prantdl {av2_prandtl0}"
-                  f"stagnation temperature {static_temp}")
-        else:
-            error_message = "Unknown artifical viscosity model {}".format(use_av)
-            raise RuntimeError(error_message)
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -605,8 +658,8 @@ if __name__ == "__main__":
                         help="use gas mixture EOS")
     parser.add_argument("-f", "--flame", action="store_true",
                         help="use combustion chemistry")
-    parser.add_argument("-x", "--mixture-transport", action="store_true",
-                        help="use mixture-averged transport")
+    parser.add_argument("-x", "--transport", type=int, choices=[0, 1, 2], default=0,
+                        help="transport model specification\n(0)Simple\n(1)PowerLaw\n(2)Mix")
     parser.add_argument("-s", "--limiter", action="store_true",
                         help="use limiter to limit fluid state")
     parser.add_argument("-t", "--tpe", action="store_true",
@@ -638,7 +691,7 @@ if __name__ == "__main__":
          casename=casename, rst_filename=rst_filename,
          periodic_mesh=args.periodic, use_mixture=args.mixture,
          multiple_boundaries=args.boundaries,
-         use_mix_transport=args.mixture_transport,
+         transport_type=args.transport,
          use_limiter=args.limiter, use_av=args.artificial_viscosity,
          use_reactions=args.flame, newton_iters=args.iters,
          use_navierstokes=args.navierstokes)
