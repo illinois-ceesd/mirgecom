@@ -191,7 +191,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    species_diffusivty = None
+    species_diffusivity = None
     thermal_conductivity = 1e-5
     viscosity = 1.0e-5
 
