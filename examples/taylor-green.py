@@ -96,7 +96,7 @@ def main(actx_class, order=1, t_final=1, resolution=4,
     timestepper = lsrk54_step
     t_final = 5e-3
     current_cfl = 1.0
-    current_dt = 1e-3
+    current_dt = 1e-6
     current_t = 0
     constant_cfl = False
 
@@ -106,7 +106,7 @@ def main(actx_class, order=1, t_final=1, resolution=4,
     nviz = 100
     nhealth = 100
 
-    dim = 3
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -121,11 +121,13 @@ def main(actx_class, order=1, t_final=1, resolution=4,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        box_ll = -np.pi
-        box_ur = np.pi
+        box_ll = (-np.pi,)*dim
+        box_ur = (np.pi,)*dim
+        if dim == 2:
+            box_ll = (np.pi/2, np.pi/2)
+            box_ur = (5*np.pi/2, 5*np.pi/2)
         generate_mesh = partial(generate_regular_rect_mesh,
-                                a=(box_ll,)*dim,
-                                b=(box_ur,) * dim,
+                                a=box_ll, b=box_ur,
                                 nelements_per_axis=(resolution,)*dim,
                                 periodic=(True,)*dim)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
@@ -168,7 +170,7 @@ def main(actx_class, order=1, t_final=1, resolution=4,
     # Periodic domain, no boundary conditions (yay!)
     boundaries = {}
 
-    initial_condition = InviscidTaylorGreenVortex()
+    initial_condition = InviscidTaylorGreenVortex(dim=dim)
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -315,7 +317,7 @@ if __name__ == "__main__":
     import argparse
     casename = "taylor-green-vortex"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
-    parser.add_argument("--order", default=3, type=int,
+    parser.add_argument("--order", default=1, type=int,
         help="specify the polynomial order of the DG method")
     parser.add_argument("--tfinal", default=20., type=float,
         help="specify final time for the simulation")
