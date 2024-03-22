@@ -280,9 +280,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             if rank == 0:
                 print("Simple transport model:")
                 print("\tconstant viscosity, species diffusivity")
-                print(f"\tmu = {mu}")
-                print(f"\tkappa = {kappa}")
-                print(f"\tspecies diffusivity = {spec_diff}")
+                print(f"\tmu = {viscosity}")
+                print(f"\tkappa = {thermal_conductivity}")
+                print(f"\tspecies diffusivity = {species_diffusivity}")
             physical_transport_model = SimpleTransport(
                 viscosity=viscosity, thermal_conductivity=thermal_conductivity,
                 species_diffusivity=species_diffusivity)
