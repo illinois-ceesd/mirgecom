@@ -197,6 +197,7 @@ class FiberEOS(PorousWallEOS):
         kappa[self._anisotropic_dir] = kappa_k
 
         # account for fiber shrinkage via "tau"
+        # XXX check if here is the best place for timescale
         return kappa*tau*self._timescale
 
     # ~~~~~~~~ other properties
@@ -217,6 +218,7 @@ class FiberEOS(PorousWallEOS):
 
     def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
+        # XXX check if here is the best place for timescale
         return self._timescale * (
             + 2.26413679e-18*temperature**5 - 2.03008004e-14*temperature**4
             + 7.05300324e-11*temperature**3 - 1.22131715e-07*temperature**2
