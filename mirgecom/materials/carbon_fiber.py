@@ -109,6 +109,7 @@ class FiberEOS(PorousWallEOS):
         \tau = \frac{m}{m_0} = \frac{\rho_i \epsilon}{\rho_i \epsilon_0}
              = \frac{r^2}{r_0^2}
 
+    .. automethod:: __init__
     .. automethod:: void_fraction
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
