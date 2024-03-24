@@ -1,11 +1,12 @@
 OpenCL kernel caching
 =====================
 
-OpenCL kernels are cached on hard disk on multiple levels during a |mirgecom|
-execution. This has the advantage of reducing the compilation time of kernels
-when running the same driver multiple times.
+OpenCL kernels are cached in memory and on hard disk on multiple levels during
+a |mirgecom| execution. This has the advantage of reducing the compilation time
+of kernels when running the same driver multiple times.
 
-The following sections discuss |mirgecom|-related packages that use caching.
+The following sections discuss |mirgecom|-related packages that use caching,
+with a focus on configuring the disk-based caching.
 
 .. note::
 
@@ -18,6 +19,21 @@ The following sections discuss |mirgecom|-related packages that use caching.
    ~/Library/Caches/pytools/pdict*  $XDG_CACHE_HOME/pyopencl
    ~/.cache/pyopencl  ~/Library/Caches/pyopencl $POCL_CACHE_DIR
    $XDG_CACHE_HOME/pocl ~/.cache/pocl ~/.nv/ComputeCache $CUDA_CACHE_PATH``
+
+.. note::
+
+   The following bash code can be used to disable all disk caches::
+
+      $ export LOOPY_NO_CACHE=1
+      $ export PYOPENCL_NO_CACHE=1
+      $ export POCL_KERNEL_CACHE=0
+      $ export CUDA_CACHE_DISABLE=1
+
+.. note::
+
+   Disabling disk caching for a specific package only affects
+   that particular package. For example, disabling disk caching for :mod:`loopy`
+   does not affect the caching behavior of :mod:`pyopencl` or *PoCL*.
 
 
 Loopy
@@ -64,21 +80,22 @@ for details.
    PyOpenCL uses ``clCreateProgramWithSource`` on the first compilation and
    caches the OpenCL binary it retrieves. The second time the same source
    is compiled, it uses ``clCreateProgramWithBinary`` to hand the binary
-   to the CL runtime (such as PoCL). This can lead to different caching behaviors on the first three compilations depending on how the CL runtime
+   to the CL runtime (such as PoCL). This can lead to different caching
+   behaviors on the first three compilations depending on how the CL runtime
    itself performs caching.
 
 
 PoCL
 ----
 
-PoCL stores compilation results (LLVM bitcode and shared libraries) in
-``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME/pocl`` by default. You can export
-``POCL_KERNEL_CACHE=0`` to disable caching. See `here
+*PoCL* stores compilation results (LLVM bitcode and shared
+libraries) in ``$POCL_CACHE_DIR`` or ``$XDG_CACHE_HOME/pocl`` by default. You
+can export ``POCL_KERNEL_CACHE=0`` to disable caching. See `here
 <http://portablecl.org/docs/html/using.html#tuning-pocl-behavior-with-env-variables>`__ for details.
 
 .. note::
 
-   When ``$POCL_CACHE_DIR`` and ``$XDG_CACHE_HOME`` are not set, PoCL's cache
+   When ``$POCL_CACHE_DIR`` and ``$XDG_CACHE_HOME`` are not set, *PoCL*'s cache
    dir defaults to ``~/.cache/pocl`` on Linux and MacOS.
 
 
