@@ -35,7 +35,7 @@ from grudge import op
 
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from meshmode.mesh.generation import generate_regular_rect_mesh
 from meshmode.array_context import (  # noqa
@@ -383,7 +383,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         tin = tempin * ones
         pin = pressin * ones
         yin = y0s * ones
-        tguess = 300.0
+        tguess = 0*ones + 300.0
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
         pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
