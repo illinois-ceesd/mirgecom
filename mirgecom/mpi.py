@@ -94,10 +94,7 @@ def _check_cache_dirs_node() -> None:
                     warn(f"Multiple ranks are sharing '{var}' on node '{hostname}'. "
                         f"Duplicate '{var}'s: {dup}.")
 
-        if sys.platform != "darwin":
-            # XDG_CACHE_HOME can't be used on MacOS, see
-            # https://github.com/illinois-ceesd/mirgecom/pull/1020
-            _check_var("XDG_CACHE_HOME")
+        _check_var("XDG_CACHE_HOME")
         _check_var("POCL_CACHE_DIR")
 
         # We haven't observed an issue yet that 'CUDA_CACHE_PATH' fixes,
@@ -248,16 +245,6 @@ def _check_mpi4py_version() -> None:
                      "scatter support.")
 
 
-def _check_xdg_env_on_macos() -> None:
-    if sys.platform == "darwin":
-        if "XDG_CACHE_HOME" in os.environ:
-            # XDG_CACHE_HOME can't be used on MacOS, see
-            # https://github.com/illinois-ceesd/mirgecom/pull/1020
-            from warnings import warn
-            warn("The XDG_CACHE_HOME environment variable is set. This "
-                 "variable is ignored on MacOS for loopy/pyopencl caches.")
-
-
 def mpi_entry_point(func) -> Callable:
     """
     Return a decorator that designates a function as the "main" function for MPI.
@@ -301,7 +288,6 @@ def mpi_entry_point(func) -> Callable:
         _check_isl_version()
         _check_mpi4py_version()
         log_disk_cache_config()
-        _check_xdg_env_on_macos()
 
         func(*args, **kwargs)
 
