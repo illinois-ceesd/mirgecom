@@ -536,12 +536,12 @@ def get_porous_flow_timestep(dcoll, gas_model, state, cfl, dd):
     mass_cp = gas_model.heat_capacity(state.cv, state.wv, state.dv.temperature)
 
     nu = state.viscosity / state.mass_density
-    alpha = kappa / ( mass_cp )
+    alpha = kappa / mass_cp
     d_species_max = \
         get_local_max_species_diffusivity(actx, state.species_diffusivity)
     viscous_stuff = nu + alpha + d_species_max
     vdt = op.elementwise_min(
-        dcoll, dd, 
+        dcoll, dd,
         length_scales / (state.wavespeed + ((viscous_stuff) / length_scales))
     )
 
