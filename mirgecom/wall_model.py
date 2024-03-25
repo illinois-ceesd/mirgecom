@@ -86,6 +86,11 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import GasTransportVars, TransportModel
 
+from grudge.dt_utils import characteristic_lengthscales
+from mirgecom.viscous import get_local_max_species_diffusivity
+import grudge.op as op
+from functools import reduce
+
 
 @with_container_arithmetic(bcast_obj_array=False,
                            bcast_container_types=(DOFArray, np.ndarray),
@@ -509,24 +514,18 @@ class PorousFlowModel:
         return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
                 + wv.density*self.wall_eos.heat_capacity(temperature, wv.tau))
 
-#    def thermal_diffusivity(self, fluid_state) -> DOFArray:
-#        """Return the wall thermal diffusivity for all components."""
-#        tau = self.decomposition_progress(solid_state.cv.mass)
-#        mass = self.solid_density(solid_state.cv.mass)
-#        kappa = fluid_state.tv.thermal_conductivity
-#        cp = self.heat_capacity(fluid_state.cv, fluid_state.wv,
-#                                fluid_state.dv.temperature)
-#        return kappa/(mass * cp)
+    # def thermal_diffusivity(self, fluid_state) -> DOFArray:
+    #     """Return the wall thermal diffusivity for all components."""
+    #     tau = self.decomposition_progress(solid_state.cv.mass)
+    #     mass = self.solid_density(solid_state.cv.mass)
+    #     kappa = fluid_state.tv.thermal_conductivity
+    #     cp = self.heat_capacity(fluid_state.cv, fluid_state.wv,
+    #                             fluid_state.dv.temperature)
+    #     return kappa/(mass * cp)
 
 
 def get_porous_flow_timestep(dcoll, gas_model, state, cfl, dd):
     r"""Routine returns the the node-local maximum stable viscous timestep."""
-
-    from grudge.dt_utils import characteristic_lengthscales
-    from mirgecom.viscous import get_local_max_species_diffusivity
-    import grudge.op as op
-    from functools import reduce
-
     actx = state.array_context
 
     length_scales = characteristic_lengthscales(
