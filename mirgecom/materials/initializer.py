@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import make_conserved
 from mirgecom.wall_model import SolidWallConservedVars
@@ -74,8 +75,8 @@ class SolidWallInitializer:
 class PorousWallInitializer:
     """State initializer for porous materials in the unified-domain solver."""
 
-    def __init__(self, temperature, material_densities, species=None,
-                 pressure=None, density=None, porous_region=None):
+    def __init__(self, *, temperature, material_densities, species=None,
+                 velocity=None, pressure=None, density=None, porous_region=None):
         """Initialize the object for porous materials.
 
         Parameters
@@ -85,6 +86,7 @@ class PorousWallInitializer:
             portions of the flow. Only used for unified-domain solver without
             explicit coupling.
         """
+        self._velocity = velocity
         self._pres = pressure
         self._mass = density
         self._temp = temperature
@@ -120,7 +122,10 @@ class PorousWallInitializer:
         ones = zeros + 1.0
         dim = x_vec.shape[0]
 
-        porous_region = ones if self._porous_region is None else self._porous_region
+        if self._porous_region is not None:
+            porous_region = self._porous_region + zeros
+        else:
+            porous_region = ones
 
         # wall-only properties
         wall_density = self._wall_density * porous_region
@@ -145,14 +150,15 @@ class PorousWallInitializer:
         else:
             eps_rho_gas = eps_gas*self._mass
 
-        # FIXME: for now, let's always start with zero velocity
-        momentum = make_obj_array([zeros for _ in range(dim)])
+        # start with zero velocity inside the material
+        #momentum = make_obj_array([zeros for _ in range(dim)])
+        momentum = (1.0-self._porous_region) * (eps_gas*self._velocity)
 
-        # internal energy (kinetic energy is absent in here)
         bulk_energy = (
             eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
             + eps_rho_gas*gas_model.eos.get_internal_energy(temperature,
                                                             species_mass_frac)
+            + 0.5*np.dot(momentum, momentum)/eps_rho_gas
         )
 
         species_mass = eps_rho_gas*species_mass_frac

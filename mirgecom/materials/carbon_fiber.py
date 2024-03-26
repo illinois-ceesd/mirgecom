@@ -31,7 +31,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Optional
+from typing import Optional, Union
 from abc import abstractmethod
 import numpy as np
 from meshmode.dof_array import DOFArray
@@ -47,7 +47,7 @@ class Oxidation:
 
     @abstractmethod
     def get_source_terms(self, temperature: DOFArray,
-            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+            tau: DOFArray, rhoY_o2: DOFArray) -> Union[DOFArray, tuple]:  # noqa N803
         r"""Source terms of fiber oxidation."""
         raise NotImplementedError()
 
@@ -97,7 +97,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
 class Y3_Oxidation_Model(Oxidation):  # noqa N801
     r"""Evaluate the source terms for carbon fiber oxidation in Y3 model.
 
-    Follows ``A. Martin, AIAA 2013-2636'', using a single reaction given by
+    Follows [Martin_2013]_ by using a single reaction given by
 
     .. math::
         C_{(s)} + O_2 \to CO_2
@@ -126,7 +126,7 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
         return 2.0*epsilon_0/original_fiber_radius**2*fiber_radius
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+            rhoY_o2: DOFArray):  # noqa N803
         r"""Return the effective source terms for the oxidation.
 
         Parameters
@@ -139,7 +139,8 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
 
         Returns
         -------
-            The tuple (\omega_{C}, \omega_{O_2}, \omega_{CO_2})
+        sources: tuple
+            the tuple ($\omega_{C}$, $\omega_{O_2}$, $\omega_{CO_2}$)
         """
         actx = temperature.array_context
 
