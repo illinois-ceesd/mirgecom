@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 from typing import Optional
 from abc import abstractmethod
+import numpy as np
 from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallEOS
 from pytools.obj_array import make_obj_array
@@ -38,24 +39,19 @@ from pytools.obj_array import make_obj_array
 class Oxidation:
     """Abstract interface for wall oxidation model.
 
-    .. automethod:: effective_surface_area_fiber
     .. automethod:: get_source_terms
     """
 
     @abstractmethod
-    def effective_surface_area_fiber(self, progress: DOFArray) -> DOFArray:
-        r"""Evaluate the effective surface of the fibers."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: Optional[DOFArray] = None) -> DOFArray:  # noqa N803
+    def get_source_terms(self, temperature: DOFArray,
+            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
         r"""Source terms of fiber oxidation."""
         raise NotImplementedError()
 
 
 # TODO per MTC review, can we generalize the oxidation model?
 # should we keep this in the driver?
+# https://github.com/illinois-ceesd/mirgecom/pull/875#discussion_r1261414281
 class Y2_Oxidation_Model(Oxidation):  # noqa N801
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
@@ -75,7 +71,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         # Rescale by x==0 value and rearrange
         return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
 
-    def _get_wall_effective_surface_area_fiber(self, progress) -> DOFArray:
+    def _get_wall_effective_surface_area_fiber(self, progress: DOFArray) -> DOFArray:
         """Evaluate the effective surface of the fibers.
 
         Parameters
@@ -85,14 +81,15 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         """
         return self.puma_effective_surface_area(progress)
 
-    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:  # noqa N803
+    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
+            rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
         """Return the effective source terms for the oxidation.
 
         Parameters
         ----------
         temperature: meshmode.dof_array.DOFArray
         tau: meshmode.dof_array.DOFArray
-            the progress ratio of the oxidation
+            the progress ratio of the oxidation: 1 for virgin, 0 for fully oxidized
         ox_mass: meshmode.dof_array.DOFArray
             the mass fraction of oxygen
         """
@@ -142,13 +139,13 @@ class FiberEOS(PorousWallEOS):
         ----------
         dim: int
             geometrical dimension of the problem.
-        virgin_mass: float
-            initial mass of the material.
-        char_mass: float
-            final mass when the decomposition is complete.
         anisotropic_direction: int
             For orthotropic materials, this indicates the normal direction
             where the properties are different than in-plane.
+        char_mass: float
+            final mass when the decomposition is complete.
+        virgin_mass: float
+            initial mass of the material.
         """
         self._char_mass = char_mass
         self._virgin_mass = virgin_mass
@@ -186,7 +183,7 @@ class FiberEOS(PorousWallEOS):
             - 3.62422269e+02)
 
     # ~~~~~~~~ fiber conductivity
-    def thermal_conductivity(self, temperature, tau=None) -> DOFArray:
+    def thermal_conductivity(self, temperature, tau=None) -> np.ndarray:
         r"""Evaluate the thermal conductivity $\kappa$ of the fibers.
 
         It accounts for anisotropy and oxidation progress.
@@ -214,7 +211,7 @@ class FiberEOS(PorousWallEOS):
         r"""Fraction $\phi$ occupied by the solid."""
         return 0.12*tau
 
-    def permeability(self, tau: DOFArray) -> DOFArray:
+    def permeability(self, tau: DOFArray) -> np.ndarray:
         r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
         # TODO: the relation depends on the coupling model. Postpone it for now.
@@ -224,7 +221,8 @@ class FiberEOS(PorousWallEOS):
         permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
         return permeability
 
-    def emissivity(self, temperature=None, tau=None) -> DOFArray:
+    def emissivity(self, temperature: DOFArray,  # type: ignore[override]
+            tau: Optional[DOFArray] = None) -> DOFArray:
         """Emissivity for energy radiation."""
         return (
             + 2.26413679e-18*temperature**5 - 2.03008004e-14*temperature**4
@@ -232,7 +230,11 @@ class FiberEOS(PorousWallEOS):
             + 1.21137817e-04*temperature**1 + 8.66656964e-01)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
-        r"""Tortuosity $\eta$ affects the species diffusivity."""
+        r"""Tortuosity $\eta$ affects the species diffusivity.
+
+        .. math:
+            D_{eff} = \frac{D_i^(m)}{\eta}
+        """
         return 1.1*tau + 1.0*(1.0 - tau)
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
