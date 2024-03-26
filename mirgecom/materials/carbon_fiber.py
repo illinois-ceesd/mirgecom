@@ -54,33 +54,38 @@ class Oxidation:
         raise NotImplementedError()
 
 
-class OxidationModel(Oxidation):
-    """Evaluate the source terms for the carbon fiber oxidation.
+# TODO per MTC review, can we generalize the oxidation model?
+# should we keep this in the driver?
+class Y2_Oxidation_Model(Oxidation):  # noqa N801
+    """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
-    The user must specify in the driver the functions for oxidation.
-    (Tentatively) Generalizing this class makes it easier for adding new,
-    more complex models and for UQ runs.
-
-    .. automethod:: effective_surface_area_fiber
+    .. automethod:: puma_effective_surface_area
     .. automethod:: get_source_terms
     """
 
-    def __init__(self, surface_area_func, oxidation_func):
-        self._surface_func = surface_area_func
-        self._oxidation_func = oxidation_func
-
-    def effective_surface_area_fiber(self, progress: DOFArray) -> DOFArray:
-        r"""Evaluate the effective surface of the fibers.
+    def puma_effective_surface_area(self, progress) -> DOFArray:
+        """Polynomial fit based on PUMA data.
 
         Parameters
         ----------
         progress: meshmode.dof_array.DOFArray
-            the rate of decomposition of the fibers, defined as 1.0 - $\tau$.
+            the rate of decomposition of the fibers
         """
-        return self._surface_func(progress)
+        # Original fit function: -1.1012e5*x**2 - 0.0646e5*x + 1.1794e5
+        # Rescale by x==0 value and rearrange
+        return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
 
-    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: Optional[DOFArray] = None) -> DOFArray:  # noqa N803
+    def _get_wall_effective_surface_area_fiber(self, progress) -> DOFArray:
+        """Evaluate the effective surface of the fibers.
+
+        Parameters
+        ----------
+        progress: meshmode.dof_array.DOFArray
+            the rate of decomposition of the fibers
+        """
+        return self.puma_effective_surface_area(progress)
+
+    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:  # noqa N803
         """Return the effective source terms for the oxidation.
 
         Parameters
@@ -88,14 +93,23 @@ class OxidationModel(Oxidation):
         temperature: meshmode.dof_array.DOFArray
         tau: meshmode.dof_array.DOFArray
             the progress ratio of the oxidation
-        rhoY_o2: meshmode.dof_array.DOFArray
+        ox_mass: meshmode.dof_array.DOFArray
             the mass fraction of oxygen
         """
-        area = self.effective_surface_area_fiber(1.0-tau)
-        if rhoY_o2:
-            return self._oxidation_func(temperature=temperature, fiber_area=area,
-                                        rhoY_o2=rhoY_o2)
-        return self._oxidation_func(temperature=temperature, fiber_area=area)
+        actx = temperature.array_context
+
+        mw_o = 15.999
+        mw_o2 = mw_o*2
+        mw_co = 28.010
+        univ_gas_const = 8314.46261815324
+
+        eff_surf_area = self._get_wall_effective_surface_area_fiber(1.0-tau)
+        alpha = (
+            (0.00143+0.01*actx.np.exp(-1450.0/temperature))
+            / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
+        k = alpha*actx.np.sqrt(
+            (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
+        return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
 
 
 class FiberEOS(PorousWallEOS):
