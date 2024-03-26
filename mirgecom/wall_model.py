@@ -238,7 +238,7 @@ class PorousWallVars:
     material_densities: Union[DOFArray, np.ndarray]
     tau: DOFArray
     void_fraction: DOFArray
-    permeability: DOFArray
+    permeability: Union[DOFArray, np.ndarray]
     tortuosity: DOFArray
     density: DOFArray
 
@@ -289,18 +289,19 @@ class PorousWallEOS:
         raise NotImplementedError()
 
     @abstractmethod
-    def permeability(self, tau: DOFArray) -> DOFArray:
+    def permeability(self, tau: DOFArray) -> Union[np.ndarray, DOFArray]:
         r"""Permeability $K$ of the porous material."""
         raise NotImplementedError()
 
     @abstractmethod
-    def emissivity(self, temperature=None, tau=None) -> DOFArray:
+    def emissivity(self, temperature: Optional[DOFArray] = None,
+            tau: Optional[DOFArray] = None) -> DOFArray:
         """Emissivity for energy radiation."""
         raise NotImplementedError()
 
     @abstractmethod
     def tortuosity(self, tau: DOFArray) -> DOFArray:
-        """Tortuosity of the porous material."""
+        r"""Tortuosity $\eta$ of the porous material."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -327,7 +328,7 @@ class PorousWallTransport:
     """
 
     def __init__(self, base_transport: TransportModel):
-        """Initialize transport model."""
+        """Initialize base transport model for fluid-only."""
         self.base_transport = base_transport
 
     def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
@@ -348,7 +349,8 @@ class PorousWallTransport:
             self.base_transport.viscosity(cv, dv, eos))
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos: GasEOS, wall_eos: PorousWallEOS) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS,
+            wall_eos: PorousWallEOS) -> Union[np.ndarray, DOFArray]:
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the
