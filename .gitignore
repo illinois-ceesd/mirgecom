@@ -51,6 +51,6 @@ test/nodal-dg
 
 
 # disk caches
-xdg-scratch/
-pocl-scratch/
-cuda-scratch/
+xdg-cache/
+pocl-cache/
+cuda-cache/
