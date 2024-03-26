@@ -33,7 +33,7 @@ srun_cmd="srun -N $nnodes -n $nproc"
 # See
 # https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
 # on why this is important
-export XDG_CACHE_HOME_ROOT="$(pwd)/xdg-scratch/rank"
+export XDG_CACHE_HOME_ROOT="$(pwd)/xdg-cache/rank"
 
 # Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
 # (each rank needs its own POCL cache dir)
