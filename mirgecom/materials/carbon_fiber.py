@@ -43,8 +43,8 @@ class Oxidation:
     """
 
     @abstractmethod
-    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: DOFArray) -> DOFArray:
+    def get_source_terms(self, temperature: DOFArray,
+            tau: DOFArray, rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
         r"""Source terms of fiber oxidation."""
         raise NotImplementedError()
 
@@ -82,7 +82,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         return self.puma_effective_surface_area(progress)
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: DOFArray) -> DOFArray:
+            rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
         """Return the effective source terms for the oxidation.
 
         Parameters
