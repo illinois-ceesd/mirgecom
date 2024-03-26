@@ -1,6 +1,7 @@
 r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
 
 .. autoclass:: Oxidation
+.. autoclass:: Y2_Oxidation_Model
 .. autoclass:: FiberEOS
 """
 
@@ -59,38 +60,27 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
     .. automethod:: get_source_terms
     """
 
-    def puma_effective_surface_area(self, progress) -> DOFArray:
-        """Polynomial fit based on PUMA data.
-
-        Parameters
-        ----------
-        progress: meshmode.dof_array.DOFArray
-            the rate of decomposition of the fibers
-        """
+    def puma_effective_surface_area(self, tau: DOFArray) -> DOFArray:
+        """Polynomial fit based on PUMA data."""
         # Original fit function: -1.1012e5*x**2 - 0.0646e5*x + 1.1794e5
         # Rescale by x==0 value and rearrange
+        progress = 1.0-tau
         return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
 
-    def _get_wall_effective_surface_area_fiber(self, progress: DOFArray) -> DOFArray:
-        """Evaluate the effective surface of the fibers.
-
-        Parameters
-        ----------
-        progress: meshmode.dof_array.DOFArray
-            the rate of decomposition of the fibers
-        """
-        return self.puma_effective_surface_area(progress)
+    def _get_wall_effective_surface_area_fiber(self, tau: DOFArray) -> DOFArray:
+        """Evaluate the effective surface of the fibers."""
+        return self.puma_effective_surface_area(tau)
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
             rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
-        """Return the effective source terms for the oxidation.
+        """Return the effective source terms for fiber oxidation.
 
         Parameters
         ----------
-        temperature: meshmode.dof_array.DOFArray
-        tau: meshmode.dof_array.DOFArray
+        temperature:
+        tau:
             the progress ratio of the oxidation: 1 for virgin, 0 for fully oxidized
-        ox_mass: meshmode.dof_array.DOFArray
+        rhoY_o2:
             the mass fraction of oxygen
         """
         actx = temperature.array_context
@@ -100,7 +90,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         mw_co = 28.010
         univ_gas_const = 8314.46261815324
 
-        eff_surf_area = self._get_wall_effective_surface_area_fiber(1.0-tau)
+        eff_surf_area = self._get_wall_effective_surface_area_fiber(tau)
         alpha = (
             (0.00143+0.01*actx.np.exp(-1450.0/temperature))
             / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
