@@ -27,4 +27,4 @@ git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 --editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
 --editable git+https://github.com/inducer/pyvisfile.git#egg=pyvisfile
---editable git+https://github.com/matthiasdiener/pytools.git@sqlitedict#egg-pytools
+--editable git+https://github.com/matthiasdiener/pytools.git@sqlitedict#egg=pytools
