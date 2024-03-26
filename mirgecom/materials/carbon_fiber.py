@@ -2,6 +2,8 @@ r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
 
 .. autoclass:: Oxidation
 .. autoclass:: Y2_Oxidation_Model
+.. autoclass:: Y3_Oxidation_Model
+.. autoclass:: OxidationModel
 .. autoclass:: FiberEOS
 """
 
@@ -50,26 +52,19 @@ class Oxidation:
         raise NotImplementedError()
 
 
-# TODO per MTC review, can we generalize the oxidation model?
-# should we keep this in the driver?
-# https://github.com/illinois-ceesd/mirgecom/pull/875#discussion_r1261414281
 class Y2_Oxidation_Model(Oxidation):  # noqa N801
-    """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
+    r"""Evaluate the source terms for carbon fiber oxidation in Y2 model.
 
-    .. automethod:: puma_effective_surface_area
     .. automethod:: get_source_terms
     """
 
-    def puma_effective_surface_area(self, tau: DOFArray) -> DOFArray:
-        """Polynomial fit based on PUMA data."""
+    def _get_wall_effective_surface_area_fiber(self, tau: DOFArray) -> DOFArray:
+        """Evaluate the effective surface of the fibers."""
+        # Polynomial fit based on PUMA data:
         # Original fit function: -1.1012e5*x**2 - 0.0646e5*x + 1.1794e5
         # Rescale by x==0 value and rearrange
         progress = 1.0-tau
         return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
-
-    def _get_wall_effective_surface_area_fiber(self, tau: DOFArray) -> DOFArray:
-        """Evaluate the effective surface of the fibers."""
-        return self.puma_effective_surface_area(tau)
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
             rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
@@ -97,6 +92,113 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         k = alpha*actx.np.sqrt(
             (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
         return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
+
+
+class Y3_Oxidation_Model(Oxidation):  # noqa N801
+    r"""Evaluate the source terms for carbon fiber oxidation in Y3 model.
+
+    Follows ``A. Martin, AIAA 2013-2636'', using a single reaction given by
+
+    .. math::
+        C_{(s)} + O_2 \to CO_2
+
+    .. automethod:: get_source_terms
+    """
+
+    def __init__(self, wall_material):
+        self._material = wall_material
+
+    def _get_wall_effective_surface_area_fiber(self, tau) -> DOFArray:
+        r"""Evaluate the effective surface of the fibers.
+
+        The fiber radius as a function of mass loss $\tau$ is given by
+
+        .. math::
+            \tau = \frac{m}{m_0} = \frac{\pi r^2/L}{\pi r_0^2/L} = \frac{r^2}{r_0^2}
+        """
+        actx = tau.array_context
+
+        original_fiber_radius = 5e-6  # half the diameter
+        fiber_radius = original_fiber_radius*actx.np.sqrt(tau)
+
+        epsilon_0 = self._material.volume_fraction(tau=1.0)
+
+        return 2.0*epsilon_0/original_fiber_radius**2*fiber_radius
+
+    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
+            rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+        r"""Return the effective source terms for the oxidation.
+
+        Parameters
+        ----------
+        temperature:
+        tau:
+            the progress ratio of the oxidation
+        rhoY_o2:
+            the mass fraction of oxygen
+
+        Returns
+        -------
+            The tuple (\omega_{C}, \omega_{O_2}, \omega_{CO_2})
+        """
+        actx = temperature.array_context
+
+        mw_c = 12.011
+        mw_o = 15.999
+        mw_o2 = mw_o*2
+        mw_co2 = 44.010
+        univ_gas_const = 8.31446261815324  # J/(K-mol)
+
+        eff_surf_area = self._get_wall_effective_surface_area_fiber(tau)
+
+        k_f = 1.0e5*actx.np.exp(-120000.0/(univ_gas_const*temperature))
+
+        m_dot_c = - rhoY_o2/mw_o2 * mw_c * eff_surf_area * k_f
+        m_dot_o2 = - rhoY_o2/mw_o2 * mw_o2 * eff_surf_area * k_f
+        m_dot_co2 = + rhoY_o2/mw_o2 * mw_co2 * eff_surf_area * k_f
+
+        return m_dot_c, m_dot_o2, m_dot_co2
+
+
+class OxidationModel(Oxidation):
+    """Evaluate the source terms for the carbon fiber oxidation.
+
+    The user must specify in the driver the functions for oxidation.
+    (Tentatively) Generalizing this class makes it easier for adding new,
+    more complex models and for UQ runs.
+
+    .. automethod:: get_source_terms
+    """
+
+    def __init__(self, surface_area_func, oxidation_func):
+        """Initialize the general oxidation class.
+
+        Parameters
+        ----------
+        surface_area_func:
+            Function prescribing how the fiber area changes during oxidation.
+        oxidation_func:
+            Reaction rate for the oxidation model.
+        """
+        self._surface_func = surface_area_func
+        self._oxidation_func = oxidation_func
+
+    # TODO we potentially have to include atomic oxygen as well
+    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
+            rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+        """Return the effective source terms for the oxidation.
+
+        Parameters
+        ----------
+        temperature:
+        tau:
+            the progress ratio of the oxidation
+        rhoY_o2:
+            the mass fraction of oxygen
+        """
+        area = self._surface_func(tau)
+        return self._oxidation_func(temperature=temperature, fiber_area=area,
+                                    rhoY_o2=rhoY_o2)
 
 
 class FiberEOS(PorousWallEOS):
