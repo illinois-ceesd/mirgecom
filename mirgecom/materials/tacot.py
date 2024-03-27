@@ -57,9 +57,27 @@ class Pyrolysis:
     .. automethod:: get_source_terms
     """
 
-    def __init__(self):
-        """Temperature in which each reaction starts."""
+    def __init__(
+            self, *, virgin_mass=120.0, char_mass=60.0, fiber_mass=160.0,
+            pre_exponential=(12000.0, 4.48e9)):
+        """Initialize TACOT parameters."""
         self._Tcrit = np.array([333.3, 555.6])
+        self._virgin_mass = virgin_mass
+        self._char_mass = char_mass
+        self._fiber_mass = fiber_mass
+
+        if len(pre_exponential) != 2:
+            raise ValueError("TACOT degradation model requires 2 pre-exponentials.")
+        self._pre_exp = np.array(pre_exponential)
+
+    def get_tacot_parameters(self):
+        """Return the parameters of TACOT decomposition for inspection."""
+        return {"virgin mass": self._virgin_mass,
+                "char_mass": self._char_mass,
+                "fiber_mass": self._fiber_mass,
+                "reaction_weights": np.array([self._virgin_mass*0.75,
+                                              self._virgin_mass*0.25]),
+                "pre_exponential": self._pre_exp}
 
     def get_source_terms(self, temperature, chi):
         r"""Return the source terms of pyrolysis decomposition for TACOT.
@@ -81,20 +99,21 @@ class Pyrolysis:
         """
         actx = temperature.array_context
 
-        # The density parameters are hard-coded for TACOT. They depend on the
-        # virgin and char volume fraction.
+        # The density parameters are hard-coded for TACOT, depending on
+        # virgin and char volume fractions.
+        w1 = self._virgin_mass*0.25*(chi[0]/self._virgin_mass*0.25)**3
+        w2 = self._virgin_mass*0.75*(chi[1]/self._virgin_mass*0.75 - 2./3.)**3
+
         return make_obj_array([
             # reaction 1
             actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
-                0.0, (
-                    -(30.*((chi[0] - 0.00)/30.)**3)*12000.
-                    * actx.np.exp(-8556.000/temperature))),
+                0.0, (-w1 * self._pre_exp[0] * actx.np.exp(-8556.000/temperature))
+                ),
             # reaction 2
             actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
-                0.0, (
-                    -(90.*((chi[1] - 60.0)/90.)**3)*4.48e9
-                    * actx.np.exp(-20444.44/temperature))),
-            # fiber oxidation: include in the RHS but dont do anything with it.
+                0.0, (-w2 * self._pre_exp[1] * actx.np.exp(-20444.44/temperature))
+                ),
+            # fiber oxidation: include in the RHS but don't do anything with it.
             actx.np.zeros_like(temperature)])
 
 
