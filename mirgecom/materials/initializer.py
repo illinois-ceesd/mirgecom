@@ -151,8 +151,10 @@ class PorousWallInitializer:
             eps_rho_gas = eps_gas*self._mass
 
         # start with zero velocity inside the material
-        #momentum = make_obj_array([zeros for _ in range(dim)])
-        momentum = (1.0-self._porous_region) * (eps_gas*self._velocity)
+        if self._velocity is not None:
+            momentum = (1.0-self._porous_region) * (eps_gas*self._velocity)
+        else:
+            momentum = make_obj_array([zeros for _ in range(dim)])
 
         bulk_energy = (
             eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
