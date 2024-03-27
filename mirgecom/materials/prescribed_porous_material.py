@@ -79,8 +79,7 @@ class PrescribedMaterialEOS(PorousWallEOS):
         r"""Evaluate the heat capacity $C_{p_s}$."""
         return self._heat_capacity_func(temperature)
 
-    def thermal_conductivity(self, temperature: DOFArray,
-                                   tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         r"""Evaluate the thermal conductivity $\kappa$"""
         return self._thermal_conductivity_func(temperature)
 

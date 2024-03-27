@@ -67,7 +67,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+                         rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
         """Return the effective source terms for fiber oxidation.
 
         Parameters
@@ -262,14 +262,16 @@ class FiberEOS(PorousWallEOS):
         """
         return 1.0 - self.volume_fraction(tau)
 
-    def enthalpy(self, temperature, tau=None) -> DOFArray:
+    def enthalpy(self, temperature: DOFArray,
+                 tau: Optional[DOFArray] = None) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
         return (
             - 3.37112113e-11*temperature**5 + 3.13156695e-07*temperature**4
             - 1.17026962e-03*temperature**3 + 2.29194901e+00*temperature**2
             - 3.62422269e+02*temperature**1 - 5.96993843e+04)
 
-    def heat_capacity(self, temperature, tau=None) -> DOFArray:
+    def heat_capacity(self, temperature: DOFArray,
+                      tau: Optional[DOFArray] = None) -> DOFArray:
         r"""Evaluate the heat capacity $C_{p_s}$ of the fibers.
 
         The coefficients are obtained with the analytical derivative of the
@@ -281,7 +283,7 @@ class FiberEOS(PorousWallEOS):
             - 3.62422269e+02)
 
     # ~~~~~~~~ fiber conductivity
-    def thermal_conductivity(self, temperature, tau=None) -> np.ndarray:
+    def thermal_conductivity(self, temperature, tau) -> np.ndarray:
         r"""Evaluate the thermal conductivity $\kappa$ of the fibers.
 
         It accounts for anisotropy and oxidation progress.
@@ -321,7 +323,7 @@ class FiberEOS(PorousWallEOS):
         return permeability
 
     def emissivity(self, temperature: DOFArray,  # type: ignore[override]
-            tau: Optional[DOFArray] = None) -> DOFArray:
+                   tau: Optional[DOFArray] = None) -> DOFArray:
         """Emissivity for energy radiation."""
         # XXX check if here is the best place for timescale
         return self._timescale * (
