@@ -148,7 +148,6 @@ class TacotEOS(PorousWallEOS):
 
         Parameters
         ----------
-
         virgin_mass: float
             initial mass of the material. The fiber and all resin components
             must be considered.
@@ -181,8 +180,7 @@ class TacotEOS(PorousWallEOS):
 
         return virgin*tau + char*(1.0 - tau)
 
-    def heat_capacity(self, temperature: DOFArray,
-                      tau: DOFArray) -> DOFArray:
+    def heat_capacity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
 
@@ -199,8 +197,7 @@ class TacotEOS(PorousWallEOS):
 
         return virgin*tau + char*(1.0 - tau)
 
-    def thermal_conductivity(self, temperature: DOFArray,
-                             tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Solid thermal conductivity as a function of pyrolysis progress."""
         virgin = (
             + 2.31290019732353e-17*temperature**5 - 2.167785032562e-13*temperature**4
