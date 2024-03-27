@@ -54,30 +54,37 @@ class Pyrolysis:
     a minimum temperature, are considered based on the resin constituents.
     The third reaction is the fiber oxidation, which is not handled here for now.
 
+    .. automethod:: __init__
+    .. automethod:: get_decomposition_parameters
     .. automethod:: get_source_terms
     """
 
-    def __init__(
-            self, *, virgin_mass=120.0, char_mass=60.0, fiber_mass=160.0,
-            pre_exponential=(12000.0, 4.48e9)):
+    def __init__(self, *,
+                 virgin_mass=120.0, char_mass=60.0, fiber_mass=160.0,
+                 pre_exponential=(12000.0, 4.48e9),
+                 decomposition_temperature=(333.3, 555.6)):
         """Initialize TACOT parameters."""
-        self._Tcrit = np.array([333.3, 555.6])
         self._virgin_mass = virgin_mass
         self._char_mass = char_mass
         self._fiber_mass = fiber_mass
 
+        if len(decomposition_temperature) != 2:
+            raise ValueError("TACOT model requires 2 starting temperatures.")
+        self._Tcrit = np.array(decomposition_temperature)
+
         if len(pre_exponential) != 2:
-            raise ValueError("TACOT degradation model requires 2 pre-exponentials.")
+            raise ValueError("TACOT model requires 2 pre-exponentials.")
         self._pre_exp = np.array(pre_exponential)
 
-    def get_tacot_parameters(self):
+    def get_decomposition_parameters(self):
         """Return the parameters of TACOT decomposition for inspection."""
-        return {"virgin mass": self._virgin_mass,
+        return {"virgin_mass": self._virgin_mass,
                 "char_mass": self._char_mass,
                 "fiber_mass": self._fiber_mass,
-                "reaction_weights": np.array([self._virgin_mass*0.75,
-                                              self._virgin_mass*0.25]),
-                "pre_exponential": self._pre_exp}
+                "reaction_weights": np.array([self._virgin_mass*0.25,
+                                              self._virgin_mass*0.75]),
+                "pre_exponential": self._pre_exp,
+                "temperature": self._Tcrit}
 
     def get_source_terms(self, temperature, chi):
         r"""Return the source terms of pyrolysis decomposition for TACOT.
@@ -101,8 +108,8 @@ class Pyrolysis:
 
         # The density parameters are hard-coded for TACOT, depending on
         # virgin and char volume fractions.
-        w1 = self._virgin_mass*0.25*(chi[0]/self._virgin_mass*0.25)**3
-        w2 = self._virgin_mass*0.75*(chi[1]/self._virgin_mass*0.75 - 2./3.)**3
+        w1 = self._virgin_mass*0.25*(chi[0]/(self._virgin_mass*0.25))**3
+        w2 = self._virgin_mass*0.75*(chi[1]/(self._virgin_mass*0.75) - 2./3.)**3
 
         return make_obj_array([
             # reaction 1
