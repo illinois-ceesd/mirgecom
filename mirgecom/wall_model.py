@@ -445,6 +445,7 @@ class PorousFlowModel:
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the fibers were all consumed.
         """
+        # TODO consider the resin+carbon case, where both are degrading.
         mass = self.solid_density(material_densities)
         return self.wall_eos.decomposition_progress(mass)
 

@@ -1297,6 +1297,8 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
     def __init__(self, boundary_pressure=101325):
         """Initialize the boundary condition object."""
         self._pressure = boundary_pressure
+        self._slip = _SlipBoundaryComponent()
+        self._adiabatic = _AdiabaticBoundaryComponent()
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
@@ -1414,11 +1416,27 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
                    normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        return grad_cv_minus
+#        return grad_cv_minus
+
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        state_bc = self.state_bc(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, **kwargs)
+
+        grad_v_bc = self._slip.grad_velocity_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
+
+        grad_mom_bc = (
+            state_bc.mass_density * grad_v_bc
+            + np.outer(state_bc.velocity, grad_cv_minus.mass))
+
+        return grad_cv_minus.replace(momentum=grad_mom_bc)
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
-        return grad_t_minus
+#        return grad_t_minus
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
 
 class RiemannInflowBoundary(MengaldoBoundaryCondition):

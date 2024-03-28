@@ -75,8 +75,9 @@ class SolidWallInitializer:
 class PorousWallInitializer:
     """State initializer for porous materials in the unified-domain solver."""
 
-    def __init__(self, *, temperature, material_densities, species=None,
-                 velocity=None, pressure=None, density=None, porous_region=None):
+    def __init__(
+            self, *, temperature, material_densities, species_mass_fractions=None,
+            velocity=None, pressure=None, density=None, porous_region=None):
         """Initialize the object for porous materials.
 
         Parameters
@@ -93,10 +94,9 @@ class PorousWallInitializer:
         self._wall_density = material_densities
         self._porous_region = porous_region
 
-        if species is not None:
-            self._y = species
+        if species_mass_fractions is not None:
+            self._y = species_mass_fractions
         else:
-            import numpy as np
             self._y = np.empty((0,), dtype=object)
 
     def __call__(self, x_vec, gas_model):
@@ -152,7 +152,7 @@ class PorousWallInitializer:
 
         # start with zero velocity inside the material
         if self._velocity is not None:
-            momentum = (1.0-self._porous_region) * (eps_gas*self._velocity)
+            momentum = (1.0-self._porous_region) * (eps_rho_gas*self._velocity)
         else:
             momentum = make_obj_array([zeros for _ in range(dim)])
 
