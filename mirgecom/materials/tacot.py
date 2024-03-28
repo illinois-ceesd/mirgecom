@@ -120,8 +120,12 @@ class Pyrolysis:
             actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
                 0.0, (-w2 * self._pre_exp[1] * actx.np.exp(-20444.44/temperature))
                 ),
-            # fiber oxidation: include in the RHS but don't do anything with it.
-            actx.np.zeros_like(temperature)])
+            # TODO: fiber oxidation:
+            # Include a resin-dependent term (probably linear) to slow down
+            # oxidation when there is a lot of resin, but make it goes with
+            # the "right" rate when the resin is consumed.
+            actx.np.zeros_like(temperature)
+            ])
 
 
 class TacotEOS(PorousWallEOS):
@@ -246,7 +250,12 @@ class TacotEOS(PorousWallEOS):
         .. math::
             \tau = \frac{\rho_0}{\rho_0 - \rho_c}
                     \left( 1 - \frac{\rho_c}{\rho(t)} \right)
+
+        Note that $\rho(t)$ is the mass of resin only, not including fibers,
+        permeating gas or gas-only regions.
         """
+        actx = mass.array_context
         char_mass = self._char_mass
         virgin_mass = self._virgin_mass
-        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/mass)
+        resin_mass = actx.np.maximum(char_mass, mass)
+        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/resin_mass)

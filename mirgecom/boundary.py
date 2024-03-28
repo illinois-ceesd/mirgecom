@@ -64,6 +64,7 @@ from mirgecom.gas_model import make_fluid_state, replace_fluid_state
 from mirgecom.utils import project_from_base
 from mirgecom.viscous import viscous_facial_flux_central, viscous_flux
 from mirgecom.inviscid import inviscid_facial_flux_rusanov, inviscid_flux
+from mirgecom.gas_model import PorousFlowFluidState
 
 
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):
@@ -1089,6 +1090,8 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         # set the normal momentum to 0
         mom_bc = self._slip.momentum_bc(state_minus.momentum_density, nhat)
 
+        # this doesn't recompute the internal energy but only substracts the
+        # kinetic energy from the total energy
         energy_bc = (
             gas_model.eos.internal_energy(state_minus.cv)
             + 0.5*np.dot(mom_bc, mom_bc)/state_minus.mass_density)
@@ -1202,11 +1205,17 @@ class FarfieldBoundary(MengaldoBoundaryCondition):
             momentum=free_stream_density*free_stream_velocity,
             species_mass=free_stream_spec_mass)
 
+        if isinstance(state_minus, PorousFlowFluidState):
+            material_densities = state_minus.wv.material_densities
+        else:
+            material_densities = None
+
         return make_fluid_state(cv=cv_infinity, gas_model=gas_model,
                                 temperature_seed=free_stream_temperature,
                                 smoothness_mu=state_minus.smoothness_mu,
                                 smoothness_kappa=state_minus.smoothness_kappa,
-                                smoothness_beta=state_minus.smoothness_beta)
+                                smoothness_beta=state_minus.smoothness_beta,
+                                material_densities=material_densities)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -1288,6 +1297,8 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
     def __init__(self, boundary_pressure=101325):
         """Initialize the boundary condition object."""
         self._pressure = boundary_pressure
+        self._slip = _SlipBoundaryComponent()
+        self._adiabatic = _AdiabaticBoundaryComponent()
 
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the exterior solution on the boundary.
@@ -1337,11 +1348,17 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
                                     energy=total_energy,
                                     species_mass=state_minus.cv.species_mass)
 
+        if isinstance(state_minus, PorousFlowFluidState):
+            material_densities = state_minus.wv.material_densities
+        else:
+            material_densities = None
+
         return make_fluid_state(cv=cv_outflow, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness_mu=state_minus.smoothness_mu,
                                 smoothness_kappa=state_minus.smoothness_kappa,
-                                smoothness_beta=state_minus.smoothness_beta)
+                                smoothness_beta=state_minus.smoothness_beta,
+                                material_densities=material_densities)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state."""
@@ -1380,11 +1397,17 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
             momentum=state_minus.momentum_density,
             species_mass=state_minus.species_mass_density)
 
+        if isinstance(state_minus, PorousFlowFluidState):
+            material_densities = state_minus.wv.material_densities
+        else:
+            material_densities = None
+
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness_mu=state_minus.smoothness_mu,
                                 smoothness_kappa=state_minus.smoothness_kappa,
-                                smoothness_beta=state_minus.smoothness_beta)
+                                smoothness_beta=state_minus.smoothness_beta,
+                                material_densities=material_densities)
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         """Get temperature value used in grad(T)."""
@@ -1393,11 +1416,27 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
     def grad_cv_bc(self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
                    normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
-        return grad_cv_minus
+#        return grad_cv_minus
+
+        dd_bdry = as_dofdesc(dd_bdry)
+        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        state_bc = self.state_bc(
+            dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
+            state_minus=state_minus, **kwargs)
+
+        grad_v_bc = self._slip.grad_velocity_bc(
+            state_minus, state_bc, grad_cv_minus, normal)
+
+        grad_mom_bc = (
+            state_bc.mass_density * grad_v_bc
+            + np.outer(state_bc.velocity, grad_cv_minus.mass))
+
+        return grad_cv_minus.replace(momentum=grad_mom_bc)
 
     def grad_temperature_bc(self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         """Return grad(temperature) to be used in viscous flux at wall."""
-        return grad_t_minus
+#        return grad_t_minus
+        return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
 
 class RiemannInflowBoundary(MengaldoBoundaryCondition):
@@ -1483,11 +1522,17 @@ class RiemannInflowBoundary(MengaldoBoundaryCondition):
                                      momentum=rho_boundary * velocity_boundary,
                                      species_mass=species_mass_boundary)
 
+        if isinstance(state_minus, PorousFlowFluidState):
+            material_densities = state_minus.wv.material_densities
+        else:
+            material_densities = None
+
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness_mu=state_minus.smoothness_mu,
                                 smoothness_kappa=state_minus.smoothness_kappa,
-                                smoothness_beta=state_minus.smoothness_beta)
+                                smoothness_beta=state_minus.smoothness_beta,
+                                material_densities=material_densities)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -1600,11 +1645,17 @@ class RiemannOutflowBoundary(MengaldoBoundaryCondition):
                                      momentum=rho_boundary*velocity_boundary,
                                      species_mass=species_mass_boundary)
 
+        if isinstance(state_minus, PorousFlowFluidState):
+            material_densities = state_minus.wv.material_densities
+        else:
+            material_densities = None
+
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness_mu=state_minus.smoothness_mu,
                                 smoothness_kappa=state_minus.smoothness_kappa,
-                                smoothness_beta=state_minus.smoothness_beta)
+                                smoothness_beta=state_minus.smoothness_beta,
+                                material_densities=material_densities)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -1965,11 +2016,17 @@ class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
                                      momentum=mass*velocity,
                                      species_mass=mass*species_mass_fracs)
 
+        if isinstance(state_minus, PorousFlowFluidState):
+            material_densities = state_minus.wv.material_densities
+        else:
+            material_densities = None
+
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
                                 smoothness_mu=state_minus.smoothness_mu,
                                 smoothness_kappa=state_minus.smoothness_kappa,
-                                smoothness_beta=state_minus.smoothness_beta)
+                                smoothness_beta=state_minus.smoothness_beta,
+                                material_densities=material_densities)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""
@@ -2067,8 +2124,17 @@ class LinearizedInflowBoundary(MengaldoBoundaryCondition):
                                      momentum=mass*velocity,
                                      species_mass=mass*self._spec_mass_fracs)
 
+        if isinstance(state_minus, PorousFlowFluidState):
+            material_densities = state_minus.wv.material_densities
+        else:
+            material_densities = None
+
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
-                                temperature_seed=state_minus.temperature)
+                                temperature_seed=state_minus.temperature,
+                                smoothness_mu=state_minus.smoothness_mu,
+                                smoothness_kappa=state_minus.smoothness_kappa,
+                                smoothness_beta=state_minus.smoothness_beta,
+                                material_densities=material_densities)
 
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return BC fluid state."""

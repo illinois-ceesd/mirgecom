@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import make_conserved
 from mirgecom.wall_model import SolidWallConservedVars
@@ -74,14 +75,29 @@ class SolidWallInitializer:
 class PorousWallInitializer:
     """State initializer for porous materials in the unified-domain solver."""
 
-    def __init__(self, temperature, species, material_densities,
-                 pressure=None, density=None):
+    def __init__(
+            self, *, temperature, material_densities, species_mass_fractions=None,
+            velocity=None, pressure=None, density=None, porous_region=None):
+        """Initialize the object for porous materials.
 
+        Parameters
+        ----------
+        porous_region:
+            Field describing the homogeneous fluid (0) and porous material (1)
+            portions of the flow. Only used for unified-domain solver without
+            explicit coupling.
+        """
+        self._velocity = velocity
         self._pres = pressure
         self._mass = density
-        self._y = species
         self._temp = temperature
         self._wall_density = material_densities
+        self._porous_region = porous_region
+
+        if species_mass_fractions is not None:
+            self._y = species_mass_fractions
+        else:
+            self._y = np.empty((0,), dtype=object)
 
     def __call__(self, x_vec, gas_model):
         """Evaluate the wall+gas properties for porous materials.
@@ -103,16 +119,28 @@ class PorousWallInitializer:
         """
         actx = x_vec[0].array_context
         zeros = actx.np.zeros_like(x_vec[0])
+        ones = zeros + 1.0
         dim = x_vec.shape[0]
 
+        if self._porous_region is not None:
+            porous_region = self._porous_region + zeros
+        else:
+            porous_region = ones
+
         # wall-only properties
-        wall_density = self._wall_density + zeros
+        wall_density = self._wall_density * porous_region
         tau = gas_model.decomposition_progress(wall_density)
         eps_rho_solid = gas_model.solid_density(wall_density)
 
         # coupled properties
         temperature = self._temp + zeros
-        species_mass_frac = self._y + zeros
+
+        nspecies = len(self._y)
+        if nspecies > 0:
+            species_mass_frac = make_obj_array([self._y[i] + zeros
+                                                for i in range(nspecies)])
+        else:
+            species_mass_frac = self._y
 
         eps_gas = gas_model.wall_eos.void_fraction(tau)
         if self._mass is None:
@@ -122,14 +150,17 @@ class PorousWallInitializer:
         else:
             eps_rho_gas = eps_gas*self._mass
 
-        # FIXME: for now, let's always start with zero velocity
-        momentum = make_obj_array([zeros for _ in range(dim)])
+        # start with zero velocity inside the material
+        if self._velocity is not None:
+            momentum = (1.0-self._porous_region) * (eps_rho_gas*self._velocity)
+        else:
+            momentum = make_obj_array([zeros for _ in range(dim)])
 
-        # internal energy (kinetic energy is absent in here)
         bulk_energy = (
             eps_rho_solid*gas_model.wall_eos.enthalpy(temperature, tau)
             + eps_rho_gas*gas_model.eos.get_internal_energy(temperature,
                                                             species_mass_frac)
+            + 0.5*np.dot(momentum, momentum)/eps_rho_gas
         )
 
         species_mass = eps_rho_gas*species_mass_frac

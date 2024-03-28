@@ -33,7 +33,7 @@ from meshmode.array_context import (  # noqa
     as pytest_generate_tests)
 from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.eos import PyrometheusMixture
+from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import make_fluid_state
 from mirgecom.wall_model import PorousFlowModel, PorousWallTransport
@@ -44,7 +44,9 @@ from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
 @pytest.mark.parametrize("order", [1, 4])
 @pytest.mark.parametrize("my_material", ["fiber", "composite"])
-def test_wall_eos(actx_factory, order, my_material):
+@pytest.mark.parametrize("my_eos", ["ideal", "mixture"])
+@pytest.mark.parametrize("use_diffused_interface", [True, False])
+def test_wall_eos(actx_factory, order, my_material, my_eos, use_diffused_interface):
     """Check the wall degradation model."""
     actx = actx_factory()
 
@@ -62,21 +64,26 @@ def test_wall_eos(actx_factory, order, my_material):
 
     # {{{ EOS initialization
 
-    mech_input = get_mechanism_input("uiuc_8sp_phenol")
-    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
-    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=3)(actx.np)
+    if my_eos == "mixture":
+        mech_input = get_mechanism_input("uiuc_8sp_phenol")
+        cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+        pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+            cantera_soln, temperature_niter=3)(actx.np)
 
-    nspecies = pyro_obj.num_species
+        nspecies = pyro_obj.num_species
 
-    x = make_obj_array([0.0 for i in range(nspecies)])
-    x[cantera_soln.species_index("O2")] = 0.21
-    x[cantera_soln.species_index("N2")] = 0.79
+        x = make_obj_array([0.0 for i in range(nspecies)])
+        x[cantera_soln.species_index("O2")] = 0.21
+        x[cantera_soln.species_index("N2")] = 0.79
 
-    cantera_soln.TPX = 900.0, 101325.0, x
-    _, _, y = cantera_soln.TDY
+        cantera_soln.TPX = 900.0, 101325.0, x
+        _, _, y = cantera_soln.TDY
 
-    eos = PyrometheusMixture(pyro_obj, temperature_guess=cantera_soln.T)
+        eos = PyrometheusMixture(pyro_obj, temperature_guess=cantera_soln.T)
+
+    if my_eos == "ideal":
+        eos = IdealSingleGas()
+        y = None
 
     # }}}
 
@@ -110,9 +117,13 @@ def test_wall_eos(actx_factory, order, my_material):
     pressure = 101325.0 + zeros
     temperature = 900.0 + zeros
 
+    if use_diffused_interface:
+        porous_region = 0.5*(1.0 - actx.np.tanh(nodes[0]/0.005))
+    else:
+        porous_region = None
     sample_init = PorousWallInitializer(
         pressure=pressure, temperature=temperature, species=y,
-        material_densities=material_densities)
+        material_densities=material_densities, porous_region=porous_region)
 
     cv, solid_densities = sample_init(nodes, gas_model)
 
@@ -121,7 +132,9 @@ def test_wall_eos(actx_factory, order, my_material):
 
     wv = solid_state.wv
 
-    assert actx.to_numpy(op.norm(dcoll, wv.tau - 1.0, np.inf)) < tol
+    assert isinstance(wv.tau, DOFArray)
+    if use_diffused_interface is False:
+        assert actx.to_numpy(op.norm(dcoll, wv.tau - 1.0, np.inf)) < tol
 
     assert isinstance(solid_state.wv.density, DOFArray)
 
