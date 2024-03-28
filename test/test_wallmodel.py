@@ -122,7 +122,7 @@ def test_wall_eos(actx_factory, order, my_material, my_eos, use_diffused_interfa
     else:
         porous_region = None
     sample_init = PorousWallInitializer(
-        pressure=pressure, temperature=temperature, species=y,
+        pressure=pressure, temperature=temperature, species_mass_fractions=y,
         material_densities=material_densities, porous_region=porous_region)
 
     cv, solid_densities = sample_init(nodes, gas_model)
