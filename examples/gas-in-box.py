@@ -264,6 +264,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             species_y = np.array([1./float(nspecies) for _ in range(nspecies)])
             species_diffusivity = np.array([spec_diff * 1./float(j+1)
                                             for j in range(nspecies)])
+
         initializer = Uniform(velocity=velocity, pressure=101325, rho=1.2039086127319172,
                               species_mass_fractions=species_y)
         temperature_seed = 293.15 * ones
