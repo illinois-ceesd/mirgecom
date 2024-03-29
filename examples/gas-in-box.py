@@ -99,7 +99,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          use_navierstokes=False, use_mixture=False,
          use_reactions=False, newton_iters=3,
          mech_name="uiuc_7sp", transport_type=0,
-         use_av=0, use_limiter=False):
+         use_av=0, use_limiter=False, order=1,
+         nscale=1, npassive_species=0):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -127,17 +128,20 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-7
+    t_final = 2e-13
     current_cfl = 1.0
-    current_dt = 1e-8
+    current_dt = 1e-14
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 5
+    nstatus = 100
+    nrestart = 100
     nviz = 100
-    nhealth = 1
+    nhealth = 100
+
+    scale_fac = pow(float(nscale), 1.0/dim)
+    nel_1d = int(scal_fac*24/dim)
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -155,7 +159,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         from mirgecom.simutil import get_box_mesh
         box_ll = -1
         box_ur = 1
-        nel_1d = 16
         generate_mesh = partial(
             get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
             n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
@@ -166,7 +169,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     from meshmode.mesh.processing import rotate_mesh_around_axis
     local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/3)
 
-    order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
@@ -253,7 +255,16 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     else:
         use_reactions = False
         eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
-        initializer = Uniform(velocity=velocity, pressure=101325, rho=1.2039086127319172)
+        species_y = None
+        if npassive_species > 0:
+            print(f"Initializing with {npassive_species} passive species.")
+            nspecies = npassive_species
+            spec_diff = 1e-4
+            species_y = np.array([1./float(nspecies) for _ in range(nspecies)])
+            spec_diffusivities = np.array([spec_diff * 1./float(j+1)
+                                           for j in range(nspecies)])
+        initializer = Uniform(velocity=velocity, pressure=101325, rho=1.2039086127319172,
+                              species_mass_fractions=species_y)
         temperature_seed = 293.15 * ones
 
     temperature_seed = force_evaluation(actx, temperature_seed)
@@ -641,7 +652,7 @@ if __name__ == "__main__":
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
-                        default=2, help="spatial dimension of simulation")
+                        default=3, help="spatial dimension of simulation")
     parser.add_argument("-i", "--iters", type=int, default=3,
                         help="number of Newton iterations for mixture temperature")
     parser.add_argument("-r", "--restart_file", help="root name of restart file")
@@ -660,10 +671,16 @@ if __name__ == "__main__":
                         help="use combustion chemistry")
     parser.add_argument("-x", "--transport", type=int, choices=[0, 1, 2], default=0,
                         help="transport model specification\n(0)Simple\n(1)PowerLaw\n(2)Mix")
-    parser.add_argument("-s", "--limiter", action="store_true",
+    parser.add_argument("-e", "--limiter", action="store_true",
                         help="use limiter to limit fluid state")
+    parser.add_argument("-s", "--species", type=int, default=0,
+                        help="number of passive species")
     parser.add_argument("-t", "--tpe", action="store_true",
                         help="use tensor-product elements (quads/hexes)")
+    parser.add_argument("-y", "--polynomial-order", type=int, default=1,
+                        help="polynomal order for the discretization")
+    parser.add_argument("-w", "--weak-scale", type=int, default=1,
+                        help="factor by which to scale the number of elements")
     args = parser.parse_args()
 
     from warnings import warn
@@ -694,6 +711,6 @@ if __name__ == "__main__":
          transport_type=args.transport,
          use_limiter=args.limiter, use_av=args.artificial_viscosity,
          use_reactions=args.flame, newton_iters=args.iters,
-         use_navierstokes=args.navierstokes)
+         use_navierstokes=args.navierstokes, npassive_species=args.species)
 
 # vim: foldmethod=marker
