@@ -683,6 +683,8 @@ if __name__ == "__main__":
                         help="polynomal order for the discretization")
     parser.add_argument("-w", "--weak-scale", type=int, default=1,
                         help="factor by which to scale the number of elements")
+    parser.add_argument("-z", "--mechanism-name", type=str, default="uiuc_7sp",
+                        help="name of thermochemical mechanism yaml file")
     args = parser.parse_args()
 
     from warnings import warn
@@ -714,6 +716,6 @@ if __name__ == "__main__":
          use_limiter=args.limiter, use_av=args.artificial_viscosity,
          use_reactions=args.flame, newton_iters=args.iters,
          use_navierstokes=args.navierstokes, npassive_species=args.species,
-         nscale=args.weak_scale)
+         nscale=args.weak_scale, mech_name=args.mechanism_name)
 
 # vim: foldmethod=marker
