@@ -31,6 +31,7 @@ from functools import partial
 from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
+import grudge.op as op
 
 from logpyle import IntervalTimer, set_dt
 from pytools.obj_array import make_obj_array
@@ -133,6 +134,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     current_dt = 1e-14
     current_t = 0
     constant_cfl = False
+    temperature_tolerance = 1e-2
 
     # some i/o frequencies
     nstatus = 100
@@ -199,7 +201,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     viscosity = 1.0e-5
 
     speedup_factor = 1.0
-
+    pyro_mechanism = None
     if use_mixture:
         # {{{  Set up initial state using Cantera
 
@@ -436,6 +438,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
 
     limiter_func = mixture_mass_fraction_limiter if use_limiter else None
+    compiled_limiter = None
+    if limiter_func is not None:
+        compiled_limiter = actx.compile(limiter_func)
 
     def stepper_state_to_gas_state(stepper_state):
         if use_mixture:
@@ -475,6 +480,16 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     mfs_compiled = actx.compile(mfs)
 
+    def get_temperature_update(cv, temperature):
+        if pyro_mechanism is not None:
+            y = cv.species_mass_fractions
+            e = gas_model.eos.internal_energy(cv) / cv.mass
+            return pyro_mechanism.get_temperature_update_energy(e, temperature, y)
+        else:
+            return 0*temperature
+
+    gtu_compiled = actx.compile(get_temperature_update)
+
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
@@ -487,11 +502,12 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
                                     tseed=temperature_seed)
         current_cv = force_evaluation(actx, current_cv)
-        # current_gas_state = make_fluid_state(current_cv, gas_model,
-        #                                     temperature_seed=temperature_seed)
+        # Force to use/compile limiter so we can evaluate DAG
+        if limiter_func is not None:
+            dv =  eos.dependent_vars(current_cv, temperature_seed)
+            current_cv = compiled_limiter(current_cv, dv.pressure, dv.temperature)
+
         current_gas_state = mfs_compiled(current_cv, temperature_seed)
-        # force_evaluation(actx, make_fluid_state(current_cv, gas_model,
-        #                                        temperature_seed=temperature_seed))
 
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
@@ -549,6 +565,16 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         if check_naninf_local(dcoll, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
+
+        if gas_state.is_mixture:
+            temper_update = gtu_compiled(gas_state.cv, gas_state.temperature)
+            temp_relup = temper_update / gas_state.temperature
+            max_temp_relup = (actx.to_numpy(op.nodal_max_loc(dcoll, "vol", 
+                                                             temp_relup)))
+            if max_temp_relup > temperature_tolerance:
+                health_error = True
+                logger.info(f"{rank=}: Temperature is not "
+                            f"converged {max_temp_relup=}.")
 
         return health_error
 
@@ -655,7 +681,7 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
                         default=3, help="spatial dimension of simulation")
-    parser.add_argument("-i", "--iters", type=int, default=3,
+    parser.add_argument("-i", "--iters", type=int, default=1,
                         help="number of Newton iterations for mixture temperature")
     parser.add_argument("-r", "--restart_file", help="root name of restart file")
     parser.add_argument("-c", "--casename", help="casename to use for i/o")
