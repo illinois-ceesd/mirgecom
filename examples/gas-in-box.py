@@ -25,6 +25,8 @@ THE SOFTWARE.
 """
 
 import logging
+import sys
+import argparse
 import numpy as np
 from functools import partial
 
@@ -664,7 +666,11 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
 
 if __name__ == "__main__":
-    import argparse
+
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        level=logging.INFO)
+
     casename = "pulse"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("-o", "--overintegration", action="store_true",
