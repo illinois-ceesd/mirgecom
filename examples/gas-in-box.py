@@ -440,9 +440,12 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
 
     limiter_func = mixture_mass_fraction_limiter if use_limiter else None
-    compiled_limiter = None
-    if limiter_func is not None:
-        compiled_limiter = actx.compile(limiter_func)
+    def my_limiter(cv, pressure, temperature):
+        if limiter_func is not None:
+            return limiter_func(cv, pressure, temperature)
+        return cv
+
+    limiter_compiled = actx.compile(my_limiter)
 
     def stepper_state_to_gas_state(stepper_state):
         if use_mixture:
@@ -507,7 +510,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         # Force to use/compile limiter so we can evaluate DAG
         if limiter_func is not None:
             dv =  eos.dependent_vars(current_cv, temperature_seed)
-            current_cv = compiled_limiter(current_cv, dv.pressure, dv.temperature)
+            current_cv = limiter_compiled(current_cv, dv.pressure, dv.temperature)
 
         current_gas_state = mfs_compiled(current_cv, temperature_seed)
 
