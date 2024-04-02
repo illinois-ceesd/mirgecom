@@ -435,9 +435,12 @@ class PorousFlowModel:
         .. math::
             \epsilon_s \rho_s = \sum_i^N \epsilon_i \rho_i
         """
+        actx = material_densities.array_context
         if isinstance(material_densities, DOFArray):
-            return material_densities
-        return sum(material_densities)
+            return actx.np.absolute(material_densities)
+        else:
+            1/0
+        # XXX return sum(material_densities)
 
     def decomposition_progress(self, material_densities) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the decomposition.

@@ -32,6 +32,7 @@ import numpy as np
 from pytools.obj_array import make_obj_array
 from mirgecom.fluid import make_conserved
 from mirgecom.wall_model import SolidWallConservedVars
+from mirgecom.wall_model import PorousWallVars
 
 
 class SolidWallInitializer:
@@ -99,7 +100,7 @@ class PorousWallInitializer:
         else:
             self._y = np.empty((0,), dtype=object)
 
-    def __call__(self, x_vec, gas_model):
+    def __call__(self, x_vec, gas_model, return_wv=False):
         """Evaluate the wall+gas properties for porous materials.
 
         Parameters
@@ -116,6 +117,8 @@ class PorousWallInitializer:
             both gas and porous material properties.
         wall_density: numpy.ndarray or :class:`meshmode.dof_array.DOFArray`
             The densities of each one of the materials
+        wv: :class:`mirgecom.fluid.wall_model.PorousWallVars`
+            Wall dependent variables
         """
         actx = x_vec[0].array_context
         zeros = actx.np.zeros_like(x_vec[0])
@@ -128,9 +131,18 @@ class PorousWallInitializer:
             porous_region = ones
 
         # wall-only properties
-        wall_density = self._wall_density * porous_region
-        tau = gas_model.decomposition_progress(wall_density)
-        eps_rho_solid = gas_model.solid_density(wall_density)
+        material_densities = self._wall_density * porous_region
+        tau = gas_model.decomposition_progress(material_densities)
+        eps_rho_solid = gas_model.solid_density(material_densities)
+
+        wv = PorousWallVars(
+            material_densities=material_densities,
+            tau=tau,
+            density=eps_rho_solid,
+            void_fraction=gas_model.wall_eos.void_fraction(tau=tau),
+            permeability=gas_model.wall_eos.permeability(tau=tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau=tau)
+        )
 
         # coupled properties
         temperature = self._temp + zeros
@@ -168,4 +180,6 @@ class PorousWallInitializer:
         cv = make_conserved(dim=dim, mass=eps_rho_gas, energy=bulk_energy,
                             momentum=momentum, species_mass=species_mass)
 
-        return cv, wall_density
+        if return_wv:
+            return cv, wv
+        return cv, wv.material_densities
