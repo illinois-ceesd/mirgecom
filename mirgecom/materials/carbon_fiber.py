@@ -105,8 +105,9 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
     .. automethod:: get_source_terms
     """
 
-    def __init__(self, wall_material):
+    def __init__(self, wall_material, initial_fiber_radius=5e-6):
         self._material = wall_material
+        self._init_fiber_radius = initial_fiber_radius
 
     def _get_wall_effective_surface_area_fiber(self, tau) -> DOFArray:
         r"""Evaluate the effective surface of the fibers.
@@ -117,13 +118,16 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
             \tau = \frac{m}{m_0} = \frac{\pi r^2/L}{\pi r_0^2/L} = \frac{r^2}{r_0^2}
         """
         actx = tau.array_context
+        zeros = actx.np.zeros_like(tau)
 
-        original_fiber_radius = 5e-6  # half the diameter
-        fiber_radius = original_fiber_radius*actx.np.sqrt(tau)
+        # half the diameter
+        fiber_radius = \
+            self._init_fiber_radius * actx.np.sqrt(actx.np.minimum(tau, zeros))
 
         epsilon_0 = self._material.volume_fraction(tau=1.0)
 
-        return 2.0*epsilon_0/original_fiber_radius**2*fiber_radius
+        # TODO simplify this...
+        return 2.0 * epsilon_0 * fiber_radius/self._init_fiber_radius**2
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
             rhoY_o2: DOFArray):  # noqa N803

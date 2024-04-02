@@ -193,3 +193,8 @@ def test_tacot_decomposition():
     assert solid_mass_rhs[0] + 26.7676118539965 < tol
     assert solid_mass_rhs[1] + 2.03565420370596 < tol
     assert sample_source_gas - 28.8032660577024 < tol
+
+
+# TODO
+def test_oxidation_model():
+    assert 1 == 1
