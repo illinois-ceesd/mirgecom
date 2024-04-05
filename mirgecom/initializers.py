@@ -1525,7 +1525,7 @@ class InviscidTaylorGreenVortex:
 
     def __init__(
             self, *, dim=2, mach_number=0.05, domain_lengthscale=1, v0=1, p0=1,
-            viscosity=1e-5
+            viscosity=0
     ):
         """Initialize vortex parameters."""
         self._mach_number = mach_number
@@ -1578,9 +1578,9 @@ class InviscidTaylorGreenVortex:
             w = zeros
             velocity = make_obj_array([u, v, w])
         else:
-            u = v0 * actx.np.sin(x)*actx.np.cos(y)*ft
-            v = -v0 * actx.np.cos(x)*actx.np.sin(y)*ft
-            p = -rho0/4.0 * (actx.np.cos(2*x) + actx.np.cos(2*y)) * ft * ft
+            u = v0 * actx.np.sin(x)*actx.np.cos(y)
+            v = -v0 * actx.np.cos(x)*actx.np.sin(y)
+            p = (rho0/4.0 * (actx.np.cos(2*x) + actx.np.cos(2*y))) + 5e-3
             velocity = make_obj_array([u, v])
 
         momentum = rho0 * velocity

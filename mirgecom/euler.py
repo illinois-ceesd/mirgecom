@@ -70,7 +70,7 @@ from mirgecom.inviscid import (  # noqa
     entropy_stable_inviscid_facial_flux_rusanov,
     entropy_stable_inviscid_facial_flux,
     entropy_conserving_flux_chandrashekar,
-    entropy_conserving_flux_Kawai,
+    entropy_conserving_flux_kawai,
     entropy_conserving_flux_renac
 )
 
@@ -111,7 +111,7 @@ class _ESFluidTemperatureTag():
 def entropy_stable_euler_operator(
         dcoll, gas_model, state, boundaries, time=0.0,
         inviscid_numerical_flux_func=None,
-        entropy_conserving_flux_func=None,
+        entropy_conserving_flux_func=entropy_conserving_flux_kawai,
         operator_states_quad=None,
         dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None,
         limiter_func=None):
@@ -197,7 +197,7 @@ def entropy_stable_euler_operator(
     if entropy_conserving_flux_func is None:
         entropy_conserving_flux_func = \
             (entropy_conserving_flux_renac if state.is_mixture
-             else entropy_conserving_flux_Kawai)
+             else entropy_conserving_flux_chandrashekar)
         flux_func = "renac" if state.is_mixture else "chandrashekar"
         warn("No entropy_conserving_flux_func was given for ESDG. "
              f"Setting EC flux to entropy_conserving_flux_{flux_func}.")
@@ -311,7 +311,7 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=None,
                    quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
                    comm_tag=None, use_esdg=False, operator_states_quad=None,
-                   entropy_conserving_flux_func=None, limiter_func=None):
+                   entropy_conserving_flux_func=entropy_conserving_flux_kawai, limiter_func=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -387,7 +387,7 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
             dcoll, gas_model=gas_model, state=state, boundaries=boundaries,
             time=time, operator_states_quad=operator_states_quad, dd=dd,
             inviscid_numerical_flux_func=inviscid_numerical_flux_func,
-            entropy_conserving_flux_func=entropy_conserving_flux_func,
+            entropy_conserving_flux_func=entropy_conserving_flux_kawai,
             quadrature_tag=quadrature_tag, comm_tag=comm_tag)
 
     if inviscid_numerical_flux_func is None:

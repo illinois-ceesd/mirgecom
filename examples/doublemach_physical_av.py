@@ -146,16 +146,18 @@ def main(actx_class, use_esdg=False,
         filename=logname, mode="wo", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    # actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm, use_axis_tag_inference_fallback = True,
+       use_einsum_inference_fallback = True)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # Timestepping control
     current_step = 0
-    timestepper = rk4_step
+    # timestepper = rk4_step
     timestepper = euler_step
     force_eval = True
-    t_final = 5.e-4
+    t_final = 1
     current_cfl = 0.1
     current_dt = 2.5e-5
     current_t = 0
@@ -174,9 +176,9 @@ def main(actx_class, use_esdg=False,
     health_temp_max = 100
 
     # Some i/o frequencies
-    nviz = 250
+    nviz = 10
     nrestart = 1000
-    nhealth = 1
+    nhealth = -1
     nstatus = 1
 
     viz_path = "viz_data/"
@@ -230,7 +232,7 @@ def main(actx_class, use_esdg=False,
     #    0 - none
     #    1 - laplacian diffusion
     #    2 - physical viscosity based, div(velocity) indicator
-    use_av = 2
+    use_av = 0
 
     # Solution setup and initialization
     # {{{ Initialize simple transport model
@@ -319,8 +321,8 @@ def main(actx_class, use_esdg=False,
         # Set the current state from time 0
         current_cv = initializer(nodes)
 
-    smoothness = None
-    no_smoothness = None
+    smoothness = actx.np.zeros_like(current_cv.mass)
+    no_smoothness = actx.np.zeros_like(current_cv.mass)
     if use_av > 0:
         smoothness = smoothness_indicator(dcoll, current_cv.mass,
                                           kappa=kappa, s0=s0)

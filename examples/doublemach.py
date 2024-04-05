@@ -131,14 +131,16 @@ def main(actx_class, use_esdg=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    #actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm, use_axis_tag_inference_fallback = True,
+       use_einsum_inference_fallback = True)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # Timestepping control
     current_step = 0
     timestepper = rk4_step
-    t_final = 1.0e-3
+    t_final = 1
     current_cfl = 0.1
     current_dt = 1.0e-4
     current_t = 0
@@ -146,7 +148,7 @@ def main(actx_class, use_esdg=False,
 
     # Some i/o frequencies
     nstatus = 10
-    nviz = 100
+    nviz = 10
     nrestart = 100
     nhealth = 1
 

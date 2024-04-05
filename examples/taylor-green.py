@@ -67,7 +67,7 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, order=1, t_final=1, resolution=4,
+def main(actx_class, order=6, t_final=1, resolution=4,
          use_overintegration=False, use_esdg=False,
          casename=None, rst_filename=None):
     """Drive the example."""
@@ -87,24 +87,26 @@ def main(actx_class, order=1, t_final=1, resolution=4,
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm, use_axis_tag_inference_fallback = True,
-        use_einsum_inference_fallback = True)
+       use_einsum_inference_fallback = True)
+    # from arraycontext import NumpyArrayContext
+    # actx = NumpyArrayContext()
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
     # timestepping control
     current_step = 0
     timestepper = lsrk54_step
-    t_final = 5e-3
+    t_final = 5
     current_cfl = 1.0
-    current_dt = 1e-6
+    current_dt = 1e-3
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
     nstatus = 100000
-    nrestart = 100
+    nrestart = 1000
     nviz = 100
-    nhealth = 100
+    nhealth = -1
 
     dim = 2
     rst_path = "restart_data/"
@@ -124,8 +126,10 @@ def main(actx_class, order=1, t_final=1, resolution=4,
         box_ll = (-np.pi,)*dim
         box_ur = (np.pi,)*dim
         if dim == 2:
-            box_ll = (np.pi/2, np.pi/2)
-            box_ur = (5*np.pi/2, 5*np.pi/2)
+            # box_ll = (0, 0)
+            box_ll = (-np.pi, -np.pi)
+
+            box_ur = (np.pi, np.pi)
         generate_mesh = partial(generate_regular_rect_mesh,
                                 a=box_ll, b=box_ur,
                                 nelements_per_axis=(resolution,)*dim,
@@ -278,7 +282,6 @@ def main(actx_class, order=1, t_final=1, resolution=4,
     def my_post_step(step, t, dt, state):
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state, dt
 
@@ -317,7 +320,7 @@ if __name__ == "__main__":
     import argparse
     casename = "taylor-green-vortex"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
-    parser.add_argument("--order", default=1, type=int,
+    parser.add_argument("--order", default=3, type=int,
         help="specify the polynomial order of the DG method")
     parser.add_argument("--tfinal", default=20., type=float,
         help="specify final time for the simulation")

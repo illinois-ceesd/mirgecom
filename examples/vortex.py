@@ -85,7 +85,9 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    #actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm, use_axis_tag_inference_fallback = True,
+       use_einsum_inference_fallback = True)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -96,7 +98,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.01
+    t_final = 1
     current_cfl = 1.0
     current_dt = .001
     current_t = 0

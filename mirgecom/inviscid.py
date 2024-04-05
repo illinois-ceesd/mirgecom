@@ -399,7 +399,7 @@ def get_inviscid_cfl(dcoll, state, dt):
     """
     return dt / get_inviscid_timestep(dcoll, state=state)
 
-def entropy_conserving_flux_Kawai(gas_model, state_ll, state_rr):
+def entropy_conserving_flux_kawai(gas_model, state_ll, state_rr):
     """Compute the entropy conservative fluxes from states *state_ll* and *state_rr*.
 
     This routine implements the two-point volume flux based on the entropy
