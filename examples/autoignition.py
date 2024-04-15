@@ -343,7 +343,12 @@ def main(actx_class, use_leap=False, use_overintegration=False,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
-    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
+    def _limit_fluid_cv(cv, temperature_seed, gas_model, dd=None):
+
+        temperature = gas_model.eos.temperature(
+            cv=cv, temperature_seed=temperature_seed)
+        pressure = gas_model.eos.pressure(
+            cv=cv, temperature=temperature)
 
         # limit species
         spec_lim = make_obj_array([
