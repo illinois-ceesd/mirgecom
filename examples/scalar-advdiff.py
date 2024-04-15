@@ -150,7 +150,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     else:
         quadrature_tag = None
 
-    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
+    def _limit_fluid_cv(cv, temperature_seed=None, gas_model=None, dd=None):
         # if True:
         #    return cv
         actx = cv.array_context
