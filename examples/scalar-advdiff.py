@@ -151,9 +151,8 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         quadrature_tag = None
 
     def _limit_fluid_cv(cv, temperature_seed=None, gas_model=None, dd=None):
-        # if True:
-        #    return cv
         actx = cv.array_context
+
         # limit species
         spec_lim = make_obj_array([
             bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0,
