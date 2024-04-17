@@ -26,11 +26,16 @@ jsrun_cmd="jsrun -g 1 -a 1 -n $nproc"
 # See
 # https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
 # on why this is important
-export XDG_CACHE_HOME_ROOT="/tmp/$USER/xdg-scratch/rank"
+export XDG_CACHE_HOME_ROOT="$(pwd)/xdg-cache/rank"
 
 # Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
 # (each rank needs its own POCL cache dir)
-export POCL_CACHE_DIR_ROOT="/tmp/$USER/pocl-cache/rank"
+export POCL_CACHE_DIR_ROOT="$(pwd)/pocl-cache/rank"
+
+
+# Reenable CUDA cache
+export CUDA_CACHE_DISABLE=0
+export CUDA_CACHE_PATH_ROOT="$(pwd)/cuda-cache/rank"
 
 # Print task allocation
 $jsrun_cmd js_task_info
@@ -38,7 +43,4 @@ $jsrun_cmd js_task_info
 echo "----------------------------"
 
 # Run application
-# -O: switch on optimizations
-# POCL_CACHE_DIR=...: each rank needs its own POCL cache dir
-# XDG_CACHE_HOME=...: each rank needs its own Loopy/PyOpenCL cache dir
-$jsrun_cmd bash -c 'POCL_CACHE_DIR=$POCL_CACHE_DIR_ROOT$OMPI_COMM_WORLD_RANK XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$OMPI_COMM_WORLD_RANK python -O -m mpi4py ./pulse-mpi.py'
+$jsrun_cmd bash -c 'CUDA_CACHE_PATH=$CUDA_CACHE_PATH_ROOT$OMPI_COMM_WORLD_RANK POCL_CACHE_DIR=$POCL_CACHE_DIR_ROOT$OMPI_COMM_WORLD_RANK XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$OMPI_COMM_WORLD_RANK python -m mpi4py ../examples/pulse.py --lazy'
