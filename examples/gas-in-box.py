@@ -499,9 +499,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
-        rst_temperature = restart_data["temperature"]
+        rst_tseed = restart_data["temperature_seed"]
         current_cv = force_evaluation(actx, current_cv)
-        current_gas_state = mfs_compiled(current_cv, rst_temperature)
+        current_gas_state = mfs_compiled(current_cv, rst_tseed)
     else:
         # Set the current state from time 0
         current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
@@ -548,7 +548,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             rst_data = {
                 "local_mesh": local_mesh,
                 "cv": gas_state.cv,
-                "temperature": gas_state.temperature,
+                "temperature_seed": gas_state.temperature,
                 "t": t,
                 "step": step,
                 "order": order,
