@@ -443,12 +443,13 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                                 momentum=mass_lim*cv.velocity,
                                 species_mass=mass_lim*spec_lim)
 
-        return make_obj_array([cv_lim, pressure, temperature])
+        # return make_obj_array([cv_lim, pressure, temperature])
+        return cv_lim
 
     limiter_func = mixture_mass_fraction_limiter if use_limiter else None
-    def my_limiter(cv, pressure, temperature):
+    def my_limiter(cv, tseed):
         if limiter_func is not None:
-            return limiter_func(cv, pressure, temperature)
+            return limiter_func(cv, tseed, gas_model=gas_model)
         return cv
 
     limiter_compiled = actx.compile(my_limiter)
@@ -516,7 +517,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         # Force to use/compile limiter so we can evaluate DAG
         if limiter_func is not None:
             dv =  eos.dependent_vars(current_cv, temperature_seed)
-            current_cv = limiter_compiled(current_cv, dv.pressure, dv.temperature)
+            current_cv = limiter_compiled(current_cv, temperature_seed)
 
         current_gas_state = mfs_compiled(current_cv, temperature_seed)
 
