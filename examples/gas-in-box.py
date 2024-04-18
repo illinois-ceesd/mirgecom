@@ -226,7 +226,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                                            oxidizer={"O2": 1.0, "N2": 3.76})
         x = cantera_soln.X
 
-        one_atm = cantera.one_atm
+        one_atm = cantera.one_atm  # pylint: disable=no-member
 
         # Let the user know about how Cantera is being initilized
         print(f"Input state (T,P,X) = ({temperature_seed}, {one_atm}, {x}")
