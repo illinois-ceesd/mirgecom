@@ -379,14 +379,15 @@ def make_fluid_state(cv, gas_model,
         if limiter_func:
             rv = limiter_func(cv=cv, temperature_seed=temperature_seed,
                               gas_model=gas_model, dd=limiter_dd)
-            if type(rv) is tuple:
+            if isinstance(rv, np.ndarray):
                 cv, pressure, temperature = rv
             else:
                 cv = rv
 
-        if pressure is None:
+        if temperature is None:
             temperature = gas_model.eos.temperature(
                 cv=cv, temperature_seed=temperature_seed)
+        if pressure is None:
             pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
 
         dv = GasDependentVars(
