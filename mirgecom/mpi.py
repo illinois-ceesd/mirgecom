@@ -33,6 +33,7 @@ from functools import wraps
 import os
 import sys
 
+from arraycontext import PyOpenCLArrayContext
 from contextlib import contextmanager
 from typing import Callable, Any, Generator, TYPE_CHECKING
 
@@ -102,7 +103,7 @@ def _check_cache_dirs_node() -> None:
         # _check_var("CUDA_CACHE_PATH")
 
 
-def _check_gpu_oversubscription() -> None:
+def _check_gpu_oversubscription(actx: PyOpenCLArrayContext) -> None:
     """
     Check whether multiple ranks are running on the same GPU on each node.
 
@@ -117,16 +118,7 @@ def _check_gpu_oversubscription() -> None:
     if size <= 1:
         return
 
-    # This may unnecessarily require pyopencl in case we run with a
-    # NumpyArrayContext or CupyArrayContext
-    cl_ctx = cl.create_some_context()
-    dev = cl_ctx.devices
-
-    # No support for multi-device contexts
-    if len(dev) > 1:
-        raise NotImplementedError("multi-device contexts not yet supported")
-
-    dev = dev[0]
+    dev = actx.queue.device
 
     # Allow running multiple ranks on non-GPU devices
     if not (dev.type & cl.device_type.GPU):
@@ -162,18 +154,14 @@ def _check_gpu_oversubscription() -> None:
                      f"Duplicate PCIe IDs: {dup}.")
 
 
-def log_disk_cache_config() -> None:
+def log_disk_cache_config(actx: PyOpenCLArrayContext) -> None:
     """Log the disk cache configuration."""
     from mpi4py import MPI
     rank = MPI.COMM_WORLD.Get_rank()
     res = f"Rank {rank} disk cache config: "
 
-    # This may unnecessarily require pyopencl in case we run with a
-    # NumpyArrayContext or CupyArrayContext
-    import pyopencl as cl
     from pyopencl.characterize import nv_compute_capability, get_pocl_version
-    cl_ctx = cl.create_some_context()
-    dev = cl_ctx.devices[0]
+    dev = actx.queue.device
 
     # Variables set any to any value => cache is disabled
     loopy_cache_enabled = bool(os.getenv("LOOPY_NO_CACHE", True))
@@ -270,8 +258,11 @@ def mpi_entry_point(func) -> Callable:
         # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
         # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
         # for details.
-        import pyopencl as cl
-        cl.get_platforms()
+        from mirgecom.array_context import actx_class_is_pyopencl
+        actx_class = kwargs["actx_class"]
+        if actx_class_is_pyopencl(actx_class):
+            import pyopencl as cl
+            cl.get_platforms()
 
         # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
         # some MPI runtimes. This must be set *before* the first import
@@ -283,11 +274,19 @@ def mpi_entry_point(func) -> Callable:
         # exit
         from mpi4py import MPI  # noqa
 
-        _check_gpu_oversubscription()
-        _check_cache_dirs_node()
+        from mirgecom.array_context import initialize_actx
+        # This is where actual actx selection occurs
+        actx = initialize_actx(actx_class, comm=MPI.COMM_WORLD)
+        kwargs["actx"] = actx
+
         _check_isl_version()
         _check_mpi4py_version()
-        log_disk_cache_config()
+
+        if actx_class_is_pyopencl(actx_class):
+            assert isinstance(actx, PyOpenCLArrayContext)
+            _check_gpu_oversubscription(actx)
+            _check_cache_dirs_node()
+            log_disk_cache_config(actx)
 
         func(*args, **kwargs)
 

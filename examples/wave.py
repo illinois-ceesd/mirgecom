@@ -62,32 +62,37 @@ def bump(actx, nodes, t=0):
 
 
 @mpi_entry_point
-def main(actx_class, casename="wave",
-         restart_step=None, use_logmgr: bool = False, mpi: bool = True) -> None:
+def main(*, actx_class, casename="wave",
+         restart_step=None, use_logmgr: bool = False, mpi: bool = True,
+         **kwargs) -> None:
     """Drive the example."""
 
     if mpi:
+        # mpi_entry_point (only called when MPI is requested) will import mpi4py
         assert "mpi4py" in sys.modules
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         num_parts = comm.Get_size()
+        actx = kwargs["actx"]
     else:
         assert "mpi4py" not in sys.modules
         comm = None
         rank = 0
         num_parts = 1
+        from mirgecom.array_context import initialize_actx
+        actx = initialize_actx(actx_class, None)
 
     snapshot_pattern = casename + "-{step:04d}-{rank:04d}.pkl"
     vizfile_pattern = casename + "-%03d-%04d.vtu"
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
+        filename="wave.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     alloc = getattr(actx, "allocator", None)
+
+    from mirgecom.array_context import actx_class_is_profiling
     use_profiling = actx_class_is_profiling(actx_class)
 
     if restart_step is None:
@@ -135,7 +140,7 @@ def main(actx_class, casename="wave",
 
     dt = actx.to_numpy(current_cfl
                        * op.nodal_min(dcoll,
-                                      "vol", nodal_dt))[()]  # type: ignore[index]
+                                      "vol", nodal_dt))[()]
 
     t_final = 1
 
@@ -245,7 +250,7 @@ def main(actx_class, casename="wave",
         logmgr.close()
 
     final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
-    assert np.abs(final_soln - 0.04409852463947439) < 1e-14  # type: ignore[operator]
+    assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
     if mpi:
         assert "mpi4py" in sys.modules
@@ -285,6 +290,7 @@ if __name__ == "__main__":
         # run main without the mpi_entry_point wrapper
         main_func = inspect.unwrap(main)
 
-    main_func(actx_class, use_logmgr=args.log, casename=casename, mpi=args.mpi)
+    main_func(actx_class=actx_class, use_logmgr=args.log, casename=casename,
+              mpi=args.mpi)
 
 # vim: foldmethod=marker

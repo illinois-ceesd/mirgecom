@@ -88,6 +88,12 @@ def actx_class_is_profiling(actx_class: Type[ArrayContext]) -> bool:
     return issubclass(actx_class, PyOpenCLProfilingArrayContext)
 
 
+def actx_class_is_pyopencl(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is PyOpenCL-based."""
+    from arraycontext import PyOpenCLArrayContext
+    return issubclass(actx_class, PyOpenCLArrayContext)
+
+
 def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* is numpy-based."""
     try:
