@@ -23,4 +23,4 @@ export XDG_CACHE_HOME="$(pwd)/xdg-cache"
 
 # Run application
 # -O: switch on optimizations
-srun -n $nproc python -O -m mpi4py ./vortex-mpi.py
+srun -n $nproc python -O -m mpi4py ./vortex.py

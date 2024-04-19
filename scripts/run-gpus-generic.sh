@@ -10,7 +10,7 @@
 # handles GPU distribution.
 #
 # Run it like this:
-#   mpiexec -n 2 bash run-gpus-generic.sh python -m mpi4py pulse-mpi.py --lazy
+#   mpiexec -n 2 bash run-gpus-generic.sh python -m mpi4py pulse.py --lazy
 # unset CUDA_CACHE_DISABLE
 export CUDA_CACHE_DISABLE=0
 MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)"}
