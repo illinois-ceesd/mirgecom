@@ -124,6 +124,11 @@ def _check_gpu_oversubscription(actx: PyOpenCLArrayContext) -> None:
     if not (dev.type & cl.device_type.GPU):
         return
 
+    # This check only works with Nvidia GPUs
+    from pyopencl.characterize import nv_compute_capability
+    if nv_compute_capability(dev) is None:
+        return
+
     with shared_split_comm_world() as node_comm:
         try:
             domain_id = hex(dev.pci_domain_id_nv)
@@ -283,6 +288,7 @@ def mpi_entry_point(func) -> Callable:
         _check_mpi4py_version()
 
         if actx_class_is_pyopencl(actx_class):
+            # Non-PyOpenCL actx classes don't use loopy, pyopencl, or pocl caching.
             assert isinstance(actx, PyOpenCLArrayContext)
             _check_gpu_oversubscription(actx)
             _check_cache_dirs_node()
