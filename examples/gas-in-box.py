@@ -310,6 +310,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     smoothness_alpha = 0.1
     smoothness_tau = .01
+    physical_transport_model = None
+
     if use_navierstokes:
         if transport_type == 2:
             if not use_mixture:
