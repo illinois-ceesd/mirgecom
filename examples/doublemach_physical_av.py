@@ -171,14 +171,14 @@ def main(actx_class, use_esdg=False,
 
     # default health status bounds
     health_pres_min = 0.7
-    health_pres_max = 19.
+    health_pres_max = 30.
     health_temp_min = 1e-4
     health_temp_max = 100
 
     # Some i/o frequencies
     nviz = 10
     nrestart = 1000
-    nhealth = -1
+    nhealth = 1
     nstatus = 1
 
     viz_path = "viz_data/"
@@ -232,7 +232,7 @@ def main(actx_class, use_esdg=False,
     #    0 - none
     #    1 - laplacian diffusion
     #    2 - physical viscosity based, div(velocity) indicator
-    use_av = 0
+    use_av = 2
 
     # Solution setup and initialization
     # {{{ Initialize simple transport model

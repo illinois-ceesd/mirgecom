@@ -83,7 +83,9 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    #actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm, use_axis_tag_inference_fallback = True,
+       use_einsum_inference_fallback = True)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -93,9 +95,9 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 1e-4
-    current_cfl = 0.01
-    current_dt = 1e-6
+    t_final = 0.2
+    current_cfl = 0.05
+    current_dt = 1e-4
     current_t = 0
     constant_cfl = False
     current_step = 0
@@ -103,10 +105,10 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 1000
-    nviz = 1
+    nviz = 5
     nhealth = 1
 
-    dim = 1
+    dim = 2
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -121,16 +123,20 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        nel_1d = 32
+        nel_1d = 100
         box_ll = 0.0
         box_ur = 1.0
-        generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
-                                b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim)
+        generate_mesh = partial(generate_regular_rect_mesh, a=(0.0,0.0),
+		                b=(1.0,0.1) * dim, nelements_per_axis=(nel_1d,10), periodic=(False,True),    
+   				boundary_tag_to_face={
+				"left": ["+x"],
+				"right": ["-x"]}
+			    )
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 4
+    order = 3
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              quadrature_order=order+2)
     nodes = actx.thaw(dcoll.nodes())
@@ -180,9 +186,15 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
+#    boundaries = {
+#        BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
+#    }
+
+    from grudge.dof_desc import BoundaryDomainTag
     boundaries = {
-        BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=boundary_solution)
-    }
+      BoundaryDomainTag("left"): PrescribedFluidBoundary(boundary_state_func=boundary_solution),
+      BoundaryDomainTag("right"): PrescribedFluidBoundary(boundary_state_func=boundary_solution)}
+    
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -307,14 +319,14 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
                 my_write_viz(step=step, t=t, state=state, dv=dv, exact=exact,
                              resid=resid)
 
-            if do_status:
-                if component_errors is None:
-                    if exact is None:
-                        exact = initializer(x_vec=nodes, eos=eos, time=t)
-                        from mirgecom.simutil import compare_fluid_solutions
-                        component_errors = \
-                            compare_fluid_solutions(dcoll, state, exact)
-                my_write_status(component_errors)
+#            if do_status:
+ #               if component_errors is None:
+  #                  if exact is None:
+   #                     exact = initializer(x_vec=nodes, eos=eos, time=t)
+    #                    from mirgecom.simutil import compare_fluid_solutions
+     #                   component_errors = \
+      #                      compare_fluid_solutions(dcoll, state, exact)
+       #         my_write_status(component_errors)
 
         except MyRuntimeError:
             if rank == 0:
