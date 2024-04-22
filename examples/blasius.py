@@ -51,8 +51,8 @@ from mirgecom.boundary import (
     PressureOutflowBoundary,
     AdiabaticSlipBoundary,
     IsothermalWallBoundary,
-    LinearizedInflow2DBoundary,
-    LinearizedOutflow2DBoundary,
+    LinearizedInflowBoundary,
+    LinearizedOutflowBoundary,
 )
 from mirgecom.utils import force_evaluation
 from mirgecom.fluid import make_conserved
@@ -62,7 +62,7 @@ from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info, logmgr_set_time,
 )
-
+from arraycontext import get_container_context_recursively
 
 logger = logging.getLogger(__name__)
 
@@ -79,13 +79,13 @@ class Initializer:
         self._velocity = velocity
 
     def __call__(self, x_vec, eos):
-        actx = x_vec[0].array_context
-
+        actx = get_container_context_recursively(x_vec)
+        zeros = actx.np.zeros_like(x_vec[0])
         temp_y = 1.0 + actx.np.tanh(1.0/0.01*x_vec[1])
         temp_x = 1.0 + 0.5*(1.0 - actx.np.tanh(1.0/0.01*(x_vec[0]+0.02)))
         temperature = actx.np.maximum(temp_y, temp_x)
-        pressure = 1.0
-        mass = pressure/(eos.gas_const()*temperature)
+        pressure = 1.0 + zeros
+        mass = pressure / (eos.gas_const()*temperature)
         velocity = self._velocity
         energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
@@ -126,7 +126,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     order = 2
 
     # default i/o frequencies
-    nviz = 1000
+    nviz = 1
     nrestart = 1000
     nhealth = 1
     nstatus = 100
@@ -138,10 +138,12 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     local_dt = True
     constant_cfl = True
 
-    current_dt = 1e-1
     niter = 10
-
-    t_final = 0.0
+    current_dt = 1e-9
+    t_final = 2e-8
+    if local_dt:
+        current_dt = 1e-1
+        t_final = 0
 
     dim = 2
     current_cfl = 0.08
@@ -246,11 +248,13 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     velocity[0] = 0.3*np.sqrt(1.4*1.0*2.0)
     flow_init = Initializer(dim=2, velocity=velocity)
 
-    linear_outflow_bnd = LinearizedOutflow2DBoundary(free_stream_density=0.5,
-        free_stream_pressure=1.0, free_stream_velocity=velocity)
+    linear_outflow_bnd = LinearizedOutflowBoundary(
+        free_stream_density=0.5, free_stream_pressure=1.0,
+        free_stream_velocity=velocity)
 
-    linear_inflow_bnd = LinearizedInflow2DBoundary(free_stream_density=0.5,
-        free_stream_pressure=1.0, free_stream_velocity=velocity)
+    linear_inflow_bnd = LinearizedInflowBoundary(
+        free_stream_density=0.5, free_stream_pressure=1.0,
+        free_stream_velocity=velocity)
 
     boundaries = {
         dd_vol.trace("inlet").domain_tag:
@@ -395,12 +399,12 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
         if local_dt:
             t = force_evaluation(actx, t)
             dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                gas_model, constant_cfl=constant_cfl, local_dt=local_dt)
+                constant_cfl=constant_cfl, local_dt=local_dt)
             dt = force_evaluation(actx, actx.np.minimum(dt, current_dt))
         else:
             if constant_cfl:
                 dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl,
-                                      t_final, constant_cfl, local_dt)
+                                      constant_cfl=constant_cfl, local_dt=local_dt)
 
         try:
             do_viz = check_step(step=step, interval=nviz)
@@ -448,7 +452,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
         dt = force_evaluation(actx, actx.np.minimum(
             current_dt,
             get_sim_timestep(dcoll, current_state, current_t,
-                             current_dt, current_cfl, gas_model,
+                             current_dt, current_cfl,
                              constant_cfl=constant_cfl, local_dt=local_dt)))
         t = force_evaluation(actx, current_t + zeros)
     else:
@@ -466,14 +470,15 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
                       dt=dt, t_final=t_final, t=t,
                       max_steps=niter, local_dt=local_dt,
                       istep=current_step)
+
     final_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
 
-    dt = get_sim_timestep(dcoll, final_state, current_t, current_dt, current_cfl,
-        gas_model, constant_cfl=constant_cfl, local_dt=local_dt)
+    dt = get_sim_timestep(dcoll, final_state, current_t, current_dt,
+                          current_cfl, constant_cfl=constant_cfl, local_dt=local_dt)
     dt = force_evaluation(actx, actx.np.minimum(dt, current_dt))
 
     my_write_viz(step=current_step, t=current_t, dt=dt, state=final_state)

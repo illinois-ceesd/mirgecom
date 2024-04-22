@@ -100,14 +100,15 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
     for pressin in ([0.25, 1.0]):
         for tempin in ([300.0, 600.0, 900.0, 1200.0, 1500.0, 1800.0, 2100.0]):
 
-            print(f"Testing (t,P) = ({tempin}, {pressin})")
+            cantera_soln.TP = tempin, pressin*cantera.one_atm
+            print(f"Testing (T, P) = ({cantera_soln.T}, {cantera_soln.P})")
 
             # Loop over each individual species by making a single-species mixture
             for i, name in enumerate(cantera_soln.species_names):
-                cantera_soln.TP = tempin, pressin*cantera.one_atm
                 cantera_soln.Y = name + ":1"
 
                 can_t, can_rho, can_y = cantera_soln.TDY
+                can_p = cantera_soln.P
                 tin = can_t * ones
                 rhoin = can_rho * ones
                 yin = can_y * ones
@@ -119,17 +120,18 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
 
                 fluid_state = make_fluid_state(cv, gas_model, tin)
 
+                assert inf_norm(fluid_state.temperature - tempin)/tempin < 1e-12
+                assert inf_norm(fluid_state.pressure - can_p)/can_p < 1e-12
+
                 # Viscosity
                 mu = fluid_state.tv.viscosity
                 mu_ct = cantera_soln.species_viscosities
-                err_mu = inf_norm(mu - mu_ct[i])
-                assert err_mu < 1.0e-12
+                assert inf_norm(mu - mu_ct[i]) < 1.0e-12
 
                 # Thermal conductivity
                 kappa = fluid_state.tv.thermal_conductivity
                 kappa_ct = cantera_soln.thermal_conductivity
-                err_kappa = inf_norm(kappa - kappa_ct)
-                assert err_kappa < 1.0e-12
+                assert inf_norm(kappa - kappa_ct) < 1.0e-12
 
                 # NOTE: Individual species are exercised in Pyrometheus.
                 # Since the transport model enforce a singular-species case
@@ -137,8 +139,7 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
                 # individual species diffusivity. However, this tests that
                 # the single-species case is enforced correctly.
                 diff = fluid_state.tv.species_diffusivity
-                err_diff = inf_norm(diff[i] - sing_diff)
-                assert err_diff < 1.0e-15
+                assert inf_norm(diff[i] - sing_diff) < 1.0e-15
 
             # prescribe an actual mixture
             cantera_soln.set_equivalence_ratio(phi=1.0, fuel="H2:1",
@@ -170,18 +171,15 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
             # Viscosity
             mu = fluid_state.tv.viscosity
             mu_ct = cantera_soln.viscosity
-            err_mu = inf_norm(mu - mu_ct)
-            assert err_mu < 1.0e-12
+            assert inf_norm(mu - mu_ct) < 1.0e-12
 
             # Thermal conductivity
             kappa = fluid_state.tv.thermal_conductivity
             kappa_ct = cantera_soln.thermal_conductivity
-            err_kappa = inf_norm(kappa - kappa_ct)
-            assert err_kappa < 1.0e-12
+            assert inf_norm(kappa - kappa_ct) < 1.0e-12
 
             # Species diffusivities
             diff = fluid_state.tv.species_diffusivity
             diff_ct = cantera_soln.mix_diff_coeffs
             for i in range(nspecies):
-                err_diff = inf_norm(diff[i] - diff_ct[i])
-                assert err_diff < 1.0e-11
+                assert inf_norm(diff[i] - diff_ct[i]) < 1.0e-11

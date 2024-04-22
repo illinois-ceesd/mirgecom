@@ -32,15 +32,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Type, Optional, TYPE_CHECKING
+from typing import Type, Dict, Any
 
 import pyopencl as cl
 from arraycontext import ArrayContext
-import sys
-
-if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
-    # pylint: disable=no-name-in-module
-    from mpi4py.MPI import Comm
 
 
 def get_reasonable_array_context_class(
@@ -117,48 +112,57 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
         return False
 
 
-def initialize_actx(actx_class: Type[ArrayContext], comm: Optional["Comm"]) \
-        -> ArrayContext:
+def initialize_actx(
+        actx_class: Type[ArrayContext],
+        comm=None, *,
+        use_axis_tag_inference_fallback: bool = False,
+        use_einsum_inference_fallback: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
     from grudge.array_context import (MPIPyOpenCLArrayContext,
-                                      MPIPytatoArrayContext)
+                                      MPIPytatoArrayContext,
+                                      MPINumpyArrayContext)
 
-    # Special handling for NumpyArrayContext since it needs no CL context
+    actx_kwargs: Dict[str, Any] = {}
+
+    if comm:
+        actx_kwargs["mpi_communicator"] = comm
+
     if actx_class_is_numpy(actx_class):
         if comm:
-            return actx_class(mpi_communicator=comm)  # type: ignore[call-arg]
+            assert issubclass(actx_class, MPINumpyArrayContext)
         else:
-            return actx_class()
-
-    cl_ctx = cl.create_some_context()
-    if actx_class_is_profiling(actx_class):
-        queue = cl.CommandQueue(cl_ctx,
-            properties=cl.command_queue_properties.PROFILING_ENABLE)
+            assert not issubclass(actx_class, MPINumpyArrayContext)
     else:
-        queue = cl.CommandQueue(cl_ctx)
-
-    from mirgecom.simutil import get_reasonable_memory_pool
-    alloc = get_reasonable_memory_pool(cl_ctx, queue)
-
-    if actx_class_is_lazy(actx_class):
-        assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
-        if comm:
-            assert issubclass(actx_class, MPIPytatoArrayContext)
-            actx: ArrayContext = actx_class(mpi_communicator=comm, queue=queue,
-                                        mpi_base_tag=12000,
-                                        allocator=alloc)  # type: ignore[call-arg]
+        cl_ctx = cl.create_some_context()
+        if actx_class_is_profiling(actx_class):
+            queue = cl.CommandQueue(cl_ctx,
+                properties=cl.command_queue_properties.PROFILING_ENABLE)
         else:
-            assert not issubclass(actx_class, MPIPytatoArrayContext)
-            actx = actx_class(queue, allocator=alloc)
-    else:
-        assert issubclass(actx_class, PyOpenCLArrayContext)
-        if comm:
-            assert issubclass(actx_class, MPIPyOpenCLArrayContext)
-            actx = actx_class(mpi_communicator=comm, queue=queue, allocator=alloc,
-                              force_device_scalars=True)  # type: ignore[call-arg]
-        else:
-            assert not issubclass(actx_class, MPIPyOpenCLArrayContext)
-            actx = actx_class(queue, allocator=alloc, force_device_scalars=True)
+            queue = cl.CommandQueue(cl_ctx)
+        actx_kwargs["queue"] = queue
 
-    return actx
+        from mirgecom.simutil import get_reasonable_memory_pool
+        alloc = get_reasonable_memory_pool(cl_ctx, queue)
+        actx_kwargs["allocator"] = alloc
+
+        if actx_class_is_lazy(actx_class):
+            assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
+            actx_kwargs["use_axis_tag_inference_fallback"] = \
+                use_axis_tag_inference_fallback
+            actx_kwargs["use_einsum_inference_fallback"] = \
+                use_einsum_inference_fallback
+            if comm:
+                assert issubclass(actx_class, MPIPytatoArrayContext)
+                actx_kwargs["mpi_base_tag"] = 12000
+            else:
+                assert not issubclass(actx_class, MPIPytatoArrayContext)
+        else:
+            assert issubclass(actx_class, PyOpenCLArrayContext)
+            actx_kwargs["force_device_scalars"] = True
+            if comm:
+                assert issubclass(actx_class, MPIPyOpenCLArrayContext)
+            else:
+                assert not issubclass(actx_class, MPIPyOpenCLArrayContext)
+
+    return actx_class(**actx_kwargs)

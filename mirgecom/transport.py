@@ -339,7 +339,7 @@ class MixtureAveragedTransport(TransportModel):
 
     def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None,
                  epsilon=1e-4, singular_diffusivity=1e-6):
-        r"""Initialize power law coefficients and parameters.
+        r"""Initialize mixture averaged transport coefficients and parameters.
 
         Parameters
         ----------

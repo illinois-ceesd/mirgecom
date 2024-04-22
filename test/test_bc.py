@@ -157,8 +157,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
-    bndry = FarfieldBoundary(dim=dim,
-                             free_stream_velocity=ff_vel,
+    bndry = FarfieldBoundary(free_stream_velocity=ff_vel,
                              free_stream_pressure=ff_press,
                              free_stream_temperature=ff_temp)
 

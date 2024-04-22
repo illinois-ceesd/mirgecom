@@ -35,7 +35,7 @@ from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.simutil import write_visfile, check_step
+from mirgecom.simutil import write_visfile, check_step, check_naninf_local
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
@@ -62,6 +62,10 @@ def main(actx_class, use_esdg=False,
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
+
+    from functools import partial
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(True,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
@@ -159,13 +163,31 @@ def main(actx_class, use_esdg=False,
         write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
                       step=step, t=t, overwrite=True, comm=comm)
 
+    def my_health_check(u):
+        health_error = False
+        if check_naninf_local(dcoll, "vol", u):
+            health_error = True
+            logger.info(f"{rank=}: Invalid field data found.")
+
+        return health_error
+
+    from mirgecom.simutil import componentwise_norms
+
     def my_pre_step(step, t, dt, state):
+        if logmgr:
+            logmgr.tick_before()
+
         try:
-            if logmgr:
-                logmgr.tick_before()
 
             if istep % 10 == 0:
-                print(istep, t, actx.to_numpy(actx.np.linalg.norm(u[0])))
+                norm = actx.to_numpy(componentwise_norms(dcoll, state))
+                print(istep, t, norm)
+
+            health_errors = global_reduce(my_health_check(state), op="lor")
+            if health_errors:
+                if rank == 0:
+                    logger.info("Solution failed health check.")
+                raise MyRuntimeError("Failed simulation health check.")
 
             do_viz = check_step(step=step, interval=nviz)
             if do_viz:

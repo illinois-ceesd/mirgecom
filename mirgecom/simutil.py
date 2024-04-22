@@ -71,14 +71,18 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import sys
 from functools import partial
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 from logpyle import IntervalTimer
 
 import grudge.op as op
 import numpy as np
 import pyopencl as cl
+from arraycontext import tag_axes
+from meshmode.transform_metadata import (
+    DiscretizationElementAxisTag,
+    DiscretizationDOFAxisTag
+)
 from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
@@ -88,10 +92,6 @@ from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
-    # pylint: disable=no-name-in-module
-    from mpi4py.MPI import Comm
 
 
 class SimulationConfigurationError(RuntimeError):
@@ -271,18 +271,13 @@ def get_sim_timestep(
     float or :class:`~meshmode.dof_array.DOFArray`
         The global maximum stable DT based on a viscous fluid.
     """
+    actx = state.array_context
+
     if local_dt:
-        actx = state.array_context
-        data_shape = (state.cv.mass[0]).shape
-        if actx.supports_nonscalar_broadcasting:
-            return cfl * actx.np.broadcast_to(
-                op.elementwise_min(
-                    dcoll, fluid_dd,
-                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
-                data_shape)
-        else:
-            return cfl * op.elementwise_min(
-                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
+        ones = actx.np.zeros_like(state.cv.mass) + 1.0
+        vdt = get_viscous_timestep(dcoll, state, dd=fluid_dd)
+        emin = op.elementwise_min(dcoll, fluid_dd, vdt)
+        return cfl * ones * emin
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
@@ -297,7 +292,7 @@ def get_sim_timestep(
 
 def write_visfile(dcoll, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None,
-                  comm: Optional["Comm"] = None):
+                  comm=None):
     """Write parallel VTK output for the fields specified in *io_fields*.
 
     This routine writes a parallel-compatible unstructured VTK visualization
@@ -497,10 +492,22 @@ def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    # added tag_axes calls to eliminate fallback warnings at compile time
     actx = red_state.array_context
-    resid = red_state - blue_state
+    resid = tag_axes(actx,
+                     {
+                         0: DiscretizationElementAxisTag(),
+                         1: DiscretizationDOFAxisTag()
+                     }, red_state - blue_state)
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx))
+        tag_axes(actx,
+                 {
+                     0: DiscretizationElementAxisTag()
+                 },
+                 flatten(
+                     componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx)
+                 )
+    )
 
     return resid_errs.tolist()
 

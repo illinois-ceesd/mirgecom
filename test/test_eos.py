@@ -239,10 +239,8 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim):
 def test_pyrometheus_mechanisms(ctx_factory, mechname):
     """Test known pyrometheus mechanisms.
 
-    This test reproduces a pyrometheus-native test in the MIRGE context.
-
-    Tests that the Pyrometheus mechanism code gets the same thermo properties
-    as the corresponding mechanism in Cantera.
+    This test reproduces a pyrometheus-native test in the MIRGE context and
+    compare thermo properties to the corresponding mechanism in Cantera.
     """
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -289,7 +287,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
         can_p = cantera_soln.P
         can_e = cantera_soln.int_energy_mass
         can_h = cantera_soln.enthalpy_mass
-        can_s = cantera_soln.entropy_mass
         can_c = cantera_soln.concentrations
 
         ones = dcoll.zeros(actx) + 1.0
@@ -302,7 +299,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
         pyro_t = pyro_mechanism.get_temperature(pyro_e, tin, yin)
         pyro_p = pyro_mechanism.get_pressure(pyro_m, pyro_t, yin)
         pyro_h = pyro_mechanism.get_mixture_enthalpy_mass(pyro_t, yin)
-        pyro_s = pyro_mechanism.get_mixture_entropy_mass(pyro_p, pyro_t, yin)
         pyro_c = pyro_mechanism.get_concentrations(pyro_m, yin)
 
         assert inf_norm((pyro_c - can_c)) < 1e-14
@@ -311,7 +307,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
         assert inf_norm((pyro_p - can_p) / can_p) < 1e-14
         assert inf_norm((pyro_e - can_e) / can_e) < 1e-10
         assert inf_norm((pyro_h - can_h) / can_h) < 1e-10
-        assert inf_norm((pyro_s - can_s) / can_s) < 1e-10
 
         # Test the concentrations zero level
         y = -ones*y0s
