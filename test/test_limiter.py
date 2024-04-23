@@ -64,7 +64,7 @@ def test_fluid_api(actx_factory):
     fluid_cv = fluid_cv.replace(mass=ones-eps)
 
     # create a fluid CV limiting routine that preserves pressure and temperature
-    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
+    def _limit_fluid_cv(cv, temperature_seed, gas_model, dd=None):
 
         density_lim = bound_preserving_limiter(dcoll, cv.mass, mmin=1.0)
 
