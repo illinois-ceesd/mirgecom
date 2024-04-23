@@ -101,10 +101,11 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          use_reactions=False, newton_iters=3,
          mech_name="uiuc_7sp", transport_type=0,
          use_av=0, use_limiter=False, order=1,
-         nscale=1, npassive_species=0):
+         nscale=1, npassive_species=0, map_mesh=False,
+         rotation_angle=0, add_pulse=False):
     """Drive the example."""
     if casename is None:
-        casename = "mirgecom"
+        casename = "gas-in-box"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -118,7 +119,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm,
+                           use_axis_tag_inference_fallback=use_tpe,
+                           use_einsum_inference_fallback=use_tpe)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -129,9 +132,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-13
+    t_final = 2e-4
     current_cfl = 1.0
-    current_dt = 1e-14
+    current_dt = 1e-6
     current_t = 0
     constant_cfl = False
     temperature_tolerance = 1e-2
@@ -139,7 +142,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     # some i/o frequencies
     nstatus = 100
     nrestart = 100
-    nviz = 100
+    nviz = 1
     nhealth = 100
 
     nscale = max(nscale, 1)
@@ -169,8 +172,30 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from meshmode.mesh.processing import rotate_mesh_around_axis
-    local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/3)
+        def add_wonk(x: np.ndarray) -> np.ndarray:
+            wonk_field = np.empty_like(x)
+            if len(x) >= 2:
+                wonk_field[0] = (
+                    1.5*x[0] + np.cos(x[0])
+                    + 0.1*np.sin(10*x[1]))
+                wonk_field[1] = (
+                    0.05*np.cos(10*x[0])
+                    + 1.3*x[1] + np.sin(x[1]))
+            else:
+                wonk_field[0] = 1.5*x[0] + np.cos(x[0])
+
+            if len(x) >= 3:
+                wonk_field[2] = x[2] + np.sin(x[0] / 2) / 2
+            return wonk_field
+
+        if map_mesh:
+            from meshmode.mesh.processing import map_mesh
+            local_mesh = map_mesh(local_mesh, add_wonk)
+
+        if abs(rotation_angle) > 0:
+            from meshmode.mesh.processing import rotate_mesh_around_axis
+            theta = rotation_angle/180.0 * np.pi
+            local_mesh = rotate_mesh_around_axis(local_mesh, theta=theta)
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              tensor_product_elements=use_tpe)
@@ -256,10 +281,10 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
         initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
                               species_mass_fractions=can_y, velocity=velocity)
-        temperature_seed = can_t * ones
+        init_t = can_t
     else:
         use_reactions = False
-        eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
+        eos = IdealSingleGas(gamma=1.4)
         species_y = None
         if npassive_species > 0:
             print(f"Initializing with {npassive_species} passive species.")
@@ -272,10 +297,12 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         initializer = Uniform(velocity=velocity, pressure=101325,
                               rho=1.2039086127319172,
                               species_mass_fractions=species_y)
-        temperature_seed = 293.15 * ones
+        init_t = 293.15
 
+    temperature_seed = init_t * ones
     temperature_seed = force_evaluation(actx, temperature_seed)
-    wall_bc = IsothermalWallBoundary() \
+
+    wall_bc = IsothermalWallBoundary(wall_temperature=init_t) \
         if use_navierstokes else AdiabaticSlipBoundary()
 
     transport = None
@@ -516,8 +543,11 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         current_gas_state = mfs_compiled(current_cv, rst_tseed)
     else:
         # Set the current state from time 0
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
-                                    tseed=temperature_seed)
+        if add_pulse:
+            current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
+                                        tseed=temperature_seed)
+        else:
+            current_cv = uniform_cv
         current_cv = force_evaluation(actx, current_cv)
         # Force to use/compile limiter so we can evaluate DAG
         if limiter_func is not None:
@@ -685,8 +715,8 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         level=logging.INFO)
 
-    casename = "pulse"
-    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    example_name = "gas-in-box"
+    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {example_name}")
     parser.add_argument("-o", "--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
     parser.add_argument("-l", "--lazy", action="store_true",
@@ -714,10 +744,14 @@ if __name__ == "__main__":
                         default=0, help="use artificial viscosity")
     parser.add_argument("-b", "--boundaries", action="store_true",
                         help="use multiple (2*ndim) boundaries")
+    parser.add_argument("-k", "--wonky", action="store_true", default=False,
+                        help="make a wonky mesh")
     parser.add_argument("-m", "--mixture", action="store_true",
                         help="use gas mixture EOS")
     parser.add_argument("-f", "--flame", action="store_true",
                         help="use combustion chemistry")
+    parser.add_argument("-g", "--rotate", type=float, default=0,
+                        help="rotate mesh by angle (degrees)")
     parser.add_argument("-x", "--transport", type=int, choices=[0, 1, 2], default=0,
                         help=("transport model specification\n"
                               + "(0)Simple\n(1)PowerLaw\n(2)Mix"))
@@ -727,6 +761,8 @@ if __name__ == "__main__":
                         help="number of passive species")
     parser.add_argument("-t", "--tpe", action="store_true",
                         help="use tensor-product elements (quads/hexes)")
+    parser.add_argument("-u", "--pulse", action="store_true", default=False,
+                        help="add an acoustic pulse at the origin")
     parser.add_argument("-y", "--polynomial-order", type=int, default=1,
                         help="polynomal order for the discretization")
     parser.add_argument("-w", "--weak-scale", type=int, default=1,
@@ -757,13 +793,14 @@ if __name__ == "__main__":
     main(actx_class, use_esdg=args.esdg, dim=args.dimension,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, use_tpe=args.tpe,
-         casename=casename, rst_filename=rst_filename,
+         casename=args.casename, rst_filename=rst_filename,
          periodic_mesh=args.periodic, use_mixture=args.mixture,
          multiple_boundaries=args.boundaries,
          transport_type=args.transport, order=args.polynomial_order,
          use_limiter=args.limiter, use_av=args.artificial_viscosity,
          use_reactions=args.flame, newton_iters=args.iters,
          use_navierstokes=args.navierstokes, npassive_species=args.species,
-         nscale=args.weak_scale, mech_name=args.mechanism_name)
+         nscale=args.weak_scale, mech_name=args.mechanism_name,
+         map_mesh=args.wonky, rotation_angle=args.rotate, add_pulse=args.pulse)
 
 # vim: foldmethod=marker
