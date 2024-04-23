@@ -1,7 +1,7 @@
-"""Test the EOS interfaces."""
+"""Test the chemistry source terms."""
 
 __copyright__ = """
-Copyright (C) 2020 University of Illinois Board of Trustees
+Copyright (C) 2024 University of Illinois Board of Trustees
 """
 
 
@@ -24,7 +24,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import logging
 import numpy as np
 import pyopencl as cl
 import pytest
@@ -33,25 +32,17 @@ from pytools.obj_array import make_obj_array
 
 from grudge import op
 
-from meshmode.array_context import (  # noqa
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
+from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.mesh.generation import generate_regular_rect_mesh
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
-
-logger = logging.getLogger(__name__)
 
 
 @pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),
@@ -74,14 +65,10 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
 
     dim = 1
     nel_1d = 4
-
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-    )
-
     order = 4
 
-    logger.info(f"Number of elements {mesh.nelements}")
+    mesh = generate_regular_rect_mesh(a=(-0.5,) * dim, b=(0.5,) * dim,
+                                      nelements_per_axis=(nel_1d,) * dim)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     ones = dcoll.zeros(actx) + 1.0
@@ -128,8 +115,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
     def get_mole_average_property(mass_fractions, spec_property):
         mmw = pyro_obj.get_mix_molecular_weight(mass_fractions)
         mole_fracs = pyro_obj.get_mole_fractions(mmw, mass_fractions)
-        return sum([mole_fracs[i] * spec_property[i]
-                    for i in range(nspecies)])
+        return sum(mole_fracs[i] * spec_property[i] for i in range(nspecies))
 
     # def get_mixture_enthalpy_mole(temperature, mass_fractions):
     #     h0_rt = pyro_obj.get_species_enthalpies_rt(temperature)
@@ -165,8 +151,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
         rhoin = can_rho * ones
         yin = can_y * ones
 
-        pyro_c = pyro_obj.get_concentrations(rhoin, yin)
-        # print(f"pyro_conc = {pyro_c}")
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        # assert properties used internaly in the chemistry
 
         for i in range(nspecies):
             # species entropy
@@ -212,13 +198,14 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
                         - actx.np.log(mole_fracs))
         # exclude meaningless check on entropy for irreversible reaction
         for i, reaction in enumerate(cantera_soln.reactions()):
-            # FIXME three-body reactions are misbehaving...
-            # if reaction.reversible:
-            if isinstance(reaction, cantera.Arrhenius):  # pylint: disable=no-member
+            if reaction.reversible:
                 can_delta_s = cantera_soln.delta_entropy[i]/pyro_obj.gas_constant
-                assert (can_delta_s - delta_s[i]) < 1e-13
+                assert inf_norm(can_delta_s - delta_s[i]) < 1e-13
 
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+        pyro_c = pyro_obj.get_concentrations(rhoin, yin)
+        # print(f"pyro_conc = {pyro_c}")
 
         # forward rates
         kfw_pm = pyro_obj.get_fwd_rate_coefficients(tin, pyro_c)
@@ -278,14 +265,10 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
 
     dim = 1
     nel_1d = 1
-
-    mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
-    )
-
     order = 4
 
-    logger.info(f"Number of elements {mesh.nelements}")
+    mesh = generate_regular_rect_mesh(a=(-0.5,) * dim, b=(0.5,) * dim,
+                                      nelements_per_axis=(nel_1d,) * dim)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     zeros = dcoll.zeros(actx)
@@ -316,8 +299,8 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
 
     # constant density, variable pressure
     if reactor_type == "IdealGasReactor":
-        reactor = cantera.IdealGasReactor(cantera_soln,  # pylint: disable=no-member
-                                          name="Batch Reactor")
+        reactor = cantera.IdealGasReactor(  # pylint: disable=no-member
+            cantera_soln, name="Batch Reactor")
 
     # constant pressure, variable density
     if reactor_type == "IdealGasConstPressureReactor":
@@ -332,8 +315,7 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
         time += dt
         net.advance(time)
 
-        can_t = reactor.T
-        tin = can_t * ones
+        tin = reactor.T * ones
         rhoin = reactor.density * ones
         yin = reactor.Y * ones
         ein = rhoin * eos.get_internal_energy(temperature=tin,
@@ -344,11 +326,12 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
 
         temp = eos.temperature(cv=cv, temperature_seed=tin)
 
+        # do NOT test everything else. If these match, then it is ok
         omega_mc = eos.get_production_rates(cv, temp)
         omega_ct = cantera_soln.net_production_rates
         for i in range(cantera_soln.n_species):
             assert inf_norm((omega_mc[i] - omega_ct[i])) < rate_tol
 
-    # check that the reactions progress far enough
-    assert can_t > 2000.0
-    assert can_t < 4000.0
+    # check that the reactions progress far enough and are stable
+    assert reactor.T > 2000.0
+    assert reactor.T < 4000.0

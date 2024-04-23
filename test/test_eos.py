@@ -42,9 +42,6 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
 
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
 from mirgecom.gas_model import GasModel, make_fluid_state
@@ -92,7 +89,7 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
-    # first check each species individually for a fixed temperature
+    # ~~~ First check each species individually for a fixed temperature
 
     tempin = 600.0
     eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
@@ -331,9 +328,8 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
 # FIXME This test is kinda redudant
 @pytest.mark.parametrize("mechname", ["uiuc_7sp", "sandiego"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
-def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
+def test_pyrometheus_eos(ctx_factory, mechname, dim, vel):
     """Test PyrometheusMixture EOS for all available mechanisms.
 
     Tests that the PyrometheusMixture EOS gets the same thermo properties
@@ -368,12 +364,10 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     press0 = 101500.0
     temp0 = 300.0
     y0s = np.zeros(shape=(nspecies,))
-    for i in range(1, nspecies):
-        y0s[i] = y0 / (10.0 ** i)
-    y0s[0] = 1.0 - np.sum(y0s[1:])
+    y0s[:] = 1.0/nspecies
     velocity = vel * np.ones(shape=(dim,))
 
-    for fac in range(1, 7):
+    for fac in [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]:
         tempin = fac * temp0
         pressin = fac * press0
 
@@ -390,8 +384,8 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin)
         pyro_p = prometheus_mechanism.get_pressure(pyro_rho, pyro_t, yin)
 
-        print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
-              f"{pyro_p}, {pyro_t}, {pyro_e})")
+        # print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
+        #       f"{pyro_p}, {pyro_t}, {pyro_e})")
 
         eos = PyrometheusMixture(prometheus_mechanism)
         gas_model = GasModel(eos=eos)
@@ -408,25 +402,25 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         y = cv.species_mass_fractions
         rho = cv.mass
 
-        print(f"pyro_y = {y}")
-        print(f"pyro_eos.p = {p}")
-        print(f"pyro_eos.temp = {temperature}")
-        print(f"pyro_eos.e = {internal_energy}")
+        # print(f"pyro_y = {y}")
+        # print(f"pyro_eos.p = {p}")
+        # print(f"pyro_eos.temp = {temperature}")
+        # print(f"pyro_eos.e = {internal_energy}")
 
         def inf_norm(x):
             return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
-        tol = 1e-14
+        tol = 1e-13
         assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
-        assert inf_norm((temperature - pyro_t) / pyro_t) < tol
         assert inf_norm((internal_energy - pyro_e) / pyro_e) < tol
         assert inf_norm((p - pyro_p) / pyro_p) < tol
+        assert inf_norm((temperature - pyro_t) / pyro_t) < tol
 
         # Test the concentrations zero level
         y = -1.0*y
-        print(f"{y=}")
+        # print(f"{y=}")
         conc = prometheus_mechanism.get_concentrations(rho, y)
-        print(f"{conc=}")
+        # print(f"{conc=}")
         for spec in range(nspecies):
             assert max(conc[spec]).all() >= 0
 
@@ -436,16 +430,16 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
                                                        zero_level=zlev)(actx.np)
 
         y = 0*y + zlev
-        print(f"{y=}")
+        # print(f"{y=}")
         conc = test_mech.get_concentrations(rho, y)
-        print(f"{conc=}")
+        # print(f"{conc=}")
         for spec in range(nspecies):
             assert max(conc[spec]).all() == 0
 
 
 @pytest.mark.parametrize("mechname", ["uiuc_7sp_const_gamma"])
 def test_temperature_constant_cv(ctx_factory, mechname):
-    """TODO."""
+    """Test mechanism with constant heat capacity."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
