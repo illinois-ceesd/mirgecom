@@ -40,15 +40,28 @@ from pytools.obj_array import make_obj_array
 
 
 class Oxidation:
-    """Abstract interface for wall oxidation model.
+    """Abstract interface for wall oxidation models.
 
     .. automethod:: get_source_terms
     """
 
     @abstractmethod
-    def get_source_terms(self, temperature: DOFArray,
-            tau: DOFArray, rhoY_o2: DOFArray) -> Union[DOFArray, tuple]:  # noqa N803
-        r"""Source terms of fiber oxidation."""
+    def get_source_terms(
+            self, temperature: DOFArray, tau: DOFArray, rhoY_o2: DOFArray,  # noqa N803
+            rhoY_o: Optional[DOFArray] = None) -> Union[DOFArray, tuple]:
+        r"""Source terms of fiber oxidation.
+
+        Parameters
+        ----------
+        temperature:
+            gas and solid temperature assuming local-equilibrium
+        tau:
+            the progress ratio of the oxidation: 1 for virgin, 0 for fully oxidized
+        rhoY_o2:
+            the mass fraction of molecular oxygen
+        rhoY_o:
+            the mass fraction of atomic oxygen
+        """
         raise NotImplementedError()
 
 
@@ -67,17 +80,8 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-                         rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
-        """Return the effective source terms for fiber oxidation.
-
-        Parameters
-        ----------
-        temperature:
-        tau:
-            the progress ratio of the oxidation: 1 for virgin, 0 for fully oxidized
-        rhoY_o2:
-            the mass fraction of oxygen
-        """
+                         rhoY_o2: DOFArray, rhoY_o=None) -> DOFArray:  # noqa N803
+        """Return the effective source terms for fiber oxidation."""
         actx = temperature.array_context
 
         mw_o = 15.999
@@ -102,6 +106,25 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
     .. math::
         C_{(s)} + O_2 \to CO_2
 
+    The degradation is computed as
+
+    .. math::
+        \frac{\partial \rho_s}{\partial t} =
+        \rho_C \frac{\partial \epsilon}{\partial t} = \dot{\omega}_\text{het}
+
+    The fiber radius as a function of mass loss $\tau$ is given by
+
+    .. math::
+        \tau = \frac{m}{m_0} = \frac{\epsilon}{\epsilon_0} =
+        \frac{\pi r^2/L}{\pi r_0^2/L} = \frac{r^2}{r_0^2}
+
+    and leads to the wall recession as
+
+    .. math::
+        \frac{\partial \epsilon}{\partial t} =
+        \frac{\partial \epsilon}{\partial r} \frac{\partial r}{\partial t} =
+        2 \frac{\epsilon_0}{r_0^2} r = 2 \frac{\epsilon_0}{r_0} \sqrt{\tau}
+
     .. automethod:: get_source_terms
     """
 
@@ -110,36 +133,17 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
         self._init_fiber_radius = initial_fiber_radius
 
     def _get_wall_effective_surface_area_fiber(self, tau) -> DOFArray:
-        r"""Evaluate the effective surface of the fibers.
-
-        The fiber radius as a function of mass loss $\tau$ is given by
-
-        .. math::
-            \tau = \frac{m}{m_0} = \frac{\pi r^2/L}{\pi r_0^2/L} = \frac{r^2}{r_0^2}
-        """
+        r"""Evaluate the effective surface of the fibers."""
         actx = tau.array_context
         zeros = actx.np.zeros_like(tau)
-
-        # half the diameter
-        fiber_radius = \
-            self._init_fiber_radius * actx.np.sqrt(actx.np.minimum(tau, zeros))
-
-        epsilon_0 = self._material.volume_fraction(tau=1.0)
-
-        # TODO simplify this...
-        return 2.0 * epsilon_0 * fiber_radius/self._init_fiber_radius**2
+        return (
+            2.0 * self._material.volume_fraction(tau=1.0)/self._init_fiber_radius
+            * actx.np.sqrt(actx.np.maximum(tau, zeros))  # only use positive tau
+        )
 
     def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: DOFArray):  # noqa N803
+            rhoY_o2: DOFArray, rhoY_o=None):  # noqa N803
         r"""Return the effective source terms for the oxidation.
-
-        Parameters
-        ----------
-        temperature:
-        tau:
-            the progress ratio of the oxidation
-        rhoY_o2:
-            the mass fraction of oxygen
 
         Returns
         -------
@@ -147,6 +151,9 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
             the tuple ($\omega_{C}$, $\omega_{O_2}$, $\omega_{CO_2}$)
         """
         actx = temperature.array_context
+
+        # ignore small but negative fractions of O2
+        rhoY_o2 = actx.np.maximum(rhoY_o2, actx.np.zeros_like(rhoY_o2))
 
         mw_c = 12.011
         mw_o = 15.999
@@ -168,7 +175,7 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
 class OxidationModel(Oxidation):
     """Evaluate the source terms for the carbon fiber oxidation.
 
-    The user must specify in the driver the functions for oxidation.
+    The user must specify the functions for oxidation in the driver.
     (Tentatively) Generalizing this class makes it easier for adding new,
     more complex models and for UQ runs.
 
@@ -176,7 +183,7 @@ class OxidationModel(Oxidation):
     """
 
     def __init__(self, surface_area_func, oxidation_func):
-        """Initialize the general oxidation class.
+        """Initialize the user-specified oxidation class.
 
         Parameters
         ----------
@@ -188,22 +195,16 @@ class OxidationModel(Oxidation):
         self._surface_func = surface_area_func
         self._oxidation_func = oxidation_func
 
-    # TODO we potentially have to include atomic oxygen as well
-    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
-            rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
-        """Return the effective source terms for the oxidation.
-
-        Parameters
-        ----------
-        temperature:
-        tau:
-            the progress ratio of the oxidation
-        rhoY_o2:
-            the mass fraction of oxygen
-        """
+    def get_source_terms(
+            self, temperature: DOFArray, tau: DOFArray, rhoY_o2: DOFArray,  # noqa N803
+            rhoY_o: Optional[DOFArray] = None) -> DOFArray:
+        """Return the effective source terms for the oxidation."""
         area = self._surface_func(tau)
+        if rhoY_o is None:
+            return self._oxidation_func(temperature=temperature, fiber_area=area,
+                                        rhoY_o2=rhoY_o2)
         return self._oxidation_func(temperature=temperature, fiber_area=area,
-                                    rhoY_o2=rhoY_o2)
+                                    rhoY_o2=rhoY_o2, rhoY_o=rhoY_o)
 
 
 class FiberEOS(PorousWallEOS):

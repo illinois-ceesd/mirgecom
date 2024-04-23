@@ -164,8 +164,6 @@ def test_tacot_decomposition():
 
     tacot_decomp = decomposition.get_decomposition_parameters()
 
-    print(tacot_decomp)
-
     # virgin_mass = tacot_decomp["virgin_mass"]
     # char_mass = tacot_decomp["char_mass"]
     # fiber_mass = tacot_decomp["fiber_mass"]
