@@ -373,13 +373,22 @@ def make_fluid_state(cv, gas_model,
                         is None else smoothness_d)
 
     if isinstance(gas_model, GasModel):
-        temperature = gas_model.eos.temperature(cv=cv,
-                                                temperature_seed=temperature_seed)
-        pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
+        pressure = None
+        temperature = None
 
         if limiter_func:
-            cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
-                              dd=limiter_dd)
+            rv = limiter_func(cv=cv, temperature_seed=temperature_seed,
+                              gas_model=gas_model, dd=limiter_dd)
+            if isinstance(rv, np.ndarray):
+                cv, pressure, temperature = rv
+            else:
+                cv = rv
+
+        if temperature is None:
+            temperature = gas_model.eos.temperature(
+                cv=cv, temperature_seed=temperature_seed)
+        if pressure is None:
+            pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
 
         dv = GasDependentVars(
             temperature=temperature,
