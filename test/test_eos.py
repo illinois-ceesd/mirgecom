@@ -328,8 +328,9 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
 # FIXME This test is kinda redudant
 @pytest.mark.parametrize("mechname", ["uiuc_7sp", "sandiego"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
-def test_pyrometheus_eos(ctx_factory, mechname, dim, vel):
+def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     """Test PyrometheusMixture EOS for all available mechanisms.
 
     Tests that the PyrometheusMixture EOS gets the same thermo properties
@@ -352,10 +353,16 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, vel):
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
+    ones = dcoll.zeros(actx) + 1.0
+
+    def inf_norm(x):
+        return actx.to_numpy(op.norm(dcoll, x, np.inf))
+
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
     sol = cantera.Solution(name="gas", yaml=mech_input)
-    prometheus_mechanism = get_pyrometheus_wrapper_class_from_cantera(sol)(actx.np)
+    prometheus_mechanism = get_pyrometheus_wrapper_class_from_cantera(
+        sol, temperature_niter=5)(actx.np)
 
     nspecies = prometheus_mechanism.num_species
     print(f"PrometheusMixture::Mechanism = {mechname}")
@@ -364,7 +371,9 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, vel):
     press0 = 101500.0
     temp0 = 300.0
     y0s = np.zeros(shape=(nspecies,))
-    y0s[:] = 1.0/nspecies
+    for i in range(1, nspecies):
+        y0s[i] = y0 / (10.0 ** i)
+    y0s[0] = 1.0 - np.sum(y0s[1:])
     velocity = vel * np.ones(shape=(dim,))
 
     for fac in [0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0]:
@@ -373,11 +382,13 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, vel):
 
         print(f"Testing {mechname}(t,P) = ({tempin}, {pressin})")
 
-        ones = dcoll.zeros(actx) + 1.0
         tin = tempin * ones
         pin = pressin * ones
         yin = y0s * ones
-        tguess = 300.0
+
+        # avoid starting too far from the actual temperature
+        tguess = tempin + 100.0*np.random.random()
+        assert tguess > 0.0
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
         pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
@@ -407,10 +418,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, vel):
         # print(f"pyro_eos.temp = {temperature}")
         # print(f"pyro_eos.e = {internal_energy}")
 
-        def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))
-
-        tol = 1e-13
+        tol = 5e-14
         assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
         assert inf_norm((internal_energy - pyro_e) / pyro_e) < tol
         assert inf_norm((p - pyro_p) / pyro_p) < tol

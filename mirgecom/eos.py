@@ -726,8 +726,8 @@ class PyrometheusMixture(MixtureEOS):
     def species_enthalpies(self, cv: ConservedVars,
             temperature: DOFArray) -> DOFArray:
         """Get the species specific enthalpies."""
-        spec_r = (self._pyrometheus_mech.gas_constant /
-                  self._pyrometheus_mech.molecular_weights)
+        spec_r = (self._pyrometheus_mech.gas_constant
+                  / self._pyrometheus_mech.molecular_weights)
         return (spec_r * temperature
                 * self._pyrometheus_mech.get_species_enthalpies_rt(temperature))
 
