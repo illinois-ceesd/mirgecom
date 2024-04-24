@@ -25,22 +25,20 @@ THE SOFTWARE.
 """
 
 import logging
+import argparse
 import numpy as np
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
+import grudge.op as op
 
 from logpyle import IntervalTimer, set_dt
 from pytools.obj_array import make_obj_array
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import (
-    euler_operator,
-    extract_vars_for_logging,
-    units_for_logging
-)
+from mirgecom.euler import euler_operator
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
     get_sim_timestep,
@@ -67,13 +65,21 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from mirgecom.transport import SimpleTransport
+from mirgecom.transport import (
+    SimpleTransport,
+    MixtureAveragedTransport,
+    PowerLawTransport,
+    ArtificialViscosityTransportDiv,
+    ArtificialViscosityTransportDiv2,
+    ArtificialViscosityTransportDiv3
+)
+from mirgecom.limiter import bound_preserving_limiter
+from mirgecom.fluid import make_conserved
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     # logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_device_memory_usage
 )
 import cantera
 
@@ -93,10 +99,13 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          periodic_mesh=False, multiple_boundaries=False,
          use_navierstokes=False, use_mixture=False,
          use_reactions=False, newton_iters=3,
-         mech_name="uiuc_7sp"):
+         mech_name="uiuc_7sp", transport_type=0,
+         use_av=0, use_limiter=False, order=1,
+         nscale=1, npassive_species=0, map_mesh=False,
+         rotation_angle=0, add_pulse=False):
     """Drive the example."""
     if casename is None:
-        casename = "mirgecom"
+        casename = "gas-in-box"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -111,6 +120,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
+    # actx = initialize_actx(actx_class, comm,
+    #                        use_axis_tag_inference_fallback=use_tpe,
+    #                        use_einsum_inference_fallback=use_tpe)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -121,17 +133,22 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-7
+    t_final = 2e-4
     current_cfl = 1.0
-    current_dt = 1e-8
+    current_dt = 1e-6
     current_t = 0
     constant_cfl = False
+    temperature_tolerance = 1e-2
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 5
-    nviz = 100
-    nhealth = 1
+    nstatus = 100
+    nrestart = 100
+    nviz = 1
+    nhealth = 100
+
+    nscale = max(nscale, 1)
+    scale_fac = pow(float(nscale), 1.0/dim)
+    nel_1d = int(scale_fac*24/dim)
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -149,7 +166,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         from mirgecom.simutil import get_box_mesh
         box_ll = -1
         box_ur = 1
-        nel_1d = 16
         generate_mesh = partial(
             get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
             n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
@@ -157,10 +173,31 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from meshmode.mesh.processing import rotate_mesh_around_axis
-    local_mesh = rotate_mesh_around_axis(local_mesh, theta=-np.pi/3)
+        def add_wonk(x: np.ndarray) -> np.ndarray:
+            wonk_field = np.empty_like(x)
+            if len(x) >= 2:
+                wonk_field[0] = (
+                    1.5*x[0] + np.cos(x[0])
+                    + 0.1*np.sin(10*x[1]))
+                wonk_field[1] = (
+                    0.05*np.cos(10*x[0])
+                    + 1.3*x[1] + np.sin(x[1]))
+            else:
+                wonk_field[0] = 1.5*x[0] + np.cos(x[0])
 
-    order = 1
+            if len(x) >= 3:
+                wonk_field[2] = x[2] + np.sin(x[0] / 2) / 2
+            return wonk_field
+
+        if map_mesh:
+            from meshmode.mesh.processing import map_mesh
+            local_mesh = map_mesh(local_mesh, add_wonk)
+
+        if abs(rotation_angle) > 0:
+            from meshmode.mesh.processing import rotate_mesh_around_axis
+            theta = rotation_angle/180.0 * np.pi
+            local_mesh = rotate_mesh_around_axis(local_mesh, theta=theta)
+
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
@@ -185,10 +222,12 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    species_diffusivty = None
+    species_diffusivity = None
     thermal_conductivity = 1e-5
     viscosity = 1.0e-5
 
+    speedup_factor = 1.0
+    pyro_mechanism = None
     if use_mixture:
         # {{{  Set up initial state using Cantera
 
@@ -213,58 +252,246 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                                            oxidizer={"O2": 1.0, "N2": 3.76})
         x = cantera_soln.X
 
-        one_atm = cantera.one_atm
+        one_atm = cantera.one_atm  # pylint: disable=no-member
 
         # Let the user know about how Cantera is being initilized
         print(f"Input state (T,P,X) = ({temperature_seed}, {one_atm}, {x}")
         # Set Cantera internal gas temperature, pressure, and mole fractios
         cantera_soln.TP = temperature_seed, one_atm
-        # Pull temperature, total density, mass fractions, and pressure from Cantera
-        # We need total density, and mass fractions to initialize the fluid/gas state.
+        # Pull temperature, total density, mass fractions, and pressure
+        # from Cantera. We need total density, and mass fractions to initialize
+        # the fluid/gas state.
         can_t, can_rho, can_y = cantera_soln.TDY
         can_p = cantera_soln.P
-        # *can_t*, *can_p* should not differ (significantly) from user's initial data,
-        # but we want to ensure that we use exactly the same starting point as Cantera,
-        # so we use Cantera's version of these data.
-        
+        # *can_t*, *can_p* should not differ (significantly) from user's
+        # initial data, but we want to ensure that we use exactly the same
+        # starting point as Cantera, so we use Cantera's version of these data.
+
         # }}}
 
         # {{{ Create Pyrometheus thermochemistry object & EOS
 
-        # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses Cantera and
-        # generates a set of methods to calculate chemothermomechanical properties and
-        # states for this particular mechanism.
-        from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+        # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses
+        # Cantera and generates a set of methods to calculate chemothermomechanical
+        # properties and states for this particular mechanism.
+        from mirgecom.thermochemistry import \
+            get_pyrometheus_wrapper_class_from_cantera
         pyro_mechanism = \
-            get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
-                                                       temperature_niter=newton_iters)(actx.np)
+            get_pyrometheus_wrapper_class_from_cantera(
+                cantera_soln, temperature_niter=newton_iters)(actx.np)
         eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
         initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
                               species_mass_fractions=can_y, velocity=velocity)
-        temperature_seed = can_t * ones
+        init_t = can_t
     else:
         use_reactions = False
-        eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
-        initializer = Uniform(velocity=velocity, pressure=101325, rho=1.2039086127319172)
-        temperature_seed = 293.15 * ones
+        eos = IdealSingleGas(gamma=1.4)
+        species_y = None
+        if npassive_species > 0:
+            print(f"Initializing with {npassive_species} passive species.")
+            nspecies = npassive_species
+            spec_diff = 1e-4
+            species_y = np.array([1./float(nspecies) for _ in range(nspecies)])
+            species_diffusivity = np.array([spec_diff * 1./float(j+1)
+                                            for j in range(nspecies)])
 
+        initializer = Uniform(velocity=velocity, pressure=101325,
+                              rho=1.2039086127319172,
+                              species_mass_fractions=species_y)
+        init_t = 293.15
+
+    temperature_seed = init_t * ones
     temperature_seed = force_evaluation(actx, temperature_seed)
-    wall_bc = IsothermalWallBoundary() if use_navierstokes else AdiabaticSlipBoundary()
+
+    wall_bc = IsothermalWallBoundary(wall_temperature=init_t) \
+        if use_navierstokes else AdiabaticSlipBoundary()
+
     transport = None
+    # initialize the transport model
+    transport_alpha = 0.6
+    transport_beta = 4.093e-7
+    transport_sigma = 2.0
+    transport_n = 0.666
+
+    av2_mu0 = 0.1
+    av2_beta0 = 6.0
+    av2_kappa0 = 1.0
+    av2_d0 = 0.1
+    av2_prandtl0 = 0.9
+    # av2_mu_s0 = 0.
+    # av2_kappa_s0 = 0.
+    # av2_beta_s0 = .01
+    # av2_d_s0 = 0.
+
+    # use_av=1 specific parameters
+    # flow stagnation temperature
+    static_temp = 2076.43
+    # steepness of the smoothed function
+    theta_sc = 100
+    # cutoff, smoothness below this value is ignored
+    beta_sc = 0.01
+    gamma_sc = 1.5
+    alpha_sc = 0.3
+    kappa_sc = 0.5
+    s0_sc = -5.0
+    s0_sc = np.log10(1.0e-4 / np.power(order, 4))
+
+    smoothness_alpha = 0.1
+    smoothness_tau = .01
+    physical_transport_model = None
+
     if use_navierstokes:
-        transport = SimpleTransport(viscosity=viscosity,
-                                    thermal_conductivity=thermal_conductivity,
-                                    species_diffusivity=species_diffusivity)
+        if transport_type == 2:
+            if not use_mixture:
+                error_message = "Invalid transport_type "\
+                    "{} for single gas.".format(transport_type)
+                raise RuntimeError(error_message)
+            if rank == 0:
+                print("Pyrometheus transport model:")
+                print("\t temperature/mass fraction dependence")
+            physical_transport_model = \
+                MixtureAveragedTransport(pyro_mechanism,
+                                         factor=speedup_factor)
+        elif transport_type == 0:
+            if rank == 0:
+                print("Simple transport model:")
+                print("\tconstant viscosity, species diffusivity")
+                print(f"\tmu = {viscosity}")
+                print(f"\tkappa = {thermal_conductivity}")
+                print(f"\tspecies diffusivity = {species_diffusivity}")
+            physical_transport_model = SimpleTransport(
+                viscosity=viscosity, thermal_conductivity=thermal_conductivity,
+                species_diffusivity=species_diffusivity)
+        elif transport_type == 1:
+            if rank == 0:
+                print("Power law transport model:")
+                print("\ttemperature dependent viscosity, species diffusivity")
+                print(f"\ttransport_alpha = {transport_alpha}")
+                print(f"\ttransport_beta = {transport_beta}")
+                print(f"\ttransport_sigma = {transport_sigma}")
+                print(f"\ttransport_n = {transport_n}")
+                print(f"\tspecies diffusivity = {species_diffusivity}")
+            physical_transport_model = PowerLawTransport(
+                alpha=transport_alpha, beta=transport_beta,
+                sigma=transport_sigma, n=transport_n,
+                species_diffusivity=species_diffusivity)
+        else:
+            error_message = "Unknown transport_type {}".format(transport_type)
+            raise RuntimeError(error_message)
+
+    transport = physical_transport_model
+    if use_av == 1:
+        transport = ArtificialViscosityTransportDiv(
+            physical_transport=physical_transport_model,
+            av_mu=alpha_sc, av_prandtl=0.75)
+    elif use_av == 2:
+        transport = ArtificialViscosityTransportDiv2(
+            physical_transport=physical_transport_model,
+            av_mu=av2_mu0, av_beta=av2_beta0, av_kappa=av2_kappa0,
+            av_prandtl=av2_prandtl0)
+    elif use_av == 3:
+        transport = ArtificialViscosityTransportDiv3(
+            physical_transport=physical_transport_model,
+            av_mu=av2_mu0, av_beta=av2_beta0,
+            av_kappa=av2_kappa0, av_d=av2_d0,
+            av_prandtl=av2_prandtl0)
+
+    if rank == 0 and use_navierstokes and use_av > 0:
+        print(f"Shock capturing parameters: alpha {alpha_sc}, "
+              f"s0 {s0_sc}, kappa {kappa_sc}")
+        print(f"Artificial viscosity {smoothness_alpha=}")
+        print(f"Artificial viscosity {smoothness_tau=}")
+
+        if use_av == 1:
+            print("Artificial viscosity using modified physical viscosity")
+            print("Using velocity divergence indicator")
+            print(f"Shock capturing parameters: alpha {alpha_sc}, "
+                  f"gamma_sc {gamma_sc}"
+                  f"theta_sc {theta_sc}, beta_sc {beta_sc}, Pr 0.75, "
+                  f"stagnation temperature {static_temp}")
+        elif use_av == 2:
+            print("Artificial viscosity using modified transport properties")
+            print("\t mu, beta, kappa")
+            # MJA update this
+            print(f"Shock capturing parameters:"
+                  f"\n\tav_mu {av2_mu0}"
+                  f"\n\tav_beta {av2_beta0}"
+                  f"\n\tav_kappa {av2_kappa0}"
+                  f"\n\tav_prantdl {av2_prandtl0}"
+                  f"\nstagnation temperature {static_temp}")
+        elif use_av == 3:
+            print("Artificial viscosity using modified transport properties")
+            print("\t mu, beta, kappa, D")
+            print(f"Shock capturing parameters:"
+                  f"\tav_mu {av2_mu0}"
+                  f"\tav_beta {av2_beta0}"
+                  f"\tav_kappa {av2_kappa0}"
+                  f"\tav_d {av2_d0}"
+                  f"\tav_prantdl {av2_prandtl0}"
+                  f"stagnation temperature {static_temp}")
+        else:
+            error_message = "Unknown artifical viscosity model {}".format(use_av)
+            raise RuntimeError(error_message)
+
     gas_model = GasModel(eos=eos, transport=transport)
     fluid_operator = ns_operator if use_navierstokes else euler_operator
     orig = np.zeros(shape=(dim,))
     uniform_cv = initializer(nodes, eos=eos)
-    limter_func = None
+
+    def mixture_mass_fraction_limiter(cv, temperature_seed, gas_model, dd=None):
+
+        temperature = gas_model.eos.temperature(
+            cv=cv, temperature_seed=temperature_seed)
+        pressure = gas_model.eos.pressure(
+            cv=cv, temperature=temperature)
+
+        # limit species
+        spec_lim = make_obj_array([
+            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i],
+                                     mmin=0.0, mmax=1.0, modify_average=True,
+                                     dd=dd)
+            for i in range(nspecies)
+        ])
+
+        # normalize to ensure sum_Yi = 1.0
+        aux = cv.mass*0.0
+        for i in range(0, nspecies):
+            aux = aux + spec_lim[i]
+        spec_lim = spec_lim/aux
+
+        # recompute density
+        mass_lim = gas_model.eos.get_density(pressure=pressure,
+                                             temperature=temperature,
+                                             species_mass_fractions=spec_lim)
+
+        # recompute energy
+        energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
+            temperature, species_mass_fractions=spec_lim)
+            + 0.5*np.dot(cv.velocity, cv.velocity)
+        )
+
+        # make a new CV with the limited variables
+        cv_lim = make_conserved(dim=dim, mass=mass_lim, energy=energy_lim,
+                                momentum=mass_lim*cv.velocity,
+                                species_mass=mass_lim*spec_lim)
+
+        # return make_obj_array([cv_lim, pressure, temperature])
+        return cv_lim
+
+    limiter_func = mixture_mass_fraction_limiter if use_limiter else None
+
+    def my_limiter(cv, tseed):
+        if limiter_func is not None:
+            return limiter_func(cv, tseed, gas_model=gas_model)
+        return cv
+
+    limiter_compiled = actx.compile(my_limiter)
 
     def stepper_state_to_gas_state(stepper_state):
         if use_mixture:
             cv, tseed = stepper_state
             return make_fluid_state(cv=cv, gas_model=gas_model,
+                                    limiter_func=limiter_func,
                                     temperature_seed=tseed)
         else:
             return make_fluid_state(cv=stepper_state, gas_model=gas_model)
@@ -293,27 +520,41 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1, center=orig)
 
     def mfs(cv, tseed):
-        return make_fluid_state(cv, gas_model, temperature_seed=tseed)
+        return make_fluid_state(cv, gas_model, limiter_func=limiter_func,
+                                temperature_seed=tseed)
 
     mfs_compiled = actx.compile(mfs)
+
+    def get_temperature_update(cv, temperature):
+        if pyro_mechanism is not None:
+            y = cv.species_mass_fractions
+            e = gas_model.eos.internal_energy(cv) / cv.mass
+            return pyro_mechanism.get_temperature_update_energy(e, temperature, y)
+        else:
+            return 0*temperature
+
+    gtu_compiled = actx.compile(get_temperature_update)
 
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
-        rst_temperature = restart_data["temperature"]
+        rst_tseed = restart_data["temperature_seed"]
         current_cv = force_evaluation(actx, current_cv)
-        current_gas_state = mfs_compiled(current_cv, rst_temperature)
+        current_gas_state = mfs_compiled(current_cv, rst_tseed)
     else:
         # Set the current state from time 0
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
-                                    tseed=temperature_seed)
+        if add_pulse:
+            current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
+                                        tseed=temperature_seed)
+        else:
+            current_cv = uniform_cv
         current_cv = force_evaluation(actx, current_cv)
-        # current_gas_state = make_fluid_state(current_cv, gas_model,
-        #                                     temperature_seed=temperature_seed)
+        # Force to use/compile limiter so we can evaluate DAG
+        if limiter_func is not None:
+            current_cv = limiter_compiled(current_cv, temperature_seed)
+
         current_gas_state = mfs_compiled(current_cv, temperature_seed)
-        # force_evaluation(actx, make_fluid_state(current_cv, gas_model,
-        #                                        temperature_seed=temperature_seed))
 
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
@@ -349,7 +590,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             rst_data = {
                 "local_mesh": local_mesh,
                 "cv": gas_state.cv,
-                "temperature": gas_state.temperature,
+                "temperature_seed": gas_state.temperature,
                 "t": t,
                 "step": step,
                 "order": order,
@@ -364,13 +605,23 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         temperature = gas_state.temperature
 
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
+        from mirgecom.simutil import check_naninf_local
         if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         if check_naninf_local(dcoll, "vol", temperature):
             health_error = True
             logger.info(f"{rank=}: Invalid temperature data found.")
+
+        if gas_state.is_mixture:
+            temper_update = gtu_compiled(gas_state.cv, gas_state.temperature)
+            temp_relup = temper_update / gas_state.temperature
+            max_temp_relup = (actx.to_numpy(op.nodal_max_loc(dcoll, "vol",
+                                                             temp_relup)))
+            if max_temp_relup > temperature_tolerance:
+                health_error = True
+                logger.info(f"{rank=}: Temperature is not "
+                            f"converged {max_temp_relup=}.")
 
         return health_error
 
@@ -460,9 +711,14 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
 
 if __name__ == "__main__":
-    import argparse
-    casename = "pulse"
-    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        level=logging.INFO)
+
+    example_name = "gas-in-box"
+    parser = argparse.ArgumentParser(
+        description=f"MIRGE-Com Example: {example_name}")
     parser.add_argument("-o", "--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
     parser.add_argument("-l", "--lazy", action="store_true",
@@ -476,8 +732,8 @@ if __name__ == "__main__":
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
-                        default=2, help="spatial dimension of simulation")
-    parser.add_argument("-i", "--iters", type=int, default=3,
+                        default=3, help="spatial dimension of simulation")
+    parser.add_argument("-i", "--iters", type=int, default=1,
                         help="number of Newton iterations for mixture temperature")
     parser.add_argument("-r", "--restart_file", help="root name of restart file")
     parser.add_argument("-c", "--casename", help="casename to use for i/o")
@@ -485,14 +741,36 @@ if __name__ == "__main__":
                         help="use periodic boundaries")
     parser.add_argument("-n", "--navierstokes", action="store_true",
                         help="use Navier-Stokes operator")
+    parser.add_argument("-a", "--artificial-viscosity", type=int,
+                        choices=[0, 1, 2, 3],
+                        default=0, help="use artificial viscosity")
     parser.add_argument("-b", "--boundaries", action="store_true",
                         help="use multiple (2*ndim) boundaries")
+    parser.add_argument("-k", "--wonky", action="store_true", default=False,
+                        help="make a wonky mesh")
     parser.add_argument("-m", "--mixture", action="store_true",
                         help="use gas mixture EOS")
     parser.add_argument("-f", "--flame", action="store_true",
                         help="use combustion chemistry")
+    parser.add_argument("-g", "--rotate", type=float, default=0,
+                        help="rotate mesh by angle (degrees)")
+    parser.add_argument("-x", "--transport", type=int, choices=[0, 1, 2], default=0,
+                        help=("transport model specification\n"
+                              + "(0)Simple\n(1)PowerLaw\n(2)Mix"))
+    parser.add_argument("-e", "--limiter", action="store_true",
+                        help="use limiter to limit fluid state")
+    parser.add_argument("-s", "--species", type=int, default=0,
+                        help="number of passive species")
     parser.add_argument("-t", "--tpe", action="store_true",
                         help="use tensor-product elements (quads/hexes)")
+    parser.add_argument("-u", "--pulse", action="store_true", default=False,
+                        help="add an acoustic pulse at the origin")
+    parser.add_argument("-y", "--polynomial-order", type=int, default=1,
+                        help="polynomal order for the discretization")
+    parser.add_argument("-w", "--weak-scale", type=int, default=1,
+                        help="factor by which to scale the number of elements")
+    parser.add_argument("-z", "--mechanism-name", type=str, default="uiuc_7sp",
+                        help="name of thermochemical mechanism yaml file")
     args = parser.parse_args()
 
     from warnings import warn
@@ -517,10 +795,14 @@ if __name__ == "__main__":
     main(actx_class, use_esdg=args.esdg, dim=args.dimension,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, use_tpe=args.tpe,
-         casename=casename, rst_filename=rst_filename,
+         casename=args.casename, rst_filename=rst_filename,
          periodic_mesh=args.periodic, use_mixture=args.mixture,
          multiple_boundaries=args.boundaries,
+         transport_type=args.transport, order=args.polynomial_order,
+         use_limiter=args.limiter, use_av=args.artificial_viscosity,
          use_reactions=args.flame, newton_iters=args.iters,
-         use_navierstokes=args.navierstokes)
+         use_navierstokes=args.navierstokes, npassive_species=args.species,
+         nscale=args.weak_scale, mech_name=args.mechanism_name,
+         map_mesh=args.wonky, rotation_angle=args.rotate, add_pulse=args.pulse)
 
 # vim: foldmethod=marker
