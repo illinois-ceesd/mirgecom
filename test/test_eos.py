@@ -388,7 +388,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         # avoid starting too far from the actual temperature
         tguess = tempin + ones*100.0*np.random.random()
-        assert tguess > 0.0
+        assert inf_norm(tguess) > 0.0
 
         pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
         pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
