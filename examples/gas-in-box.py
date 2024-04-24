@@ -716,7 +716,8 @@ if __name__ == "__main__":
         level=logging.INFO)
 
     example_name = "gas-in-box"
-    parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {example_name}")
+    parser = argparse.ArgumentParser(
+        description=f"MIRGE-Com Example: {example_name}")
     parser.add_argument("-o", "--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
     parser.add_argument("-l", "--lazy", action="store_true",
