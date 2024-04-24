@@ -95,7 +95,11 @@ def _check_cache_dirs_node() -> None:
                         f"Duplicate '{var}'s: {dup}.")
 
         _check_var("XDG_CACHE_HOME")
-        _check_var("POCL_CACHE_DIR")
+
+        if os.environ.get("XDG_CACHE_HOME") is None:
+            # When XDG_CACHE_HOME is set but POCL_CACHE_DIR is not, pocl
+            # will use XDG_CACHE_HOME as the cache directory.
+            _check_var("POCL_CACHE_DIR")
 
         # We haven't observed an issue yet that 'CUDA_CACHE_PATH' fixes,
         # so disable this check for now.
