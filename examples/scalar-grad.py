@@ -84,8 +84,8 @@ def main(actx_class, casename="tester", use_tpe = False,
     if rank == 0:
         print(f"{scale_fac=}")
 
-    from pytato import enable_traceback_tag
-    enable_traceback_tag()
+    from pytato import set_traceback_tag_enabled
+    set_traceback_tag_enabled()
 
     snapshot_pattern = casename + "-{step:04d}-{rank:04d}.pkl"
     vizfile_pattern = casename + "-%03d-%04d.vtu"
