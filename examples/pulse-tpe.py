@@ -91,6 +91,8 @@ def main(actx_class, use_esdg=False, use_tpe=True,
 
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+    from pytato import set_traceback_tag_enabled
+    set_traceback_tag_enabled()
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
