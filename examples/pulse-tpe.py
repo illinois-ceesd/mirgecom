@@ -348,8 +348,6 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
-    parser.add_argument("--tpe", action="store_true",
-                        help="Use tensor product (quad/hex) elements.")
     args = parser.parse_args()
 
     from warnings import warn
@@ -375,7 +373,7 @@ if __name__ == "__main__":
 
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap, use_tpe=args.tpe,
-         casename=casename, rst_filename=rst_filename)
+         use_leap=args.leap, casename=casename,
+         rst_filename=rst_filename)
 
 # vim: foldmethod=marker
