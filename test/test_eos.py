@@ -233,7 +233,7 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
 
 @pytest.mark.parametrize("mechname", ["air_3sp", "uiuc_7sp", "sandiego",
                                       "uiuc_8sp_phenol", "uiuc_4sp_oxidation"])
-def test_pyrometheus_mechanisms(ctx_factory, mechname):
+def test_pyrometheus_mechanisms(ctx_factory, mechname, output_mechanism=True):
     """Test known pyrometheus mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context and
@@ -261,8 +261,23 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
 
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
-    sol = cantera.Solution(name="gas", yaml=mech_input)
-    pyro_mechanism = get_pyrometheus_wrapper_class_from_cantera(sol)(actx.np)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+
+    if output_mechanism:
+        import pyrometheus
+        # write then load the mechanism file to yield better readable pytest coverage
+        with open(f"./{mechname}.py", "w") as mech_file:
+            code = pyrometheus.codegen.python.gen_thermochem_code(cantera_soln)
+            print(code, file=mech_file)
+
+        import importlib
+        from mirgecom.thermochemistry import get_pyrometheus_wrapper_class
+        pyromechlib = importlib.import_module(f"{mechname}")
+        pyro_mechanism = get_pyrometheus_wrapper_class(
+            pyro_class=pyromechlib.Thermochemistry)(actx.np)
+    else:
+        pyro_mechanism = \
+            get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
 
     nspecies = pyro_mechanism.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
@@ -276,7 +291,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname):
         tempin = fac * temp0
 
         print(f"Testing (t,P) = ({tempin}, {pressin})")
-        cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
         cantera_soln.TPY = tempin, pressin, y0s
 
         can_t, can_m, can_y = cantera_soln.TDY
@@ -368,6 +382,9 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     print(f"PrometheusMixture::Mechanism = {mechname}")
     print(f"PrometheusMixture::NumSpecies = {nspecies}")
 
+    eos = PyrometheusMixture(prometheus_mechanism)
+    gas_model = GasModel(eos=eos)
+
     press0 = 101500.0
     temp0 = 300.0
     y0s = np.zeros(shape=(nspecies,))
@@ -398,8 +415,6 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         # print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
         #       f"{pyro_p}, {pyro_t}, {pyro_e})")
 
-        eos = PyrometheusMixture(prometheus_mechanism)
-        gas_model = GasModel(eos=eos)
         initializer = Uniform(
             dim=dim, pressure=pyro_p, temperature=pyro_t,
             species_mass_fractions=y0s, velocity=velocity)

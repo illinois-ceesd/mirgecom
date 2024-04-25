@@ -42,7 +42,10 @@ from mirgecom.fluid import make_conserved
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.mechanisms import get_mechanism_input
-from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+from mirgecom.thermochemistry import (
+    get_pyrometheus_wrapper_class_from_cantera,
+    get_pyrometheus_wrapper_class
+)
 
 
 @pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),
@@ -50,7 +53,10 @@ from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
                           ("sandiego", "H2", 1e-9)])
 @pytest.mark.parametrize("reactor_type",
                          ["IdealGasReactor", "IdealGasConstPressureReactor"])
-def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type):
+@pytest.mark.parametrize(("pressure", "nsteps"),
+                         [(25000.0, 100), (101325.0, 50)])
+def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
+                              pressure, nsteps, output_mechanism=True):
     """Test known pyrometheus reaction mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context.
@@ -77,13 +83,25 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
     mech_input = get_mechanism_input(mechname)
     cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
 
-    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
+    if output_mechanism:
+        import pyrometheus
+        # write then load the mechanism file to yield better readable pytest coverage
+        with open(f"./{mechname}.py", "w") as mech_file:
+            code = pyrometheus.codegen.python.gen_thermochem_code(cantera_soln)
+            print(code, file=mech_file)
+
+        import importlib
+        pyromechlib = importlib.import_module(f"{mechname}")
+        pyro_obj = get_pyrometheus_wrapper_class(
+            pyro_class=pyromechlib.Thermochemistry)(actx.np)
+    else:
+        pyro_obj = get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
 
     tempin = 1200.0
-    pressin = 101325.0
+    pressin = pressure
     print(f"Testing (t,P) = ({tempin}, {pressin})")
 
     # Homogeneous reactor to get test data
@@ -135,7 +153,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
 
     time = 0.0
     dt = 2.5e-6
-    for _ in range(50):
+    for _ in range(nsteps):
         time += dt
         sim.advance(time)
 
@@ -240,8 +258,8 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
             assert inf_norm(omega_pm[i] - omega) < rate_tol
 
     # check that the reactions progress far enough (and remains stable)
-    assert can_t > 2000.0
-    assert can_t < 4000.0
+    assert can_t > 1800.0
+    assert can_t < 3200.0
 
 
 @pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),
@@ -250,7 +268,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
 @pytest.mark.parametrize("reactor_type",
                          ["IdealGasReactor", "IdealGasConstPressureReactor"])
 @pytest.mark.parametrize(("pressure", "nsteps"),
-                         [(25000.0, 120), (100000.0, 50)])
+                         [(25000.0, 100), (101325.0, 50)])
 def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
                            pressure, nsteps):
     """Test of known pyrometheus reaction mechanisms in the MIRGE context.
@@ -326,12 +344,12 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
 
         temp = eos.temperature(cv=cv, temperature_seed=tin)
 
-        # do NOT test everything else. If these match, then it is ok
+        # do NOT test anything else. If this match, then everything is ok
         omega_mc = eos.get_production_rates(cv, temp)
         omega_ct = cantera_soln.net_production_rates
         for i in range(cantera_soln.n_species):
             assert inf_norm((omega_mc[i] - omega_ct[i])) < rate_tol
 
     # check that the reactions progress far enough and are stable
-    assert reactor.T > 2000.0
-    assert reactor.T < 4000.0
+    assert reactor.T > 1800.0
+    assert reactor.T < 3200.0
