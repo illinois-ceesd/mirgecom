@@ -20,6 +20,6 @@
 #
 # Example:
 # PRODUCTION_DRIVERS="illinois-ceesd/drivers_y1-nozzle@main:w-hagen/isolator@NS"
-PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"production"}
+PRODUCTION_BRANCH=${PRODUCTION_BRANCH:-"tulio/test_eos-production"}
 PRODUCTION_FORK=${PRODUCTION_FORK:-"illinois-ceesd"}
 PRODUCTION_DRIVERS=${PRODUCTION_DRIVERS:-"illinois-ceesd/drivers_y3-prediction@main"}
