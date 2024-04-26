@@ -286,6 +286,8 @@ def mpi_entry_point(func) -> Callable:
         from mirgecom.array_context import initialize_actx
         # This is where actual actx selection occurs
         actx = initialize_actx(actx_class, comm=MPI.COMM_WORLD)
+
+        # Pass the actx to the wrapped function
         kwargs["actx"] = actx
 
         _check_isl_version()
