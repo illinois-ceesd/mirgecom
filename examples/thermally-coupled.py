@@ -145,6 +145,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     else:  # generate the grid from scratch
         def get_mesh_data():
             from meshmode.mesh.io import read_gmsh
+            # pylint: disable=unpacking-non-sequence
             mesh, tag_to_elements = read_gmsh(
                 f"{local_path}/multivolume.msh", force_ambient_dim=2,
                 return_tag_to_elements_map=True)
