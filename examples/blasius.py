@@ -208,6 +208,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
 
         def get_mesh_data():
             from meshmode.mesh.io import read_gmsh
+            # pylint: disable=unpacking-non-sequence
             mesh, tag_to_elements = read_gmsh(
                 mesh_path, force_ambient_dim=dim,
                 return_tag_to_elements_map=True)
