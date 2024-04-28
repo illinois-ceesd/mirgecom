@@ -384,9 +384,6 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
     eos = PyrometheusMixture(pyro_mechanism)
     gas_model = GasModel(eos=eos)
 
-    eos = PyrometheusMixture(prometheus_mechanism)
-    gas_model = GasModel(eos=eos)
-
     press0 = 101500.0
     temp0 = 300.0
     y0s = np.zeros(shape=(nspecies,))
@@ -437,9 +434,9 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
         tol = 5e-14
         assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
+        assert inf_norm((temperature - pyro_t) / pyro_t) < tol
         assert inf_norm((internal_energy - pyro_e) / pyro_e) < tol
         assert inf_norm((p - pyro_p) / pyro_p) < tol
-        assert inf_norm((temperature - pyro_t) / pyro_t) < tol
 
         # Test the concentrations zero level
         y = -1.0*y
