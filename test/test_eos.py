@@ -339,7 +339,6 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, output_mechanism=True):
             assert inf_norm(conc[spec]) < 1e-14
 
 
-# FIXME This test is kinda redudant
 @pytest.mark.parametrize("mechname", ["uiuc_7sp", "sandiego"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("y0", [0, 1])
@@ -374,13 +373,16 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
-    sol = cantera.Solution(name="gas", yaml=mech_input)
-    prometheus_mechanism = get_pyrometheus_wrapper_class_from_cantera(
-        sol, temperature_niter=5)(actx.np)
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
+    pyro_mechanism = get_pyrometheus_wrapper_class_from_cantera(
+        cantera_soln, temperature_niter=5)(actx.np)
 
-    nspecies = prometheus_mechanism.num_species
-    print(f"PrometheusMixture::Mechanism = {mechname}")
-    print(f"PrometheusMixture::NumSpecies = {nspecies}")
+    nspecies = pyro_mechanism.num_species
+    print(f"PyrometheusMixture::Mechanism = {mechname}")
+    print(f"PyrometheusMixture::NumSpecies = {nspecies}")
+
+    eos = PyrometheusMixture(pyro_mechanism)
+    gas_model = GasModel(eos=eos)
 
     eos = PyrometheusMixture(prometheus_mechanism)
     gas_model = GasModel(eos=eos)
@@ -407,10 +409,10 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         tguess = tempin + ones*100.0*np.random.random()
         assert inf_norm(tguess) > 0.0
 
-        pyro_rho = prometheus_mechanism.get_density(pin, tin, yin)
-        pyro_e = prometheus_mechanism.get_mixture_internal_energy_mass(tin, yin)
-        pyro_t = prometheus_mechanism.get_temperature(pyro_e, tguess, yin)
-        pyro_p = prometheus_mechanism.get_pressure(pyro_rho, pyro_t, yin)
+        pyro_rho = pyro_mechanism.get_density(pin, tin, yin)
+        pyro_e = pyro_mechanism.get_mixture_internal_energy_mass(tin, yin)
+        pyro_t = pyro_mechanism.get_temperature(pyro_e, tguess, yin)
+        pyro_p = pyro_mechanism.get_pressure(pyro_rho, pyro_t, yin)
 
         # print(f"prom(rho, y, p, t, e) = ({pyro_rho}, {y0s}, "
         #       f"{pyro_p}, {pyro_t}, {pyro_e})")
@@ -442,14 +444,14 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         # Test the concentrations zero level
         y = -1.0*y
         # print(f"{y=}")
-        conc = prometheus_mechanism.get_concentrations(rho, y)
+        conc = pyro_mechanism.get_concentrations(rho, y)
         # print(f"{conc=}")
         for spec in range(nspecies):
             assert max(conc[spec]).all() >= 0
 
         zlev = 1e-3
         test_mech = \
-            get_pyrometheus_wrapper_class_from_cantera(sol,
+            get_pyrometheus_wrapper_class_from_cantera(cantera_soln,
                                                        zero_level=zlev)(actx.np)
 
         y = 0*y + zlev
