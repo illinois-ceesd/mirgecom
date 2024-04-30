@@ -137,7 +137,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
     local_path = os.path.dirname(os.path.abspath(__file__))
-    grid_file_name = local_path + "/multivolume_quads.mesh"
+    grid_file_name = local_path + "/multivolume_quads.msh"
 
     if rst_filename:  # read the grid from restart data
         rst_filename = f"{rst_filename}-{rank:04d}.pkl"
