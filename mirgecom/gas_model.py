@@ -436,14 +436,22 @@ def make_fluid_state(cv, gas_model,
             tortuosity=gas_model.wall_eos.tortuosity(tau=tau)
         )
 
-        temperature = gas_model.get_temperature(cv=cv, wv=wv,
-            tseed=temperature_seed)
-
-        pressure = gas_model.get_pressure(cv, wv, temperature)
+        pressure = None
+        temperature = None
 
         if limiter_func:
-            cv = limiter_func(cv=cv, wv=wv, pressure=pressure,
-                              temperature=temperature, dd=limiter_dd)
+            rv = limiter_func(cv=cv, wv=wv, temperature_seed=temperature_seed,
+                              gas_model=gas_model, dd=limiter_dd)
+            if isinstance(rv, np.ndarray):
+                cv, pressure, temperature = rv
+            else:
+                cv = rv
+
+        if temperature is None:
+            temperature = gas_model.get_temperature(cv=cv, wv=wv,
+                                                    tseed=temperature_seed)
+        if pressure is None:
+            pressure = gas_model.get_pressure(cv, wv, temperature)
 
         from mirgecom.eos import MixtureEOS
         if isinstance(gas_model.eos, MixtureEOS):

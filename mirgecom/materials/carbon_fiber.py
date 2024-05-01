@@ -34,9 +34,9 @@ THE SOFTWARE.
 from typing import Optional, Union
 from abc import abstractmethod
 import numpy as np
+from pytools.obj_array import make_obj_array
 from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallEOS
-from pytools.obj_array import make_obj_array
 
 
 class Oxidation:
@@ -125,12 +125,16 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
         \frac{\partial \epsilon}{\partial r} \frac{\partial r}{\partial t} =
         2 \frac{\epsilon_0}{r_0^2} r = 2 \frac{\epsilon_0}{r_0} \sqrt{\tau}
 
+    .. automethod:: __init__
     .. automethod:: get_source_terms
     """
 
-    def __init__(self, wall_material, initial_fiber_radius=5e-6):
+    def __init__(self, wall_material, initial_fiber_radius=5.5e-6, arrhenius=1e5,
+                 activation_energy=-120000.0):
         self._material = wall_material
         self._init_fiber_radius = initial_fiber_radius
+        self._arrhenius = arrhenius
+        self._Ea = activation_energy
 
     def _get_wall_effective_surface_area_fiber(self, tau) -> DOFArray:
         r"""Evaluate the effective surface of the fibers."""
@@ -152,8 +156,8 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
         """
         actx = temperature.array_context
 
-        # ignore small but negative fractions of O2
-        rhoY_o2 = actx.np.maximum(rhoY_o2, actx.np.zeros_like(rhoY_o2))
+        # ignore negative amounts of O2
+        rhoY_o2 = actx.np.maximum(rhoY_o2, actx.np.zeros_like(rhoY_o2))  # noqa N806
 
         mw_c = 12.011
         mw_o = 15.999
@@ -163,7 +167,7 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
 
         eff_surf_area = self._get_wall_effective_surface_area_fiber(tau)
 
-        k_f = 1.0e5*actx.np.exp(-120000.0/(univ_gas_const*temperature))
+        k_f = self._arrhenius*actx.np.exp(self._Ea/(univ_gas_const*temperature))
 
         m_dot_c = - rhoY_o2/mw_o2 * mw_c * eff_surf_area * k_f
         m_dot_o2 = - rhoY_o2/mw_o2 * mw_o2 * eff_surf_area * k_f

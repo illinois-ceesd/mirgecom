@@ -162,9 +162,11 @@ class PorousWallInitializer:
         else:
             eps_rho_gas = eps_gas*self._mass
 
-        # start with zero velocity inside the material
+        # TODO gotta define better the velocity..
         if self._velocity is not None:
-            momentum = (1.0-self._porous_region) * (eps_rho_gas*self._velocity)
+            velocity = self._velocity/eps_gas
+            momentum = make_obj_array([eps_rho_gas*velocity[i] for i in range(dim)])
+            # momentum = (1.0-self._porous_region) * (eps_rho_gas*self._velocity)
         else:
             momentum = make_obj_array([zeros for _ in range(dim)])
 

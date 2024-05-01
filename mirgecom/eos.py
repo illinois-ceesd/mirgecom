@@ -833,3 +833,16 @@ class PyrometheusMixture(MixtureEOS):
 
         return make_conserved(dim, rho_source, energy_source, mom_source,
                               species_sources)
+
+    def get_mole_fractions(self, species_mass_fractions):
+        """Get mole fractions from mass fractions."""
+        mix_mol_weight = \
+            self._pyrometheus_mech.get_mix_molecular_weight(species_mass_fractions)
+        return self._pyrometheus_mech.get_mole_fractions(mix_mol_weight,
+                                                         species_mass_fractions)
+
+    def get_mass_fractions(self, species_mole_fractions):
+        """Get mass fractions from mole fractions."""
+        mol_weights = self.get_species_molecular_weights()
+        mmw = sum(species_mole_fractions*mol_weights)
+        return species_mole_fractions*mol_weights/mmw
