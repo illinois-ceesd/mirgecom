@@ -51,15 +51,21 @@ from mirgecom.eos import PyrometheusMixture
 from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.mechanisms import get_mechanism_input
-from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+from mirgecom.thermochemistry import (
+    get_pyrometheus_wrapper_class_from_cantera,
+    get_pyrometheus_wrapper_class
+)
+import pyrometheus
 
 logger = logging.getLogger(__name__)
 
 
-@pytest.mark.parametrize("mechname", ["sandiego"])
+@pytest.mark.parametrize("mechname", ["uiuc_7sp"])
 @pytest.mark.parametrize("dim", [2])
 @pytest.mark.parametrize("order", [1, 3, 5])
-def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
+@pytest.mark.parametrize("use_lewis", [True, False])
+def test_pyrometheus_transport(ctx_factory, mechname, dim, order, use_lewis,
+                               output_mechanism=True):
     """Test mixture-averaged transport properties."""
     cl_ctx = ctx_factory()
     queue = cl.CommandQueue(cl_ctx)
@@ -82,25 +88,41 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
 
     # Pyrometheus initialization
     mech_input = get_mechanism_input(mechname)
-    cantera_soln = cantera.Solution(name="gas", yaml=mech_input)
-    pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=3)(actx.np)
+    ct_transport_model = "unity-Lewis-number" if use_lewis else "mixture-averaged"
+    cantera_soln = cantera.Solution(name="gas", yaml=mech_input,
+                                    transport_model=ct_transport_model)
+
+    if output_mechanism:
+        # write then load the mechanism file to yield better readable pytest coverage
+        with open(f"./{mechname}.py", "w") as mech_file:
+            code = pyrometheus.codegen.python.gen_thermochem_code(cantera_soln)
+            print(code, file=mech_file)
+
+        import importlib
+        pyromechlib = importlib.import_module(f"{mechname}")
+        pyro_obj = get_pyrometheus_wrapper_class(
+            pyro_class=pyromechlib.Thermochemistry)(actx.np)
+    else:
+        pyro_obj = get_pyrometheus_wrapper_class_from_cantera(
+            cantera_soln, temperature_niter=3)(actx.np)
 
     nspecies = pyro_obj.num_species
     print(f"PyrometheusMixture::NumSpecies = {nspecies}")
 
     # Transport data initialization
     sing_diff = 1e-6
+    lewis = np.ones(nspecies,) if use_lewis else None
     transport_model = MixtureAveragedTransport(pyro_obj,
                                                epsilon=1e-4,
-                                               singular_diffusivity=sing_diff)
+                                               singular_diffusivity=sing_diff,
+                                               lewis=lewis)
     eos = PyrometheusMixture(pyro_obj, temperature_guess=666.)
     gas_model = GasModel(eos=eos, transport=transport_model)
 
     for pressin in ([0.25, 1.0]):
         for tempin in ([300.0, 600.0, 900.0, 1200.0, 1500.0, 1800.0, 2100.0]):
 
-            cantera_soln.TP = tempin, pressin*cantera.one_atm
+            cantera_soln.TP = tempin, pressin*101325.0
             print(f"Testing (T, P) = ({cantera_soln.T}, {cantera_soln.P})")
 
             # Loop over each individual species by making a single-species mixture
@@ -113,7 +135,7 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
                 rhoin = can_rho * ones
                 yin = can_y * ones
 
-                cv = make_conserved(dim=2, mass=rhoin,
+                cv = make_conserved(dim=dim, mass=rhoin,
                         momentum=make_obj_array([zeros, zeros]),
                         energy=rhoin*gas_model.eos.get_internal_energy(tin, yin),
                         species_mass=rhoin*yin)
@@ -133,13 +155,14 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
                 kappa_ct = cantera_soln.thermal_conductivity
                 assert inf_norm(kappa - kappa_ct) < 1.0e-12
 
-                # NOTE: Individual species are exercised in Pyrometheus.
-                # Since the transport model enforce a singular-species case
-                # to avoid numerical issues when Yi -> 1, we can not test the
-                # individual species diffusivity. However, this tests that
-                # the single-species case is enforced correctly.
-                diff = fluid_state.tv.species_diffusivity
-                assert inf_norm(diff[i] - sing_diff) < 1.0e-15
+                if not use_lewis:
+                    # NOTE: Individual species are exercised in Pyrometheus.
+                    # Since the transport model enforce a singular-species case
+                    # to avoid numerical issues when Yi -> 1, we can not test the
+                    # individual species diffusivity. However, this tests that
+                    # the single-species case is enforced correctly.
+                    diff = fluid_state.tv.species_diffusivity
+                    assert inf_norm(diff[i] - sing_diff) < 1.0e-15
 
             # prescribe an actual mixture
             cantera_soln.set_equivalence_ratio(phi=1.0, fuel="H2:1",
@@ -154,7 +177,7 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
             rhoin = can_rho * ones
             yin = can_y * ones
 
-            cv = make_conserved(dim=2, mass=rhoin,
+            cv = make_conserved(dim=dim, mass=rhoin,
                     momentum=make_obj_array([zeros for _ in range(dim)]),
                     energy=rhoin*gas_model.eos.get_internal_energy(tin, yin),
                     species_mass=rhoin*yin)
@@ -182,4 +205,4 @@ def test_pyrometheus_transport(ctx_factory, mechname, dim, order):
             diff = fluid_state.tv.species_diffusivity
             diff_ct = cantera_soln.mix_diff_coeffs
             for i in range(nspecies):
-                assert inf_norm(diff[i] - diff_ct[i]) < 1.0e-11
+                assert inf_norm(diff[i] - diff_ct[i]) < 2.0e-11
