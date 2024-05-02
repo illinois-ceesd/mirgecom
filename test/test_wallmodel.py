@@ -31,6 +31,7 @@ import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import get_box_mesh
 
+
 def test_tacot_decomposition(actx_factory):
     """Check the wall degradation model."""
     actx = actx_factory()
