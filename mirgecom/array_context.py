@@ -161,8 +161,9 @@ def initialize_actx(
 
     actx = actx_class(**actx_kwargs)
 
+    # Check cache directories and log disk cache configuration for
+    # PyOpenCL-based actx (Non-PyOpenCL actx classes don't use loopy, pyopencl, # or pocl caching).
     if actx_class_is_pyopencl(actx_class):
-        # Non-PyOpenCL actx classes don't use loopy, pyopencl, or pocl caching.
         assert isinstance(actx, PyOpenCLArrayContext)
         from mirgecom.mpi import (_check_gpu_oversubscription,
                                   _check_cache_dirs_node, log_disk_cache_config)
