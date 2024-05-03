@@ -159,4 +159,15 @@ def initialize_actx(
             else:
                 assert not issubclass(actx_class, MPIPyOpenCLArrayContext)
 
-    return actx_class(**actx_kwargs)
+    actx = actx_class(**actx_kwargs)
+
+    if actx_class_is_pyopencl(actx_class):
+        # Non-PyOpenCL actx classes don't use loopy, pyopencl, or pocl caching.
+        assert isinstance(actx, PyOpenCLArrayContext)
+        from mirgecom.mpi import (_check_gpu_oversubscription,
+                                  _check_cache_dirs_node, log_disk_cache_config)
+        _check_gpu_oversubscription(actx)
+        _check_cache_dirs_node()
+        log_disk_cache_config(actx)
+
+    return actx

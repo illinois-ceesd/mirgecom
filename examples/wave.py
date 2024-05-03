@@ -31,13 +31,14 @@ from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from pytools.obj_array import flat_obj_array
 
+from mirgecom.array_context import initialize_actx
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage,
                                          logmgr_add_mempool_usage)
-from mirgecom.mpi import mpi_entry_point
+from mirgecom.mpi import initialize_mpi
 from mirgecom.utils import force_evaluation
 from mirgecom.wave import wave_operator
 
@@ -61,26 +62,22 @@ def bump(actx, nodes, t=0):
             / source_width**2))
 
 
-@mpi_entry_point
 def main(*, actx_class, casename="wave",
-         restart_step=None, use_logmgr: bool = False, mpi: bool = True,
-         **kwargs) -> None:
+         restart_step=None, use_logmgr: bool = False, mpi: bool = True) -> None:
     """Drive the example."""
 
     if mpi:
-        # mpi_entry_point (only called when MPI is requested) will import mpi4py
-        assert "mpi4py" in sys.modules
+        initialize_mpi(actx_class)
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()
         num_parts = comm.Get_size()
-        actx = kwargs["actx"]
+        actx = initialize_actx(actx_class, comm)
     else:
         assert "mpi4py" not in sys.modules
         comm = None
         rank = 0
         num_parts = 1
-        from mirgecom.array_context import initialize_actx
         actx = initialize_actx(actx_class, None)
 
     snapshot_pattern = casename + "-{step:04d}-{rank:04d}.pkl"

@@ -242,68 +242,45 @@ def _check_mpi4py_version() -> None:
                      "scatter support.")
 
 
-def mpi_entry_point(func) -> Callable:
+def initialize_mpi(actx_class) -> None:
     """
-    Return a decorator that designates a function as the "main" function for MPI.
+    Initialize MPI for a mirgecom application.
 
-    Declares that all MPI code that will be executed on the current process is
-    contained within *func*. Calls `MPI_Init()`/`MPI_Init_thread()` and sets up a
+    Calls `MPI_Init()`/`MPI_Init_thread()` and sets up a
     hook to call `MPI_Finalize()` on exit.
     """
-    @wraps(func)
-    def wrapped_func(*args, **kwargs) -> None:
-        # We enforce this so that an exception raised on one rank terminates
-        # all ranks.
-        if "mpi4py.run" not in sys.modules:
-            raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
-                        "mpi4py <args>').")
+    # We enforce this so that an exception raised on one rank terminates
+    # all ranks.
+    if "mpi4py.run" not in sys.modules:
+        raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
+                    "mpi4py <args>').")
 
-        # We enforce this so that we can work around certain interoperability issues,
-        # including the hwloc/mprobe ones below.
-        if "mpi4py.MPI" in sys.modules:
-            raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
-                        "point. Check for prior imports.")
+    # We enforce this so that we can work around certain interoperability issues,
+    # including the hwloc/mprobe ones below.
+    if "mpi4py.MPI" in sys.modules:
+        raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
+                    "point. Check for prior imports.")
 
-        # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
-        # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
-        # for details.
-        from mirgecom.array_context import actx_class_is_pyopencl
-        actx_class = kwargs["actx_class"]
-        if actx_class_is_pyopencl(actx_class):
-            import pyopencl as cl
-            cl.get_platforms()
+    # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
+    # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
+    # for details.
+    from mirgecom.array_context import actx_class_is_pyopencl
+    if actx_class_is_pyopencl(actx_class):
+        import pyopencl as cl
+        cl.get_platforms()
 
-        # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
-        # some MPI runtimes. This must be set *before* the first import
-        # of mpi4py.MPI.
-        import mpi4py
-        mpi4py.rc.recv_mprobe = False
+    # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
+    # some MPI runtimes. This must be set *before* the first import
+    # of mpi4py.MPI.
+    import mpi4py
+    mpi4py.rc.recv_mprobe = False
 
-        # Runs MPI_Init()/MPI_Init_thread() and sets up a hook for MPI_Finalize() on
-        # exit
-        from mpi4py import MPI  # noqa
+    # Runs MPI_Init()/MPI_Init_thread() and sets up a hook for MPI_Finalize() on
+    # exit
+    from mpi4py import MPI  # noqa
 
-        from mirgecom.array_context import initialize_actx
-        # This is where actual actx selection occurs
-        actx = initialize_actx(actx_class, comm=MPI.COMM_WORLD)
-
-        # Pass the actx to the wrapped function
-        kwargs["actx"] = actx
-
-        _check_isl_version()
-        _check_mpi4py_version()
-        log_disk_cache_config()
-
-        if actx_class_is_pyopencl(actx_class):
-            # Non-PyOpenCL actx classes don't use loopy, pyopencl, or pocl caching.
-            assert isinstance(actx, PyOpenCLArrayContext)
-            _check_gpu_oversubscription(actx)
-            _check_cache_dirs_node()
-            log_disk_cache_config(actx)
-
-        func(*args, **kwargs)
-
-    return wrapped_func
+    _check_isl_version()
+    _check_mpi4py_version()
 
 
 def pudb_remote_debug_on_single_rank(func: Callable) -> Callable:
