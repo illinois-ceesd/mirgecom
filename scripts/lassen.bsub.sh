@@ -26,16 +26,16 @@ jsrun_cmd="jsrun -g 1 -a 1 -n $nproc"
 # See
 # https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
 # on why this is important
-export XDG_CACHE_HOME_ROOT="$(pwd)/xdg-cache/rank"
+export XDG_CACHE_HOME_ROOT="$(pwd)/.mirge-cache/xdg-cache/rank"
 
 # Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
 # (each rank needs its own POCL cache dir)
-export POCL_CACHE_DIR_ROOT="$(pwd)/pocl-cache/rank"
+export POCL_CACHE_DIR_ROOT="$(pwd)/.mirge-cache/pocl-cache/rank"
 
 
 # Reenable CUDA cache
 export CUDA_CACHE_DISABLE=0
-export CUDA_CACHE_PATH_ROOT="$(pwd)/cuda-cache/rank"
+export CUDA_CACHE_PATH_ROOT="$(pwd)/.mirge-cache/cuda-cache/rank"
 
 # Print task allocation
 $jsrun_cmd js_task_info

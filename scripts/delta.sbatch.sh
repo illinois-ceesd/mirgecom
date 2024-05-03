@@ -33,11 +33,11 @@ srun_cmd="srun -N $nnodes -n $nproc"
 # See
 # https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
 # on why this is important
-export XDG_CACHE_HOME_ROOT="$(pwd)/xdg-cache/rank"
+export XDG_CACHE_HOME_ROOT="$(pwd)/.mirge-cache/xdg-cache/rank"
 
 # Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
 # (each rank needs its own POCL cache dir)
-export POCL_CACHE_DIR_ROOT="$(pwd)/pocl-cache/rank"
+export POCL_CACHE_DIR_ROOT="$(pwd)/.mirge-cache/pocl-cache/rank"
 
 # Run application
 $srun_cmd bash -c 'POCL_CACHE_DIR=$POCL_CACHE_DIR_ROOT$SLURM_PROCID XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$SLURM_PROCID python -u -O -m mpi4py ./pulse.py'

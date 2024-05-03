@@ -19,7 +19,7 @@ echo nnodes=$nnodes nproc=$nproc
 # See
 # https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
 # on why this is important
-export XDG_CACHE_HOME="$(pwd)/xdg-cache"
+export XDG_CACHE_HOME="$(pwd)/.mirge-cache/xdg-cache"
 
 # Run application
 # -O: switch on optimizations
