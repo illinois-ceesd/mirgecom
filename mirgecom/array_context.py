@@ -313,7 +313,7 @@ def initialize_actx(
 
     # Check cache directories and log disk cache configuration for
     # PyOpenCL-based actx (Non-PyOpenCL actx classes don't use loopy, pyopencl,
-    # or pocl caching).
+    # or pocl, and therefore we don't need to examine their caching).
     if actx_class_is_pyopencl(actx_class):
         assert isinstance(actx, PyOpenCLArrayContext)
         _check_gpu_oversubscription(actx)
