@@ -20,7 +20,8 @@ export PYOPENCL_CTX="AMD:0"
 
 run_cmd="flux run -N $nnodes -n $nproc --exclusive"
 
-export XDG_CACHE_ROOT=${XDG_CACHE_ROOT:-"$(pwd)/.mirge-cache/xdg-cache"}
-export POCL_CACHE_ROOT=${POCL_CACHE_ROOT:-"$(pwd)/.mirge-cache/pocl-cache"}
+MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)/.mirge-cache/"}
+export XDG_CACHE_ROOT=${XDG_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/xdg-cache"}
+export POCL_CACHE_ROOT=${POCL_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/pocl-cache"}
 
 $run_cmd bash -c 'POCL_CACHE_DIR=$POCL_CACHE_ROOT/$FLUX_TASK_RANK XDG_CACHE_HOME=$XDG_CACHE_ROOT/$FLUX_TASK_RANK ROCR_VISIBLE_DEVICES=$FLUX_TASK_LOCAL_ID python -m mpi4py examples/pulse.py --lazy '
