@@ -3,7 +3,7 @@
 # Used to wrap the spawning of parallel mirgecom drivers on Tioga.
 export CUDA_CACHE_DISABLE=0
 
-MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)"}
+MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)/.mirge-cache/"}
 POCL_CACHE_ROOT=${POCL_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/pocl-cache"}
 XDG_CACHE_ROOT=${XDG_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/xdg-cache"}
 CUDA_CACHE_ROOT=${CUDA_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/cuda-cache"}
