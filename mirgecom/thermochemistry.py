@@ -46,7 +46,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-
+import numpy as np
 
 def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.,
                                   flamelet=False):
@@ -80,8 +80,8 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
     class PyroWrapper(pyro_class):
 
-        def __init__():
-            super().__init__()
+        def __init__(self, usr_np=np):
+            super().__init__(usr_np=usr_np)
             self.get_temperature_update = \
                 (self.get_temperature_update_ethalpy if flamelet else
                  self.get_temperature_update_energy)
@@ -113,7 +113,6 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
         # separated out allows it to be used in the fluid drivers for evaluating
         # convergence of the temperature calculation.
         def get_temperature_update_ethalpy(self, h_in, t_in, y):
-        if do_energy is False:
             pv_fun = self.get_mixture_specific_heat_cp_mass
             he_fun = self.get_mixture_enthalpy_mass
             return (h_in - he_func(t_in, y)) / pv_func(t_in, y)
