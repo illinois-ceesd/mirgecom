@@ -48,7 +48,8 @@ THE SOFTWARE.
 """
 
 
-def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.):
+def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.,
+                                  flamelet=False):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Dynamically creates a class that inherits from a
@@ -80,10 +81,10 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
     class PyroWrapper(pyro_class):
 
         def __init__():
-            super.__init__()
-            self.get_temperature_udpate = \
-                (self.get_temperature_update_energy if energy else
-                 self.get_temperature_update_enthalpy)
+            super().__init__()
+            self.get_temperature_update = \
+                (self.get_temperature_update_ethalpy if flamelet else
+                 self.get_temperature_update_energy)
 
         # This bit disallows negative concentrations (or user-defined floor)
         # and instead pins them to 0. Sometimes, mass_fractions can be slightly
@@ -177,7 +178,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
 
 def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5,
-                                               zero_level=0.):
+                                               zero_level=0., flamelet=False):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Cantera-based interface that creates a Pyrometheus mechanism
@@ -197,16 +198,17 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
     pyro_class = pyro.get_thermochem_class(cantera_soln)
     return get_pyrometheus_wrapper_class(pyro_class,
                                          temperature_niter=temperature_niter,
-                                         zero_level=zero_level)
+                                         zero_level=zero_level, flamelet=flamelet)
 
 
 def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
                                                 temperature_niter=5,
-                                                zero_level=0.):
+                                                zero_level=0., flamelet=False):
     """Grab a pyrometheus mechanism class from the mech name."""
     from mirgecom.mechanisms import get_mechanism_input
     mech_input_source = get_mechanism_input(mechanism_name)
     from cantera import Solution
     cantera_soln = Solution(name="gas", yaml=mech_input_source)
     return get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level)
+        cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level,
+        flamlet=flamelet)

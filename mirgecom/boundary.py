@@ -192,9 +192,12 @@ class _AdiabaticBoundaryComponent:
 class _ImpermeableBoundaryComponent:
     """Helper class for impermeable boundaries, consistent with [Mengaldo_2014]_."""
 
+    # Routine seems fine for flamelets, where just like before but nspecies=1
+    # For flamelet mixtures, Z is the one transported scalar
     def grad_species_mass_bc(self, state_minus, grad_cv_minus, normal):
+        # This will return nspecies=1 for flamelet
         nspecies = len(state_minus.species_mass_density)
-
+        # This will return [grad(Z)] for flamelet [grad(Y_alpha)] for mixture 
         grad_species_mass_bc = 1.*grad_cv_minus.species_mass
         if nspecies > 0:
             from mirgecom.fluid import species_mass_fraction_gradient
@@ -1165,6 +1168,8 @@ class FarfieldBoundary(MengaldoBoundaryCondition):
     .. automethod:: grad_temperature_bc
     """
 
+    # This is OK, user needs to be aware that for flamelet, Z is specified
+    # in the farfield mixture, *not* Y.
     def __init__(self, free_stream_pressure, free_stream_velocity,
                  free_stream_temperature, free_stream_mass_fractions=None):
         """Initialize the boundary condition object."""
@@ -1182,19 +1187,24 @@ class FarfieldBoundary(MengaldoBoundaryCondition):
         free_stream_pressure = 0.*state_minus.pressure + self._pressure
         free_stream_velocity = 0.*state_minus.velocity + self._velocity
 
+        # For flamelet, EOS already expects to get Z from this function call
+        # and *not* species_mass_fractions.
+        y_or_z = free_stream_mass_fractions
         free_stream_density = gas_model.eos.get_density(
             pressure=free_stream_pressure, temperature=free_stream_temperature,
-            species_mass_fractions=free_stream_mass_fractions)
+            species_mass_fractions=y_or_z)
 
         free_stream_internal_energy = gas_model.eos.get_internal_energy(
             temperature=free_stream_temperature,
-            species_mass_fractions=free_stream_mass_fractions)
+            species_mass_fractions=y_or_z)
 
         free_stream_total_energy = \
             free_stream_density*(free_stream_internal_energy
                                  + .5*np.dot(free_stream_velocity,
                                              free_stream_velocity))
-        free_stream_spec_mass = free_stream_density * free_stream_mass_fractions
+        # This call puts the correct free_stream_density back into the right
+        # shape for transported scalars (regardless of mixture, or flamelet)
+        free_stream_spec_mass = free_stream_density * y_or_z
 
         cv_infinity = make_conserved(
             state_minus.dim, mass=free_stream_density,
@@ -1315,16 +1325,16 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         # evaluate internal energy based on prescribed pressure
         pressure_plus = 2.0*self._pressure - state_minus.pressure
         if state_minus.is_mixture:
-            gas_const = gas_model.eos.gas_const(
-                species_mass_fractions=state_minus.cv.species_mass_fractions)
+            # This form should work for flamelet, too
+            y_or_z = state_minus.cv.species_mass_fractions
+            gas_const = gas_model.eos.gas_const(species_mass_fractions=y_or_z)
             temp_plus = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
                               state_minus.temperature,
                               pressure_plus/(state_minus.cv.mass*gas_const)))
 
             internal_energy = state_minus.cv.mass*(
-                gas_model.eos.get_internal_energy(temp_plus,
-                                            state_minus.species_mass_fractions))
+                gas_model.eos.get_internal_energy(temp_plus,y_or_z))
         else:
             boundary_pressure = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
@@ -1332,6 +1342,7 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
             internal_energy = boundary_pressure/(gamma - 1.0)
 
         total_energy = internal_energy + kinetic_energy
+
         cv_outflow = make_conserved(dim=state_minus.dim, mass=state_minus.cv.mass,
                                     momentum=state_minus.cv.momentum,
                                     energy=total_energy,
@@ -1358,8 +1369,9 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         # evaluate internal energy based on prescribed pressure
         pressure_plus = self._pressure + actx.np.zeros_like(state_minus.pressure)
         if state_minus.is_mixture:
+            y_or_z = state_minus.cv.species_mass_fractions
             gas_const = gas_model.eos.gas_const(
-                species_mass_fractions=state_minus.cv.species_mass_fractions)
+                species_mass_fractions=y_or_z)
             temp_plus = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
                               state_minus.temperature,
@@ -1367,7 +1379,7 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
 
             internal_energy = state_minus.cv.mass*(
                 gas_model.eos.get_internal_energy(
-                    temp_plus, state_minus.species_mass_fractions))
+                    temp_plus, species_mass_fractions=y_or_z))
         else:
             boundary_pressure = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
@@ -1462,13 +1474,14 @@ class RiemannInflowBoundary(MengaldoBoundaryCondition):
         pressure_boundary = rho_boundary * c_boundary**2 / gamma_boundary
 
         if state_minus.is_mixture:
-            y_plus = self._cv_plus.species_mass_fractions
+            # Flamelet OK (I think)
+            y_or_z_plus = self._cv_plus.species_mass_fractions
             energy_boundary = rho_boundary * (
                 gas_model.eos.get_internal_energy(temperature=self._t_plus,
-                                                  species_mass_fractions=y_plus)
+                                                  species_mass_fractions=y_or_z_plus)
                 + 0.5*np.dot(velocity_boundary, velocity_boundary))
-
-            species_mass_boundary = rho_boundary * y_plus
+            # Converts back to Z in flamelet, uses Y for regular mixture
+            species_mass_boundary = rho_boundary * self._cv_plus.species_mass_fractions
         else:
             energy_boundary = (
                 pressure_boundary / (gamma_boundary - 1)
@@ -1579,20 +1592,21 @@ class RiemannOutflowBoundary(MengaldoBoundaryCondition):
         if state_minus.is_mixture:
 
             # using gas constant based on state_minus species
+            y_or_z = state_minus.cv.species_mass_fractions
             gas_const = gas_model.eos.gas_const(
-                species_mass_fractions=state_minus.cv.species_mass_fractions)
+                species_mass_fractions=y_or_z)
             temperature_boundary = pressure_boundary/(gas_const*rho_boundary)
 
             energy_boundary = rho_boundary * (
                 gas_model.eos.get_internal_energy(
-                    temperature_boundary, state_minus.cv.species_mass_fractions)
+                    temperature_boundary, species_mass_fractions=y_or_z)
                 + 0.5*np.dot(velocity_boundary, velocity_boundary))
         else:
             energy_boundary = (
                 pressure_boundary / (gamma_boundary - 1)
                 + 0.5*rho_boundary*np.dot(velocity_boundary, velocity_boundary))
 
-        # extrapolate species
+        # extrapolate species (appropriately done for mixture/flamelet/passive)
         species_mass_boundary = rho_boundary * state_minus.species_mass_fractions
 
         boundary_cv = make_conserved(dim=state_minus.dim, mass=rho_boundary,
@@ -1658,10 +1672,10 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
 
         mom_bc = self._slip.momentum_bc(state_minus.momentum_density, nhat)
         t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus, **kwargs)
-
+        # Update supports flamelet
+        y_or_z = state_minus.cv.species_mass_fractions
         internal_energy_bc = gas_model.eos.get_internal_energy(
-            temperature=t_bc,
-            species_mass_fractions=state_minus.species_mass_fractions)
+            temperature=t_bc, species_mass_fractions=y_or_z)
 
         total_energy_bc = (
             state_minus.mass_density * internal_energy_bc
@@ -1682,6 +1696,7 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
         Gradients of species mass fractions are set to zero in the normal direction
         to ensure zero flux of species across the boundary.
         """
+        # Should be fine as-is for flamelet
         dd_bdry = as_dofdesc(dd_bdry)
         normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
         state_bc = self.state_bc(
@@ -1753,9 +1768,10 @@ class IsothermalWallBoundary(MengaldoBoundaryCondition):
         mom_bc = self._no_slip.momentum_bc(state_minus.momentum_density)
         t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus, **kwargs)
 
+        # Updated for flamelet support
+        y_or_z = state_minus.cv.species_mass_fractions
         internal_energy_bc = gas_model.eos.get_internal_energy(
-            temperature=t_bc,
-            species_mass_fractions=state_minus.species_mass_fractions)
+            temperature=t_bc, species_mass_fractions=y_or_z)
 
         # Velocity is pinned to 0 here, no kinetic energy
         total_energy_bc = state_minus.mass_density*internal_energy_bc
@@ -1824,9 +1840,10 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
         mom_bc = self._no_slip.momentum_bc(state_minus.momentum_density)
         t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus)
 
+        # Updated for flamelet support
+        y_or_z = state_minus.cv.species_mass_fractions
         internal_energy_bc = gas_model.eos.get_internal_energy(
-            temperature=t_bc,
-            species_mass_fractions=state_minus.species_mass_fractions)
+            temperature=t_bc, species_mass_fractions=y_or_z)
 
         # Velocity is pinned to 0 here, no kinetic energy
         total_energy_bc = state_minus.mass_density*internal_energy_bc
@@ -1852,6 +1869,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
         return self._adiabatic.grad_temperature_bc(grad_t_minus, normal)
 
 
+# This BC needs updated for Flamelet - it's harder to do than for others
 class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
     r"""Characteristics outflow BCs for linearized Euler equations.
 
@@ -1944,26 +1962,29 @@ class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
         mass = r_tilde_bnd + self._ref_mass
         pressure = p_tilde_bnd + self._ref_pressure
 
+        # Here need to handle this differently for mixture vs. flamelet
+        # --- 
         if self._spec_mass_fracs is None:
-            species_mass_fracs = state_minus.cv.species_mass_fractions
+            y_or_z = state_minus.cv.species_mass_fractions
         else:
-            species_mass_fracs = self._spec_mass_fracs
+            y_or_z = self._spec_mass_fracs
 
         kin_energy = 0.5*mass*np.dot(velocity, velocity)
         if state_minus.is_mixture:
             gas_const = gas_model.eos.gas_const(
-                species_mass_fractions=species_mass_fracs)
+                species_mass_fractions=y_or_z)
             temperature = pressure/(mass*gas_const)
             int_energy = mass*gas_model.eos.get_internal_energy(
-                temperature, species_mass_fracs)
+                temperature, y_or_z)
         else:
             int_energy = pressure/(gas_model.eos.gamma() - 1.0)
+        # -----
 
         boundary_cv = make_conserved(dim=dim,
                                      mass=mass,
                                      energy=kin_energy + int_energy,
                                      momentum=mass*velocity,
-                                     species_mass=mass*species_mass_fracs)
+                                     species_mass=mass*y_or_z)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
@@ -1989,6 +2010,7 @@ class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
         return grad_cv_minus
 
 
+# This BC needs updated for Flamelet - it's harder to do than for others
 class LinearizedInflowBoundary(MengaldoBoundaryCondition):
     r"""Characteristics inflow BCs for linearized Euler equations.
 
@@ -2052,20 +2074,24 @@ class LinearizedInflowBoundary(MengaldoBoundaryCondition):
         pressure = p_tilde_bnd + self._ref_pressure
 
         kin_energy = 0.5*mass*np.dot(velocity, velocity)
+        # Needs updated for flamelet
+        # ---
+        y_or_z = self._spec_mass_fracs
         if state_minus.is_mixture:
             gas_const = gas_model.eos.gas_const(
-                species_mass_fractions=self._spec_mass_fracs)
+                species_mass_fractions=y_or_z)
             temperature = self._ref_pressure/(self._ref_mass*gas_const)
             int_energy = mass*gas_model.eos.get_internal_energy(
-                temperature, self._spec_mass_fracs)
+                temperature, y_or_z)
         else:
             int_energy = pressure/(gas_model.eos.gamma() - 1.0)
+        # ----
 
         boundary_cv = make_conserved(dim=state_minus.dim,
                                      mass=mass,
                                      energy=kin_energy + int_energy,
                                      momentum=mass*velocity,
-                                     species_mass=mass*self._spec_mass_fracs)
+                                     species_mass=mass*y_or_z)
 
         return make_fluid_state(cv=boundary_cv, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature)

@@ -957,6 +957,7 @@ def make_entropy_projected_fluid_state(
                             temperature_seed=temperature_seed)
 
 
+# TODO: Revisit for Entropy Stable flamelet mixture
 def conservative_to_entropy_vars(gamma, state):
     """Compute the entropy variables from conserved variables.
 

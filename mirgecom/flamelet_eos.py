@@ -836,6 +836,17 @@ class PyrometheusMixture(MixtureEOS):
                               species_sources)
 
 
+# The strategy for making a quick flamelet EOS is to copy the existing
+# pyro mixture EOS and tweaking the application-facing interface such that
+# any time the application calls the EOS, it is assumed that the application
+# is passing the conserved quantity Z_j (mixture_fractions) in place of
+# Y_i (species mass_fractions). Note: First stab, only one Z, but for multiple
+# fuel sources, multiple Z_j will be required.
+#
+# Internal calls are created to deal with converting Y_i(Z_j) - so that the
+# application-facing interface is identical from the application's perspective.
+# Special care needs to be taken to keep sorted what the application thinks of as
+# nspecies: Nspecies_y (number of molecules) vs. Nspecies_z (number of mixtures).
 class FlameletMixture(MixtureEOS):
     r"""Ideal gas mixture ($p = \rho{R}_\mathtt{mix}{T}$).
 
@@ -874,7 +885,7 @@ class FlameletMixture(MixtureEOS):
     """
 
     def __init__(self, pyrometheus_mech=None, temperature_guess=300.0,
-                 y_ox=None, y_fu=None, t_ox=None, t_fu=None):
+                 y_ox=None, y_fu=None, h_ox=None, h_fu=None):
         """Initialize Pyrometheus-based flamelet EOS with mechanism class.
 
         Parameters
@@ -905,6 +916,10 @@ class FlameletMixture(MixtureEOS):
         """
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
+        self._y_ox = y_ox
+        self._y_fu = y_fu
+        self._h_ox = h_ox
+        self._h_fu = h_fu
 
     def get_temperature_seed(self, cv: ConservedVars,
             temperature_seed: Optional[DOFArray] = None) -> DOFArray:
@@ -929,37 +944,72 @@ class FlameletMixture(MixtureEOS):
             tseed = temperature_seed
         return tseed if isinstance(tseed, DOFArray) else tseed * (0*cv.mass + 1.0)
 
-    def get_species_mass_fractions(self, z: DOFArray) -> np.ndarray:
+    def get_species_mass_fractions(self, cv: Optional[ConservedVars] = None,
+                                   mixture_fractions: Optional[DOFArray] = None
+                                   ) -> np.ndarray:
         r"""Get mixture species mass fractions from mixture fraction."""
-        return make_obj_array([self.y_ox[i] + (y_fu[i] - y_ox[i])*z
+        if cv is None and mixture_fractions is None:
+            raise ValueError("One of *cv* or *z* must be specified")
+        if mixture_fractions is None:
+            mixture_fractions = cv.mixture_fractions
+        return make_obj_array([self.y_ox[i] + (y_fu[i] - y_ox[i])*mixture_fractions
                                for i in self._nspecies])
 
-    def get_species_enthalpies(self, z: DOFArray) -> np.ndarray:
+    def get_species_enthalpies(self, mixture_fractions: DOFArray) -> np.ndarray:
         r"""Get species enthalpies from mixture fraction."""
-        return make_obj_array([self.h_ox[i] + (h_fu[i] - h_ox[i])*z
+        return make_obj_array([self.h_ox[i] + (h_fu[i] - h_ox[i])*mixture_fractions
                                for i in self._nspecies])
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant pressure."""
-        z = cv.species_mass_fractions
+        y = self.get_species_mass_fractions(mixture_fractions=cv.mixture_fractions)
         return \
             self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
 
     def heat_capacity_cv(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant volume."""
-        y = cv.species_mass_fractions
+        y = self.get_species_mass_fractions(mixture_fractions=cv.mixture_fractions)
         cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
-        rspec = self.gas_const(species_mass_fractions=y)
+        rspec = self._gas_const(species_mass_fractions=y)
         return cp - rspec
 
     def gamma(self, cv: ConservedVars,  # type: ignore[override]
             temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged heat capacity ratio, $\frac{C_p}{C_p - R_s}$."""
-        y = cv.species_mass_fractions
+        y = self.get_species_mass_fractions(mixture_fractions=cv.mixture_fractions)
         cp = self._pyrometheus_mech.get_mixture_specific_heat_cp_mass(temperature, y)
-        rspec = self.gas_const(species_mass_fractions=y)
+        rspec = self._gas_const(species_mass_fractions=y)
         return cp / (cp - rspec)
 
+    # Internal one, assumes species_mass_fractions = species_mass_fractions (heh)
+    def _gas_const(self, cv: Optional[ConservedVars] = None,
+                  temperature: Optional[DOFArray] = None,
+                  species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
+        r"""Get specific gas constant $R_s$.
+
+        The mixture specific gas constant is calculated as
+
+        .. math::
+
+            R_s = \frac{R}{\sum{\frac{{Y}_\alpha}{{M}_\alpha}}}
+
+        by the :mod:`pyrometheus` mechanism provided by the user. In this
+        equation, ${M}_\alpha$ are the species molar masses and R is the
+        universal gas constant.
+        """
+        if cv is not None:
+            if species_mass_fractions is None:
+                raise ValueError("One of *cv* or *species_mass_fractions*"
+                                 " must be specified.")
+            from warnings import warn
+            warn("Passing CV to eos.gas_const will be deprecated in Q1 2024.",
+                 stacklevel=2)
+            y = self.get_species_mass_fractions(mixture_fractions=cv.mixture_fractions)
+        else:
+            y = species_mass_fractions
+        return self._pyrometheus_mech.get_specific_gas_constant(y)
+
+    # Application interface assumes (species_mass_fractions = mixture_fractions)
     def gas_const(self, cv: Optional[ConservedVars] = None,
                   temperature: Optional[DOFArray] = None,
                   species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
@@ -976,10 +1026,17 @@ class FlameletMixture(MixtureEOS):
         universal gas constant.
         """
         if cv is not None:
+            if species_mass_fractions is None:
+                raise ValueError("One of *cv* or *species_mass_fractions*"
+                                 " must be specified.")
             from warnings import warn
             warn("Passing CV to eos.gas_const will be deprecated in Q1 2024.",
                  stacklevel=2)
-        y = species_mass_fractions if cv is None else cv.species_mass_fractions
+            y = self.get_species_mass_fractions(
+                mixture_fractions=cv.mixture_fractions)
+        else:
+            y = self.get_species_mass_fractions(
+                mixture_fractions=species_mass_fractions)
         return self._pyrometheus_mech.get_specific_gas_constant(y)
 
     def kinetic_energy(self, cv: ConservedVars) -> DOFArray:
@@ -1005,13 +1062,23 @@ class FlameletMixture(MixtureEOS):
         """
         return (cv.energy - self.kinetic_energy(cv))
 
-    def get_density(self, pressure: DOFArray,  # type: ignore[override]
+    # This one actually uses mass fractions
+    def _get_density(self, pressure: DOFArray,  # type: ignore[override]
             temperature: DOFArray, species_mass_fractions: np.ndarray) -> DOFArray:
         r"""Get the density from pressure, temperature, and species fractions (Y)."""
         return self._pyrometheus_mech.get_density(pressure, temperature,
                                                   species_mass_fractions)
 
-    def get_internal_energy(self, temperature: DOFArray,  # type: ignore[override]
+    # This application-facing one assumes application passes the conserved
+    # variable *mixture_fractions* in place of *species_mass_fractions*
+    def get_density(self, pressure: DOFArray,  # type: ignore[override]
+            temperature: DOFArray, species_mass_fractions: np.ndarray) -> DOFArray:
+        r"""Get the density from pressure, temperature, and species fractions (Y)."""
+        y = self.get_species_mass_fractions(species_mass_fractions)
+        return self._get_density(pressure, temperature, y)
+
+    # Internal
+    def _get_internal_energy(self, temperature: DOFArray,  # type: ignore[override]
             species_mass_fractions: np.ndarray) -> DOFArray:
         r"""Get the gas thermal energy from temperature, and species fractions (Y).
 
@@ -1024,7 +1091,21 @@ class FlameletMixture(MixtureEOS):
         return self._pyrometheus_mech.get_mixture_internal_energy_mass(
             temperature, species_mass_fractions)
 
-    def get_enthalpy(self, temperature: DOFArray,
+    # Application-facing
+    def get_internal_energy(self, temperature: DOFArray,  # type: ignore[override]
+            species_mass_fractions: np.ndarray) -> DOFArray:
+        r"""Get the gas thermal energy from temperature, and species fractions (Y).
+
+        The gas internal energy $e$ is calculated from:
+
+        .. math::
+
+            e = R_s T \sum{Y_\alpha e_\alpha}
+        """
+        y = self.get_species_mass_fractions(mixture_fractions=species_mass_fractions)
+        return self._get_internal_energy(temperature, y)
+
+    def _get_enthalpy(self, temperature: DOFArray,
             species_mass_fractions: np.ndarray) -> DOFArray:
         r"""Get the gas enthalpy from temperature, and species fractions (Y).
 
@@ -1036,6 +1117,19 @@ class FlameletMixture(MixtureEOS):
         """
         return self._pyrometheus_mech.get_mixture_enthalpy_mass(
             temperature, species_mass_fractions)
+
+    def get_enthalpy(self, temperature: DOFArray,
+            species_mass_fractions: np.ndarray) -> DOFArray:
+        r"""Get the gas enthalpy from temperature, and species fractions (Y).
+
+        The enthalpy of the gas mixture $h$ is calculated from:
+
+        .. math::
+
+            h = \sum{Y_\alpha h_\alpha}
+        """
+        y = self.get_species_mass_fractions(mixture_fractions=species_mass_fractions)
+        return self._get_enthalpy(temperature, y)
 
     def get_species_molecular_weights(self):
         """Get the species molecular weights."""
@@ -1051,7 +1145,7 @@ class FlameletMixture(MixtureEOS):
     def get_production_rates(self, cv: ConservedVars,
             temperature: DOFArray) -> np.ndarray:
         r"""Get the chemical production rates for each species."""
-        y = cv.species_mass_fractions
+        y = self.get_species_mass_fractions(cv.mixture_fractions)
         return self._pyrometheus_mech.get_net_production_rates(
             cv.mass, temperature, y)
 
@@ -1064,7 +1158,7 @@ class FlameletMixture(MixtureEOS):
 
             p = \rho R_{mix} T
         """
-        y = cv.species_mass_fractions
+        y = self.get_species_mass_fractions(cv.mixture_fractions)
         return self._pyrometheus_mech.get_pressure(cv.mass, temperature, y)
 
     def sound_speed(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
@@ -1104,9 +1198,10 @@ class FlameletMixture(MixtureEOS):
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
         tseed = self.get_temperature_seed(cv, temperature_seed)
-        y = cv.species_mass_fractions
+        z = cv.mixture_fractions
+        y = self.get_species_mass_fractions(z)
         # e = self.internal_energy(cv) / cv.mass
-        h = self.get_species_enthalpies / cv.mass
+        h = self._get_enthalpy(tseed, y)
         return self._pyrometheus_mech.get_temperature(h, tseed, y)
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
@@ -1130,7 +1225,7 @@ class FlameletMixture(MixtureEOS):
             DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
             inversion interfaces.
         """
-        y = cv.species_mass_fractions
+        y = self.get_species_mass_fractions(cv.mixture_fraction)
         return (cv.mass * self.get_internal_energy(temperature, y)
                 + self.kinetic_energy(cv))
 

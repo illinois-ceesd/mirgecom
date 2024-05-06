@@ -253,6 +253,11 @@ class ConservedVars:
         """Return the species mass fractions y = species_mass / mass."""
         return self.species_mass / self.mass
 
+    @property
+    def mixture_fraction(self):
+        """Return the mixture fractions z = species_mass / mass."""
+        return self.species_mass / self.mass
+
     def join(self):
         """Return a flat object array representation of the conserved quantities."""
         return _join_conserved(

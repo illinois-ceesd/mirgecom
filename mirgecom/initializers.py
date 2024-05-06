@@ -75,7 +75,7 @@ def initialize_flow_solution(actx, coords, gas_model=None, eos=None,
         pressure = eos.get_pressure(density, temperature, species_mass_fractions)
 
     if temperature is None:
-        gas_const = eos.gas_const(species_mass_fractions=species_mass_fractions)
+        gas_const = eos.gas_const(species_mass_fractions)
         temperature = pressure/(density*gas_const)
 
     if density is None:
