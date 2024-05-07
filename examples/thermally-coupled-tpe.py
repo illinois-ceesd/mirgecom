@@ -152,7 +152,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
             # pylint: disable=unpacking-non-sequence
             mesh, tag_to_elements = read_gmsh(
                 grid_file_name, force_ambient_dim=2,
-                return_tag_to_elements_map=True)
+                return_tag_to_elements_map=True,
+                mesh_construction_kwargs={
+                    "skip_tests": True,
+                    "force_positive_orientation": True})
             volume_to_tags = {
                 "Fluid": ["Upper"],
                 "Wall": ["Lower"]}
