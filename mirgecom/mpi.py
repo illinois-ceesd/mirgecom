@@ -30,7 +30,6 @@ THE SOFTWARE.
 """
 
 from functools import wraps
-import os
 import sys
 
 from contextlib import contextmanager
@@ -54,160 +53,6 @@ def shared_split_comm_world() -> Generator["Comm", None, None]:
         yield comm
     finally:
         comm.Free()
-
-
-def _check_cache_dirs_node() -> None:
-    """Check whether multiple ranks share cache directories on the same node."""
-    from mpi4py import MPI
-
-    size = MPI.COMM_WORLD.Get_size()
-
-    if size <= 1:
-        return
-
-    with shared_split_comm_world() as node_comm:
-        node_rank = node_comm.Get_rank()
-
-        def _check_var(var: str) -> None:
-            from warnings import warn
-
-            try:
-                my_path = os.environ[var]
-            except KeyError:
-                warn(f"Please set the '{var}' variable in your job script to "
-                    "avoid file system overheads when running on large numbers of "
-                    "ranks. See https://mirgecom.readthedocs.io/en/latest/running/large-systems.html "  # noqa: E501
-                    "for more information.")
-                # Create a fake path so there will not be a second warning below.
-                my_path = f"no/such/path/rank{node_rank}"
-
-            all_paths = node_comm.gather(my_path, root=0)
-
-            if node_rank == 0:
-                assert all_paths
-                if len(all_paths) != len(set(all_paths)):
-                    hostname = MPI.Get_processor_name()
-                    dup = [path for path in set(all_paths)
-                                if all_paths.count(path) > 1]
-
-                    from warnings import warn
-                    warn(f"Multiple ranks are sharing '{var}' on node '{hostname}'. "
-                        f"Duplicate '{var}'s: {dup}.")
-
-        _check_var("XDG_CACHE_HOME")
-
-        if os.environ.get("XDG_CACHE_HOME") is None:
-            # When XDG_CACHE_HOME is set but POCL_CACHE_DIR is not, pocl
-            # will use XDG_CACHE_HOME as the cache directory.
-            _check_var("POCL_CACHE_DIR")
-
-        # We haven't observed an issue yet that 'CUDA_CACHE_PATH' fixes,
-        # so disable this check for now.
-        # _check_var("CUDA_CACHE_PATH")
-
-
-def _check_gpu_oversubscription() -> None:
-    """
-    Check whether multiple ranks are running on the same GPU on each node.
-
-    Only works with CUDA devices currently due to the use of the
-    PCI_DOMAIN_ID_NV extension.
-    """
-    from mpi4py import MPI
-    import pyopencl as cl
-
-    size = MPI.COMM_WORLD.Get_size()
-
-    if size <= 1:
-        return
-
-    # This may unnecessarily require pyopencl in case we run with a
-    # NumpyArrayContext or CupyArrayContext
-    cl_ctx = cl.create_some_context()
-    dev = cl_ctx.devices
-
-    # No support for multi-device contexts
-    if len(dev) > 1:
-        raise NotImplementedError("multi-device contexts not yet supported")
-
-    dev = dev[0]
-
-    # Allow running multiple ranks on non-GPU devices
-    if not (dev.type & cl.device_type.GPU):
-        return
-
-    with shared_split_comm_world() as node_comm:
-        try:
-            domain_id = hex(dev.pci_domain_id_nv)
-        except (cl._cl.LogicError, AttributeError):
-            from warnings import warn
-            warn("Cannot detect whether multiple ranks are running on the"
-                 " same GPU because it requires Nvidia GPUs running with"
-                 " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
-            return
-
-        node_rank = node_comm.Get_rank()
-
-        bus_id = hex(dev.pci_bus_id_nv)
-        slot_id = hex(dev.pci_slot_id_nv)
-
-        dev_id = (domain_id, bus_id, slot_id)
-
-        dev_ids = node_comm.gather(dev_id, root=0)
-
-        if node_rank == 0:
-            assert dev_ids
-            if len(dev_ids) != len(set(dev_ids)):
-                hostname = MPI.Get_processor_name()
-                dup = [item for item in dev_ids if dev_ids.count(item) > 1]
-
-                from warnings import warn
-                warn(f"Multiple ranks are sharing GPUs on node '{hostname}'. "
-                     f"Duplicate PCIe IDs: {dup}.")
-
-
-def log_disk_cache_config() -> None:
-    """Log the disk cache configuration."""
-    from mpi4py import MPI
-    rank = MPI.COMM_WORLD.Get_rank()
-    res = f"Rank {rank} disk cache config: "
-
-    # This may unnecessarily require pyopencl in case we run with a
-    # NumpyArrayContext or CupyArrayContext
-    import pyopencl as cl
-    from pyopencl.characterize import nv_compute_capability, get_pocl_version
-    cl_ctx = cl.create_some_context()
-    dev = cl_ctx.devices[0]
-
-    # Variables set any to any value => cache is disabled
-    loopy_cache_enabled = bool(os.getenv("LOOPY_NO_CACHE", True))
-    pyopencl_cache_enabled = bool(os.getenv("PYOPENCL_NO_CACHE", True))
-
-    loopy_cache_dir = ("(" + os.getenv("XDG_CACHE_HOME", "default dir") + ")"
-                       if loopy_cache_enabled else "")
-    pyopencl_cache_dir = ("(" + os.getenv("XDG_CACHE_HOME", "default dir") + ")"
-                          if pyopencl_cache_enabled else "")
-
-    res += f"loopy: {loopy_cache_enabled} {loopy_cache_dir}; "
-    res += f"pyopencl: {pyopencl_cache_enabled} {pyopencl_cache_dir}; "
-
-    if get_pocl_version(dev.platform) is not None:
-        # Variable set to '0' => cache is disabled
-        pocl_cache_enabled = os.getenv("POCL_KERNEL_CACHE", "1") != "0"
-        pocl_cache_dir = ("(" + os.getenv("POCL_CACHE_DIR", "default dir") + ")"
-                        if pocl_cache_enabled else "")
-
-        res += f"pocl: {pocl_cache_enabled} {pocl_cache_dir}; "
-
-    if nv_compute_capability(dev) is not None:
-        # Variable set to '1' => cache is disabled
-        cuda_cache_enabled = os.getenv("CUDA_CACHE_DISABLE", "0") != "1"
-        cuda_cache_dir = ("(" + os.getenv("CUDA_CACHE_PATH", "default dir") + ")"
-                          if cuda_cache_enabled else "")
-        res += f"cuda: {cuda_cache_enabled} {cuda_cache_dir};"
-
-    res += "\n"
-    logger.info(res)
 
 
 def _check_isl_version() -> None:
@@ -287,11 +132,8 @@ def mpi_entry_point(func) -> Callable:
         # exit
         from mpi4py import MPI  # noqa
 
-        _check_gpu_oversubscription()
-        _check_cache_dirs_node()
         _check_isl_version()
         _check_mpi4py_version()
-        log_disk_cache_config()
 
         func(*args, **kwargs)
 
