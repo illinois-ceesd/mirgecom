@@ -94,45 +94,52 @@ def _check_mpi4py_version() -> None:
                      "scatter support.")
 
 
-def initialize_mpi() -> None:
+def mpi_entry_point(func) -> Callable:
     """
-    Initialize MPI for a mirgecom application.
+    Return a decorator that designates a function as the "main" function for MPI.
 
-    Calls `MPI_Init()`/`MPI_Init_thread()` and sets up a
+    Declares that all MPI code that will be executed on the current process is
+    contained within *func*. Calls `MPI_Init()`/`MPI_Init_thread()` and sets up a
     hook to call `MPI_Finalize()` on exit.
     """
-    # We enforce this so that an exception raised on one rank terminates
-    # all ranks.
-    if "mpi4py.run" not in sys.modules:
-        raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
-                    "mpi4py <args>').")
+    @wraps(func)
+    def wrapped_func(*args, **kwargs) -> None:
+        # We enforce this so that an exception raised on one rank terminates
+        # all ranks.
+        if "mpi4py.run" not in sys.modules:
+            raise RuntimeError("Must run MPI scripts via mpi4py (i.e., 'python -m "
+                        "mpi4py <args>').")
 
-    # We enforce this so that we can work around certain interoperability issues,
-    # including the hwloc/mprobe ones below.
-    if "mpi4py.MPI" in sys.modules:
-        raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
-                    "point. Check for prior imports.")
+        # We enforce this so that we can work around certain interoperability issues,
+        # including the hwloc/mprobe ones below.
+        if "mpi4py.MPI" in sys.modules:
+            raise RuntimeError("mpi4py.MPI imported before designated MPI entry "
+                        "point. Check for prior imports.")
 
-    # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
-    # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
-    # for details.
-    # Crude detection of whether a non-pyopencl actx has been requested:
-    if not "--numpy" in sys.argv and not "--cupy" in sys.argv:
-        import pyopencl as cl
-        cl.get_platforms()
+        # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
+        # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
+        # for details.
+        # Crude detection of whether a non-pyopencl actx has been requested:
+        if "--numpy" not in sys.argv and "--cupy" not in sys.argv:
+            import pyopencl as cl
+            cl.get_platforms()
 
-    # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
-    # some MPI runtimes. This must be set *before* the first import
-    # of mpi4py.MPI.
-    import mpi4py
-    mpi4py.rc.recv_mprobe = False
+        # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
+        # some MPI runtimes. This must be set *before* the first import
+        # of mpi4py.MPI.
+        import mpi4py
+        mpi4py.rc.recv_mprobe = False
 
-    # Runs MPI_Init()/MPI_Init_thread() and sets up a hook for MPI_Finalize() on
-    # exit
-    from mpi4py import MPI  # noqa
+        # Runs MPI_Init()/MPI_Init_thread() and sets up a hook for MPI_Finalize() on
+        # exit
+        from mpi4py import MPI  # noqa
 
-    _check_isl_version()
-    _check_mpi4py_version()
+        _check_isl_version()
+        _check_mpi4py_version()
+
+        func(*args, **kwargs)
+
+    return wrapped_func
 
 
 def pudb_remote_debug_on_single_rank(func: Callable) -> Callable:
