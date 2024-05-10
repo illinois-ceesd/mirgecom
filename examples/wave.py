@@ -67,7 +67,7 @@ def main(actx_class, casename="wave",
     """Drive the example."""
 
     if mpi:
-        initialize_mpi(actx_class)
+        initialize_mpi()
         from mpi4py import MPI
         comm = MPI.COMM_WORLD
         rank = comm.Get_rank()

@@ -94,7 +94,7 @@ def _check_mpi4py_version() -> None:
                      "scatter support.")
 
 
-def initialize_mpi(actx_class) -> None:
+def initialize_mpi() -> None:
     """
     Initialize MPI for a mirgecom application.
 
@@ -116,8 +116,8 @@ def initialize_mpi(actx_class) -> None:
     # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
     # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
     # for details.
-    from mirgecom.array_context import actx_class_is_pyopencl
-    if actx_class_is_pyopencl(actx_class):
+    # Crude detection of whether a non-pyopencl actx has been requested:
+    if not "--numpy" in sys.argv and not "--cupy" in sys.argv:
         import pyopencl as cl
         cl.get_platforms()
 
