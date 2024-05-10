@@ -91,38 +91,9 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         An array container containing the limited field(s).
     """
     actx = field.array_context
-
-    # Compute cell averages of the state
-    def cancel_polynomials(grp):
-        return actx.from_numpy(np.asarray([1 if sum(mode_id) == 0
-                                           else 0 for mode_id in grp.mode_ids()]))
-
-    # map from nodal to modal
-    if dd is None:
-        dd = DD_VOLUME_ALL
-
-    dd_nodal = dd
-    dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
-
-    modal_map = dcoll.connection_from_dds(dd_nodal, dd_modal)
-    nodal_map = dcoll.connection_from_dds(dd_modal, dd_nodal)
-
-    modal_discr = dcoll.discr_from_dd(dd_modal)
-    modal_field = modal_map(field)
-
-    # cancel the ``high-order'' polynomials p > 0, and only the average remains
-    filtered_modal_field = DOFArray(
-        actx,
-        tuple(actx.einsum("ej,j->ej",
-                          vec_i,
-                          cancel_polynomials(grp),
-                          arg_names=("vec", "filter"),
-                          tagged=(FirstAxisIsElementsTag(),))
-              for grp, vec_i in zip(modal_discr.groups, modal_field))
-    )
-
-    # convert back to nodal to have the average at all points
-    cell_avgs = nodal_map(filtered_modal_field)
+    cell_vols = abs(op.elementwise_integral(dcoll, dd,
+                                            actx.np.zeros_like(field) + 1.0))
+    cell_avgs = op.elementwise_integral(dcoll, dd, field)/cell_vols
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:
