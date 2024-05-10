@@ -33,11 +33,7 @@ THE SOFTWARE.
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
-from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_MODAL
-
-import numpy as np
-from meshmode.transform_metadata import FirstAxisIsElementsTag
-from meshmode.dof_array import DOFArray
+from grudge.dof_desc import DD_VOLUME_ALL
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
