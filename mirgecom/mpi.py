@@ -119,10 +119,8 @@ def mpi_entry_point(func) -> Callable:
         # Avoid hwloc version conflicts by forcing pocl to load before mpi4py
         # (don't ask). See https://github.com/illinois-ceesd/mirgecom/pull/169
         # for details.
-        # Crude detection of whether a non-pyopencl actx has been requested:
-        if "--numpy" not in sys.argv and "--cupy" not in sys.argv:
-            import pyopencl as cl
-            cl.get_platforms()
+        import pyopencl as cl
+        cl.get_platforms()
 
         # Avoid https://github.com/illinois-ceesd/mirgecom/issues/132 on
         # some MPI runtimes. This must be set *before* the first import
