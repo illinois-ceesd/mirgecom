@@ -1,4 +1,4 @@
-"""Demonstrate a gas in a box with an acoustic pulse."""
+"""Demonstrate a generic gas example."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -133,9 +133,10 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-4
+    n_steps = 20
     current_cfl = 1.0
-    current_dt = 1e-13
+    current_dt = 1e-6
+    t_final = current_dt * n_steps
     current_t = 0
     constant_cfl = False
     temperature_tolerance = 1e-2
