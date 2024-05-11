@@ -86,9 +86,6 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     meshmode.dof_array.DOFArray or numpy.ndarray
         An array container containing the limited field(s).
     """
-    if dd is None:
-        dd = DD_VOLUME_ALL
-
     actx = field.array_context
     if dd is None:
         dd = DD_VOLUME_ALL
