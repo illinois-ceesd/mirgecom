@@ -1,4 +1,4 @@
-"""Demonstrate a gas in a box with an acoustic pulse."""
+"""Demonstrate a generic gas example."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -102,7 +102,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          mech_name="uiuc_7sp", transport_type=0,
          use_av=0, use_limiter=False, order=1,
          nscale=1, npassive_species=0, map_mesh=False,
-         rotation_angle=0, add_pulse=False):
+         rotation_angle=0, add_pulse=False,
+         mesh_filename=None):
     """Drive the example."""
     if casename is None:
         casename = "gas-in-box"
@@ -132,18 +133,19 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-4
+    n_steps = 20
     current_cfl = 1.0
     current_dt = 1e-6
+    t_final = current_dt * n_steps
     current_t = 0
     constant_cfl = False
     temperature_tolerance = 1e-2
 
     # some i/o frequencies
-    nstatus = 100
+    nstatus = 1
     nrestart = 100
     nviz = 1
-    nhealth = 100
+    nhealth = 1
 
     nscale = max(nscale, 1)
     scale_fac = pow(float(nscale), 1.0/dim)
@@ -162,15 +164,28 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        from mirgecom.simutil import get_box_mesh
-        box_ll = -1
-        box_ur = 1
-        generate_mesh = partial(
-            get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
-            n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
-            tensor_product_elements=use_tpe)
+        if mesh_filename is not None:
+            from meshmode.mesh.io import read_gmsh
+            mesh_construction_kwargs = {
+                "force_positive_orientation": True,
+                "skip_tests": False
+            }
+            generate_mesh = partial(
+                read_gmsh, filename=mesh_filename,
+                mesh_construction_kwargs=mesh_construction_kwargs,
+            )
+        else:
+            from mirgecom.simutil import get_box_mesh
+            box_ll = -1
+            box_ur = 1
+            generate_mesh = partial(
+                get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
+                n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
+                tensor_product_elements=use_tpe)
+
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
+        dim = local_mesh.ambient_dim
 
         def add_wonk(x: np.ndarray) -> np.ndarray:
             wonk_field = np.empty_like(x)
@@ -770,6 +785,8 @@ if __name__ == "__main__":
                         help="factor by which to scale the number of elements")
     parser.add_argument("-z", "--mechanism-name", type=str, default="uiuc_7sp",
                         help="name of thermochemical mechanism yaml file")
+    parser.add_argument("--meshfile", type=str,
+                        help="name of gmsh input file")
     args = parser.parse_args()
 
     from warnings import warn
@@ -802,6 +819,7 @@ if __name__ == "__main__":
          use_reactions=args.flame, newton_iters=args.iters,
          use_navierstokes=args.navierstokes, npassive_species=args.species,
          nscale=args.weak_scale, mech_name=args.mechanism_name,
-         map_mesh=args.wonky, rotation_angle=args.rotate, add_pulse=args.pulse)
+         map_mesh=args.wonky, rotation_angle=args.rotate, add_pulse=args.pulse,
+         mesh_filename=args.meshfile)
 
 # vim: foldmethod=marker
