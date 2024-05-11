@@ -107,7 +107,7 @@ class SolidWallConservedVars:
 
 
 @dataclass_array_container
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class SolidWallDependentVars:
     """Wall dependent variables for heat conduction only materials."""
 
@@ -206,7 +206,6 @@ class PorousWallVars:
     .. attribute:: material_densities
     .. attribute:: tau
     .. attribute:: void_fraction
-    .. attribute:: emissivity
     .. attribute:: permeability
     .. attribute:: tortuosity
     .. attribute:: density
@@ -215,8 +214,7 @@ class PorousWallVars:
     material_densities: Union[DOFArray, np.ndarray]
     tau: DOFArray
     void_fraction: DOFArray
-    emissivity: DOFArray
-    permeability: DOFArray
+    permeability: Union[DOFArray, np.ndarray]
     tortuosity: DOFArray
     density: DOFArray
 
@@ -267,18 +265,19 @@ class PorousWallEOS:
         raise NotImplementedError()
 
     @abstractmethod
-    def permeability(self, tau: DOFArray) -> DOFArray:
+    def permeability(self, tau: DOFArray) -> Union[np.ndarray, DOFArray]:
         r"""Permeability $K$ of the porous material."""
         raise NotImplementedError()
 
     @abstractmethod
-    def emissivity(self, temperature=None, tau=None) -> DOFArray:
+    def emissivity(self, temperature: Optional[DOFArray] = None,
+            tau: Optional[DOFArray] = None) -> DOFArray:
         """Emissivity for energy radiation."""
         raise NotImplementedError()
 
     @abstractmethod
     def tortuosity(self, tau: DOFArray) -> DOFArray:
-        """Tortuosity of the porous material."""
+        r"""Tortuosity $\eta$ of the porous material."""
         raise NotImplementedError()
 
     @abstractmethod
@@ -288,12 +287,13 @@ class PorousWallEOS:
 
 
 # FIXME: Generalize TransportModel interface to accept state variables
-# other than fluid cv
+# other than fluid cv following
+# https://github.com/illinois-ceesd/mirgecom/pull/935#discussion_r1298730910
 class PorousWallTransport:
     r"""Transport model for porous media flow.
 
-    Takes any transport model and modifies it to consider the interaction
-    with the porous materials.
+    Takes any gas-only transport model and modifies it to consider the
+    interaction with the porous materials.
 
     .. automethod:: __init__
     .. automethod:: bulk_viscosity
@@ -304,7 +304,7 @@ class PorousWallTransport:
     """
 
     def __init__(self, base_transport: TransportModel):
-        """Initialize transport model."""
+        """Initialize base transport model for fluid-only."""
         self.base_transport = base_transport
 
     def bulk_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
@@ -325,7 +325,8 @@ class PorousWallTransport:
             self.base_transport.viscosity(cv, dv, eos))
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos: GasEOS, wall_eos: PorousWallEOS) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS,
+            wall_eos: PorousWallEOS) -> Union[np.ndarray, DOFArray]:
         r"""Return the effective thermal conductivity of the gas+solid.
 
         It is a function of temperature and degradation progress. As the
@@ -337,12 +338,9 @@ class PorousWallTransport:
         .. math::
             \frac{\rho_s \kappa_s + \rho_g \kappa_g}{\rho_s + \rho_g}
         """
-        y_g = cv.mass/(cv.mass + wv.density)
-        y_s = 1.0 - y_g
         kappa_s = wall_eos.thermal_conductivity(dv.temperature, wv.tau)
         kappa_g = self.base_transport.thermal_conductivity(cv, dv, eos)
-
-        return y_s*kappa_s + y_g*kappa_g
+        return (wv.density*kappa_s + cv.mass*kappa_g)/(cv.mass + wv.density)
 
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
             wv: PorousWallVars, eos: GasEOS) -> DOFArray:
@@ -382,6 +380,11 @@ class PorousFlowModel:
 
         Transport class that governs how the gas flows through the porous
         media. This is accounted for in :class:`PorousWallTransport`
+
+    .. attribute:: temperature_iteration
+
+        Number of iterations for temperature evaluation using Newton's method.
+        Defaults to 3 if not specified.
 
     It also include functions that combine the properties of the porous
     material and the gas that permeates, yielding the actual porous flow EOS:
@@ -434,7 +437,7 @@ class PorousFlowModel:
             T^{n+1} = T^n -
                 \frac
                 {\epsilon_g \rho_g e_g + \rho_s h_s - \rho e}
-                {\epsilon_g \rho_g C_{p_g} + \epsilon_s \rho_s C_{p_s}}
+                {\epsilon_g \rho_g C_{v_g} + \epsilon_s \rho_s C_{p_s}}
 
         """
         if isinstance(tseed, DOFArray) is False:
@@ -469,7 +472,7 @@ class PorousFlowModel:
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
-        r"""Return the enthalpy of the gas+solid material.
+        r"""Return the internal energy of the gas+solid material.
 
         .. math::
             \rho e = \epsilon_s \rho_s e_s + \epsilon_g \rho_g e_g
@@ -483,7 +486,7 @@ class PorousFlowModel:
         r"""Return the heat capacity of the gas+solid material.
 
         .. math::
-            \rho e = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
+            \rho C_v = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
         """
         return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
                 + wv.density*self.wall_eos.heat_capacity(temperature, wv.tau))
