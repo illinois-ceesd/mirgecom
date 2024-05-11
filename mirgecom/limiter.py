@@ -38,7 +38,7 @@ from grudge.dof_desc import DD_VOLUME_ALL
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                              mmin=0.0, mmax=None, modify_average=False,
-                             dd=DD_VOLUME_ALL):
+                             dd=None):
     r"""Implement a slope limiter for bound-preserving properties.
 
     The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
@@ -90,6 +90,9 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         dd = DD_VOLUME_ALL
 
     actx = field.array_context
+    if dd is None:
+        dd = DD_VOLUME_ALL
+
     cell_vols = abs(op.elementwise_integral(dcoll, dd,
                                             actx.np.zeros_like(field) + 1.0))
     cell_avgs = op.elementwise_integral(dcoll, dd, field)/cell_vols
