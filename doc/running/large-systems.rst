@@ -47,7 +47,7 @@ environment variables, such as in the following example::
 
    $ export XDG_CACHE_ROOT="/tmp/$USER/xdg-cache"
    $ export POCL_CACHE_ROOT="/tmp/$USER/pocl-cache"
-   $ srun -n 512 bash -c 'POCL_CACHE_DIR=$POCL_CACHE_ROOT/$$ XDG_CACHE_HOME=$XDG_CACHE_ROOT/$$ python -m mpi4py examples/wave-mpi.py'
+   $ srun -n 512 bash -c 'POCL_CACHE_DIR=$POCL_CACHE_ROOT/$$ XDG_CACHE_HOME=$XDG_CACHE_ROOT/$$ python -m mpi4py examples/wave.py'
 
 
 There is also on-disk caching of compiled kernels done by CUDA itself.
