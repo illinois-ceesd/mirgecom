@@ -110,6 +110,9 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
             he_func = self.get_mixture_enthalpy_mass
             return (h_in - he_func(t_in, y)) / pv_func(t_in, y)
 
+        # This is the temperature update wrapper for *get_temperature*. It returns
+        # the appropriate temperature update for the energy vs. the enthalpy
+        # version of *get_temperature*.
         def get_temperature_update(self, e_or_h, t_in, y, use_energy=True):
             if use_energy:
                 return self.get_temperature_update_energy(e_or_h, t_in, y)
@@ -127,13 +130,17 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
             Parameters
             ----------
-            energy: :class:`~meshmode.dof_array.DOFArray`
-                The internal (thermal) energy of the mixture.
+            energy_or_enthalpy: :class:`~meshmode.dof_array.DOFArray`
+                The internal (thermal) energy or enthalpy of the mixture. If
+                enthalpy is passed, then *use_energy* should be set `False`.
             temperature_guess: :class:`~meshmode.dof_array.DOFArray`
                 An initial starting temperature for the Newton iterations.
             species_mass_fractions: numpy.ndarray
                 An object array of :class:`~meshmode.dof_array.DOFArray` with the
                 mass fractions of the mixture species.
+            use_energy: bool
+                Indicates whether the energy or enthalpy version of the routine
+                will be used. Defaults `True` for the energy version.
 
             Returns
             -------
@@ -144,9 +151,13 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
             # if calorically perfect gas (constant heat capacities)
             if num_iter == 0:
-                cv_mass = self.get_mixture_specific_heat_cv_mass(
-                    temperature_guess*0.0, species_mass_fractions)
-                return energy_or_enthalpy/cv_mass
+                if use_energy:
+                    heat_cap = self.get_mixture_specific_heat_cv_mass(
+                        temperature_guess*0.0, species_mass_fractions)
+                else:
+                    heat_cap = self.get_mixture_specific_heat_cp_mass(
+                        temperature_guess*0.0, species_mass_fractions)
+                return energy_or_enthalpy/heat_cap
 
             # if thermally perfect gas
             t_i = temperature_guess
