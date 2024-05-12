@@ -10,10 +10,13 @@
 # handles GPU distribution.
 #
 # Run it like this:
-#   mpiexec -n 2 bash run-gpus-generic.sh python -m mpi4py pulse-mpi.py --lazy
+#   mpiexec -n 2 bash run-gpus-generic.sh python -m mpi4py pulse.py --lazy
 # unset CUDA_CACHE_DISABLE
-POCL_CACHE_ROOT=${POCL_CACHE_ROOT:-"/tmp/$USER/pocl-scratch"}
-XDG_CACHE_ROOT=${XDG_CACHE_HOME:-"/tmp/$USER/xdg-scratch"}
+export CUDA_CACHE_DISABLE=0
+MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)/.mirge-cache/"}
+POCL_CACHE_ROOT=${POCL_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/pocl-cache"}
+XDG_CACHE_ROOT=${XDG_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/xdg-cache"}
+CUDA_CACHE_ROOT=${CUDA_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/cuda-cache"}
 
 if [[ -n "$OMPI_COMM_WORLD_NODE_RANK" ]]; then
     # Open MPI
@@ -27,8 +30,10 @@ fi
 
 POCL_CACHE_DIR=${POCL_CACHE_DIR:-"${POCL_CACHE_ROOT}/${RANK_ID}"}
 XDG_CACHE_HOME=${XDG_CACHE_HOME:-"${XDG_CACHE_ROOT}/${RANK_ID}"}
+CUDA_CACHE_PATH=${CUDA_CACHE_DIR:-"${CUDA_CACHE_ROOT}/${RANK_ID}"}
 
 export POCL_CACHE_DIR
 export XDG_CACHE_HOME
+export CUDA_CACHE_PATH
 
 "$@"
