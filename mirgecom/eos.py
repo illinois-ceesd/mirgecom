@@ -622,8 +622,8 @@ class PyrometheusMixture(MixtureEOS):
         if isinstance(tseed, DOFArray):
             return tseed
         else:
-            if zeros is None:
-                raise ValueError("Require *ary* for shaping temperature seed.")
+            if ary is None:
+                raise ValueError("Requires *ary* for shaping temperature seed.")
         return tseed * (0*ary + 1.0)
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
