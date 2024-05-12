@@ -116,7 +116,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
         def get_temperature_update(self, e_or_h, t_in, y, use_energy=True):
             if use_energy:
                 return self.get_temperature_update_energy(e_or_h, t_in, y)
-            return self.get_temperature_udpate_enthalpy(e_or_h, t_in, y)
+            return self.get_temperature_update_enthalpy(e_or_h, t_in, y)
 
         # This hard-codes the number of Newton iterations because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
