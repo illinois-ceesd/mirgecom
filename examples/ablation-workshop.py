@@ -469,7 +469,7 @@ class TabulatedGasEOS(MixtureEOS):
     def kinetic_energy(self, cv: ConservedVars):
         raise NotImplementedError
 
-    def get_temperature_seed(self, cv: ConservedVars,
+    def get_temperature_seed(self, ary: Optional[DOFArray] = None,
             temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
         raise NotImplementedError
 

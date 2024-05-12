@@ -231,7 +231,7 @@ class MixtureEOS(GasEOS):
 
     @abstractmethod
     def get_temperature_seed(
-            self, cv: ConservedVars,
+            self, ary: Optional[DOFArray] = None,
             temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
         r"""Get a constant and uniform guess for the gas temperature.
 
@@ -598,7 +598,7 @@ class PyrometheusMixture(MixtureEOS):
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
 
-    def get_temperature_seed(self, cv: ConservedVars,
+    def get_temperature_seed(self, ary: Optional[DOFArray] = None,
             temperature_seed: Optional[DOFArray] = None) -> DOFArray:
         """Get a *cv*-shaped array with which to seed temperature calcuation.
 
@@ -619,7 +619,12 @@ class PyrometheusMixture(MixtureEOS):
         tseed = self._tguess
         if temperature_seed is not None:
             tseed = temperature_seed
-        return tseed if isinstance(tseed, DOFArray) else tseed * (0*cv.mass + 1.0)
+        if isinstance(tseed, DOFArray):
+            return tseed
+        else:
+            if ary is None:
+                raise ValueError("Requires *ary* for shaping temperature seed.")
+        return tseed * (0*ary + 1.0)
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant pressure."""
@@ -788,7 +793,7 @@ class PyrometheusMixture(MixtureEOS):
         if temperature_seed is None:
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
-        tseed = self.get_temperature_seed(cv, temperature_seed)
+        tseed = self.get_temperature_seed(cv.mass, temperature_seed)
 
         y = cv.species_mass_fractions
         e = self.internal_energy(cv) / cv.mass
@@ -817,14 +822,10 @@ class PyrometheusMixture(MixtureEOS):
         if temperature_seed is None:
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
-        if temperature_seed is not None:
-            if isinstance(temperature_seed, DOFArray):
-                tseed = temperature_seed
-            else:
-                tseed = temperature_seed + (0*enthalpy + 1.0)
+        tseed = self.get_temperature_seed(enthalpy, temperature_seed)
 
-        return self._pyrometheus_mech.get_temperature_from_enthalpy(
-            enthalpy, tseed, species_mass_fractions)
+        return self._pyrometheus_mech.get_temperature(
+            enthalpy, tseed, species_mass_fractions, use_energy=False)
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
             temperature: DOFArray) -> DOFArray:
