@@ -95,7 +95,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, use_esdg=False, use_tpe=False,
          use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None, dim=2,
+         casename=None, rst_filename=None, dim=3,
          periodic_mesh=False, multiple_boundaries=False,
          use_navierstokes=False, use_mixture=False,
          use_reactions=False, newton_iters=3,
@@ -133,7 +133,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    n_steps = 20
+    n_steps = 20000
     current_cfl = 1.0
     current_dt = 1e-6
     t_final = current_dt * n_steps
@@ -170,10 +170,17 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                 "force_positive_orientation": True,
                 "skip_tests": False
             }
-            generate_mesh = partial(
-                read_gmsh, filename=mesh_filename,
-                mesh_construction_kwargs=mesh_construction_kwargs,
-            )
+            if dim == 2:
+                generate_mesh = partial(
+                    read_gmsh, filename=mesh_filename,
+                    mesh_construction_kwargs=mesh_construction_kwargs,
+                    force_ambient_dim=2
+                )
+            else:
+                generate_mesh = partial(
+                    read_gmsh, filename=mesh_filename,
+                    mesh_construction_kwargs=mesh_construction_kwargs
+                )
         else:
             from mirgecom.simutil import get_box_mesh
             box_ll = -1
