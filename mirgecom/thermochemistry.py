@@ -142,6 +142,54 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
                 )
             return t_i
 
+        # This is the temperature update for *get_temperature*. Having this
+        # separated out allows it to be used in the fluid drivers for evaluating
+        # convergence of the temperature calculation.
+        def get_temperature_update_enthalpy(self, h_in, t_in, y):
+            pv_func = self.get_mixture_specific_heat_cp_mass
+            he_func = self.get_mixture_enthalpy_mass
+            return (h_in - he_func(t_in, y)) / pv_func(t_in, y)
+
+        # This hard-codes the number of Newton iterations because the convergence
+        # check is not compatible with lazy evaluation. Instead, we plan to check
+        # the temperature residual at simulation health checking time.
+        # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
+        # - could adapt dt or num_iter on temperature convergence?
+        # - can pass-in num_iter?
+        def get_temperature_from_enthalpy(self, enthalpy, temperature_guess, species_mass_fractions):
+            """Compute the temperature of the mixture from the enthalpy.
+
+            Parameters
+            ----------
+            enthalpy: :class:`~meshmode.dof_array.DOFArray`
+                The specific enthalpy of the mixture.
+            temperature_guess: :class:`~meshmode.dof_array.DOFArray`
+                An initial starting temperature for the Newton iterations.
+            species_mass_fractions: numpy.ndarray
+                An object array of :class:`~meshmode.dof_array.DOFArray` with the
+                mass fractions of the mixture species.
+
+            Returns
+            -------
+            :class:`~meshmode.dof_array.DOFArray`
+                The mixture temperature after a fixed number of Newton iterations.
+            """
+            num_iter = temperature_niter
+
+            # if calorically perfect gas (constant heat capacities)
+            if num_iter == 0:
+                cp_mass = self.get_mixture_specific_heat_cp_mass(
+                    temperature_guess*0.0, species_mass_fractions)
+                return enthalpy/cp_mass
+
+            # if thermally perfect gas
+            t_i = temperature_guess
+            for _ in range(num_iter):
+                t_i = t_i + self.get_temperature_update_enthalpy(
+                    enthalpy, t_i, species_mass_fractions
+                )
+            return t_i
+
         # Compute heat release rate due to chemistry.
         # Only used for visualization/post-processing.
         def get_heat_release_rate(self, state):

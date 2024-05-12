@@ -789,9 +789,42 @@ class PyrometheusMixture(MixtureEOS):
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
         tseed = self.get_temperature_seed(cv, temperature_seed)
+
         y = cv.species_mass_fractions
         e = self.internal_energy(cv) / cv.mass
         return self._pyrometheus_mech.get_temperature(e, tseed, y)
+
+    def temperature_from_enthalpy(self, enthalpy: DOFArray,
+            temperature_seed: Optional[DOFArray] = None,
+            species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
+        r"""Get the thermodynamic temperature of the gas.
+
+        The thermodynamic temperature ($T$) is calculated iteratively with
+        Newton-Raphson method from the mixture specific enthalpy ($h$) as:
+
+        .. math::
+
+            h(T) = \sum_i h_i(T) Y_i
+
+        Parameters
+        ----------
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Data from which to seed temperature calculation.
+        """
+        # For mixtures, the temperature calculation *must* be seeded. This
+        # check catches any actual temperature calculation that did not
+        # provide a seed.
+        if temperature_seed is None:
+            raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
+                                              "requires a *temperature_seed*.")
+        if temperature_seed is not None:
+            if isinstance(temperature_seed, DOFArray):
+                tseed = temperature_seed
+            else:
+                tseed = temperature_seed + (0*enthalpy + 1.0)
+
+        return self._pyrometheus_mech.get_temperature_from_enthalpy(
+            enthalpy, tseed, species_mass_fractions)
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
             temperature: DOFArray) -> DOFArray:
