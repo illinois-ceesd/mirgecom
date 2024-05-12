@@ -325,7 +325,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
                                 op="max")
         return ts_field, cfl, min(t_remaining, dt)
 
-    def _limit_fluid_cv(cv, temperature_seed, gas_model, dd):
+    def _limit_fluid_cv(cv, temperature_seed, gas_model, dd=None):
 
         temperature = gas_model.eos.temperature(
             cv=cv, temperature_seed=temperature_seed)
@@ -365,15 +365,10 @@ def main(actx_class, use_leap=False, use_overintegration=False,
         e = gas_model.eos.internal_energy(cv) / cv.mass
         return pyro_mechanism.get_temperature_update_energy(e, temperature, y)
 
-    from grudge.dof_desc import DD_VOLUME_ALL
-    from grudge.dof_desc import VolumeDomainTag, DOFDesc, DISCR_TAG_BASE
-    dd_vol_fluid = DOFDesc(VolumeDomainTag("vol"), DISCR_TAG_BASE)
-
     def get_fluid_state(cv, tseed):
         return make_fluid_state(cv=cv, gas_model=gas_model,
                                 temperature_seed=tseed,
-                                limiter_func=_limit_fluid_cv,
-                                limiter_dd=DD_VOLUME_ALL)
+                                limiter_func=_limit_fluid_cv)
 
     compute_temperature_update = actx.compile(get_temperature_update)
     construct_fluid_state = actx.compile(get_fluid_state)
