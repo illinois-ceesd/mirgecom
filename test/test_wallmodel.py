@@ -139,8 +139,19 @@ def test_wall_eos(actx_factory, order, my_material):
         op.norm(dcoll, solid_state.temperature - 900.0, np.inf)) < tol
 
 
-def test_tacot_decomposition():
+def test_tacot_decomposition(actx_factory):
     """Check the wall degradation model."""
+    actx = actx_factory()
+
+    dim = 2
+    nelems = 2
+    order = 2
+    mesh = get_box_mesh(dim, -0.1, 0.1, nelems)
+    dcoll = create_discretization_collection(actx, mesh, order=order)
+
+    nodes = actx.thaw(dcoll.nodes())
+    zeros = actx.np.zeros_like(nodes[0])
+
     temperature = 900.0 + zeros
 
     from mirgecom.materials.tacot import Pyrolysis
