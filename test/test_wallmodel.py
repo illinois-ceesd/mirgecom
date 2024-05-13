@@ -141,42 +141,43 @@ def test_wall_eos(actx_factory, order, my_material):
 
 def test_tacot_decomposition():
     """Check the wall degradation model."""
-    temperature = 900.0
+    temperature = 900.0 + zeros
 
     from mirgecom.materials.tacot import Pyrolysis
-    decomposition = Pyrolysis()
-    chi = np.array([30.0, 90.0, 160.0])
+    decomposition = Pyrolysis(virgin_mass=120.0, char_mass=60.0, fiber_mass=160.0,
+                              pre_exponential=(12000.0, 4.48e9),
+                              decomposition_temperature=(333.3, 555.6))
+    chi = make_obj_array([30.0 + zeros, 90.0 + zeros, 160.0 + zeros])
 
     tol = 1e-8
 
+    # ~~~ Test parameter setup
     tacot_decomp = decomposition.get_decomposition_parameters()
 
-    print(tacot_decomp)
+    assert tacot_decomp["virgin_mass"] - 120.0 < tol
+    assert tacot_decomp["char_mass"] - 60.0 < tol
+    assert tacot_decomp["fiber_mass"] - 160.0 < tol
 
-    # virgin_mass = tacot_decomp["virgin_mass"]
-    # char_mass = tacot_decomp["char_mass"]
-    # fiber_mass = tacot_decomp["fiber_mass"]
     weights = tacot_decomp["reaction_weights"]
+    assert weights[0] - 30.0 < tol
+    assert weights[1] - 90.0 < tol
+
     pre_exp = tacot_decomp["pre_exponential"]
+    assert pre_exp[0] - 12000.0 < tol
+    assert pre_exp[1] - 4.48e9 < tol
+
     Tcrit = tacot_decomp["temperature"]  # noqa N806
+    assert Tcrit[0] - 333.3 < tol
+    assert Tcrit[1] - 555.6 < tol
 
-    # The density parameters are hard-coded for TACOT, depending on
-    # virgin and char volume fractions.
-    w1 = weights[0]*(chi[0]/(weights[0]))**3
-    w2 = weights[1]*(chi[1]/(weights[1]) - 2./3.)**3
-
-    solid_mass_rhs = make_obj_array([
-        # reaction 1
-        np.where(np.less(temperature, Tcrit[0]),
-            0.0, (-w1 * pre_exp[0] * np.exp(-8556.000/temperature))),
-        # reaction 2
-        np.where(np.less(temperature, Tcrit[1]),
-            0.0, (-w2 * pre_exp[1] * np.exp(-20444.44/temperature))),
-        # fiber oxidation: include in the RHS but don't do anything with it.
-        np.zeros_like(temperature)])
+    # ~~~ Test actual decomposition
+    solid_mass_rhs = decomposition.get_source_terms(temperature, chi)
 
     sample_source_gas = -sum(solid_mass_rhs)
 
-    assert solid_mass_rhs[0] + 26.7676118539965 < tol
-    assert solid_mass_rhs[1] + 2.03565420370596 < tol
-    assert sample_source_gas - 28.8032660577024 < tol
+    assert actx.to_numpy(
+        op.norm(dcoll, solid_mass_rhs[0] + 26.7676118539965, np.inf)) < tol
+    assert actx.to_numpy(
+        op.norm(dcoll, solid_mass_rhs[1] + 2.03565420370596, np.inf)) < tol
+    assert actx.to_numpy(
+        op.norm(dcoll, sample_source_gas - 28.8032660577024, np.inf)) < tol
