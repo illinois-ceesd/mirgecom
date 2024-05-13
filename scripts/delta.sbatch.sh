@@ -36,9 +36,5 @@ srun_cmd="srun -N $nnodes -n $nproc"
 MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)/.mirge-cache/"}
 export XDG_CACHE_HOME_ROOT="${MIRGE_CACHE_ROOT}/xdg-cache/rank"
 
-# Fixes https://github.com/illinois-ceesd/mirgecom/issues/292
-# (each rank needs its own POCL cache dir)
-export POCL_CACHE_DIR_ROOT="${MIRGE_CACHE_ROOT}/pocl-cache/rank"
-
 # Run application
-$srun_cmd bash -c 'POCL_CACHE_DIR=$POCL_CACHE_DIR_ROOT$SLURM_PROCID XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$SLURM_PROCID python -u -O -m mpi4py ./pulse.py'
+$srun_cmd bash -c 'XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$SLURM_PROCID python -u -O -m mpi4py ./pulse.py'
