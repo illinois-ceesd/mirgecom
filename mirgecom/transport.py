@@ -315,7 +315,10 @@ class PowerLawTransport(TransportModel):
             d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
         """
         if self._lewis is not None:
-            alpha = self._sigma * self.viscosity(cv, dv)/(cv.mass*eos.gamma(cv, dv.temperature))
+            alpha = (
+                self._sigma * self.viscosity(cv, dv)
+                / (cv.mass * eos.gamma(cv, dv.temperature))
+            )
             return self._lewis*alpha
         return self._d_alpha*(0*cv.mass + 1.)
 
