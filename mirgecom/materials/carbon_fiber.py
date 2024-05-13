@@ -140,8 +140,9 @@ class Y3_Oxidation_Model(Oxidation):  # noqa N801
         r"""Evaluate the effective surface of the fibers."""
         actx = tau.array_context
         zeros = actx.np.zeros_like(tau)
+        ones = zeros + 1.0
         return (
-            2.0 * self._material.volume_fraction(tau=1.0)/self._init_fiber_radius
+            2.0 * self._material.volume_fraction(tau=ones)/self._init_fiber_radius
             * actx.np.sqrt(actx.np.maximum(tau, zeros))  # only use positive tau
         )
 
@@ -318,7 +319,10 @@ class FiberEOS(PorousWallEOS):
     # ~~~~~~~~ other properties
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Fraction $\phi$ occupied by the solid."""
-        return 0.12*tau
+        # XXX check if this keeps tau positive and bounds everything else to physical
+        # values (it doesn't crash, but it is non-ideal to have unphysical values)
+        actx = tau.array_context
+        return actx.np.maximum(0.12*tau, 0.0*tau)
 
     def permeability(self, tau: DOFArray) -> np.ndarray:
         r"""Permeability $K$ of the porous material."""
