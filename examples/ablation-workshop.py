@@ -151,6 +151,7 @@ def initializer(dim, gas_model, material_densities, temperature,
 
     gas_const = gas_model.eos.gas_const(cv=None, temperature=temperature)
 
+    eps_rho_gas = 1
     if gas_density is None:
         eps_gas = gas_model.wall_eos.void_fraction(tau)
         eps_rho_gas = eps_gas*pressure/(gas_const*temperature)
@@ -777,8 +778,9 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                                         actx.np.zeros_like(nodes[0]) + 300.0)
     fluid_state = compiled_make_state(cv, temperature_seed, material_densities)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    gc_timer = None
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
         logmgr_set_time(logmgr, istep, current_t)
@@ -1107,7 +1109,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
 
-            if do_garbage:
+            if do_garbage and (gc_timer is not None):
                 with gc_timer:
                     gc.collect()
 
