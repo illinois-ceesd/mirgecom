@@ -226,6 +226,12 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
 
         can_h = cantera_soln.enthalpy_mass
         enthalpy = eos.get_enthalpy(tin, yin)
+        t_from_h = eos.temperature_from_enthalpy(enthalpy, tin, yin)
+        t_from_e = eos.temperature(cv, tin)
+        t_resid = inf_norm((t_from_h - t_from_e)/t_from_e)
+        print(f"{t_from_h=}")
+        assert t_resid < 1.0e-12
+
         abs_err_h = inf_norm(enthalpy - can_h)
         assert abs_err_h/np.abs(can_h) < 1.0e-12
         assert abs_err_h < 1.0e-6
