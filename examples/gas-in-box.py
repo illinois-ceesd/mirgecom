@@ -95,7 +95,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, use_esdg=False, use_tpe=False,
          use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None, dim=3,
+         casename=None, rst_filename=None, dim=None,
          periodic_mesh=False, multiple_boundaries=False,
          use_navierstokes=False, use_mixture=False,
          use_reactions=False, newton_iters=3,
@@ -133,7 +133,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    n_steps = 20000
+    n_steps = 20
     current_cfl = 1.0
     current_dt = 1e-6
     t_final = current_dt * n_steps
@@ -146,10 +146,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     nrestart = 100
     nviz = 1
     nhealth = 1
-
-    nscale = max(nscale, 1)
-    scale_fac = pow(float(nscale), 1.0/dim)
-    nel_1d = int(scale_fac*24/dim)
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -170,18 +166,23 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                 "force_positive_orientation": True,
                 "skip_tests": False
             }
-            if dim == 2:
-                generate_mesh = partial(
-                    read_gmsh, filename=mesh_filename,
-                    mesh_construction_kwargs=mesh_construction_kwargs,
-                    force_ambient_dim=2
-                )
-            else:
+            if dim is None or (dim == 3):
                 generate_mesh = partial(
                     read_gmsh, filename=mesh_filename,
                     mesh_construction_kwargs=mesh_construction_kwargs
                 )
+            else:
+                generate_mesh = partial(
+                    read_gmsh, filename=mesh_filename,
+                    mesh_construction_kwargs=mesh_construction_kwargs,
+                    force_ambient_dim=dim
+                )
         else:
+            if dim is None:
+                dim = 2
+            nscale = max(nscale, 1)
+            scale_fac = pow(float(nscale), 1.0/dim)
+            nel_1d = int(scale_fac*24/dim)
             from mirgecom.simutil import get_box_mesh
             box_ll = -1
             box_ur = 1
@@ -192,7 +193,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
-        dim = local_mesh.ambient_dim
+        if dim is None:
+            dim = local_mesh.ambient_dim
 
         def add_wonk(x: np.ndarray) -> np.ndarray:
             wonk_field = np.empty_like(x)
@@ -753,7 +755,7 @@ if __name__ == "__main__":
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
-                        default=3, help="spatial dimension of simulation")
+                        help="spatial dimension of simulation")
     parser.add_argument("-i", "--iters", type=int, default=1,
                         help="number of Newton iterations for mixture temperature")
     parser.add_argument("-r", "--restart_file", help="root name of restart file")
