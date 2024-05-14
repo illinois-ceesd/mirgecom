@@ -95,7 +95,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, use_esdg=False, use_tpe=False,
          use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None, dim=2,
+         casename=None, rst_filename=None, dim=None,
          periodic_mesh=False, multiple_boundaries=False,
          use_navierstokes=False, use_mixture=False,
          use_reactions=False, newton_iters=3,
@@ -147,10 +147,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     nviz = 1
     nhealth = 1
 
-    nscale = max(nscale, 1)
-    scale_fac = pow(float(nscale), 1.0/dim)
-    nel_1d = int(scale_fac*24/dim)
-
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -170,11 +166,23 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                 "force_positive_orientation": True,
                 "skip_tests": False
             }
-            generate_mesh = partial(
-                read_gmsh, filename=mesh_filename,
-                mesh_construction_kwargs=mesh_construction_kwargs,
-            )
+            if dim is None or (dim == 3):
+                generate_mesh = partial(
+                    read_gmsh, filename=mesh_filename,
+                    mesh_construction_kwargs=mesh_construction_kwargs
+                )
+            else:
+                generate_mesh = partial(
+                    read_gmsh, filename=mesh_filename,
+                    mesh_construction_kwargs=mesh_construction_kwargs,
+                    force_ambient_dim=dim
+                )
         else:
+            if dim is None:
+                dim = 2
+            nscale = max(nscale, 1)
+            scale_fac = pow(float(nscale), 1.0/dim)
+            nel_1d = int(scale_fac*24/dim)
             from mirgecom.simutil import get_box_mesh
             box_ll = -1
             box_ur = 1
@@ -185,7 +193,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
-        dim = local_mesh.ambient_dim
+        if dim is None:
+            dim = local_mesh.ambient_dim
 
         def add_wonk(x: np.ndarray) -> np.ndarray:
             wonk_field = np.empty_like(x)
@@ -236,10 +245,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    species_diffusivity = None
-    thermal_conductivity = 1e-5
-    viscosity = 1.0e-5
 
+    species_diffusivity = None
     speedup_factor = 1.0
     pyro_mechanism = None
     if use_mixture:
@@ -320,8 +327,10 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     wall_bc = IsothermalWallBoundary(wall_temperature=init_t) \
         if use_navierstokes else AdiabaticSlipBoundary()
 
+    # initialize parameters for transport model
     transport = None
-    # initialize the transport model
+    thermal_conductivity = 1e-5
+    viscosity = 1.0e-5
     transport_alpha = 0.6
     transport_beta = 4.093e-7
     transport_sigma = 2.0
@@ -347,7 +356,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     gamma_sc = 1.5
     alpha_sc = 0.3
     kappa_sc = 0.5
-    s0_sc = -5.0
     s0_sc = np.log10(1.0e-4 / np.power(order, 4))
 
     smoothness_alpha = 0.1
@@ -531,8 +539,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         else:
             boundaries = {BTAG_ALL: wall_bc}
 
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1, center=orig)
-
     def mfs(cv, tseed):
         return make_fluid_state(cv, gas_model, limiter_func=limiter_func,
                                 temperature_seed=tseed)
@@ -559,6 +565,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     else:
         # Set the current state from time 0
         if add_pulse:
+            acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1,
+                                           center=orig)
             current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
                                         tseed=temperature_seed)
         else:
@@ -576,7 +584,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     visualizer = make_visualizer(dcoll)
 
-    initname = "pulse"
+    initname = "gas-in-box"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
@@ -746,7 +754,7 @@ if __name__ == "__main__":
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
-                        default=3, help="spatial dimension of simulation")
+                        help="spatial dimension of simulation")
     parser.add_argument("-i", "--iters", type=int, default=1,
                         help="number of Newton iterations for mixture temperature")
     parser.add_argument("-r", "--restart_file", help="root name of restart file")
