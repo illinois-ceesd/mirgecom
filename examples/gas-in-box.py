@@ -245,10 +245,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    species_diffusivity = None
-    thermal_conductivity = 1e-5
-    viscosity = 1.0e-5
 
+    species_diffusivity = None
     speedup_factor = 1.0
     pyro_mechanism = None
     if use_mixture:
@@ -329,8 +327,10 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     wall_bc = IsothermalWallBoundary(wall_temperature=init_t) \
         if use_navierstokes else AdiabaticSlipBoundary()
 
+    # initialize parameters for transport model
     transport = None
-    # initialize the transport model
+    thermal_conductivity = 1e-5
+    viscosity = 1.0e-5
     transport_alpha = 0.6
     transport_beta = 4.093e-7
     transport_sigma = 2.0
@@ -356,7 +356,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     gamma_sc = 1.5
     alpha_sc = 0.3
     kappa_sc = 0.5
-    s0_sc = -5.0
     s0_sc = np.log10(1.0e-4 / np.power(order, 4))
 
     smoothness_alpha = 0.1
@@ -540,8 +539,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         else:
             boundaries = {BTAG_ALL: wall_bc}
 
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1, center=orig)
-
     def mfs(cv, tseed):
         return make_fluid_state(cv, gas_model, limiter_func=limiter_func,
                                 temperature_seed=tseed)
@@ -568,6 +565,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     else:
         # Set the current state from time 0
         if add_pulse:
+            acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1,
+                                           center=orig)
             current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_cv, eos=eos,
                                         tseed=temperature_seed)
         else:
@@ -585,7 +584,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     visualizer = make_visualizer(dcoll)
 
-    initname = "pulse"
+    initname = "gas-in-box"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
