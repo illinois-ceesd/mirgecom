@@ -22,17 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
-import cantera
 import numpy as np
 from pytools.obj_array import make_obj_array
-from grudge import op
-from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-from mirgecom.simutil import get_box_mesh
+import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
+from mirgecom.simutil import get_box_mesh
+import pytest
+import cantera
+from meshmode.dof_array import DOFArray
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import make_fluid_state
