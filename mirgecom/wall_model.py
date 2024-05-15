@@ -473,7 +473,7 @@ class PorousFlowModel:
         return cv.mass*self.eos.gas_const()*temperature/wv.void_fraction
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
-                        temperature: DOFArray) -> DOFArray:
+                 temperature: DOFArray) -> DOFArray:
         r"""Return the internal energy of the gas+solid material.
 
         .. math::
@@ -484,7 +484,7 @@ class PorousFlowModel:
                 + wv.density*self.wall_eos.enthalpy(temperature, wv.tau))
 
     def heat_capacity(self, cv: ConservedVars, wv: PorousWallVars,
-                      temperature: DOFArray) -> DOFArray:
+                 temperature: DOFArray) -> DOFArray:
         r"""Return the heat capacity of the gas+solid material.
 
         .. math::
