@@ -37,7 +37,8 @@ import os
 import logging
 
 import pyopencl as cl
-from arraycontext import ArrayContext, PyOpenCLArrayContext
+from arraycontext import (ArrayContext, PyOpenCLArrayContext,
+                          PytatoPyOpenCLArrayContext)
 
 logger = logging.getLogger(__name__)
 
@@ -76,13 +77,11 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
 
 def actx_class_is_lazy(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* is lazy."""
-    from arraycontext import PytatoPyOpenCLArrayContext
     return issubclass(actx_class, PytatoPyOpenCLArrayContext)
 
 
 def actx_class_is_eager(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* is eager."""
-    from arraycontext import PyOpenCLArrayContext
     return issubclass(actx_class, PyOpenCLArrayContext)
 
 
@@ -94,8 +93,7 @@ def actx_class_is_profiling(actx_class: Type[ArrayContext]) -> bool:
 
 def actx_class_is_pyopencl(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* is PyOpenCL-based."""
-    from arraycontext import PyOpenCLArrayContext
-    return issubclass(actx_class, PyOpenCLArrayContext)
+    return actx_class_is_lazy(actx_class) or actx_class_is_eager(actx_class)
 
 
 def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
@@ -162,7 +160,7 @@ def _check_cache_dirs_node() -> None:
         # _check_var("CUDA_CACHE_PATH")
 
 
-def _check_gpu_oversubscription(actx: PyOpenCLArrayContext) -> None:
+def _check_gpu_oversubscription(actx: ArrayContext) -> None:
     """
     Check whether multiple ranks are running on the same GPU on each node.
 
@@ -171,6 +169,8 @@ def _check_gpu_oversubscription(actx: PyOpenCLArrayContext) -> None:
     """
     from mpi4py import MPI
     import pyopencl as cl
+
+    assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
 
     size = MPI.COMM_WORLD.Get_size()
 
@@ -216,18 +216,22 @@ def _check_gpu_oversubscription(actx: PyOpenCLArrayContext) -> None:
                      f"Duplicate PCIe IDs: {dup}.")
 
 
-def log_disk_cache_config(actx: PyOpenCLArrayContext) -> None:
+def log_disk_cache_config(actx: ArrayContext) -> None:
     """Log the disk cache configuration."""
     from mpi4py import MPI
+
+    assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
+
     rank = MPI.COMM_WORLD.Get_rank()
     res = f"Rank {rank} disk cache config: "
 
     from pyopencl.characterize import nv_compute_capability, get_pocl_version
     dev = actx.queue.device
 
-    # Variables set any to any value => cache is disabled
-    loopy_cache_enabled = bool(os.getenv("LOOPY_NO_CACHE", True))
-    pyopencl_cache_enabled = bool(os.getenv("PYOPENCL_NO_CACHE", True))
+    # Variables set to a 'True' value => cache is disabled
+    from pytools import strtobool
+    loopy_cache_enabled = not strtobool(os.getenv("LOOPY_NO_CACHE", "False"))
+    pyopencl_cache_enabled = not strtobool(os.getenv("PYOPENCL_NO_CACHE", "False"))
 
     loopy_cache_dir = ("(" + os.getenv("XDG_CACHE_HOME", "default dir") + ")"
                        if loopy_cache_enabled else "")
@@ -240,7 +244,11 @@ def log_disk_cache_config(actx: PyOpenCLArrayContext) -> None:
     if get_pocl_version(dev.platform) is not None:
         # Variable set to '0' => cache is disabled
         pocl_cache_enabled = os.getenv("POCL_KERNEL_CACHE", "1") != "0"
-        pocl_cache_dir = ("(" + os.getenv("POCL_CACHE_DIR", "default dir") + ")"
+
+        # If POCL_CACHE_DIR is set, pocl uses it. Otherwise, it uses XDG_CACHE_HOME.
+        pocl_cache_dir = ("("
+                          + os.getenv("POCL_CACHE_DIR",
+                                    os.getenv("XDG_CACHE_HOME", "default dir")) + ")"
                         if pocl_cache_enabled else "")
 
         res += f"pocl: {pocl_cache_enabled} {pocl_cache_dir}; "
@@ -262,7 +270,6 @@ def initialize_actx(
         use_axis_tag_inference_fallback: bool = False,
         use_einsum_inference_fallback: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
-    from arraycontext import PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
     from grudge.array_context import (MPIPyOpenCLArrayContext,
                                       MPIPytatoArrayContext,
                                       MPINumpyArrayContext)
@@ -315,7 +322,6 @@ def initialize_actx(
     # PyOpenCL-based actx (Non-PyOpenCL actx classes don't use loopy, pyopencl,
     # or pocl, and therefore we don't need to examine their caching).
     if actx_class_is_pyopencl(actx_class):
-        assert isinstance(actx, PyOpenCLArrayContext)
         _check_gpu_oversubscription(actx)
         _check_cache_dirs_node()
         log_disk_cache_config(actx)
