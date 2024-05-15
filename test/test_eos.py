@@ -100,12 +100,15 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
 
         cantera_soln.TPX = tempin, pressure, x
         can_t, can_rho, can_y = cantera_soln.TDY
+        can_x = cantera_soln.X
         can_p = cantera_soln.P
 
         pin = can_p * ones
         tin = can_t * ones
-        yin = can_y * ones
+        xin = can_x * ones
         rhoin = can_rho * ones
+
+        yin = eos.get_mass_fractions(xin)
 
         # First, check density
         mass = eos.get_density(pin, tin, yin)
@@ -173,12 +176,23 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
 
         cantera_soln.TPX = tempin, pressure, x
         can_t, can_rho, can_y = cantera_soln.TDY
+        can_x = cantera_soln.X
         can_p = cantera_soln.P
 
         pin = can_p * ones
         tin = can_t * ones
-        yin = can_y * ones
+        xin = can_x * ones
         rhoin = can_rho * ones
+
+        yin = eos.get_mass_fractions(xin)
+        for i in range(nspecies):
+            abs_err_y = inf_norm(yin[i] - can_y[i])
+            assert abs_err_y < 1.0e-14
+
+        xin_p = eos.get_mole_fractions(yin)
+        for i in range(nspecies):
+            abs_err_x = inf_norm(xin_p[i] - can_x[i])
+            assert abs_err_x < 1.0e-14
 
         mass = eos.get_density(pin, tin, yin)
         abs_err_m = inf_norm(mass - can_rho)
