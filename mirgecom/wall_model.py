@@ -86,11 +86,6 @@ from mirgecom.eos import (
 )
 from mirgecom.transport import GasTransportVars, TransportModel
 
-from grudge.dt_utils import characteristic_lengthscales
-from mirgecom.viscous import get_local_max_species_diffusivity
-import grudge.op as op
-from functools import reduce
-
 
 @with_container_arithmetic(bcast_obj_array=False,
                            bcast_container_types=(DOFArray, np.ndarray),
@@ -116,8 +111,6 @@ class SolidWallConservedVars:
 class SolidWallDependentVars:
     """Wall dependent variables for heat conduction only materials."""
 
-    tau: DOFArray
-    density: Union[DOFArray, np.ndarray]
     thermal_conductivity: DOFArray
     temperature: DOFArray
 
@@ -139,7 +132,7 @@ class SolidWallModel:
     driver-defined functions that prescribe the actual properties and their
     spatial distribution.
 
-    .. automethod:: solid_density
+    .. automethod:: density
     .. automethod:: heat_capacity
     .. automethod:: enthalpy
     .. automethod:: thermal_diffusivity
@@ -148,72 +141,55 @@ class SolidWallModel:
     .. automethod:: dependent_vars
     """
 
-    def __init__(self, enthalpy_func, heat_capacity_func,
-                 thermal_conductivity_func, decomposition_func=None):
+    def __init__(self, density_func, enthalpy_func, heat_capacity_func,
+                 thermal_conductivity_func):
+        self._density_func = density_func
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
         self._thermal_conductivity_func = thermal_conductivity_func
-        self._decomposition_func = decomposition_func
 
-    def solid_density(self, material_densities) -> DOFArray:
-        r"""Return the solid density $\rho_s$."""
-        if isinstance(material_densities, DOFArray):
-            return material_densities
-        return sum(material_densities)
+    def density(self) -> DOFArray:
+        """Return the wall density for all components."""
+        return self._density_func()
 
-    def decomposition_progress(self, material_densities) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the decomposition."""
-        mass = self.solid_density(material_densities)
-        if self._decomposition_func:
-            # for materials that decompose when heated
-            return self._decomposition_func(mass)
-        actx = mass.array_context
-        return actx.np.zeros_like(mass) + 1.0
+    def heat_capacity(self, temperature: DOFArray = None) -> DOFArray:
+        """Return the wall heat_capacity for all components."""
+        return self._heat_capacity_func(temperature)
 
-    def heat_capacity(self, temperature: DOFArray = None, tau=None) -> DOFArray:
-        """Return the wall heat_capacity."""
-        return self._heat_capacity_func(temperature=temperature, tau=tau)
+    def enthalpy(self, temperature: DOFArray) -> DOFArray:
+        """Return the wall enthalpy for all components."""
+        return self._enthalpy_func(temperature)
 
-    def enthalpy(self, temperature: DOFArray, tau=None) -> DOFArray:
-        """Return the wall enthalpy."""
-        return self._enthalpy_func(temperature=temperature, tau=tau)
-
-    def thermal_diffusivity(self, solid_state: SolidWallState) -> DOFArray:
+    def thermal_diffusivity(self, mass: DOFArray, temperature: DOFArray,
+            thermal_conductivity: DOFArray = None) -> DOFArray:
         """Return the wall thermal diffusivity for all components."""
-        tau = self.decomposition_progress(solid_state.cv.mass)
-        mass = self.solid_density(solid_state.cv.mass)
-        kappa = self.thermal_conductivity(solid_state.dv.temperature, tau)
-        cp = self.heat_capacity(solid_state.dv.temperature, tau)
-        return kappa/(mass * cp)
+        if thermal_conductivity is None:
+            thermal_conductivity = self.thermal_conductivity(temperature)
+        return thermal_conductivity/(mass * self.heat_capacity(temperature))
 
-    def thermal_conductivity(self, temperature: DOFArray, tau=None) -> DOFArray:
-        """Return the wall thermal conductivity."""
-        return self._thermal_conductivity_func(temperature=temperature, tau=tau)
+    def thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
+        """Return the wall thermal conductivity for all components."""
+        return self._thermal_conductivity_func(temperature)
 
     def get_temperature(self, wv: SolidWallConservedVars,
             tseed: DOFArray = None, niter: int = 3) -> DOFArray:
         """Evaluate the temperature based on the energy."""
         if tseed is not None:
-            tau = self.decomposition_progress(wv.mass)
             temp = tseed*1.0
             for _ in range(0, niter):
-                h = self.enthalpy(temperature=temp, tau=tau)
-                cp = self.heat_capacity(temperature=temp, tau=tau)
-                temp = temp - (h - wv.energy/self.solid_density(wv.mass))/cp
+                h = self.enthalpy(temp)
+                cp = self.heat_capacity(temp)
+                temp = temp - (h - wv.energy/wv.mass)/cp
             return temp
 
-        return wv.energy/(self.solid_density(wv.mass)*self.heat_capacity())
+        return wv.energy/(self.density()*self.heat_capacity())
 
     def dependent_vars(self, wv: SolidWallConservedVars,
             tseed: DOFArray = None, niter: int = 3) -> SolidWallDependentVars:
         """Return solid wall dependent variables."""
-        tau = self.decomposition_progress(wv.mass)
-        density = self.solid_density(wv.mass)
         temperature = self.get_temperature(wv, tseed, niter)
-        kappa = self.thermal_conductivity(temperature=temperature, tau=tau)
+        kappa = self.thermal_conductivity(temperature)
         return SolidWallDependentVars(
-            tau=tau,
-            density=density,
             thermal_conductivity=kappa,
             temperature=temperature)
 
@@ -438,12 +414,6 @@ class PorousFlowModel:
         if isinstance(material_densities, DOFArray):
             return material_densities
         return sum(material_densities)
-        # if isinstance(material_densities, DOFArray):
-        #     actx = material_densities.array_context
-        #     return actx.np.absolute(material_densities)
-        # else:
-        #     actx = material_densities[0].array_context
-        #     return sum(actx.np.absolute(material_densities))
 
     def decomposition_progress(self, material_densities) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the decomposition.
@@ -522,35 +492,3 @@ class PorousFlowModel:
         """
         return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
                 + wv.density*self.wall_eos.heat_capacity(temperature, wv.tau))
-
-    # def thermal_diffusivity(self, fluid_state) -> DOFArray:
-    #     """Return the wall thermal diffusivity for all components."""
-    #     tau = self.decomposition_progress(solid_state.cv.mass)
-    #     mass = self.solid_density(solid_state.cv.mass)
-    #     kappa = fluid_state.tv.thermal_conductivity
-    #     cp = self.heat_capacity(fluid_state.cv, fluid_state.wv,
-    #                             fluid_state.dv.temperature)
-    #     return kappa/(mass * cp)
-
-
-def get_porous_flow_timestep(dcoll, gas_model, state, cfl, dd):
-    r"""Routine returns the the node-local maximum stable viscous timestep."""
-    actx = state.array_context
-
-    length_scales = characteristic_lengthscales(
-        state.array_context, dcoll, dd=dd)
-
-    kappa = reduce(actx.np.maximum, state.thermal_conductivity)
-    mass_cp = gas_model.heat_capacity(state.cv, state.wv, state.dv.temperature)
-
-    nu = state.viscosity / state.mass_density
-    alpha = kappa / mass_cp
-    d_species_max = \
-        get_local_max_species_diffusivity(actx, state.species_diffusivity)
-    viscous_stuff = nu + alpha + d_species_max
-    vdt = op.elementwise_min(
-        dcoll, dd,
-        length_scales / (state.wavespeed + ((viscous_stuff) / length_scales))
-    )
-
-    return cfl * vdt
