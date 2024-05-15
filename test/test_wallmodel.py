@@ -205,3 +205,8 @@ def test_tacot_decomposition(actx_factory):
         op.norm(dcoll, solid_mass_rhs[1] + 2.03565420370596, np.inf)) < tol
     assert actx.to_numpy(
         op.norm(dcoll, sample_source_gas - 28.8032660577024, np.inf)) < tol
+
+
+# TODO
+def test_oxidation_model():
+    assert 1 == 1
