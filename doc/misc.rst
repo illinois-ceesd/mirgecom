@@ -96,5 +96,3 @@ References
 .. [Ern_2008] Daniele A. Di Pietro, Alexandre Ern, Jean-Luc Guermond, Discontinuous Galerkin Methods for \
    Anisotropic Semidefinite Diffusion with Advection, SIAM Journal on Numerical Analysis 46 2 \
    `(DOI) <https://www.jstor.org/stable/40233233?seq=12>`__
-.. [Martin_2013] Alexandre Martin, Volume averaged modeling of the oxidation of porous carbon fiber material,
-    AIAA Thermophysics conference 2013-2636

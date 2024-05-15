@@ -120,12 +120,8 @@ class Pyrolysis:
             actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
                 0.0, (-w2 * self._pre_exp[1] * actx.np.exp(-20444.44/temperature))
                 ),
-            # TODO: fiber oxidation:
-            # Include a resin-dependent term (probably linear) to slow down
-            # oxidation when there is a lot of resin, but make it goes with
-            # the "right" rate when the resin is consumed.
-            actx.np.zeros_like(temperature)
-            ])
+            # fiber oxidation: include in the RHS but don't do anything with it.
+            actx.np.zeros_like(temperature)])
 
 
 class TacotEOS(PorousWallEOS):
