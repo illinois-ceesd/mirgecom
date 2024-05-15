@@ -108,7 +108,7 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
         xin = can_x * ones
         rhoin = can_rho * ones
 
-        yin = eos.get_mass_fractions(xin)
+        yin = eos.mass_fractions_from_mole_fractions(xin)
 
         # First, check density
         mass = eos.get_density(pin, tin, yin)
@@ -184,12 +184,12 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
         xin = can_x * ones
         rhoin = can_rho * ones
 
-        yin = eos.get_mass_fractions(xin)
+        yin = eos.mass_fractions_from_mole_fractions(xin)
         for i in range(nspecies):
             abs_err_y = inf_norm(yin[i] - can_y[i])
             assert abs_err_y < 1.0e-14
 
-        xin_p = eos.get_mole_fractions(yin)
+        xin_p = eos.mole_fractions_from_mass_fractions(yin)
         for i in range(nspecies):
             abs_err_x = inf_norm(xin_p[i] - can_x[i])
             assert abs_err_x < 1.0e-14
