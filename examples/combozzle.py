@@ -704,9 +704,9 @@ def main(actx_class, rst_filename=None, use_tpe=False,
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
                 ("max_temperature",    "{value:7g})\n")])
 
+    init_y = 0
     if single_gas_only:
         nspecies = 0
-        init_y = 0
     elif use_cantera:
 
         # {{{  Set up initial state using Cantera
@@ -1112,6 +1112,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         fluid_operator_states = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries, quadrature_tag=quadrature_tag)
 
+        grad_cv = None
         if inviscid_only:
             fluid_rhs = \
                 euler_operator(
@@ -1139,7 +1140,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
             fluid_rhs = fluid_rhs + eos.get_species_source_terms(
                 cv, fluid_state.temperature)
 
-        if av_on:
+        if av_on and not inviscid_only:
             alpha_f = compute_av_alpha_field(fluid_state)
             indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
                                              kappa=kappa_sc, s0=s0_sc)

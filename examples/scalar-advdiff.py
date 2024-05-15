@@ -368,25 +368,28 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
                 dv = fluid_state.dv
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
 
-            if do_health or do_status:
-                component_errors = compare_fluid_solutions(dcoll, cv, exact)
+                if do_health or do_status:
+                    component_errors = \
+                        compare_fluid_solutions(dcoll, cv, exact)
 
-            if do_health:
-                health_errors = global_reduce(
-                    my_health_check(dv.pressure, component_errors), op="lor")
-                if health_errors:
-                    if rank == 0:
-                        logger.info("Fluid solution failed health check.")
-                    raise MyRuntimeError("Failed simulation health check.")
+                    if do_health:
+                        health_errors = global_reduce(
+                            my_health_check(dv.pressure, component_errors),
+                            op="lor")
+                        if health_errors:
+                            if rank == 0:
+                                logger.info("Fluid solution failed health check.")
+                                raise MyRuntimeError(
+                                    "Failed simulation health check.")
+
+                    if do_status:
+                        my_write_status(component_errors=component_errors)
+
+                if do_viz:
+                    my_write_viz(step=step, t=t, cv=cv, dv=dv, exact=exact)
 
             if do_restart:
                 my_write_restart(step=step, t=t, cv=cv)
-
-            if do_viz:
-                my_write_viz(step=step, t=t, cv=cv, dv=dv, exact=exact)
-
-            if do_status:
-                my_write_status(component_errors=component_errors)
 
         except MyRuntimeError:
             if rank == 0:

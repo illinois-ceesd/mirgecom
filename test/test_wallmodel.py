@@ -22,18 +22,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
-import cantera
 import numpy as np
 from pytools.obj_array import make_obj_array
-from grudge import op
-from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE
-from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-from mirgecom.simutil import get_box_mesh
+import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
+from mirgecom.simutil import get_box_mesh
+import pytest
+import cantera
+from meshmode.dof_array import DOFArray
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.transport import SimpleTransport
 from mirgecom.gas_model import make_fluid_state
@@ -41,6 +40,8 @@ from mirgecom.wall_model import PorousFlowModel, PorousWallTransport
 from mirgecom.materials.initializer import PorousWallInitializer
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE
+from meshmode.dof_array import DOFArray
 
 
 @pytest.mark.parametrize("order", [1, 4])
