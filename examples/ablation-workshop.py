@@ -77,6 +77,7 @@ from mirgecom.wall_model import (
     PorousWallTransport
 )
 from mirgecom.fluid import ConservedVars
+from mirgecom.materials.tacot import TacotEOS as OriginalTacotEOS
 from logpyle import IntervalTimer, set_dt
 from typing import Optional, Union
 from pytools.obj_array import make_obj_array
@@ -150,6 +151,7 @@ def initializer(dim, gas_model, material_densities, temperature,
 
     gas_const = gas_model.eos.gas_const(cv=None, temperature=temperature)
 
+    eps_rho_gas = 1
     if gas_density is None:
         eps_gas = gas_model.wall_eos.void_fraction(tau)
         eps_rho_gas = eps_gas*pressure/(gas_const*temperature)
@@ -339,6 +341,7 @@ class GasTabulatedTransport(TransportModel):
 
     def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        """Return the (empty) species mass diffusivities."""
         return cv.species_mass  # empty array
 
 
@@ -347,9 +350,8 @@ class TabulatedGasEOS(MixtureEOS):
 
     This section is to be used when species conservation is not employed and
     the output gas is assumed to be in chemical equilibrium.
-    The table was extracted from the suplementar material from the
-    ablation workshop. Some lines were removed to reduce the number of spline
-    interpolation segments.
+    The table was extracted from the ablation workshop suplementary material.
+    Some lines were removed to reduce the number of spline interpolation segments.
     """
 
     def __init__(self):
@@ -448,6 +450,7 @@ class TabulatedGasEOS(MixtureEOS):
     def gas_const(self, cv: Optional[ConservedVars] = None,
                   temperature: Optional[DOFArray] = None,
                   species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
+        """Return the specific gas constant."""
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         molar_mass = eval_spline(temperature, bnds, coeffs)
@@ -469,7 +472,7 @@ class TabulatedGasEOS(MixtureEOS):
     def kinetic_energy(self, cv: ConservedVars):
         raise NotImplementedError
 
-    def get_temperature_seed(self, cv: ConservedVars,
+    def get_temperature_seed(self, ary: Optional[DOFArray] = None,
             temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
         raise NotImplementedError
 
@@ -565,6 +568,16 @@ class PorousFlowModel(BasePorousFlowModel):
         return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
 
 
+class TacotEOS(OriginalTacotEOS):
+    """Inherits and modified the original TACOT material."""
+
+    def permeability(self, tau: DOFArray) -> DOFArray:
+        r"""Permeability $K$ of the composite material."""
+        virgin = 1.6e-11
+        char = 2.0e-11
+        return virgin*tau + char*(1.0 - tau)
+
+
 def binary_sum(ary):
     """Sum the elements of an array, creating a log-depth DAG instead of linear."""
     n = len(ary)
@@ -592,13 +605,13 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     viz_path = "viz_data/"
     vizname = viz_path+casename
 
-    t_final = 4.0e-6
+    t_final = 2.0e-7
 
     dim = 1
 
-    order = 2
-    dt = 4.0e-8
-    pressure_scaling_factor = 0.1  # noqa N806
+    order = 3
+    dt = 2.0e-8
+    pressure_scaling_factor = 1.0  # noqa N806
 
     nviz = 200
     ngarbage = 50
@@ -622,7 +635,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     else:  # generate the grid from scratch
         from functools import partial
-        nel_1d = 201
+        nel_1d = 121
 
         from meshmode.mesh.generation import generate_regular_rect_mesh
         generate_mesh = partial(generate_regular_rect_mesh,
@@ -653,11 +666,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     pressure_boundaries = {
-        BoundaryDomainTag("prescribed"):
-            DirichletDiffusionBoundary(101325),
-        BoundaryDomainTag("neumann"):
-            NeumannDiffusionBoundary(0.0)
-    }
+        BoundaryDomainTag("prescribed"): DirichletDiffusionBoundary(101325.0),
+        BoundaryDomainTag("neumann"): NeumannDiffusionBoundary(0.0)}
 
     def my_presc_bdry(u_minus):
         return +u_minus
@@ -665,12 +675,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     def my_wall_bdry(u_minus):
         return -u_minus
 
-    velocity_boundaries = {
-        BoundaryDomainTag("prescribed"):
-            my_presc_bdry,
-        BoundaryDomainTag("neumann"):
-            my_wall_bdry
-    }
+    velocity_boundaries = {BoundaryDomainTag("prescribed"): my_presc_bdry,
+                           BoundaryDomainTag("neumann"): my_wall_bdry}
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -680,7 +686,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     my_gas = TabulatedGasEOS()
     bprime_class = BprimeTable()
-    my_material = my_composite.TacotEOS(char_mass=220.0, virgin_mass=280.0)
+    my_material = TacotEOS(char_mass=220.0, virgin_mass=280.0)
     pyrolysis = my_composite.Pyrolysis()
 
     base_transport = GasTabulatedTransport()
@@ -740,7 +746,6 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             tau=tau,
             density=gas_model.solid_density(material_densities),
             void_fraction=gas_model.wall_eos.void_fraction(tau=tau),
-            emissivity=gas_model.wall_eos.emissivity(tau=tau),
             permeability=gas_model.wall_eos.permeability(tau=tau),
             tortuosity=gas_model.wall_eos.tortuosity(tau=tau)
         )
@@ -773,8 +778,9 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                                         actx.np.zeros_like(nodes[0]) + 300.0)
     fluid_state = compiled_make_state(cv, temperature_seed, material_densities)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    gc_timer = None
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
         logmgr_set_time(logmgr, istep, current_t)
@@ -895,10 +901,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
 
         temperature_bc = op.project(dcoll, dd_wall, dd_bdry_quad, dv.temperature)
-        m_dot_g = op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity)
-        emissivity = op.project(dcoll, dd_wall, dd_bdry_quad, wv.emissivity)
-
-        m_dot_g = np.dot(m_dot_g, normal_vec)
+        momentum_bc = op.project(dcoll, dd_wall, dd_bdry_quad, cv.mass*velocity)
+        m_dot_g = np.dot(momentum_bc, normal_vec)
 
         # time-dependent function
         weight = actx.np.where(actx.np.less(time, 0.1), (time/0.1)+1e-7, 1.0)
@@ -949,10 +953,12 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         flux = -(conv_coeff*(h_e - h_w) - m_dot*h_w + m_dot_g*h_g)
 
+        tau_bc = op.project(dcoll, dd_wall, dd_bdry_quad, wv.tau)
+        emissivity = my_material.emissivity(tau=tau_bc)
         radiation = emissivity*5.67e-8*(temperature_bc**4 - 300**4)
 
         # this is the physical flux normal to the boundary
-        return flux - radiation
+        return flux + radiation
 
     def phenolics_operator(dcoll, fluid_state, boundaries, gas_model, pyrolysis,
                            quadrature_tag, dd_wall=DD_VOLUME_ALL, time=0.0,
@@ -1054,7 +1060,6 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
                       ("WV_phase_3", wv.material_densities[2]),
                       ("WV_tau", wv.tau),
                       ("WV_void_fraction", wv.void_fraction),
-                      ("WV_emissivity", wv.emissivity),
                       ("WV_permeability", wv.permeability),
                       ("WV_tortuosity", wv.tortuosity),
                       ("WV_density", wv.density),
@@ -1104,10 +1109,8 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
 
-            if do_garbage:
+            if do_garbage and (gc_timer is not None):
                 with gc_timer:
-                    logger.info(
-                        "Running gc.collect() to work around memory growth issue ")
                     gc.collect()
 
             if do_health:

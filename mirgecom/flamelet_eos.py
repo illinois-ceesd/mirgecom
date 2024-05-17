@@ -1202,7 +1202,8 @@ class FlameletMixture(MixtureEOS):
         y = self.get_species_mass_fractions(z)
         # e = self.internal_energy(cv) / cv.mass
         h = self._get_enthalpy(tseed, y)
-        return self._pyrometheus_mech.get_temperature(h, tseed, y)
+        return self._pyrometheus_mech.get_temperature(h, tseed, y,
+                                                      use_energy=False)
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
             temperature: DOFArray) -> DOFArray:
@@ -1225,7 +1226,7 @@ class FlameletMixture(MixtureEOS):
             DV = EOS(CV), and inversions CV = EOS(DV). This is one of those
             inversion interfaces.
         """
-        y = self.get_species_mass_fractions(cv.mixture_fraction)
+        y = self.get_species_mass_fractions(cv.mixture_fractions)
         return (cv.mass * self.get_internal_energy(temperature, y)
                 + self.kinetic_energy(cv))
 

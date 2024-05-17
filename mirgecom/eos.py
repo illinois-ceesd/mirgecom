@@ -232,7 +232,7 @@ class MixtureEOS(GasEOS):
 
     @abstractmethod
     def get_temperature_seed(
-            self, cv: ConservedVars,
+            self, ary: Optional[DOFArray] = None,
             temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
         r"""Get a constant and uniform guess for the gas temperature.
 
@@ -573,6 +573,8 @@ class PyrometheusMixture(MixtureEOS):
     .. automethod:: species_enthalpies
     .. automethod:: get_species_source_terms
     .. automethod:: get_temperature_seed
+    .. automethod:: mole_fractions_from_mass_fractions
+    .. automethod:: mass_fractions_from_mole_fractions
     """
 
     def __init__(self, pyrometheus_mech, temperature_guess=300.0):
@@ -599,7 +601,7 @@ class PyrometheusMixture(MixtureEOS):
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
 
-    def get_temperature_seed(self, cv: ConservedVars,
+    def get_temperature_seed(self, ary: Optional[DOFArray] = None,
             temperature_seed: Optional[DOFArray] = None) -> DOFArray:
         """Get a *cv*-shaped array with which to seed temperature calcuation.
 
@@ -620,7 +622,12 @@ class PyrometheusMixture(MixtureEOS):
         tseed = self._tguess
         if temperature_seed is not None:
             tseed = temperature_seed
-        return tseed if isinstance(tseed, DOFArray) else tseed * (0*cv.mass + 1.0)
+        if isinstance(tseed, DOFArray):
+            return tseed
+        else:
+            if ary is None:
+                raise ValueError("Requires *ary* for shaping temperature seed.")
+        return tseed * (0*ary + 1.0)
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant pressure."""
@@ -786,10 +793,39 @@ class PyrometheusMixture(MixtureEOS):
         if temperature_seed is None:
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
-        tseed = self.get_temperature_seed(cv, temperature_seed)
+        tseed = self.get_temperature_seed(cv.mass, temperature_seed)
+
         y = cv.species_mass_fractions
         e = self.internal_energy(cv) / cv.mass
         return self._pyrometheus_mech.get_temperature(e, tseed, y)
+
+    def temperature_from_enthalpy(self, enthalpy: DOFArray,
+            temperature_seed: Optional[DOFArray] = None,
+            species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
+        r"""Get the thermodynamic temperature of the gas.
+
+        The thermodynamic temperature ($T$) is calculated iteratively with
+        Newton-Raphson method from the mixture specific enthalpy ($h$) as:
+
+        .. math::
+
+            h(T) = \sum_i h_i(T) Y_i
+
+        Parameters
+        ----------
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Data from which to seed temperature calculation.
+        """
+        # For mixtures, the temperature calculation *must* be seeded. This
+        # check catches any actual temperature calculation that did not
+        # provide a seed.
+        if temperature_seed is None:
+            raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
+                                              "requires a *temperature_seed*.")
+        tseed = self.get_temperature_seed(enthalpy, temperature_seed)
+
+        return self._pyrometheus_mech.get_temperature(
+            enthalpy, tseed, species_mass_fractions, use_energy=False)
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
             temperature: DOFArray) -> DOFArray:
@@ -834,6 +870,19 @@ class PyrometheusMixture(MixtureEOS):
 
         return make_conserved(dim, rho_source, energy_source, mom_source,
                               species_sources)
+
+    def mole_fractions_from_mass_fractions(self, species_mass_fractions):
+        """Get mole fractions from mass fractions."""
+        mix_mol_weight = \
+            self._pyrometheus_mech.get_mix_molecular_weight(species_mass_fractions)
+        return self._pyrometheus_mech.get_mole_fractions(mix_mol_weight,
+                                                         species_mass_fractions)
+
+    def mass_fractions_from_mole_fractions(self, species_mole_fractions):
+        """Get mass fractions from mole fractions."""
+        mol_weights = self.get_species_molecular_weights()
+        mmw = sum(species_mole_fractions*mol_weights)
+        return species_mole_fractions*mol_weights/mmw
 
 
 # The strategy for making a quick flamelet EOS is to copy the existing

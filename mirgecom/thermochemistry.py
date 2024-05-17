@@ -80,12 +80,6 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
     class PyroWrapper(pyro_class):
 
-        def __init__(self, usr_np=np):
-            super().__init__(usr_np=usr_np)
-            self.get_temperature_update = \
-                (self.get_temperature_update_ethalpy if flamelet else
-                 self.get_temperature_update_energy)
-
         # This bit disallows negative concentrations (or user-defined floor)
         # and instead pins them to 0. Sometimes, mass_fractions can be slightly
         # negative and that's ok.
@@ -117,24 +111,37 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
             he_fun = self.get_mixture_enthalpy_mass
             return (h_in - he_func(t_in, y)) / pv_func(t_in, y)
 
+        # This is the temperature update wrapper for *get_temperature*. It returns
+        # the appropriate temperature update for the energy vs. the enthalpy
+        # version of *get_temperature*.
+        def get_temperature_update(self, e_or_h, t_in, y, use_energy=True):
+            if use_energy:
+                return self.get_temperature_update_energy(e_or_h, t_in, y)
+            return self.get_temperature_update_enthalpy(e_or_h, t_in, y)
+
         # This hard-codes the number of Newton iterations because the convergence
         # check is not compatible with lazy evaluation. Instead, we plan to check
         # the temperature residual at simulation health checking time.
         # FIXME: Occasional convergence check is other-than-ideal; revisit asap.
         # - could adapt dt or num_iter on temperature convergence?
         # - can pass-in num_iter?
-        def get_temperature(self, ener_or_enth, temperature_guess, species_mass_fractions):
+        def get_temperature(self, energy_or_enthalpy, temperature_guess,
+                            species_mass_fractions, use_energy=True):
             """Compute the temperature of the mixture from thermal energy.
 
             Parameters
             ----------
-            energy: :class:`~meshmode.dof_array.DOFArray`
-                The internal (thermal) energy of the mixture.
+            energy_or_enthalpy: :class:`~meshmode.dof_array.DOFArray`
+                The internal (thermal) energy or enthalpy of the mixture. If
+                enthalpy is passed, then *use_energy* should be set `False`.
             temperature_guess: :class:`~meshmode.dof_array.DOFArray`
                 An initial starting temperature for the Newton iterations.
             species_mass_fractions: numpy.ndarray
                 An object array of :class:`~meshmode.dof_array.DOFArray` with the
                 mass fractions of the mixture species.
+            use_energy: bool
+                Indicates whether the energy or enthalpy version of the routine
+                will be used. Defaults `True` for the energy version.
 
             Returns
             -------
@@ -146,15 +153,19 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
             # TODO: Update for flamelet
             # if calorically perfect gas (constant heat capacities)
             if num_iter == 0:
-                cv_mass = self.get_mixture_specific_heat_cv_mass(
-                    temperature_guess*0.0, species_mass_fractions)
-                return ener_or_enth/cv_mass
+                if use_energy:
+                    heat_cap = self.get_mixture_specific_heat_cv_mass(
+                        temperature_guess*0.0, species_mass_fractions)
+                else:
+                    heat_cap = self.get_mixture_specific_heat_cp_mass(
+                        temperature_guess*0.0, species_mass_fractions)
+                return energy_or_enthalpy/heat_cap
 
             # if thermally perfect gas
             t_i = temperature_guess
             for _ in range(num_iter):
                 t_i = t_i + self.get_temperature_update(
-                    ener_or_enth, t_i, species_mass_fractions
+                    energy_or_enthalpy, t_i, species_mass_fractions, use_energy
                 )
             return t_i
 

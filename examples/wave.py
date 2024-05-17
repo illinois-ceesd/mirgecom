@@ -31,6 +31,7 @@ from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from pytools.obj_array import flat_obj_array
 
+from mirgecom.array_context import initialize_actx
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
 from mirgecom.logging_quantities import (initialize_logmgr,
@@ -82,12 +83,13 @@ def main(actx_class, casename="wave",
     vizfile_pattern = casename + "-%03d-%04d.vtu"
 
     logmgr = initialize_logmgr(use_logmgr,
-        filename="wave-mpi.sqlite", mode="wu", mpi_comm=comm)
+        filename="wave.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     alloc = getattr(actx, "allocator", None)
+
+    from mirgecom.array_context import actx_class_is_profiling
     use_profiling = actx_class_is_profiling(actx_class)
 
     if restart_step is None:
