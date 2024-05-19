@@ -965,12 +965,24 @@ class FlameletMixture(MixtureEOS):
         """
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
+        self.set_flamelet_params(y_fu=y_fu, y_ox=y_ox, h_fu=h_fu, h_ox=h_ox)
+
+    def set_flamelet_params(self, y_fu=None, y_ox=None, h_fu=None, h_ox=None):
+        nspec = self._pyrometheus_mech.num_species
+        if y_fu is None:
+            y_fu = np.zeros(nspec, dtype=object)
+        if y_ox is None:
+            y_ox = np.zeros(nspec, dtype=object)
+        if h_fu is None:
+            h_fu = np.zeros(nspec, dtype=object)
+        if h_ox is None:
+            h_ox = np.zeros(nspec, dtype=object)
         self._y_ox = y_ox
         self._y_fu = y_fu
         self._h_ox = h_ox
         self._h_fu = h_fu
 
-    def get_temperature_seed(self, cv: ConservedVars,
+    def get_temperature_seed(self, ary: Optional[DOFArray] = None,
             temperature_seed: Optional[DOFArray] = None) -> DOFArray:
         """Get a *cv*-shaped array with which to seed temperature calcuation.
 
@@ -991,7 +1003,12 @@ class FlameletMixture(MixtureEOS):
         tseed = self._tguess
         if temperature_seed is not None:
             tseed = temperature_seed
-        return tseed if isinstance(tseed, DOFArray) else tseed * (0*cv.mass + 1.0)
+        if isinstance(tseed, DOFArray):
+            return tseed
+        else:
+            if ary is None:
+                raise ValueError("Requires *ary* for shaping temperature seed.")
+        return tseed * (0*ary + 1.0)
 
     def get_species_mass_fractions(self, cv: Optional[ConservedVars] = None,
                                    mixture_fractions: Optional[DOFArray] = None
@@ -1255,13 +1272,42 @@ class FlameletMixture(MixtureEOS):
         if temperature_seed is None:
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
-        tseed = self.get_temperature_seed(cv, temperature_seed)
+        tseed = self.get_temperature_seed(cv.mass, temperature_seed)
         z = cv.mixture_fractions
         y = self.get_species_mass_fractions(mixture_fractions=z)
         # e = self.internal_energy(cv) / cv.mass
         h = self._get_enthalpy(tseed, y)
         return self._pyrometheus_mech.get_temperature(h, tseed, y,
                                                       use_energy=False)
+
+    # The application has passed y_or_z (z for flamelet)
+    def temperature_from_enthalpy(self, enthalpy: DOFArray,
+            temperature_seed: Optional[DOFArray] = None,
+            species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
+        r"""Get the thermodynamic temperature of the gas.
+
+        The thermodynamic temperature ($T$) is calculated iteratively with
+        Newton-Raphson method from the mixture specific enthalpy ($h$) as:
+
+        .. math::
+
+            h(T) = \sum_i h_i(T) Y_i
+
+        Parameters
+        ----------
+        temperature_seed: float or :class:`~meshmode.dof_array.DOFArray`
+            Data from which to seed temperature calculation.
+        """
+        # For mixtures, the temperature calculation *must* be seeded. This
+        # check catches any actual temperature calculation that did not
+        # provide a seed.
+        if temperature_seed is None:
+            raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
+                                              "requires a *temperature_seed*.")
+        tseed = self.get_temperature_seed(enthalpy, temperature_seed)
+        y = self.get_species_mass_fractions(mixture_fractions=species_mass_fractions)
+        return self._pyrometheus_mech.get_temperature(
+            enthalpy, tseed, y, use_energy=False)
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
             temperature: DOFArray) -> DOFArray:
