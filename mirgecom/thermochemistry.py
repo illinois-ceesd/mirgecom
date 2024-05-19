@@ -46,10 +46,9 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import numpy as np
 
-def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.,
-                                  flamelet=False):
+
+def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Dynamically creates a class that inherits from a
@@ -106,9 +105,9 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
         # This is the temperature update for *get_temperature*. Having this
         # separated out allows it to be used in the fluid drivers for evaluating
         # convergence of the temperature calculation.
-        def get_temperature_update_ethalpy(self, h_in, t_in, y):
-            pv_fun = self.get_mixture_specific_heat_cp_mass
-            he_fun = self.get_mixture_enthalpy_mass
+        def get_temperature_update_enthalpy(self, h_in, t_in, y):
+            pv_func = self.get_mixture_specific_heat_cp_mass
+            he_func = self.get_mixture_enthalpy_mass
             return (h_in - he_func(t_in, y)) / pv_func(t_in, y)
 
         # This is the temperature update wrapper for *get_temperature*. It returns
@@ -149,8 +148,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
                 The mixture temperature after a fixed number of Newton iterations.
             """
             num_iter = temperature_niter
-            
-            # TODO: Update for flamelet
+
             # if calorically perfect gas (constant heat capacities)
             if num_iter == 0:
                 if use_energy:
@@ -188,7 +186,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
 
 def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5,
-                                               zero_level=0., flamelet=False):
+                                               zero_level=0.):
     """Return a MIRGE-compatible wrapper for a :mod:`pyrometheus` mechanism class.
 
     Cantera-based interface that creates a Pyrometheus mechanism
@@ -208,17 +206,16 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
     pyro_class = pyro.get_thermochem_class(cantera_soln)
     return get_pyrometheus_wrapper_class(pyro_class,
                                          temperature_niter=temperature_niter,
-                                         zero_level=zero_level, flamelet=flamelet)
+                                         zero_level=zero_level)
 
 
 def get_thermochemistry_class_by_mechanism_name(mechanism_name: str,
                                                 temperature_niter=5,
-                                                zero_level=0., flamelet=False):
+                                                zero_level=0.):
     """Grab a pyrometheus mechanism class from the mech name."""
     from mirgecom.mechanisms import get_mechanism_input
     mech_input_source = get_mechanism_input(mechanism_name)
     from cantera import Solution
     cantera_soln = Solution(name="gas", yaml=mech_input_source)
     return get_pyrometheus_wrapper_class_from_cantera(
-        cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level,
-        flamlet=flamelet)
+        cantera_soln, temperature_niter=temperature_niter, zero_level=zero_level)

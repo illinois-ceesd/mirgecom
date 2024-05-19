@@ -254,7 +254,7 @@ class ConservedVars:
         return self.species_mass / self.mass
 
     @property
-    def mixture_fraction(self):
+    def mixture_fractions(self):
         """Return the mixture fractions z = species_mass / mass."""
         return self.species_mass / self.mass
 

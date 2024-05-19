@@ -1334,7 +1334,7 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
                               pressure_plus/(state_minus.cv.mass*gas_const)))
 
             internal_energy = state_minus.cv.mass*(
-                gas_model.eos.get_internal_energy(temp_plus,y_or_z))
+                gas_model.eos.get_internal_energy(temp_plus, y_or_z))
         else:
             boundary_pressure = (
                 actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
