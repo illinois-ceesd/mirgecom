@@ -188,8 +188,8 @@ def main(actx_class, use_esdg=False,
     z0s = np.zeros(shape=(nspecies_z,)) + 1.
     y_f = np.zeros(shape=(nspecies_y,))
     y_o = np.zeros(shape=(nspecies_y,))
-    h_f = np.zeros(shape=(nspecies_y,)) + 1e-5
-    h_o = np.zeros(shape=(nspecies_y,)) + 1e-5
+    # h_f = np.zeros(shape=(nspecies_y,)) + 1e-5
+    # h_o = np.zeros(shape=(nspecies_y,)) + 1e-5
     n_f = 1
     n_o = nspecies_y - n_f
     y_f[0] = 1.
@@ -200,7 +200,7 @@ def main(actx_class, use_esdg=False,
     # spec_sum = sum([y0s[i] for i in range(nspecies-1)])
     # y0s[nspecies-1] = 1.0 - spec_sum
     eos = FlameletMixture(pyrometheus_mechanism, temperature_guess=300,
-                          y_fu=y_f, y_ox=y_o, h_fu=h_f, h_ox=h_o)
+                          y_fu=y_f, y_ox=y_o)
     from mirgecom.gas_model import GasModel, make_fluid_state
     gas_model = GasModel(eos=eos)
 

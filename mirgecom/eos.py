@@ -974,9 +974,9 @@ class FlameletMixture(MixtureEOS):
         if y_ox is None:
             y_ox = np.zeros(nspec, dtype=object)
         if h_fu is None:
-            h_fu = np.zeros(nspec, dtype=object)
+            h_fu = 0.
         if h_ox is None:
-            h_ox = np.zeros(nspec, dtype=object)
+            h_ox = 0.
         self._y_ox = y_ox
         self._y_fu = y_fu
         self._h_ox = h_ox
@@ -1010,12 +1010,12 @@ class FlameletMixture(MixtureEOS):
                 raise ValueError("Requires *ary* for shaping temperature seed.")
         return tseed * (0*ary + 1.0)
 
-    def get_species_mass_fractions(self, cv: Optional[ConservedVars] = None,
-                                   mixture_fractions: Optional[DOFArray] = None
-                                   ) -> np.ndarray:
+    def get_species_mass_fractions(
+            self, cv: Optional[ConservedVars] = None,
+            mixture_fractions: Optional[DOFArray] = None) -> np.ndarray:
         r"""Get mixture species mass fractions from mixture fraction."""
         if cv is None and mixture_fractions is None:
-            raise ValueError("One of *cv* or *z* must be specified")
+            raise ValueError("One of *cv* or *mixture_fractions* must be specified")
         if mixture_fractions is None:
             mixture_fractions = cv.mixture_fractions
         y_fu = self._y_fu
@@ -1026,11 +1026,11 @@ class FlameletMixture(MixtureEOS):
 
     def get_species_enthalpies(self, mixture_fractions: DOFArray) -> np.ndarray:
         r"""Get species enthalpies from mixture fraction."""
-        h_fu = self._h_fu
-        h_ox = self._h_ox
         # return make_obj_array([self.h_ox[i] + (h_fu[i] - h_ox[i])*mixture_fractions
         #                       for i in self._nspecies])
-        return (h_fu - h_ox)*mixture_fractions + h_ox
+        # h_fu = self.get_enthalpy(species_mass_fractions=1.)
+        # self._h_ox = self.get_enthalpy(species_mass_fractions=0.)
+        return (self._h_fu - self._h_ox)*mixture_fractions + self._h_ox
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant pressure."""
@@ -1203,6 +1203,9 @@ class FlameletMixture(MixtureEOS):
 
             h = \sum{Y_\alpha h_\alpha}
         """
+        # These two should be equivalent:
+        # mixture_fractions=species_mass_fractions
+        # return self._h_ox + (self._h_fu - self._h_ox)*mixture_fractions
         y = self.get_species_mass_fractions(mixture_fractions=species_mass_fractions)
         return self._get_enthalpy(temperature, y)
 
@@ -1213,9 +1216,10 @@ class FlameletMixture(MixtureEOS):
     def species_enthalpies(self, cv: ConservedVars,
             temperature: DOFArray) -> DOFArray:
         """Get the species specific enthalpies."""
-        spec_r = self._pyrometheus_mech.gas_constant/self._pyrometheus_mech.wts
-        return (spec_r * temperature
-                * self._pyrometheus_mech.get_species_enthalpies_rt(temperature))
+        # spec_r = self._pyrometheus_mech.gas_constant/self._pyrometheus_mech.wts
+        # return (spec_r * temperature
+        #        * self._pyrometheus_mech.get_species_enthalpies_rt(temperature))
+        return 0*cv.mixture_fractions
 
     def get_production_rates(self, cv: ConservedVars,
             temperature: DOFArray) -> np.ndarray:
@@ -1273,8 +1277,8 @@ class FlameletMixture(MixtureEOS):
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
         tseed = self.get_temperature_seed(cv.mass, temperature_seed)
-        z = cv.mixture_fractions
-        y = self.get_species_mass_fractions(mixture_fractions=z)
+        # z = cv.mixture_fractions
+        y = self.get_species_mass_fractions(mixture_fractions=cv.mixture_fractions)
         # e = self.internal_energy(cv) / cv.mass
         h = self._get_enthalpy(tseed, y)
         return self._pyrometheus_mech.get_temperature(h, tseed, y,
