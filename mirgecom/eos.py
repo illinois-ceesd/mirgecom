@@ -629,6 +629,10 @@ class PyrometheusMixture(MixtureEOS):
                 raise ValueError("Requires *ary* for shaping temperature seed.")
         return tseed * (0*ary + 1.0)
 
+    def get_species_mass_fractions(self, cv: DOFArray) -> np.ndarray:
+        r"""Get mixture species mass fractions from mixture fraction."""
+        return cv.species_mass_fractions
+
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant pressure."""
         y = cv.species_mass_fractions
@@ -934,7 +938,7 @@ class FlameletMixture(MixtureEOS):
     """
 
     def __init__(self, pyrometheus_mech=None, temperature_guess=300.0,
-                 y_ox=None, y_fu=None, h_ox=None, h_fu=None):
+                 y_fu=None, y_ox=None, h_fu=None, h_ox=None):
         """Initialize Pyrometheus-based flamelet EOS with mechanism class.
 
         Parameters
@@ -1022,6 +1026,7 @@ class FlameletMixture(MixtureEOS):
         y_ox = self._y_ox
         # return make_obj_array([self.y_ox[i] + (y_fu[i] - y_ox[i])*mixture_fractions
         #                       for i in self._nspecies])
+        # return np.outer(y_fu - y_ox, mixture_fractions) + y_ox
         return (y_fu - y_ox)*mixture_fractions + y_ox
 
     def get_species_enthalpies(self, mixture_fractions: DOFArray) -> np.ndarray:
@@ -1030,7 +1035,7 @@ class FlameletMixture(MixtureEOS):
         #                       for i in self._nspecies])
         # h_fu = self.get_enthalpy(species_mass_fractions=1.)
         # self._h_ox = self.get_enthalpy(species_mass_fractions=0.)
-        return (self._h_fu - self._h_ox)*mixture_fractions + self._h_ox
+        return np.outer(self._h_fu - self._h_ox, mixture_fractions[0]) + self._h_ox
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant pressure."""

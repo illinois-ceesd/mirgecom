@@ -284,14 +284,15 @@ def _aux_shape(ary, leading_shape):
     if (isinstance(ary, np.ndarray) and ary.dtype == object
             and not isinstance(ary, DOFArray)):
         naxes = len(leading_shape)
-        if ary.shape[:naxes] != leading_shape:
-            raise ValueError("array shape does not start with expected leading "
-                    "dimensions")
+        asne = ary.shape[:naxes]
+        if asne != leading_shape:
+            raise ValueError("obj array shape does not start with expected leading "
+                    f"dimensions ({naxes=},shape={asne},expected={leading_shape})")
         return ary.shape[naxes:]
     else:
         if leading_shape != ():
             raise ValueError("array shape does not start with expected leading "
-                    "dimensions")
+                    f"dimensions (shape={ary.shape}, expected={leading_shape})")
         return ()
 
 
