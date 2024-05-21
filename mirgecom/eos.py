@@ -1211,8 +1211,12 @@ class FlameletMixture(MixtureEOS):
         # These two should be equivalent:
         # mixture_fractions=species_mass_fractions
         # return self._h_ox + (self._h_fu - self._h_ox)*mixture_fractions
-        y = self.get_species_mass_fractions(mixture_fractions=species_mass_fractions)
-        return self._get_enthalpy(temperature, y)
+        # y = self.get_species_mass_fractions(
+        #    mixture_fractions=species_mass_fractions)
+        # return self._get_enthalpy(temperature, y)
+        # NO: Make sure to replace with this linear model, otherwise we aren't
+        # sure if it is actually working properly, or just a fluke.
+        return (self._h_fu - self._h_ox)*species_mass_fractions[0] + self._h_ox
 
     def get_species_molecular_weights(self):
         """Get the species molecular weights."""
@@ -1224,6 +1228,7 @@ class FlameletMixture(MixtureEOS):
         # spec_r = self._pyrometheus_mech.gas_constant/self._pyrometheus_mech.wts
         # return (spec_r * temperature
         #        * self._pyrometheus_mech.get_species_enthalpies_rt(temperature))
+        # Esteban: Just send 0 here to disable diffusive enthalpy transport with Z
         return 0*cv.mixture_fractions
 
     def get_production_rates(self, cv: ConservedVars,
@@ -1282,10 +1287,9 @@ class FlameletMixture(MixtureEOS):
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
         tseed = self.get_temperature_seed(cv.mass, temperature_seed)
-        # z = cv.mixture_fractions
-        y = self.get_species_mass_fractions(mixture_fractions=cv.mixture_fractions)
-        # e = self.internal_energy(cv) / cv.mass
-        h = self._get_enthalpy(tseed, y)
+        z = cv.mixture_fractions
+        y = self.get_species_mass_fractions(mixture_fractions=z)
+        h = self.get_enthalpy(tseed, z)
         return self._pyrometheus_mech.get_temperature(h, tseed, y,
                                                       use_energy=False)
 
