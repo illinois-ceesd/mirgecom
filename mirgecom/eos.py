@@ -831,6 +831,13 @@ class PyrometheusMixture(MixtureEOS):
         return self._pyrometheus_mech.get_temperature(
             enthalpy, tseed, species_mass_fractions, use_energy=False)
 
+    def get_temperature_resid(self, cv, temperature):
+        actx = cv.array_context
+        y = cv.species_mass_fractions
+        e = self.internal_energy(cv)/cv.mass
+        return actx.np.abs(self._pyrometheus_mech.get_temperature_update_energy(
+            e, temperature, y))/temperature
+
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
             temperature: DOFArray) -> DOFArray:
         r"""
@@ -1321,6 +1328,14 @@ class FlameletMixture(MixtureEOS):
         y = self.get_species_mass_fractions(mixture_fractions=species_mass_fractions)
         return self._pyrometheus_mech.get_temperature(
             enthalpy, tseed, y, use_energy=False)
+
+    def get_temperature_resid(self, cv, temperature):
+        actx = cv.array_context
+        z = cv.mixture_fractions
+        y = self.get_species_mass_fractions(mixture_fractions=z)
+        h = self.get_enthalpy(temperature, z)
+        return actx.np.abs(self._pyrometheus_mech.get_temperature_update_enthalpy(
+            h, temperature, y))/temperature
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,
             temperature: DOFArray) -> DOFArray:
