@@ -30,11 +30,8 @@ echo nnodes=$nnodes nproc=$nproc
 
 srun_cmd="srun -N $nnodes -n $nproc"
 
-# See
-# https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
-# on why this is important
 MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)/.mirge-cache/"}
-export XDG_CACHE_HOME_ROOT="${MIRGE_CACHE_ROOT}/xdg-cache/rank"
+export XDG_CACHE_HOME="${MIRGE_CACHE_ROOT}/xdg-cache"
 
 # Run application
-$srun_cmd bash -c 'XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$SLURM_PROCID python -u -O -m mpi4py ./pulse.py'
+$srun_cmd python -u -m mpi4py ./pulse.py

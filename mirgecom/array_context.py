@@ -108,58 +108,6 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
         return False
 
 
-def _check_cache_dirs_node() -> None:
-    """Check whether multiple ranks share cache directories on the same node."""
-    from mpi4py import MPI
-
-    size = MPI.COMM_WORLD.Get_size()
-
-    if size <= 1:
-        return
-
-    from mirgecom.mpi import shared_split_comm_world
-
-    with shared_split_comm_world() as node_comm:
-        node_rank = node_comm.Get_rank()
-
-        def _check_var(var: str) -> None:
-            from warnings import warn
-
-            try:
-                my_path = os.environ[var]
-            except KeyError:
-                warn(f"Please set the '{var}' variable in your job script to "
-                    "avoid file system overheads when running on large numbers of "
-                    "ranks. See https://mirgecom.readthedocs.io/en/latest/running/large-systems.html "  # noqa: E501
-                    "for more information.")
-                # Create a fake path so there will not be a second warning below.
-                my_path = f"no/such/path/rank{node_rank}"
-
-            all_paths = node_comm.gather(my_path, root=0)
-
-            if node_rank == 0:
-                assert all_paths
-                if len(all_paths) != len(set(all_paths)):
-                    hostname = MPI.Get_processor_name()
-                    dup = [path for path in set(all_paths)
-                                if all_paths.count(path) > 1]
-
-                    from warnings import warn
-                    warn(f"Multiple ranks are sharing '{var}' on node '{hostname}'. "
-                        f"Duplicate '{var}'s: {dup}.")
-
-        _check_var("XDG_CACHE_HOME")
-
-        if os.environ.get("XDG_CACHE_HOME") is None:
-            # When XDG_CACHE_HOME is set but POCL_CACHE_DIR is not, pocl
-            # will use XDG_CACHE_HOME as the cache directory.
-            _check_var("POCL_CACHE_DIR")
-
-        # We haven't observed an issue yet that 'CUDA_CACHE_PATH' fixes,
-        # so disable this check for now.
-        # _check_var("CUDA_CACHE_PATH")
-
-
 def _check_gpu_oversubscription(actx: ArrayContext) -> None:
     """
     Check whether multiple ranks are running on the same GPU on each node.
@@ -323,7 +271,6 @@ def initialize_actx(
     # or pocl, and therefore we don't need to examine their caching).
     if actx_class_is_pyopencl(actx_class):
         _check_gpu_oversubscription(actx)
-        _check_cache_dirs_node()
         log_disk_cache_config(actx)
 
     return actx
