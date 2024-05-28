@@ -85,7 +85,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, use_esdg=False, use_overintegration=False,
-         use_leap=False, casename=None, rst_filename=None):
+         use_leap=False, casename=None, rst_filename=None, use_tpe=True):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -102,7 +102,9 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm,
+                           use_axis_tag_inference_fallback=True,
+                           use_einsum_inference_fallback=True)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -113,9 +115,10 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 2e-9
+    current_dt = 1e-8
+    nsteps = 20
+    t_final = nsteps * current_dt
     current_cfl = 1.0
-    current_dt = 1e-10
     current_t = 0
     constant_cfl = False
 
@@ -125,7 +128,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 500
-    nviz = 100
+    nviz = 10
     nhealth = 1
 
     dim = 2
@@ -134,6 +137,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
     local_path = os.path.dirname(os.path.abspath(__file__))
+    grid_file_name = local_path + "/multivolume_quads.msh"
 
     if rst_filename:  # read the grid from restart data
         rst_filename = f"{rst_filename}-{rank:04d}.pkl"
@@ -147,8 +151,11 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
             from meshmode.mesh.io import read_gmsh
             # pylint: disable=unpacking-non-sequence
             mesh, tag_to_elements = read_gmsh(
-                f"{local_path}/multivolume.msh", force_ambient_dim=2,
-                return_tag_to_elements_map=True)
+                grid_file_name, force_ambient_dim=2,
+                return_tag_to_elements_map=True,
+                mesh_construction_kwargs={
+                    "skip_tests": True,
+                    "force_positive_orientation": True})
             volume_to_tags = {
                 "Fluid": ["Upper"],
                 "Wall": ["Lower"]}
@@ -175,10 +182,11 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
 
     local_nelements = local_fluid_mesh.nelements + local_wall_mesh.nelements
 
-    order = 3
+    order = 1
     dcoll = create_discretization_collection(
         actx, volume_to_local_mesh, order=order,
-        quadrature_order=order+2)
+        quadrature_order=order+2,
+        tensor_product_elements=use_tpe)
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -244,7 +252,7 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     wall_heat_capacity = 50*eos.heat_capacity_cp()
     wall_kappa = 10*fluid_kappa*wall_ones
 
-    wall_time_scale = 20
+    wall_time_scale = 200
 
     isothermal_wall_temp = 300
 
@@ -607,7 +615,6 @@ if __name__ == "__main__":
 
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename)
+         use_leap=args.leap, casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

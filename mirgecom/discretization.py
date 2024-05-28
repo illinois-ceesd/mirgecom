@@ -51,12 +51,13 @@ def create_discretization_collection(actx, volume_meshes, order, *,
     if tensor_product_elements:
         warn("Overintegration is not supported for tensor product elements.")
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DISCR_TAG_MODAL
     from grudge.discretization import make_discretization_collection
     from meshmode.discretization.poly_element import (
         QuadratureSimplexGroupFactory,
         PolynomialRecursiveNodesGroupFactory,
-        LegendreGaussLobattoTensorProductGroupFactory as Lgl
+        LegendreGaussLobattoTensorProductGroupFactory as Lgl,
+        ModalGroupFactory
     )
 
     if quadrature_order < 0:
@@ -66,7 +67,8 @@ def create_discretization_collection(actx, volume_meshes, order, *,
         return make_discretization_collection(
             actx, volume_meshes,
             discr_tag_to_group_factory={
-                DISCR_TAG_BASE: Lgl(order)
+                DISCR_TAG_BASE: Lgl(order),
+                DISCR_TAG_MODAL: ModalGroupFactory(order)
             }
         )
     else:
@@ -76,5 +78,6 @@ def create_discretization_collection(actx, volume_meshes, order, *,
                 DISCR_TAG_BASE: PolynomialRecursiveNodesGroupFactory(order=order,
                                                                      family="lgl"),
                 DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(quadrature_order),
+                DISCR_TAG_MODAL: ModalGroupFactory(order)
             }
         )

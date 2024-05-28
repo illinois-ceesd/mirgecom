@@ -740,8 +740,7 @@ def test_orthotropic_diffusion(actx_factory):
     dcoll = create_discretization_collection(actx, mesh, order)
     nodes = actx.thaw(dcoll.nodes())
 
-    zeros = actx.np.zeros_like(nodes[0])
-    kappa = make_obj_array([kappa0 + zeros, kappa1 + zeros])
+    kappa = make_obj_array([kappa0, kappa1])
     u = 30.0*nodes[0] + 60.0*nodes[1]
 
     # exercise Neumann BC
@@ -762,8 +761,8 @@ def test_orthotropic_diffusion(actx_factory):
     assert err_grad_y < 1.e-9
 
     diff_flux = diffusion_flux(kappa, grad_u)
-    flux_x = -(kappa0 + zeros)*grad_u[0]
-    flux_y = -(kappa1 + zeros)*grad_u[1]
+    flux_x = -kappa0*grad_u[0]
+    flux_y = -kappa1*grad_u[1]
     err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
     err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
     assert err_flux_x < 1.e-9
@@ -794,8 +793,8 @@ def test_orthotropic_diffusion(actx_factory):
     assert err_grad_y < 1.e-9
 
     diff_flux = diffusion_flux(kappa, grad_u)
-    flux_x = -(kappa0 + zeros)*grad_u[0]
-    flux_y = -(kappa1 + zeros)*grad_u[1]
+    flux_x = -kappa0*grad_u[0]
+    flux_y = -kappa1*grad_u[1]
     err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
     err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
     assert err_flux_x < 1.e-9

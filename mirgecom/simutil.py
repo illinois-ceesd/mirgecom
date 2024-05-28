@@ -71,9 +71,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import sys
 from functools import partial
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import Dict, List, Optional
 from logpyle import IntervalTimer
 
 import grudge.op as op
@@ -93,10 +92,6 @@ from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
-    # pylint: disable=no-name-in-module
-    from mpi4py.MPI import Comm
 
 
 class SimulationConfigurationError(RuntimeError):
@@ -297,7 +292,7 @@ def get_sim_timestep(
 
 def write_visfile(dcoll, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None,
-                  comm: Optional["Comm"] = None):
+                  comm=None):
     """Write parallel VTK output for the fields specified in *io_fields*.
 
     This routine writes a parallel-compatible unstructured VTK visualization

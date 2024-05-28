@@ -72,7 +72,7 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, use_overintegration=False, use_esdg=False,
-         use_leap=False, casename=None, rst_filename=None):
+         use_leap=False, casename=None, rst_filename=None, use_tpe=True):
     """Drive example."""
     if casename is None:
         casename = "mirgecom"
@@ -89,7 +89,9 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm,
+                           use_axis_tag_inference_fallback=True,
+                           use_einsum_inference_fallback=True)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -134,14 +136,17 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         box_ur = .5
         periodic = (True, )*dim
         from meshmode.mesh.generation import generate_regular_rect_mesh
+        from meshmode.mesh import TensorProductElementGroup
+        grp_cls = TensorProductElementGroup if use_tpe else None
         generate_mesh = partial(generate_regular_rect_mesh, a=(box_ll,)*dim,
                                 b=(box_ur,) * dim, nelements_per_axis=(nel_1d,)*dim,
-                                periodic=periodic)
+                                periodic=periodic, group_cls=grp_cls)
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_QUAD
@@ -374,8 +379,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
 
                     if do_health:
                         health_errors = global_reduce(
-                            my_health_check(dv.pressure, component_errors),
-                            op="lor")
+                            my_health_check(dv.pressure, component_errors), op="lor")
                         if health_errors:
                             if rank == 0:
                                 logger.info("Fluid solution failed health check.")
