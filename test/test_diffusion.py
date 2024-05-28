@@ -51,10 +51,15 @@ from mirgecom.diffusion import (
     RobinDiffusionBoundary)
 from mirgecom.integrators import rk4_step
 from mirgecom.simutil import get_box_mesh
+from mirgecom.integrators import rk4_step
 from mirgecom.discretization import create_discretization_collection
+
 
 logger = logging.getLogger(__name__)
 
+
+# import os
+# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 def test_diffusion_boundary_conditions(actx_factory):
     """Checks the boundary conditions for diffusion operator."""
@@ -383,7 +388,7 @@ def sym_diffusion(dim, sym_kappa, sym_u):
         (DecayingTrigRobinBoundary(2, 1., 2., 4.), 50, 1.e-5, [12, 14, 16]),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
-            visualize=False):
+                            visualize=False):
     """
     Checks the accuracy of the diffusion operator by solving the heat equation for a
     given problem setup.
@@ -459,7 +464,9 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_diffusion_discontinuous_kappa(actx_factory, order,
+        use_overintegration, visualize=False):
     """
     Checks the accuracy of the diffusion operator for an kappa field that has a
     jump across an element face.
@@ -470,7 +477,9 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     mesh = get_box_mesh(1, -1, 1, n)
 
-    dcoll = create_discretization_collection(actx, mesh, order)
+    dcoll = create_discretization_collection(
+        actx, mesh, order=order, quadrature_order=2*order+1)
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     nodes = actx.thaw(dcoll.nodes())
 
@@ -506,7 +515,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     def get_rhs(t, u, return_grad_u=False):
         return diffusion_operator(
             dcoll, kappa=kappa, boundaries=boundaries, u=u,
-            return_grad_u=return_grad_u)
+            quadrature_tag=quadrature_tag, return_grad_u=return_grad_u)
 
     rhs, grad_u_steady = get_rhs(0, u_steady, return_grad_u=True)
 

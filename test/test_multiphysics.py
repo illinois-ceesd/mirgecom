@@ -23,8 +23,6 @@ THE SOFTWARE.
 import numpy as np
 from dataclasses import replace
 from functools import partial
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
 from pytools.obj_array import make_obj_array
 import grudge.op as op
 from mirgecom.simutil import (
@@ -150,7 +148,7 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
-def test_thermally_coupled_fluid_wall(
+def test_thermally_coupled_fluid_wall_fluxes(
         actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
     actx = actx_factory()
@@ -177,10 +175,7 @@ def test_thermally_coupled_fluid_wall(
         dcoll = create_discretization_collection(
             actx, volume_meshes, order=order, quadrature_order=2*order+1)
 
-        if use_overintegration:
-            quadrature_tag = DISCR_TAG_QUAD
-        else:
-            quadrature_tag = None
+        quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
         dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
         dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -197,22 +192,15 @@ def test_thermally_coupled_fluid_wall(
         fluid_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_fluid))
         wall_nodes = actx.thaw(dcoll.nodes(dd=dd_vol_wall))
 
-        # Crank up the heat conduction so it's fast as possible within NS
-        # timestep restriction
-        heat_amplification_factor = 10000
-
         gamma = 1.4
         r = 285.71300152552493
-        mu = 4.216360056e-05
         eos = IdealSingleGas(gamma=gamma, gas_const=r)
-        base_fluid_pressure = 4935.22
-        base_fluid_temp = 300
+        base_fluid_pressure = 5000.0
+        base_fluid_temp = 300.0
         fluid_density = base_fluid_pressure/base_fluid_temp/r
         fluid_heat_capacity = eos.heat_capacity_cv()
-        fluid_kappa = heat_amplification_factor * 0.05621788139856423
-        transport = SimpleTransport(
-            viscosity=mu,
-            thermal_conductivity=fluid_kappa)
+        fluid_kappa = 1.0
+        transport = SimpleTransport(thermal_conductivity=fluid_kappa)
         gas_model = GasModel(eos=eos, transport=transport)
 
         # Made-up wall material
@@ -284,14 +272,14 @@ def test_thermally_coupled_fluid_wall(
                     ("temp_perturb", fluid_temp_perturb),
                     ("temp_perturb_later", fluid_temp_perturb_later),
                     ("temp", fluid_temp),
-                    ])
+                    ], overwrite=True)
             viz_wall.write_vtk_file(
                 f"thermally_coupled_init_{viz_suffix}_wall.vtu", [
                     ("temp_steady", wall_temp_steady),
                     ("temp_perturb", wall_temp_perturb),
                     ("temp_perturb_later", wall_temp_perturb_later),
                     ("temp", wall_temp),
-                    ])
+                    ], overwrite=True)
 
         def get_rhs(t, state):
             fluid_state = make_fluid_state(cv=state[0], gas_model=gas_model)
@@ -311,9 +299,7 @@ def test_thermally_coupled_fluid_wall(
         def cv_from_temp(temp):
             rho = fluid_density * (0*temp + 1)
             mom = make_obj_array([0*temp]*2)
-            energy = (
-                (rho * r * temp)/(gamma - 1.0)
-                + np.dot(mom, mom)/(2.0*rho))
+            energy = (rho * r * temp)/(gamma - 1.0) + np.dot(mom, mom)/(2.0*rho)
             return make_conserved(
                 dim=2,
                 mass=rho,
@@ -337,12 +323,12 @@ def test_thermally_coupled_fluid_wall(
                     ("cv", fluid_state.cv),
                     ("dv", fluid_state.dv),
                     ("rhs", rhs[0]),
-                    ])
+                    ], overwrite=True)
             viz_wall.write_vtk_file(
                 f"thermally_coupled_steady_{viz_suffix}_wall.vtu", [
                     ("temp", state[1]),
                     ("rhs", rhs[1]),
-                    ])
+                    ], overwrite=True)
 
         fluid_cv = cv_from_temp(fluid_temp)
         linf_err_fluid = max_component_norm(
@@ -376,14 +362,14 @@ def test_thermally_coupled_fluid_wall(
 
         # Set dt once for all scales
         if n == scales[0]:
-            dt = 0.00025 * min(h_min_fluid**2, h_min_wall**2)
+            dt = 1.5 * min(h_min_fluid**2, h_min_wall**2)
 
         heat_cfl_fluid = fluid_alpha * dt/h_min_fluid**2
         heat_cfl_wall = wall_alpha * dt/h_min_wall**2
 
         print(f"{heat_cfl_fluid=}, {heat_cfl_wall=}")
-        assert heat_cfl_fluid < 0.05
-        assert heat_cfl_wall < 0.05
+        assert heat_cfl_fluid < 0.2
+        assert heat_cfl_wall < 0.2
 
         from mirgecom.integrators import rk4_step
 
@@ -403,14 +389,14 @@ def test_thermally_coupled_fluid_wall(
                         ("dv", fluid_state.dv),
                         ("expected_temp", expected_fluid_temp),
                         ("rhs", rhs[0]),
-                        ])
+                        ], overwrite=True)
                 viz_wall.write_vtk_file(
                     "thermally_coupled_accuracy_"
                     f"{viz_suffix}_wall_{step}.vtu", [
                         ("temp", state[1]),
                         ("expected_temp", expected_wall_temp),
                         ("rhs", rhs[1]),
-                        ])
+                        ], overwrite=True)
 
         fluid_state = make_fluid_state(state[0], gas_model)
         fluid_temp = fluid_state.dv.temperature
@@ -445,7 +431,7 @@ def test_thermally_coupled_fluid_wall(
         or eoc_rec_wall.max_error() < 1e-11)
 
 
-@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
         actx_factory, order, use_overintegration, visualize=False):
@@ -474,10 +460,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     dcoll = create_discretization_collection(
         actx, volume_meshes, order=order, quadrature_order=2*order+1)
 
-    if use_overintegration:
-        quadrature_tag = DISCR_TAG_QUAD
-    else:
-        quadrature_tag = None
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
@@ -535,6 +518,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
         time=0.0, quadrature_tag=quadrature_tag, interface_noslip=False,
         interface_radiation=True, sigma=2.0,
         ambient_temperature=0.0, wall_emissivity=wall_emissivity,
+        inviscid_terms_on=False
     )
 
     # Check that steady-state solution has 0 RHS
