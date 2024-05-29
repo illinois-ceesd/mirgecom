@@ -107,8 +107,11 @@ def viscous_stress_tensor(state, grad_cv):
 # low level routine works with numpy arrays and can be tested without
 # a full grid + fluid state, etc
 def _compute_diffusive_flux(density, d_alpha, y, grad_y):
-    return -density*(d_alpha.reshape(-1, 1)*grad_y
-                     - outer(y, sum(d_alpha.reshape(-1, 1)*grad_y)))
+    #return -density*(d_alpha.reshape(-1, 1)*grad_y
+                     #- outer(y, sum(d_alpha.reshape(-1, 1)*grad_y)))
+    # eliminate correction velocity for flamelets
+    return -density*(d_alpha.reshape(-1, 1)*grad_y)
+                     
 
 
 def diffusive_flux(state, grad_cv):
