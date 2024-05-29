@@ -48,30 +48,30 @@ def create_discretization_collection(actx, volume_meshes, order, *,
             "mpi_communicator argument is deprecated and will disappear in Q4 2022.",
             DeprecationWarning, stacklevel=2)
 
-    if tensor_product_elements:
-        warn("Overintegration is not supported for tensor product elements.")
-
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DISCR_TAG_MODAL
     from grudge.discretization import make_discretization_collection
     from meshmode.discretization.poly_element import (
         QuadratureSimplexGroupFactory,
+        QuadratureGroupFactory,
         PolynomialRecursiveNodesGroupFactory,
         LegendreGaussLobattoTensorProductGroupFactory as Lgl,
         ModalGroupFactory
     )
 
-    if quadrature_order < 0:
-        quadrature_order = 2*order+1
-
     if tensor_product_elements:
+        if quadrature_order < 0:
+            quadrature_order = 2*order + 1
         return make_discretization_collection(
             actx, volume_meshes,
             discr_tag_to_group_factory={
                 DISCR_TAG_BASE: Lgl(order),
-                DISCR_TAG_MODAL: ModalGroupFactory(order)
+                DISCR_TAG_MODAL: ModalGroupFactory(order),
+                DISCR_TAG_QUAD: QuadratureGroupFactory(quadrature_order)
             }
         )
     else:
+        if quadrature_order < 0:
+            quadrature_order = 2*order+1
         return make_discretization_collection(
             actx, volume_meshes,
             discr_tag_to_group_factory={

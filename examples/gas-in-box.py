@@ -47,7 +47,7 @@ from mirgecom.simutil import (
 from mirgecom.utils import force_evaluation
 from mirgecom.io import make_init_message
 
-from mirgecom.integrators import rk4_step
+from mirgecom.integrators import rk4_step, euler_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticSlipBoundary,
@@ -103,7 +103,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          use_av=0, use_limiter=False, order=1,
          nscale=1, npassive_species=0, map_mesh=False,
          rotation_angle=0, add_pulse=False,
-         mesh_filename=None):
+         mesh_filename=None, euler_timestepping=False):
     """Drive the example."""
     if casename is None:
         casename = "gas-in-box"
@@ -132,7 +132,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
-        timestepper = rk4_step
+        timestepper = euler_step if euler_timestepping else rk4_step
+
     n_steps = 20
     current_cfl = 1.0
     current_dt = 1e-6
@@ -193,6 +194,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
+        print(f"{local_mesh.ambient_dim=}, {local_mesh.dim=}")
+
         if dim is None:
             dim = local_mesh.ambient_dim
 
@@ -751,6 +754,8 @@ if __name__ == "__main__":
         help="use leap timestepper")
     parser.add_argument("--esdg", action="store_true",
         help="use entropy-stable dg for inviscid terms.")
+    parser.add_argument("--euler-timestepping", action="store_true",
+                        help="use euler timestepping")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
@@ -828,6 +833,6 @@ if __name__ == "__main__":
          use_navierstokes=args.navierstokes, npassive_species=args.species,
          nscale=args.weak_scale, mech_name=args.mechanism_name,
          map_mesh=args.wonky, rotation_angle=args.rotate, add_pulse=args.pulse,
-         mesh_filename=args.meshfile)
+         mesh_filename=args.meshfile, euler_timestepping=args.euler_timestepping)
 
 # vim: foldmethod=marker
