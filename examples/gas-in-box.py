@@ -102,7 +102,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          mech_name="uiuc_7sp", transport_type=0,
          use_av=0, use_limiter=False, order=1,
          nscale=1, npassive_species=0, map_mesh=False,
-         rotation_angle=0, add_pulse=False,
+         rotation_angle=0, add_pulse=False, nsteps=20,
          mesh_filename=None, euler_timestepping=False):
     """Drive the example."""
     if casename is None:
@@ -134,10 +134,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     else:
         timestepper = euler_step if euler_timestepping else rk4_step
 
-    n_steps = 20
     current_cfl = 1.0
     current_dt = 1e-6
-    t_final = current_dt * n_steps
+    t_final = current_dt * nsteps
     current_t = 0
     constant_cfl = False
     temperature_tolerance = 1e-2
@@ -756,6 +755,8 @@ if __name__ == "__main__":
         help="use entropy-stable dg for inviscid terms.")
     parser.add_argument("--euler-timestepping", action="store_true",
                         help="use euler timestepping")
+    parser.add_argument("--nsteps", type=int, default=20,
+                        help="number of timesteps to take")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
@@ -823,7 +824,7 @@ if __name__ == "__main__":
 
     main(actx_class, use_esdg=args.esdg, dim=args.dimension,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap, use_tpe=args.tpe,
+         use_leap=args.leap, use_tpe=args.tpe, nsteps=args.nsteps,
          casename=args.casename, rst_filename=rst_filename,
          periodic_mesh=args.periodic, use_mixture=args.mixture,
          multiple_boundaries=args.boundaries,
