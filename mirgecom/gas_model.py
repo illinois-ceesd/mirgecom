@@ -79,6 +79,13 @@ from mirgecom.utils import normalize_boundaries
 from mirgecom.wall_model import PorousWallVars, PorousFlowModel
 
 
+def get_cv_from_state_container(state):
+    if isinstance(state, ConservedVars):
+        return state
+    else:
+        return state.cv
+
+
 @dataclass(frozen=True)
 class GasModel:
     r"""Physical gas model for calculating fluid state-dependent quantities.
@@ -901,33 +908,37 @@ def replace_fluid_state(
 
         The new fluid conserved and thermal state
     """
-    new_cv = state.cv.replace(
+    input_cv = get_cv_from_state_container(state)
+    new_cv = input_cv.replace(
         mass=(mass if mass is not None else state.cv.mass),
         energy=(energy if energy is not None else state.cv.energy),
         momentum=(momentum if momentum is not None else state.cv.momentum),
         species_mass=(
             species_mass if species_mass is not None else state.cv.species_mass))
 
-    new_tseed = (
-        temperature_seed
-        if temperature_seed is not None
-        else state.temperature)
+    if not isinstance(state, ConservedVars):
+        new_tseed = (
+            temperature_seed
+            if temperature_seed is not None
+            else state.temperature)
 
-    material_densities = (None
-        if isinstance(gas_model, PorousFlowModel) is False
-        else state.wv.material_densities)
+        material_densities = (None
+                              if isinstance(gas_model, PorousFlowModel) is False
+                              else state.wv.material_densities)
 
-    return make_fluid_state(
-        cv=new_cv,
-        gas_model=gas_model,
-        temperature_seed=new_tseed,
-        smoothness_mu=state.smoothness_mu,
-        smoothness_kappa=state.smoothness_kappa,
-        smoothness_d=state.smoothness_d,
-        smoothness_beta=state.smoothness_beta,
-        material_densities=material_densities,
-        limiter_func=limiter_func,
-        limiter_dd=limiter_dd)
+        return make_fluid_state(
+            cv=new_cv,
+            gas_model=gas_model,
+            temperature_seed=new_tseed,
+            smoothness_mu=state.smoothness_mu,
+            smoothness_kappa=state.smoothness_kappa,
+            smoothness_d=state.smoothness_d,
+            smoothness_beta=state.smoothness_beta,
+            material_densities=material_densities,
+            limiter_func=limiter_func,
+            limiter_dd=limiter_dd)
+    else:
+        return new_cv
 
 
 def make_entropy_projected_fluid_state(
