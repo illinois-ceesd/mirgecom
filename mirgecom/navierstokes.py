@@ -131,6 +131,7 @@ def grad_cv_operator(
         quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
+        operator_cv_quad=None,
         operator_states_quad=None, limiter_func=None,
         use_esdg=False):
     r"""Compute the gradient of the fluid conserved variables.
@@ -188,7 +189,10 @@ def grad_cv_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-    if operator_states_quad is None:
+    if operator_cv_quad is not None:
+        cv_quad, cv_interior_pairs, domain_bnd_cv_quad = \
+            operator_cv_quad
+    elif operator_states_quad is None:
         if state.is_mixture and limiter_func is None:
             warn("Mixtures often require species limiting, and a non-limited "
                  "state is being created for this operator. For mixtures, "
