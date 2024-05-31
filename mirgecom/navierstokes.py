@@ -189,30 +189,30 @@ def grad_cv_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-    if operator_cv_quad is not None:
-        cv_quad, cv_interior_pairs, domain_bnd_cv_quad = \
-            operator_cv_quad
-    elif operator_states_quad is None:
-        if state.is_mixture and limiter_func is None:
-            warn("Mixtures often require species limiting, and a non-limited "
-                 "state is being created for this operator. For mixtures, "
-                 "one should pass the operator_states_quad argument with "
-                 "limited states or pass a limiter_func to this operator.")
-        operator_states_quad = make_operator_fluid_states(
-            dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
-            entropy_stable=use_esdg)
-
-    vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
-        operator_states_quad
-
     get_interior_flux = partial(
         _gradient_flux_interior, dcoll, numerical_flux_func)
 
-    cv_interior_pairs = [TracePair(state_pair.dd,
-                                   interior=state_pair.int.cv,
-                                   exterior=state_pair.ext.cv)
-                         for state_pair in inter_elem_bnd_states_quad]
+    if operator_cv_quad is not None:
+        vol_cv_quad, cv_interior_pairs, domain_bnd_states_quad = \
+            operator_cv_quad
+    else:
+        if operator_states_quad is None:
+            if state.is_mixture and limiter_func is None:
+                warn("Mixtures often require species limiting, and a non-limited "
+                     "state is being created for this operator. For mixtures, "
+                     "one should pass the operator_states_quad argument with "
+                     "limited states or pass a limiter_func to this operator.")
+                operator_states_quad = make_operator_fluid_states(
+                    dcoll, state, gas_model, boundaries, quadrature_tag,
+                    dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
+                    entropy_stable=use_esdg)
+        vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
+            operator_states_quad
+        vol_cv_quad = vol_state_quad.cv
+        cv_interior_pairs = [TracePair(state_pair.dd,
+                                       interior=state_pair.int.cv,
+                                       exterior=state_pair.ext.cv)
+                             for state_pair in inter_elem_bnd_states_quad]
 
     cv_flux_bnd = (
 
@@ -235,7 +235,7 @@ def grad_cv_operator(
 
     # [Bassi_1997]_ eqn 15 (s = grad_q)
     return grad_operator(
-        dcoll, dd_vol_quad, dd_allfaces_quad, vol_state_quad.cv, cv_flux_bnd)
+        dcoll, dd_vol_quad, dd_allfaces_quad, vol_cv_quad, cv_flux_bnd)
 
 
 def grad_t_operator(

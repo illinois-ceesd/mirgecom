@@ -313,7 +313,8 @@ def make_fluid_state(cv, gas_model,
                      smoothness_d=None,
                      smoothness_beta=None,
                      material_densities=None,
-                     limiter_func=None, limiter_dd=None):
+                     limiter_func=None, limiter_dd=None,
+                     dissipation_rate=None):
     """Create a fluid state from the conserved vars and physical gas model.
 
     Parameters
@@ -850,6 +851,105 @@ def make_operator_fluid_states(
         volume_state_quad, interior_boundary_states_quad, domain_boundary_states_quad
 
 
+def make_operator_fluid_cvs(
+        dcoll, volume_cv, gas_model, boundaries, quadrature_tag=DISCR_TAG_BASE,
+        dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None, entropy_stable=False):
+    """Prepare gas model-consistent fluid states for use in fluid operators.
+
+    This routine prepares a model-consistent fluid state for each of the volume and
+    all interior and domain boundaries, using the quadrature representation if
+    one is given. The input *volume_state* is projected to the quadrature domain
+    (if any), along with the model-consistent dependent quantities.
+
+    .. note::
+
+        When running MPI-distributed, volume state conserved quantities
+        (ConservedVars), and for mixtures, temperatures will be communicated over
+        partition boundaries inside this routine.
+
+    Parameters
+    ----------
+    dcoll: :class:`~grudge.discretization.DiscretizationCollection`
+
+        A discretization collection encapsulating the DG elements
+
+    volume_state: :class:`~mirgecom.gas_model.FluidState`
+
+        The full fluid conserved and thermal state
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        The physical model constructs for the gas_model
+
+    boundaries
+        Dictionary of boundary functions, one for each valid
+        :class:`~grudge.dof_desc.BoundaryDomainTag`.
+
+    quadrature_tag
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    dd: grudge.dof_desc.DOFDesc
+        the DOF descriptor of the discretization on which *volume_state* lives. Must
+        be a volume on the base discretization.
+
+    comm_tag: Hashable
+
+        Tag for distributed communication
+
+    limiter_func:
+
+        Callable function to limit the fluid conserved quantities to physically
+        valid and realizable values.
+
+    Returns
+    -------
+    (:class:`~mirgecom.gas_model.FluidState`, :class:`~grudge.trace_pair.TracePair`,
+     dict)
+
+        Thermally consistent fluid state for the volume, fluid state trace pairs
+        for the internal boundaries, and a dictionary of fluid states keyed by
+        boundary domain tags in *boundaries*, all on the quadrature grid (if
+        specified).
+    """
+    boundaries = normalize_boundaries(boundaries)
+
+    if not isinstance(dd.domain_tag, VolumeDomainTag):
+        raise TypeError("dd must represent a volume")
+    if dd.discretization_tag != DISCR_TAG_BASE:
+        raise ValueError("dd must belong to the base discretization")
+
+    dd_vol = dd
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+
+    # project pair to the quadrature discretization and update dd to quad
+    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
+
+    domain_boundary_cv_quad = {
+        bdtag: op.project(
+            dcoll, dd_vol, dd_vol_quad.with_domain_tag(bdtag),
+            volume_cv)
+        for bdtag in boundaries
+    }
+
+    # performs MPI communication of CV if needed
+    interior_boundary_cv_quad = [
+        # Get the interior trace pairs onto the surface quadrature
+        # discretization (if any)
+        interp_to_surf_quad(tpair=tpair)
+        for tpair in interior_trace_pairs(
+            dcoll, volume_cv, volume_dd=dd_vol,
+            comm_tag=(_FluidCVTag, comm_tag))
+    ]
+
+    # Interpolate the fluid state to the volume quadrature grid
+    # (this includes the conserved and dependent quantities)
+    volume_cv_quad = op.project(dcoll, dd_vol, dd_vol_quad, volume_cv)
+
+    return \
+        volume_cv_quad, interior_boundary_cv_quad, domain_boundary_cv_quad
+
+
 def replace_fluid_state(
         state, gas_model, *, mass=None, energy=None, momentum=None,
         species_mass=None, temperature_seed=None, limiter_func=None,
@@ -910,11 +1010,11 @@ def replace_fluid_state(
     """
     input_cv = get_cv_from_state_container(state)
     new_cv = input_cv.replace(
-        mass=(mass if mass is not None else state.cv.mass),
-        energy=(energy if energy is not None else state.cv.energy),
-        momentum=(momentum if momentum is not None else state.cv.momentum),
+        mass=(mass if mass is not None else input_cv.mass),
+        energy=(energy if energy is not None else input_cv.energy),
+        momentum=(momentum if momentum is not None else input_cv.momentum),
         species_mass=(
-            species_mass if species_mass is not None else state.cv.species_mass))
+            species_mass if species_mass is not None else input_cv.species_mass))
 
     if not isinstance(state, ConservedVars):
         new_tseed = (

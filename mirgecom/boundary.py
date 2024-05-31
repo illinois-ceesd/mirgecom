@@ -59,10 +59,7 @@ from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
 from pytools.obj_array import make_obj_array
-from mirgecom.fluid import (
-    ConservedVars,
-    make_conserved
-)
+from mirgecom.fluid import make_conserved, ConservedVars
 from mirgecom.gas_model import (
     make_fluid_state, replace_fluid_state,
     get_cv_from_state_container
@@ -1372,39 +1369,48 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         """Return state."""
         actx = state_minus.array_context
         nhat = actx.thaw(dcoll.normal(dd_bdry))
-
+        cv_minus = get_cv_from_state_container(state_minus)
+        y_or_z_minus = cv_minus.species_mass_fractions
+ 
         # boundary-normal velocity
-        boundary_vel = np.dot(state_minus.velocity, nhat)*nhat
+        boundary_vel = np.dot(cv_minus.velocity, nhat)*nhat
         boundary_speed = actx.np.sqrt(np.dot(boundary_vel, boundary_vel))
-        speed_of_sound = state_minus.speed_of_sound
-        kinetic_energy = gas_model.eos.kinetic_energy(state_minus.cv)
-        gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
+        kinetic_energy = gas_model.eos.kinetic_energy(cv_minus)
+        internal_energy = gas_model.eos.internal_energy(cv_minus)
 
-        # evaluate internal energy based on prescribed pressure
-        pressure_plus = self._pressure + actx.np.zeros_like(state_minus.pressure)
-        if state_minus.is_mixture:
-            y_or_z = state_minus.cv.species_mass_fractions
-            gas_const = gas_model.eos.gas_const(
-                species_mass_fractions=y_or_z)
-            temp_plus = (
-                actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
-                              state_minus.temperature,
-                              pressure_plus/(state_minus.cv.mass*gas_const)))
+        if not isinstance(state_minus, ConservedVars):
+            temperature_minus = state_minus.temperature
+            speed_of_sound = state_minus.speed_of_sound
+            pressure_minus = state_minus.pressure
+            gamma = gas_model.eos.gamma(cv_minus, temperature_minus)
+        
+            # evaluate internal energy based on prescribed pressure
+            pressure_plus = self._pressure + actx.np.zeros_like(pressure_minus)
+            if state_minus.is_mixture:
+                gas_const = gas_model.eos.gas_const(
+                    species_mass_fractions=y_or_z_minus)
+                temp_plus = (
+                    actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
+                                  temperature_minus,
+                                  pressure_plus/(cv_minus.mass*gas_const)))
 
-            internal_energy = state_minus.cv.mass*(
-                gas_model.eos.get_internal_energy(
-                    temp_plus, species_mass_fractions=y_or_z))
-        else:
-            boundary_pressure = (
-                actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
-                              state_minus.pressure, pressure_plus))
-            internal_energy = boundary_pressure / (gamma - 1.0)
+                internal_energy = cv_minus.mass*(
+                    gas_model.eos.get_internal_energy(
+                        temp_plus, species_mass_fractions=y_or_z_minus))
+            else:
+                boundary_pressure = (
+                    actx.np.where(actx.np.greater(boundary_speed, speed_of_sound),
+                                  state_minus.pressure, pressure_plus))
+                internal_energy = boundary_pressure / (gamma - 1.0)
 
         cv_plus = make_conserved(
-            state_minus.dim, mass=state_minus.mass_density,
+            cv_minus.dim, mass=cv_minus.mass,
             energy=kinetic_energy + internal_energy,
-            momentum=state_minus.momentum_density,
-            species_mass=state_minus.species_mass_density)
+            momentum=cv_minus.momentum,
+            species_mass=y_or_z_minus)
+
+        if isinstance(state_minus, ConservedVars):
+            return cv_plus
 
         return make_fluid_state(cv=cv_plus, gas_model=gas_model,
                                 temperature_seed=state_minus.temperature,
@@ -1860,18 +1866,10 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
         cv_minus = get_cv_from_state_container(state_minus)
 
         mom_bc = self._no_slip.momentum_bc(cv_minus.momentum)
-        if isinstance(state_minus, ConservedVars):
-            t_bc = cv_minus.mass*0 + 300.
-        else:
-            t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus)
-
-        # Updated for flamelet support
-        y_or_z = state_minus.cv.species_mass_fractions
-        internal_energy_bc = gas_model.eos.get_internal_energy(
-            temperature=t_bc, species_mass_fractions=y_or_z)
+        internal_energy_bc = gas_model.eos.internal_energy(cv_minus)
 
         # Velocity is pinned to 0 here, no kinetic energy
-        total_energy_bc = state_minus.mass_density*internal_energy_bc
+        total_energy_bc = cv_minus.mass*internal_energy_bc
 
         return replace_fluid_state(
             state_minus, gas_model,
