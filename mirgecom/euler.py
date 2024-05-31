@@ -73,7 +73,7 @@ from mirgecom.inviscid import (  # noqa
     entropy_conserving_flux_renac
 )
 
-from mirgecom.operators import div_operator
+# from mirgecom.operators import div_operator
 from mirgecom.utils import normalize_boundaries
 from arraycontext import map_array_container
 from mirgecom.gas_model import (
@@ -407,8 +407,14 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
         numerical_flux_func=inviscid_numerical_flux_func, time=time,
         dd=dd_vol)
 
-    return -div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
-                         inviscid_flux_vol, inviscid_flux_bnd)
+    vol_term = op.weak_local_div(dcoll, dd_vol_quad, inviscid_flux_vol)
+    bnd_term = op.face_mass(dcoll, dd_allfaces_quad, inviscid_flux_bnd)
+
+    # return -div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
+    #                     inviscid_flux_vol, inviscid_flux_bnd)
+    return op.inverse_mass(
+        dcoll, dd_vol_quad.with_discr_tag(DISCR_TAG_BASE),
+        vol_term - bnd_term)
 
 
 # By default, run unitless

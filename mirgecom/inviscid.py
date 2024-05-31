@@ -296,6 +296,7 @@ def inviscid_flux_on_element_boundary(
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     def _interior_flux(state_pair):
+        print(f"{state_pair.dd=},{dd_allfaces_quad=}")
         return op.project(dcoll,
             state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(
