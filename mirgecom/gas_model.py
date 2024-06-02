@@ -67,6 +67,8 @@ from grudge.trace_pair import (
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import (
     GasEOS,
+    FlameletMixture,
+    NNFlameletMixture,
     GasDependentVars,
     MixtureDependentVars,
     MixtureEOSNeededError
@@ -127,6 +129,7 @@ class FluidState:
     .. autoattribute:: smoothness_kappa
     .. autoattribute:: smoothness_d
     .. autoattribute:: smoothness_beta
+    .. autoattribute:: dissipation_rate
     .. autoattribute:: velocity
     .. autoattribute:: speed
     .. autoattribute:: wavespeed
@@ -188,6 +191,11 @@ class FluidState:
         return self.dv.smoothness_beta
 
     @property
+    def dissipation_rate(self):
+        """Return the dissipation_rate field."""
+        return self.dv.dissipation_rate
+
+    @property
     def mass_density(self):
         """Return the gas density."""
         return self.cv.mass
@@ -241,6 +249,16 @@ class FluidState:
     def is_mixture(self):
         """Indicate if this is a state resulting from a mixture gas model."""
         return isinstance(self.dv, MixtureDependentVars)
+
+    @property
+    def is_flamelet(self):
+        """Indicate if this is a state resulting from a mixture gas model."""
+        return isinstance(self.dv, FlameletMixture)
+
+    @property
+    def is_nnflamelet(self):
+        """Indicate if this is a state resulting from a mixture gas model."""
+        return isinstance(self.dv, NNFlameletMixture)
 
     def _get_mixture_property(self, name):
         """Grab a mixture property if EOS is a :class:`~mirgecom.eos.MixtureEOS`."""
@@ -379,6 +397,8 @@ def make_fluid_state(cv, gas_model,
                        is None else smoothness_beta)
     smoothness_d = (actx.np.zeros_like(cv.mass) if smoothness_d
                         is None else smoothness_d)
+    dissipation_rate = (actx.np.zeros_like(cv.mass) if dissipation_rate
+                        is None else dissipation_rate)
 
     if isinstance(gas_model, GasModel):
         pressure = None
@@ -386,7 +406,8 @@ def make_fluid_state(cv, gas_model,
 
         if limiter_func:
             rv = limiter_func(cv=cv, temperature_seed=temperature_seed,
-                              gas_model=gas_model, dd=limiter_dd)
+                              gas_model=gas_model, dd=limiter_dd,
+                              dissipation_rate=dissipation_rate)
             if isinstance(rv, np.ndarray):
                 cv, pressure, temperature = rv
             else:
@@ -394,7 +415,8 @@ def make_fluid_state(cv, gas_model,
 
         if temperature is None:
             temperature = gas_model.eos.temperature(
-                cv=cv, temperature_seed=temperature_seed)
+                cv=cv, temperature_seed=temperature_seed,
+                dissipation_rate=dissipation_rate)
         if pressure is None:
             pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
 
@@ -418,7 +440,8 @@ def make_fluid_state(cv, gas_model,
                 smoothness_kappa=dv.smoothness_kappa,
                 smoothness_d=dv.smoothness_d,
                 smoothness_beta=dv.smoothness_beta,
-                species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature)
+                species_enthalpies=gas_model.eos.species_enthalpies(cv, temperature),
+                dissipation_rate=dissipation_rate
             )
 
         if gas_model.transport is not None:
@@ -521,13 +544,19 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     cv_sd = op.project(dcoll, src, tgt, state.cv)
 
     temperature_seed = None
+    dissipation_rate = None
     if state.is_mixture:
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
+        if isinstance(gas_model.eos, NNFlameletMixture):
+            if state.dv.dissipation_rate is not None:
+                dissipation_rate = op.project(dcoll, src, tgt,
+                                              state.dv.dissipation_rate)
 
     if entropy_stable:
         temp_state = make_fluid_state(cv=cv_sd, gas_model=gas_model,
                                       temperature_seed=temperature_seed,
-                                      limiter_func=limiter_func, limiter_dd=tgt)
+                                      limiter_func=limiter_func, limiter_dd=tgt,
+                                      dissipation_rate=dissipation_rate)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
@@ -559,7 +588,8 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
                             smoothness_d=smoothness_d,
                             smoothness_beta=smoothness_beta,
                             material_densities=material_densities,
-                            limiter_func=limiter_func, limiter_dd=tgt)
+                            limiter_func=limiter_func, limiter_dd=tgt,
+                            dissipation_rate=dissipation_rate)
 
 
 def _getattr_ish(obj, name):
@@ -576,6 +606,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
                                  smoothness_d_pairs=None,
                                  smoothness_beta_pairs=None,
                                  material_densities_pairs=None,
+                                 dissipation_rate_pairs=None,
                                  limiter_func=None):
     """Create a fluid state from the conserved vars and equation of state.
 
@@ -624,6 +655,8 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
         smoothness_beta_pairs = [None] * len(cv_pairs)
     if material_densities_pairs is None:
         material_densities_pairs = [None] * len(cv_pairs)
+    if dissipation_rate_pairs is None:
+        dissipation_rate_pairs = [None] * len(cv_pairs)
     return [TracePair(
         cv_pair.dd,
         interior=make_fluid_state(
@@ -634,6 +667,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             smoothness_d=_getattr_ish(smoothness_d_pair, "int"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "int"),
             material_densities=_getattr_ish(material_densities_pair, "int"),
+            dissipation_rate=_getattr_ish(dissipation_rate_pair, "int"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd),
         exterior=make_fluid_state(
             cv_pair.ext, gas_model,
@@ -643,6 +677,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             smoothness_d=_getattr_ish(smoothness_d_pair, "ext"),
             smoothness_beta=_getattr_ish(smoothness_beta_pair, "ext"),
             material_densities=_getattr_ish(material_densities_pair, "ext"),
+            dissipation_rate=_getattr_ish(dissipation_rate_pair, "ext"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd))
         for cv_pair,
             tseed_pair,
@@ -650,10 +685,12 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             smoothness_kappa_pair,
             smoothness_d_pair,
             smoothness_beta_pair,
-            material_densities_pair in zip(
+            material_densities_pair,
+            dissipation_rate_pair in zip(
                 cv_pairs, temperature_seed_pairs,
                 smoothness_mu_pairs, smoothness_kappa_pairs, smoothness_d_pairs,
-                smoothness_beta_pairs, material_densities_pairs)]
+                smoothness_beta_pairs, material_densities_pairs,
+                dissipation_rate_pairs)]
 
 
 class _FluidCVTag:
@@ -681,6 +718,10 @@ class _FluidSmoothnessBetaTag:
 
 
 class _WallDensityTag:
+    pass
+
+
+class _FluidDissipationRateTag:
     pass
 
 
@@ -777,6 +818,8 @@ def make_operator_fluid_states(
     ]
 
     tseed_interior_pairs = None
+    dissipation_rate_interior_pairs = None
+
     if volume_state.is_mixture:
         # If this is a mixture, we need to exchange the temperature field because
         # mixture pressure (used in the inviscid flux calculations) depends on
@@ -789,6 +832,12 @@ def make_operator_fluid_states(
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.temperature, volume_dd=dd_vol,
                 comm_tag=(_FluidTemperatureTag, comm_tag))]
+
+        dissipation_rate_interior_pairs = [
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.dissipation_rate, volume_dd=dd_vol,
+                comm_tag=(_FluidDissipationRateTag, comm_tag))]
 
     smoothness_mu_interior_pairs = None
     if volume_state.smoothness_mu is not None:
@@ -839,6 +888,7 @@ def make_operator_fluid_states(
         smoothness_d_pairs=smoothness_d_interior_pairs,
         smoothness_beta_pairs=smoothness_beta_interior_pairs,
         material_densities_pairs=material_densities_interior_pairs,
+        dissipation_rate_pairs=dissipation_rate_interior_pairs,
         limiter_func=limiter_func)
 
     # Interpolate the fluid state to the volume quadrature grid

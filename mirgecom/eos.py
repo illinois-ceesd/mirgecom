@@ -18,6 +18,7 @@ Exceptions
 ^^^^^^^^^^
 .. autoexception:: TemperatureSeedMissingError
 .. autoexception:: MixtureEOSNeededError
+.. autoexecption:: DissipationRateMissingError
 """
 
 __copyright__ = """
@@ -54,6 +55,12 @@ from mirgecom.fluid import ConservedVars, make_conserved
 
 class TemperatureSeedMissingError(Exception):
     """Indicate that EOS is inappropriately called without seeding temperature."""
+
+    pass
+
+
+class DissipationRateMissingError(Exception):
+    """Indicate that EOS is inappropriately called without a dissipation rate."""
 
     pass
 
@@ -99,6 +106,7 @@ class MixtureDependentVars(GasDependentVars):
     """
 
     species_enthalpies: DOFArray
+    dissipation_rate: DOFArray
 
 
 class GasEOS(metaclass=ABCMeta):
@@ -130,7 +138,8 @@ class GasEOS(metaclass=ABCMeta):
 
     @abstractmethod
     def temperature(self, cv: ConservedVars,
-                    temperature_seed: Optional[DOFArray] = None) -> DOFArray:
+                    temperature_seed: Optional[DOFArray] = None,
+                    dissipation_rate: Optional[DOFArray] = None) -> DOFArray:
         """Get the gas temperature."""
 
     @abstractmethod
@@ -185,7 +194,8 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
             smoothness_d: Optional[DOFArray] = None,
-            smoothness_beta: Optional[DOFArray] = None) -> GasDependentVars:
+            smoothness_beta: Optional[DOFArray] = None,
+            dissipation_rate: Optional[DOFArray] = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -204,6 +214,8 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
+        if dissipation_rate is None:
+            dissipation_rate = zeros
 
         return GasDependentVars(
             temperature=temperature,
@@ -212,7 +224,8 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
             smoothness_d=smoothness_d,
-            smoothness_beta=smoothness_beta
+            smoothness_beta=smoothness_beta,
+            dissipation_rate=dissipation_rate
         )
 
 
@@ -268,7 +281,8 @@ class MixtureEOS(GasEOS):
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
             smoothness_d: Optional[DOFArray] = None,
-            smoothness_beta: Optional[DOFArray] = None) -> MixtureDependentVars:
+            smoothness_beta: Optional[DOFArray] = None,
+            dissipation_rate: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
         Certain implementations of :class:`GasEOS` (e.g. :class:`MixtureEOS`)
@@ -287,6 +301,8 @@ class MixtureEOS(GasEOS):
             smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
+        if dissipation_rate is None:
+            dissipation_rate = zeros
 
         return MixtureDependentVars(
             temperature=temperature,
@@ -296,7 +312,8 @@ class MixtureEOS(GasEOS):
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
             smoothness_d=smoothness_d,
-            smoothness_beta=smoothness_beta
+            smoothness_beta=smoothness_beta,
+            dissipation_rate=dissipation_rate
         )
 
 
@@ -463,7 +480,8 @@ class IdealSingleGas(GasEOS):
         return actx.np.sqrt(self._gamma / cv.mass * self.pressure(cv))
 
     def temperature(self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> DOFArray:
+                    temperature_seed: Optional[DOFArray] = None,
+                    dissipation_rate: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature (T) is calculated from the internal
@@ -776,7 +794,8 @@ class PyrometheusMixture(MixtureEOS):
                             / cv.mass)
 
     def temperature(self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> DOFArray:
+                    temperature_seed: Optional[DOFArray] = None,
+                    dissipation_rate: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature ($T$) is calculated iteratively with
@@ -1272,7 +1291,8 @@ class FlameletMixture(MixtureEOS):
                             / cv.mass)
 
     def temperature(self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> DOFArray:
+                    temperature_seed: Optional[DOFArray] = None,
+                    dissipation_rate: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature ($T$) is calculated iteratively with
@@ -1464,7 +1484,7 @@ class NNFlameletMixture(MixtureEOS):
         self._pyrometheus_mech = pyrometheus_mech
         self._tguess = temperature_guess
         self.set_flamelet_params(y_fu=y_fu, y_ox=y_ox, h_fu=h_fu, h_ox=h_ox)
-        self._flamelet_nn = _flamelet_nn
+        self._flamelet_nn = flamelet_nn
 
     def set_flamelet_params(self, y_fu=None, y_ox=None, h_fu=None, h_ox=None):
         nspec = self._pyrometheus_mech.num_species
@@ -1760,7 +1780,8 @@ class NNFlameletMixture(MixtureEOS):
                             / cv.mass)
 
     def temperature(self, cv: ConservedVars,
-            temperature_seed: Optional[DOFArray] = None) -> DOFArray:
+                    temperature_seed: Optional[DOFArray] = None,
+                    dissipation_rate: Optional[DOFArray] = None) -> DOFArray:
         r"""Get the thermodynamic temperature of the gas.
 
         The thermodynamic temperature ($T$) is calculated iteratively with
@@ -1778,6 +1799,9 @@ class NNFlameletMixture(MixtureEOS):
         # For mixtures, the temperature calculation *must* be seeded. This
         # check catches any actual temperature calculation that did not
         # provide a seed.
+        if dissipation_rate is None:
+            raise DissipationRateMissingError("NNFlameletMixture.temperature"
+                                              "requires a *dissipation_rate*.")
         z = cv.mixture_fractions
         if self._flamelet_nn:
             y, temp = self._flamelet_nn(diss_rate_st=temperature_seed,
