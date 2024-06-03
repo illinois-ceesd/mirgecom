@@ -1531,25 +1531,28 @@ class NNFlameletMixture(MixtureEOS):
 
     def get_species_mass_fractions(
             self, cv: Optional[ConservedVars] = None,
-            mixture_fractions: Optional[DOFArray] = None) -> np.ndarray:
+            mixture_fractions: Optional[DOFArray] = None,
+            dissipation_rate: Optional[DOFArray] = None) -> np.ndarray:
         r"""Get mixture species mass fractions from mixture fraction."""
         if cv is None and mixture_fractions is None:
             raise ValueError("One of *cv* or *mixture_fractions* must be specified")
-        if mixture_fractions is None:
-            mixture_fractions = cv.mixture_fractions
+        z = mixture_fractions
+        if z is None:
+            z = cv.mixture_fractions
+        # if dissipation_rate is None:
+        #    raise ValueError("Missing dissipation rate for computing mass fracs")
+        if self._flamelet_nn and dissipation_rate is not None:
+            y, temp = self._flamelet_nn.reconstruct(diss_rate=dissipation_rate,
+                                        mixture_fraction=z[0])
+            return y
+        # raise AssertionError("NNFlamelet EOS has no active NN object.")
+        # What the flamelet did before NN
         y_fu = self._y_fu
         y_ox = self._y_ox
-        # return make_obj_array([self.y_ox[i] + (y_fu[i] - y_ox[i])*mixture_fractions
-        #                       for i in self._nspecies])
-        # return np.outer(y_fu - y_ox, mixture_fractions) + y_ox
-        return (y_fu - y_ox)*mixture_fractions + y_ox
+        return (y_fu - y_ox)*z + y_ox
 
     def get_species_enthalpies(self, mixture_fractions: DOFArray) -> np.ndarray:
         r"""Get species enthalpies from mixture fraction."""
-        # return make_obj_array([self.h_ox[i] + (h_fu[i] - h_ox[i])*mixture_fractions
-        #                       for i in self._nspecies])
-        # h_fu = self.get_enthalpy(species_mass_fractions=1.)
-        # self._h_ox = self.get_enthalpy(species_mass_fractions=0.)
         return np.outer(self._h_fu - self._h_ox, mixture_fractions[0]) + self._h_ox
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
@@ -1803,10 +1806,14 @@ class NNFlameletMixture(MixtureEOS):
             raise DissipationRateMissingError("NNFlameletMixture.temperature"
                                               "requires a *dissipation_rate*.")
         z = cv.mixture_fractions
+
         if self._flamelet_nn:
-            y, temp = self._flamelet_nn(diss_rate_st=temperature_seed,
+            y, temp = self._flamelet_nn.reconstruct(diss_rate=dissipation_rate,
                                         mixture_fraction=z[0])
             return temp
+        else:
+            raise AssertionError("NNFlamelet EOS has no active NN object.")
+
         if temperature_seed is None:
             raise TemperatureSeedMissingError("MixtureEOS.get_temperature"
                                               "requires a *temperature_seed*.")
