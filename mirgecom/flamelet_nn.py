@@ -69,7 +69,7 @@ class FlameletNN:
             "ij,j...->i...", w, x
         ) + b
 
-    def reconstruct(self, diss_rate_st, mixture_fraction, actx=None):
+    def reconstruct(self, diss_rate, mixture_fraction, actx=None):
         if actx is None:
             actx = get_container_context_recursively(mixture_fraction)
             npctx = actx.np
@@ -77,9 +77,9 @@ class FlameletNN:
             npctx = np
 
         num_dim = len(mixture_fraction.shape)
-        # diss_rate_st = self.stoichiometric_diss_rate(
-        #    npctx, mixture_fraction, diss_rate
-        # )
+        diss_rate_st = self.stoichiometric_diss_rate(
+            npctx, mixture_fraction, diss_rate
+        )
 
         x = npctx.stack((diss_rate_st, mixture_fraction))
         x = npctx.tanh(
@@ -105,8 +105,10 @@ class FlameletNN:
             self.state_std[0].reshape((-1,) + num_dim * (1,)) * x[0]
             + self.state_mean[0].reshape((-1,) + num_dim * (1,))
         )
+
         mass_frac = (
             self.state_std[1:].reshape((-1,) + num_dim * (1,)) * x[1:]
             + self.state_mean[1:].reshape((-1,) + num_dim * (1,))
         )
+
         return temp, mass_frac
