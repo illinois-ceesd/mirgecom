@@ -50,6 +50,7 @@ from grudge.dof_desc import (
     VolumeDomainTag,
     DISCR_TAG_BASE,
 )
+from grudge.geometry import normal as face_normal
 import grudge.op as op
 from mirgecom.fluid import (
     make_conserved,
@@ -296,7 +297,12 @@ def inviscid_flux_on_element_boundary(
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     def _interior_flux(state_pair):
-        print(f"{state_pair.dd=},{dd_allfaces_quad=}")
+        # actx = state_pair.int.array_context
+        # mass = state_pair.int.mass_density
+        # print(f"cq.shape={mass[0].shape}")
+        # normal = actx.thaw(face_normal(actx, dcoll, state_pair.dd))
+        # print(f"{normal[0][0].shape=}")
+        # print(f"{state_pair.dd=}")
         return op.project(dcoll,
             state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(

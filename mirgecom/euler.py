@@ -406,15 +406,21 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
         domain_boundary_states_quad, quadrature_tag=quadrature_tag,
         numerical_flux_func=inviscid_numerical_flux_func, time=time,
         dd=dd_vol)
-
+    print(f"{inviscid_flux_vol.mass[0][0].shape=}")
+    print(f"{inviscid_flux_bnd.mass[0].shape=}")
     vol_term = op.weak_local_div(dcoll, dd_vol_quad, inviscid_flux_vol)
+    # vol_term = volume_quadrature_project(dcoll, dd_vol_quad, vol_term)
     bnd_term = op.face_mass(dcoll, dd_allfaces_quad, inviscid_flux_bnd)
+    print(f"{vol_term.mass[0].shape=}")
+    print(f"{bnd_term.mass[0].shape=}")
+
+    ivterm = vol_term - bnd_term
 
     # return -div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
     #                     inviscid_flux_vol, inviscid_flux_bnd)
     return op.inverse_mass(
         dcoll, dd_vol_quad.with_discr_tag(DISCR_TAG_BASE),
-        vol_term - bnd_term)
+        ivterm)
 
 
 # By default, run unitless

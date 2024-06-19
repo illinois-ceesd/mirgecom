@@ -51,33 +51,19 @@ def create_discretization_collection(actx, volume_meshes, order, *,
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DISCR_TAG_MODAL
     from grudge.discretization import make_discretization_collection
     from meshmode.discretization.poly_element import (
-        QuadratureSimplexGroupFactory,
+        InterpolatoryEdgeClusteredGroupFactory,
         QuadratureGroupFactory,
-        PolynomialRecursiveNodesGroupFactory,
-        LegendreGaussLobattoTensorProductGroupFactory as Lgl,
         ModalGroupFactory
     )
 
-    if tensor_product_elements:
-        if quadrature_order < 0:
-            quadrature_order = 2*order + 1
-        return make_discretization_collection(
-            actx, volume_meshes,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: Lgl(order),
-                DISCR_TAG_MODAL: ModalGroupFactory(order),
-                DISCR_TAG_QUAD: QuadratureGroupFactory(quadrature_order)
-            }
-        )
-    else:
-        if quadrature_order < 0:
-            quadrature_order = 2*order+1
-        return make_discretization_collection(
-            actx, volume_meshes,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: PolynomialRecursiveNodesGroupFactory(order=order,
-                                                                     family="lgl"),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(quadrature_order),
-                DISCR_TAG_MODAL: ModalGroupFactory(order)
-            }
-        )
+    if quadrature_order < 0:
+        quadrature_order = 2*order + 1
+
+    return make_discretization_collection(
+        actx, volume_meshes,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: InterpolatoryEdgeClusteredGroupFactory(order),
+            DISCR_TAG_MODAL: ModalGroupFactory(order),
+            DISCR_TAG_QUAD: QuadratureGroupFactory(quadrature_order)
+        }
+    )
