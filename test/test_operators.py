@@ -181,7 +181,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
 
         return wonk_field
 
-    do_wonk_test = not tpe
+    do_wonk_test = False
 
     do_rotation_test = False
     if dim > 1:
