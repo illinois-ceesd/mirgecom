@@ -48,6 +48,11 @@ def create_discretization_collection(actx, volume_meshes, order, *,
             "mpi_communicator argument is deprecated and will disappear in Q4 2022.",
             DeprecationWarning, stacklevel=2)
 
+    if tensor_product_elements:
+        warn(
+            "tensor_product_elements argument is not needed and will vanish soon.",
+            DeprecationWarning, stacklevel=2)
+
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DISCR_TAG_MODAL
     from grudge.discretization import make_discretization_collection
     from meshmode.discretization.poly_element import (

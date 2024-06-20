@@ -223,8 +223,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             theta = rotation_angle/180.0 * np.pi
             local_mesh = rotate_mesh_around_axis(local_mesh, theta=theta)
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             tensor_product_elements=use_tpe)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.
 
