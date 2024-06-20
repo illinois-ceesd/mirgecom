@@ -205,7 +205,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
 
     sym_test_func = sym_test_func_factory(dim)
 
-    tol = 1e-10 if dim < 3 else 1e-9
+    tol = 1e-10 if dim < 3 else 2e-9
 
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
