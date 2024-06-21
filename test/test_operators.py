@@ -133,8 +133,22 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
-@pytest.mark.parametrize("tpe", [False, True])
-@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
+                         [
+                             (1, "tet_box1", None, False),
+                             (2, "tet_box2", None, False),
+                             (3, "tet_box3", None, False),
+                             (2, "hex_box2", None, False),
+                             (3, "hex_box3", None, False),
+                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
+                             ])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("sym_test_func_factory", [
     partial(_coord_test_func, order=0),
@@ -144,7 +158,8 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     _trig_test_func,
     _cv_test_func
 ])
-def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
+def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
+                       order, sym_test_func_factory):
     """Test the gradient operator for sanity.
 
     Check whether we get the right answers for gradients of analytic functions with
@@ -181,24 +196,14 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
 
         return wonk_field
 
-    do_wonk_test = False
-
-    do_rotation_test = False
-    if dim > 1:
-        do_rotation_test = True
-        if dim == 2:
-            rotation_axes = [np.array([0, 0, 1])]
-        else:
-            rotation_axes = [np.array([0, 0, 1]),
-                             np.array([0, 1, 1]),
-                             np.array([1, 1, 1])]
+    tpe = mesh_name.startswith("hex_")
+    rotation_angle = 32.0
+    theta = rotation_angle/180.0 * np.pi
 
     # This comes from array_context
     actx = actx_factory()
 
     if tpe:  # TPE requires *grudge* array context, not array_context
-        if dim == 1:  # TPE does not support dim=1
-            pytest.skip()
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)
         actx = PyOpenCLArrayContext(queue)
@@ -216,13 +221,16 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
         b = tuple((2 ** n) for n in range(dim))
 
         mesh = get_box_mesh(dim, a=0, b=b, n=nfac*3, tensor_product_elements=tpe)
+        if wonk:
+            mesh = map_mesh(mesh, add_wonk)
+        if rot_axis is not None:
+            mesh = rotate_mesh_around_axis(mesh, theta=theta, axis=rot_axis)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                 tensor_product_elements=tpe)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
 
         # compute max element size
         h_max = h_max_from_volume(dcoll)
@@ -280,172 +288,3 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < tol
     )
-
-    if do_rotation_test:
-
-        rotation_angle = 32.0
-        for rotation_axis in rotation_axes:
-
-            eoc = EOCRecorder()
-
-            for nfac in [2, 4, 8]:
-
-                # Make non-uniform spacings
-                b = tuple((2 ** n) for n in range(dim))
-
-                mesh = get_box_mesh(dim, a=0, b=b, n=nfac*3,
-                                    tensor_product_elements=tpe)
-
-                theta = rotation_angle/180.0 * np.pi
-                mesh = rotate_mesh_around_axis(mesh, theta=theta, axis=rotation_axis)
-
-                logger.info(
-                    f"Number of {dim}d elements: {mesh.nelements}"
-                )
-
-                dcoll = create_discretization_collection(actx, mesh, order=order)
-
-                # compute max element size
-                h_max = h_max_from_volume(dcoll)
-
-                def sym_eval(expr, x_vec):
-                    mapper = sym.EvaluationMapper({"x": x_vec})
-                    from arraycontext import rec_map_array_container
-                    return rec_map_array_container(
-                        # If expressions don't depend on coords (e.g., order 0),
-                        # evaluated result will be scalar-valued, so promote to
-                        # DOFArray
-                        lambda comp_expr: mapper(comp_expr) + 0*x_vec[0],
-                        expr)
-
-                test_func = partial(sym_eval, sym_test_func)
-                grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
-
-                nodes = actx.thaw(dcoll.nodes())
-                int_flux = partial(central_flux_interior, actx, dcoll)
-                bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
-
-                test_data = test_func(nodes)
-                exact_grad = grad_test_func(nodes)
-
-                err_scale = max(flatten(componentwise_norms(dcoll, exact_grad,
-                                                            np.inf), actx))
-
-                if err_scale <= 1e-16:
-                    err_scale = 1
-
-                print(f"{test_data=}")
-                print(f"{exact_grad=}")
-
-                test_data_int_tpair = interior_trace_pair(dcoll, test_data)
-                boundaries = [BTAG_ALL]
-                test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
-                                                 test_data_int_tpair, boundaries)
-
-                dd_vol = as_dofdesc("vol")
-                dd_allfaces = as_dofdesc("all_faces")
-                test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
-                                          test_data, test_data_flux_bnd)
-
-                print(f"{test_grad=}")
-                grad_err = \
-                    max(flatten(
-                        componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
-                        actx) / err_scale)
-
-                eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
-
-            assert (
-                eoc.order_estimate() >= order - 0.5
-                or eoc.max_error() < tol
-            )
-
-    if do_wonk_test:
-
-        tol = 1e-8
-
-        rotation_angles = [0.0]
-        if dim == 2:
-            rotation_axis = np.array([0, 0, 1])
-        else:
-            rotation_axis = np.array([1, 1, 1])
-
-        for rotation_angle in rotation_angles:
-
-            eoc = EOCRecorder()
-
-            for nfac in [2, 4, 8]:
-
-                # Make non-uniform spacings
-                b = tuple((2 ** n) for n in range(dim))
-
-                mesh = get_box_mesh(dim, a=0, b=b, n=nfac*3,
-                                    tensor_product_elements=tpe)
-
-                mesh = map_mesh(mesh, add_wonk)
-
-                if rotation_angle > 0:
-                    theta = rotation_angle/180.0 * np.pi
-                    mesh = rotate_mesh_around_axis(mesh, theta=theta,
-                                                   axis=rotation_axis)
-
-                logger.info(
-                    f"Number of {dim}d elements: {mesh.nelements}"
-                )
-
-                dcoll = create_discretization_collection(actx, mesh, order=order)
-
-                # compute max element size
-                h_max = h_max_from_volume(dcoll)
-
-                def sym_eval(expr, x_vec):
-                    mapper = sym.EvaluationMapper({"x": x_vec})
-                    from arraycontext import rec_map_array_container
-                    return rec_map_array_container(
-                        # If expressions don't depend on coords (e.g., order 0),
-                        # evaluated result will be scalar-valued, so promote to
-                        # DOFArray
-                        lambda comp_expr: mapper(comp_expr) + 0*x_vec[0],
-                        expr)
-
-                test_func = partial(sym_eval, sym_test_func)
-                grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
-
-                nodes = actx.thaw(dcoll.nodes())
-                int_flux = partial(central_flux_interior, actx, dcoll)
-                bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
-
-                test_data = test_func(nodes)
-                exact_grad = grad_test_func(nodes)
-
-                err_scale = max(flatten(componentwise_norms(dcoll, exact_grad,
-                                                            np.inf), actx))
-
-                if err_scale <= 1e-10:
-                    err_scale = 1
-
-                print(f"{test_data=}")
-                print(f"{exact_grad=}")
-
-                test_data_int_tpair = interior_trace_pair(dcoll, test_data)
-                boundaries = [BTAG_ALL]
-                test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
-                                                 test_data_int_tpair, boundaries)
-
-                dd_vol = as_dofdesc("vol")
-                dd_allfaces = as_dofdesc("all_faces")
-                test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
-                                          test_data, test_data_flux_bnd)
-
-                print(f"{test_grad=}")
-                grad_err = \
-                    max(flatten(
-                        componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
-                        actx) / err_scale)
-
-                eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
-
-            assert (
-                eoc.order_estimate() >= order - 0.5
-                or eoc.max_error() < tol
-            )
