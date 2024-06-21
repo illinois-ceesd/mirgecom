@@ -193,7 +193,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
-        print(f"{local_mesh.ambient_dim=}, {local_mesh.dim=}")
 
         if dim is None:
             dim = local_mesh.ambient_dim
