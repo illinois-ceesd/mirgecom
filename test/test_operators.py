@@ -187,11 +187,11 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
     if dim > 1:
         do_rotation_test = True
         if dim == 2:
-            rotation_axes = [[0, 0, 1]]
+            rotation_axes = [np.array([0, 0, 1])]
         else:
-            rotation_axes = [[0, 0, 1],
-                             [0, 1, 1],
-                             [1, 1, 1]]
+            rotation_axes = [np.array([0, 0, 1]),
+                             np.array([0, 1, 1]),
+                             np.array([1, 1, 1])]
 
     # This comes from array_context
     actx = actx_factory()
@@ -213,8 +213,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
     for nfac in [2, 4, 8]:
 
         # Make non-uniform spacings
-        b = [(2 ** n) for n in range(dim)]
-        b = tuple(b)
+        b = tuple((2 ** n) for n in range(dim))
 
         mesh = get_box_mesh(dim, a=0, b=b, n=nfac*3, tensor_product_elements=tpe)
 
@@ -292,8 +291,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
             for nfac in [2, 4, 8]:
 
                 # Make non-uniform spacings
-                b = [(2 ** n) for n in range(dim)]
-                b = tuple(b)
+                b = tuple((2 ** n) for n in range(dim))
 
                 mesh = get_box_mesh(dim, a=0, b=b, n=nfac*3,
                                     tensor_product_elements=tpe)
@@ -305,8 +303,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
                     f"Number of {dim}d elements: {mesh.nelements}"
                 )
 
-                dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                         tensor_product_elements=tpe)
+                dcoll = create_discretization_collection(actx, mesh, order=order)
 
                 # compute max element size
                 h_max = h_max_from_volume(dcoll)
@@ -369,9 +366,9 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
 
         rotation_angles = [0.0]
         if dim == 2:
-            rotation_axis = [0, 0, 1]
+            rotation_axis = np.array([0, 0, 1])
         else:
-            rotation_axis = [1, 1, 1]
+            rotation_axis = np.array([1, 1, 1])
 
         for rotation_angle in rotation_angles:
 
@@ -380,8 +377,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
             for nfac in [2, 4, 8]:
 
                 # Make non-uniform spacings
-                b = [(2 ** n) for n in range(dim)]
-                b = tuple(b)
+                b = tuple((2 ** n) for n in range(dim))
 
                 mesh = get_box_mesh(dim, a=0, b=b, n=nfac*3,
                                     tensor_product_elements=tpe)
@@ -397,8 +393,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory):
                     f"Number of {dim}d elements: {mesh.nelements}"
                 )
 
-                dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                         tensor_product_elements=tpe)
+                dcoll = create_discretization_collection(actx, mesh, order=order)
 
                 # compute max element size
                 h_max = h_max_from_volume(dcoll)
