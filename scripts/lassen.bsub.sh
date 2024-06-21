@@ -27,11 +27,11 @@ jsrun_cmd="jsrun -g 1 -a 1 -n $nproc"
 # https://mirgecom.readthedocs.io/en/latest/running.html#avoiding-overheads-due-to-caching-of-kernels
 # on why this is important
 MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)/.mirge-cache/"}
-export XDG_CACHE_HOME_ROOT="${MIRGE_CACHE_ROOT}/xdg-cache/rank"
+export XDG_CACHE_HOME="${MIRGE_CACHE_ROOT}/xdg-cache"
 
 # Reenable CUDA cache
 export CUDA_CACHE_DISABLE=0
-export CUDA_CACHE_PATH_ROOT="${MIRGE_CACHE_ROOT}/cuda-cache/rank"
+export CUDA_CACHE_PATH="${MIRGE_CACHE_ROOT}/cuda-cache"
 
 # Print task allocation
 $jsrun_cmd js_task_info
@@ -39,4 +39,4 @@ $jsrun_cmd js_task_info
 echo "----------------------------"
 
 # Run application
-$jsrun_cmd bash -c 'CUDA_CACHE_PATH=$CUDA_CACHE_PATH_ROOT$OMPI_COMM_WORLD_RANK XDG_CACHE_HOME=$XDG_CACHE_HOME_ROOT$OMPI_COMM_WORLD_RANK python -m mpi4py ../examples/pulse.py --lazy'
+$jsrun_cmd python -m mpi4py ../examples/pulse.py --lazy

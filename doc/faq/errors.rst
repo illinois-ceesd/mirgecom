@@ -68,9 +68,3 @@ to run the simulation::
 
 
 Try running on more nodes and/or devices.
-
-
-What can I do about ``CUDA_ERROR_FILE_NOT_FOUND: file not found`` errors?
--------------------------------------------------------------------------
-
-Please see :ref:`caching-errors` for a workaround.
