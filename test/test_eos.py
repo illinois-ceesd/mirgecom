@@ -35,7 +35,7 @@ from grudge import op
 
 from meshmode.array_context import (  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    SingleGridWorkBalancingPytatoArrayContext as PytatoPyOpenCLArrayContext
 )
 from meshmode.mesh.generation import generate_regular_rect_mesh
 from meshmode.array_context import (  # noqa
