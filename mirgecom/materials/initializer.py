@@ -40,8 +40,9 @@ class SolidWallInitializer:
     materials, and/or their combination, subject or not to ablation.
     """
 
-    def __init__(self, temperature):
+    def __init__(self, temperature, material_densities):
         self._temp = temperature
+        self._mass = material_densities
 
     def __call__(self, x_vec, wall_model):
         """Evaluate the wall+gas properties for porous materials.
@@ -59,8 +60,14 @@ class SolidWallInitializer:
             The conserved variables for heat-conduction only materials.
         """
         actx = x_vec[0].array_context
-        mass = wall_model.density() + actx.np.zeros_like(x_vec[0])
-        energy = mass * wall_model.enthalpy(self._temp)
+
+        mass = self._mass + actx.np.zeros_like(x_vec[0])
+        solid_mass = wall_model.solid_density(mass)
+        tau = wall_model.decomposition_progress(mass)
+
+        temperature = self._temp + actx.np.zeros_like(x_vec[0])
+        energy = solid_mass * wall_model.enthalpy(temperature=temperature,
+                                                  tau=tau)
         return SolidWallConservedVars(mass=mass, energy=energy)
 
 
@@ -91,6 +98,8 @@ class PorousWallInitializer:
         cv: :class:`mirgecom.fluid.ConservedVars`
             The conserved variables for porous-media flows. It depends on
             both gas and porous material properties.
+        wall_density: numpy.ndarray or :class:`meshmode.dof_array.DOFArray`
+            The densities of each one of the materials
         """
         actx = x_vec[0].array_context
         zeros = actx.np.zeros_like(x_vec[0])
@@ -125,5 +134,7 @@ class PorousWallInitializer:
 
         species_mass = eps_rho_gas*species_mass_frac
 
-        return make_conserved(dim=dim, mass=eps_rho_gas, energy=bulk_energy,
-                              momentum=momentum, species_mass=species_mass)
+        cv = make_conserved(dim=dim, mass=eps_rho_gas, energy=bulk_energy,
+                            momentum=momentum, species_mass=species_mass)
+
+        return cv, wall_density

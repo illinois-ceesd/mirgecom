@@ -8,4 +8,4 @@ Operators
    diffusion
    artificial_viscosity
    gas-dynamics
-   thermally_coupled
+   fluid_wall_coupled
