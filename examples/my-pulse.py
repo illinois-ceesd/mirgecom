@@ -48,6 +48,7 @@ from mirgecom.steppers import advance_state
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
     Uniform,
+    MyNotUniform,
     AcousticPulse
 )
 from mirgecom.eos import IdealSingleGas
@@ -105,7 +106,7 @@ def main(actx_class, use_esdg=False,
     else:
         timestepper = rk4_step
     current_cfl = 1.0
-    current_dt = .0005
+    current_dt = 0.005
     n_steps = 200
     t_final = n_steps * current_dt
     current_t = 0
@@ -114,7 +115,7 @@ def main(actx_class, use_esdg=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 5
-    nviz = 100
+    nviz = 1
     nhealth = 1
 
     dim = 2
@@ -173,14 +174,15 @@ def main(actx_class, use_esdg=False,
     gas_model = GasModel(eos=eos)
     velocity = np.zeros(shape=(dim,))
     velocity[0] = 0.0
-    orig = np.zeros(shape=(dim,))
-    initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
+    # orig = np.zeros(shape=(dim,))
+
+    initializer = MyNotUniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
     boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
     # boundaries = {}
 
-    acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
+    # acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -188,7 +190,8 @@ def main(actx_class, use_esdg=False,
         current_cv = restart_data["cv"]
     else:
         # Set the current state from time 0
-        current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
+        # current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
+        current_cv = uniform_state
 
     current_state = make_fluid_state(current_cv, gas_model)
 
@@ -238,8 +241,8 @@ def main(actx_class, use_esdg=False,
     def my_health_check(pressure):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
+        if check_naninf_local(dcoll, "vol", pressure):
+           # or check_range_local(dcoll, "vol", pressure, .8, 1.6):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
         return health_error

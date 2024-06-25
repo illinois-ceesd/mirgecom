@@ -1088,6 +1088,88 @@ class Uniform:
                               momentum=momrhs, species_mass=yrhs)
 
 
+class MyNotUniform:
+
+    def __init__(self, *, dim=1, nspecies=0, rho=None, pressure=None, energy=None,
+                 velocity=None, temperature=None, species_mass_fractions=None):
+        r"""Initialize uniform flow parameters.
+
+        Parameters
+        ----------
+        dim: int
+            specify the number of dimensions for the flow
+        nspecies: int
+            specify the number of species in the flow
+        rho: float
+            specifies the density
+        p: float
+            specifies the pressure
+        e: float
+            specifies the internal energy
+        velocity: numpy.ndarray
+            specifies the flow velocity
+        """
+        if velocity is not None:
+            numvel = len(velocity)
+            myvel = velocity
+            if numvel > dim:
+                dim = numvel
+            elif numvel < dim:
+                myvel = np.zeros(shape=(dim,))
+                for i in range(numvel):
+                    myvel[i] = velocity[i]
+            self._velocity = myvel
+        else:
+            self._velocity = np.zeros(shape=(dim,))
+
+        if species_mass_fractions is not None:
+            self._nspecies = len(species_mass_fractions)
+            self._mass_fracs = species_mass_fractions
+        else:
+            self._nspecies = nspecies
+            self._mass_fracs = np.zeros(shape=(nspecies,))
+
+        if self._velocity.shape != (dim,):
+            raise ValueError(f"Expected {dim}-dimensional inputs.")
+
+        self._temp = temperature
+        self._p = pressure
+        self._rho = rho
+        self._e = energy  # XXX Unused. Deprecate this?
+        self._dim = dim
+
+    def __call__(self, x_vec, eos, **kwargs):
+        """Create a uniform flow solution at locations *x_vec*.
+
+        Parameters
+        ----------
+        x_vec: numpy.ndarray
+            Nodal coordinates
+        eos: :class:`mirgecom.eos.IdealSingleGas`
+            Equation of state class with method to supply gas *gamma*.
+
+        Returns
+        -------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Fluid solution
+        """
+        actx = x_vec[0].array_context
+        x = x_vec[0]
+        dim = len(x_vec)
+        print(f"{x_vec=}")
+        x2 = np.dot(x_vec, x_vec)
+        print(f"{x2=}")
+
+        mass = 0*x2 + 1.0
+        print(f"{mass=}")
+
+        mom = 0*x_vec + 1.0
+        energy = actx.np.sin(x) + 10000
+
+        return make_conserved(dim=dim, mass=mass, energy=energy,
+                              momentum=mom)
+
+
 class MixtureInitializer:
     r"""Solution initializer for multi-species mixture.
 
@@ -1145,11 +1227,6 @@ class MixtureInitializer:
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
-        actx = x_vec[0].array_context
-        return initialize_flow_solution(
-            actx, coords=x_vec, eos=eos, pressure=self._pressure,
-            temperature=self._temperature, velocity=self._velocity,
-            species_mass_fractions=self._massfracs)
 
 
 class PlanarDiscontinuity:
