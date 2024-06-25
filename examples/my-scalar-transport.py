@@ -137,6 +137,8 @@ def main(actx_class, use_esdg=False,
     order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+    rank_field = 0*nodes[0] + rank
+
     # quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     vis_timer = None
@@ -161,7 +163,7 @@ def main(actx_class, use_esdg=False,
     velocity[0] = 0.0
     orig = np.zeros(shape=(dim,))
 
-    alpha = .1
+    alpha = 5.0
 
     def initializer(xyz_coords):
         dim = len(xyz_coords)
@@ -201,7 +203,8 @@ def main(actx_class, use_esdg=False,
         logger.info(init_message)
 
     def my_write_viz(step, t, state):
-        viz_fields = [("state", state)]
+        viz_fields = [("state", state),
+                      ("rank", rank_field)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
