@@ -103,7 +103,7 @@ def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> Non
 
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
-    """Deprecated. Do not use in new code."""
+    """Do not use in new code. Deprecated."""
     from warnings import warn
     warn("logmgr_add_device_name is deprecated and will disappear in Q3 2021. "
          "Use logmgr_add_cl_device_info instead.", DeprecationWarning,
@@ -204,7 +204,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: Optional[str] = No
 
 # {{{ State handling
 
-def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
+def set_sim_state(mgr: LogManager, dim, state, eos=None) -> None:
     """Update the simulation state of all :class:`StateConsumer` of the log manager.
 
     Parameters
