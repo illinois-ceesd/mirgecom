@@ -41,6 +41,8 @@ from mirgecom.simutil import (
     distribute_mesh
 )
 from mirgecom.io import make_init_message
+import grudge.op as op
+import grudge.geometry as geo
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
@@ -61,6 +63,15 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+def advection_numerical_flux(dcoll, soln_trace_pair, velocity):
+    actx = soln_trace_pair.int.array_context # = Q^-
+    dd = soln_trace_pair.dd
+    n_hat = geo.normal(actx, dcoll, dd)
+    v_normal = np.dot(velocity, n_hat)
+
+    return soln_trace_pair.avg * v_normal
+
+    
 @mpi_entry_point
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
@@ -134,7 +145,7 @@ def main(actx_class, use_esdg=False,
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
+    order = 3
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
     rank_field = 0*nodes[0] + rank
@@ -160,7 +171,9 @@ def main(actx_class, use_esdg=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.0
+    velocity[0] = 0.01
+    velocity[1] = 0.04
+
     orig = np.zeros(shape=(dim,))
 
     alpha = 5.0
@@ -278,8 +291,15 @@ def main(actx_class, use_esdg=False,
         return state, dt
 
     def my_rhs(t, state):
-        return 0 * state
+        def flux(tpair):
+            return op.project(dcoll, tpair.dd, "all_faces",
+                              advection_numerical_flux(dcoll, tpair, velocity))
 
+        volume_flux = velocity * state
+        volume_term = op.weak_local_div(dcoll, volume_flux)
+        surface_term = sum(flux(tpair)
+                           for tpair in op.interior_trace_pairs(dcoll, state))
+        return op.inverse_mass(dcoll, volume_term - op.face_mass(dcoll, surface_term))
 
     # Need a DT calculation for scalar transport
     # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
