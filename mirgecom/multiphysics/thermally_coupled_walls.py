@@ -145,6 +145,9 @@ class InterfaceWallBoundary(DiffusionBoundary):
         self.u_plus = u_plus
         self.grad_u_plus = grad_u_plus
         self._gap_resistance = gap_resistance
+        if gap_resistance < 1e-10:
+            print("YABADABADOO")
+            sys.exit()
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
@@ -163,7 +166,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
             return numerical_flux_func(kappa_tpair, u_tpair, normal)
         else:
-            return u_minus*normal
+            return -u_minus*normal
 
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
@@ -268,10 +271,7 @@ def _get_interface_boundaries_no_grad(
         wall_1_dd, wall_2_dd,
         wall_1_kappa, wall_2_kappa,
         wall_1_temperature, wall_2_temperature,
-        wall_1_boundaries, wall_2_boundaries,
         interface_resistance,
-        wall_penalty_amount,
-        quadrature_tag,
         comm_tag):
 
     interface_tpairs = _get_interface_trace_pairs_no_grad(
@@ -306,10 +306,10 @@ def _get_interface_boundaries(
         wall_1_kappa, wall_2_kappa,
         wall_1_temperature, wall_2_temperature,
         wall_1_grad_temperature, wall_2_grad_temperature,
-        wall_1_boundaries, wall_2_boundaries,
+        # wall_1_boundaries, wall_2_boundaries,
         interface_resistance,
-        wall_penalty_amount,
-        quadrature_tag,
+        # wall_penalty_amount,
+        # quadrature_tag,
         comm_tag):
 
     interface_tpairs = _get_interface_trace_pairs(
@@ -390,9 +390,9 @@ def add_interface_boundaries_no_grad(
             dcoll,
             wall_1_dd, wall_2_dd,
             wall_1_kappa, wall_2_kappa,
-            wall_2_temperature, wall_2_temperature,
+            wall_1_temperature, wall_2_temperature,
             interface_resistance,
-            quadrature_tag,
+            # quadrature_tag,
             comm_tag)
 
     wall_1_all_boundaries_no_grad = {}
@@ -477,10 +477,10 @@ def add_interface_boundaries(
             wall_1_kappa, wall_2_kappa,
             wall_1_temperature, wall_2_temperature,
             wall_1_grad_temperature, wall_2_grad_temperature,
-            wall_1_boundaries, wall_2_boundaries,
+            # wall_1_boundaries, wall_2_boundaries,
             interface_resistance,
-            wall_penalty_amount,
-            quadrature_tag,
+            # wall_penalty_amount,
+            # quadrature_tag,
             comm_tag)
 
     wall_1_all_boundaries = {}
