@@ -1,24 +1,4 @@
-r""":mod:`mirgecom.multiphysics.thermally_coupled_fluid_wall` for thermally-coupled
-fluid and wall.
-
-Couples a fluid subdomain governed by the compressible Navier-Stokes equations
-(:mod:`mirgecom.navierstokes`) with a wall subdomain governed by the heat
-equation (:mod:`mirgecom.diffusion`) through temperature and heat flux. This
-coupling can optionally include a sink term representing emitted radiation.
-In the non-radiating case, coupling enforces continuity of temperature and heat flux
-
-.. math::
-    T_\text{wall} &= T_\text{fluid} \\
-    -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n} &=
-        -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n},
-
-and in the radiating case, coupling enforces a similar condition but with an
-additional radiation sink term in the heat flux
-
-.. math::
-    -\kappa_\text{wall} \nabla T_\text{wall} \cdot \hat{n} =
-        -\kappa_\text{fluid} \nabla T_\text{fluid} \cdot \hat{n}
-        + \epsilon \sigma (T^4 - T_\text{ambient}^4).
+r""":mod:`mirgecom.multiphysics.thermally_coupled_walls` for thermally-coupled walls.
 
 Boundary Setup Functions
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -30,11 +10,10 @@ Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^
 
 .. autoclass:: InterfaceWallBoundary
-.. autoclass:: InterfaceWallRadiationBoundary
 """
 
 __copyright__ = """
-Copyright (C) 2022 University of Illinois Board of Trustees
+Copyright (C) 2024 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -57,31 +36,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import numpy as np
-# from abc import abstractmethod
-# from functools import partial
 
 from arraycontext import dataclass_array_container
 from meshmode.dof_array import DOFArray
-from grudge.trace_pair import (
-    TracePair,
-    inter_volume_trace_pairs
-)
-from grudge.dof_desc import (
-    DISCR_TAG_BASE,
-    # as_dofdesc,
-)
-# import grudge.op as op
-
-# from mirgecom.flux import num_flux_central
+from grudge.trace_pair import TracePair, inter_volume_trace_pairs
 from mirgecom.diffusion import (
     grad_facial_flux_weighted,
-    # diffusion_flux,
     diffusion_facial_flux_harmonic,
     DiffusionBoundary,
-    # grad_operator as wall_grad_t_operator,
-    # diffusion_operator,
 )
 from mirgecom.multiphysics import make_interface_boundaries
 from mirgecom.utils import project_from_base
@@ -101,12 +65,6 @@ class _WallGradTag:
 
 class _WallOperatorTag:
     pass
-
-
-def _replace_kappa(state, kappa):
-    """Replace the thermal conductivity in fluid state *state* with *kappa*."""
-    new_tv = replace(state.tv, thermal_conductivity=kappa)
-    return replace(state, tv=new_tv)
 
 
 # FIXME: Interior penalty should probably use an average of the lengthscales on
@@ -147,6 +105,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
         self._gap_resistance = gap_resistance
         if gap_resistance < 1e-10:
             print("YABADABADOO")
+            import sys
             sys.exit()
 
     def get_grad_flux(
@@ -199,7 +158,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
                 kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
                 penalty_amount=penalty_amount)
         else:
-            return -(u_plus - u_minus)/self._gap_resistance  # TODO check sign
+            return -(u_plus - u_minus)/self._gap_resistance
 
 
 @dataclass_array_container
@@ -306,10 +265,7 @@ def _get_interface_boundaries(
         wall_1_kappa, wall_2_kappa,
         wall_1_temperature, wall_2_temperature,
         wall_1_grad_temperature, wall_2_grad_temperature,
-        # wall_1_boundaries, wall_2_boundaries,
         interface_resistance,
-        # wall_penalty_amount,
-        # quadrature_tag,
         comm_tag):
 
     interface_tpairs = _get_interface_trace_pairs(
@@ -348,7 +304,6 @@ def add_interface_boundaries_no_grad(
         wall_1_boundaries, wall_2_boundaries,
         *,
         interface_resistance=None,
-        quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
     """
     Parameters
@@ -377,11 +332,6 @@ def add_interface_boundaries_no_grad(
 
     interface_resistance:
 
-    quadrature_tag
-
-        An identifier denoting a particular quadrature discretization to use during
-        operator evaluations.
-
     comm_tag: Hashable
         Tag for distributed communication
     """
@@ -392,7 +342,6 @@ def add_interface_boundaries_no_grad(
             wall_1_kappa, wall_2_kappa,
             wall_1_temperature, wall_2_temperature,
             interface_resistance,
-            # quadrature_tag,
             comm_tag)
 
     wall_1_all_boundaries_no_grad = {}
@@ -416,7 +365,6 @@ def add_interface_boundaries(
         *,
         interface_resistance=None,
         wall_penalty_amount=None,
-        quadrature_tag=DISCR_TAG_BASE,
         comm_tag=None):
     """
     Include the wall-wall interface boundaries.
@@ -457,11 +405,6 @@ def add_interface_boundaries(
         :class:`~mirgecom.multiphysics.thermally_coupled_fluid_wall.InterfaceFluidBoundary`
         for details.
 
-    quadrature_tag
-
-        An identifier denoting a particular quadrature discretization to use during
-        operator evaluations.
-
     comm_tag: Hashable
         Tag for distributed communication
     """
@@ -477,10 +420,7 @@ def add_interface_boundaries(
             wall_1_kappa, wall_2_kappa,
             wall_1_temperature, wall_2_temperature,
             wall_1_grad_temperature, wall_2_grad_temperature,
-            # wall_1_boundaries, wall_2_boundaries,
             interface_resistance,
-            # wall_penalty_amount,
-            # quadrature_tag,
             comm_tag)
 
     wall_1_all_boundaries = {}
