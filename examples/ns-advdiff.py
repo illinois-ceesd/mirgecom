@@ -121,8 +121,8 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     wave_vector = np.ones(shape=(dim,))
     wave_vector[1] = 0.5
     k2 = np.dot(wave_vector, wave_vector)
-    wave_vector = wave_vector / np.sqrt(k2)
-    wave_vector = 2 * np.pi * wave_vector / wavelength
+    wave_hat = wave_vector / np.sqrt(k2)
+    wave_vector = 2 * np.pi * wave_hat / wavelength
 
     cos_axis = np.zeros(shape=(dim,))
     scal_fac = np.ones(shape=(dim,))
@@ -135,15 +135,17 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     for d in range(dim):
         axis = np.zeros(shape=(dim,))
         axis[d] = 1
-        cos_axis[d] = np.dot(wave_vector, axis)
-        if np.abs(cos_axis[d]) < 1e-12:
+        cos_axis[d] = np.abs(np.dot(wave_hat, axis))
+        if cos_axis[d] < 1e-12:
             wave_vector[d] = 0
+            wave_hat[d] = 0
             scal_fac[d] = 0.5
         else:
             scal_fac[d] = 1./cos_axis[d]
-            boxl[d] = scal_fac[d]*boxl[d]
-            boxr[d] = scal_fac[d]*boxr[d]
-            nelax[d] = int(scal_fac[d]*nelax[d])
+        boxl[d] = scal_fac[d]*boxl[d]
+        boxr[d] = scal_fac[d]*boxr[d]
+        nelax[d] = int(scal_fac[d]*nelax[d])
+
     box_ll = tuple(boxl)
     box_ur = tuple(boxr)
     nel_axes = tuple(nelax)

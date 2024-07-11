@@ -104,7 +104,7 @@ def main(actx_class, use_esdg=False,
     else:
         timestepper = rk4_step
 
-    n_step = 2000
+    n_step = 20000
     current_cfl = 1.0
     current_dt = .005
     t_final = n_step * current_dt

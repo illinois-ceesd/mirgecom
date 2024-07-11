@@ -110,6 +110,32 @@ def num_flux_central(f_minus_normal, f_plus_normal):
     return (f_plus_normal + f_minus_normal)/2
 
 
+def num_flux_central_ip(f_minus_normal, f_plus_normal, q_minus, q_plus, alpha):
+    r"""Central low-level numerical flux.
+
+    The central flux is calculated as:
+
+    .. math::
+        f_{\text{central}} = \frac{\left(f^++f^-\right)}{2}
+
+    Parameters
+    ----------
+    f_minus_normal
+        Normal component of physical flux interior to (left of) interface
+
+    f_plus_normal
+        Normal component of physical flux exterior to (right of) interface
+
+    Returns
+    -------
+    numpy.ndarray
+
+        object array of :class:`~meshmode.dof_array.DOFArray` with the
+        central numerical flux.
+    """
+    return (f_plus_normal + f_minus_normal)/2 + alpha*(q_plus - q_minus)
+
+
 def num_flux_hll(f_minus_normal, f_plus_normal, q_minus, q_plus, s_minus, s_plus):
     r"""HLL low-level numerical flux.
 

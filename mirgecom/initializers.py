@@ -762,7 +762,7 @@ class MulticomponentTrig:
          {\rho}\mathbf{V} &= {\rho}\mathbf{V}_0\\
          {\rho}E &= \frac{p_0}{(\gamma - 1)} + \frac{1}{2}\rho{|V_0|}^{2}\\
          {\rho~Y_\alpha} &= {\rho~Y_\alpha}_{0}
-         + {a_\alpha}\sin{\omega(\mathbf{r} - \mathbf{v}t)},
+         + {a_\alpha}\sin{\mathbf{k}\cdot\mathbf{x} - \omega t)},
 
     where $\mathbf{V}_0$ is the fixed velocity specified by the user at init time,
     and $\gamma$ is taken from the equation-of-state object (eos).
@@ -856,6 +856,7 @@ class MulticomponentTrig:
         self._d = spec_diffusivities
         self._wave_vector = wave_vector
         self._trig_func = trig_function
+        self._k2 = np.dot(wave_vector, wave_vector)
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
         """
@@ -892,8 +893,9 @@ class MulticomponentTrig:
             spec_x = x_vec - self._spec_centers[i]
             wave_r = spec_x - vel_t
             wave_x = np.dot(wave_r, self._wave_vector)
-            expterm = mm.exp(-t*self._d[i]*self._spec_omegas[i]**2)
-            trigterm = self._trig_func(self._spec_omegas[i]*wave_x)
+            # wave_t = self._spec_omegas[i]*t
+            expterm = mm.exp(-t*self._d[i]*self._k2)
+            trigterm = self._trig_func(wave_x)
             spec_y = self._spec_y0s[i] + self._spec_amps[i]*expterm*trigterm
             spec_mass[i] = mass * spec_y
 
