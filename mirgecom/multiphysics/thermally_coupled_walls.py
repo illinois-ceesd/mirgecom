@@ -103,10 +103,6 @@ class InterfaceWallBoundary(DiffusionBoundary):
         self.u_plus = u_plus
         self.grad_u_plus = grad_u_plus
         self._gap_resistance = gap_resistance
-        if gap_resistance < 1e-10:
-            print("YABADABADOO")
-            import sys
-            sys.exit()
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
