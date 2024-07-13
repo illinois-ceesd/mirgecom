@@ -1,4 +1,4 @@
-"""Demonstrate simple scalar advection-diffusion."""
+"""Demonstrate scalar transport."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -23,43 +23,40 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
+
 import logging
 import numpy as np
 from functools import partial
-from pytools.obj_array import make_obj_array
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.discretization import create_discretization_collection
+# from meshmode.mesh import BTAG_ALL
+# from grudge.dof_desc import DISCR_TAG_QUAD
+from arraycontext import get_container_context_recursively
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DD_VOLUME_ALL
 
+from logpyle import IntervalTimer, set_dt
 
-from mirgecom.transport import SimpleTransport
-from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import (
-    # get_sim_timestep,
-    generate_and_distribute_mesh,
-    compare_fluid_solutions
-)
-from mirgecom.limiter import bound_preserving_limiter
-from mirgecom.fluid import make_conserved
-from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.simutil import (
+    distribute_mesh
+)
+from mirgecom.io import make_init_message
+from mirgecom.operators import (
+    grad_operator,
+    div_operator
+)
 from mirgecom.utils import force_evaluation
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-# from mirgecom.boundary import PrescribedFluidBoundary
-# from mirgecom.initializers import MulticomponentLump
-from mirgecom.eos import IdealSingleGas
-
-from logpyle import IntervalTimer, set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
+    logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
-    set_sim_state
 )
+import grudge.op as op
+import grudge.geometry as geo
 
 logger = logging.getLogger(__name__)
 
@@ -70,17 +67,63 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+def _diffusion_flux_interior(dcoll, grad_tpair, state_tpair,
+                             diffusivity, alpha=0):
+    actx = state_tpair.int.array_context
+    normal = actx.thaw(dcoll.normal(state_tpair.dd))
+    # average of -J
+    flux_avg = diffusivity * grad_tpair.avg
+    # This is -J .dot. nhat
+    flux_n = np.dot(flux_avg, normal)
+    state_jump = state_tpair.ext - state_tpair.int
+    dissipation = alpha * state_jump
+    return flux_n - dissipation
+
+
+def _gradient_flux_interior(dcoll, state_tpair):
+    """Compute interior face flux for gradient operator."""
+    actx = state_tpair.int.array_context
+    dd_trace = state_tpair.dd
+    dd_allfaces = dd_trace.with_boundary_tag(FACE_RESTR_ALL)
+    normal = actx.thaw(dcoll.normal(state_tpair.dd))
+    flux = state_tpair.avg * normal
+    return op.project(dcoll, dd_trace, dd_allfaces, flux)
+
+
+def _advection_flux_interior(dcoll, state_tpair, velocity):
+    r"""Compute the numerical flux for divergence of advective flux."""
+    actx = state_tpair.int.array_context
+    dd = state_tpair.dd
+    normal = geo.normal(actx, dcoll, dd)
+    v_n = np.dot(velocity, normal)
+    # v2 = np.dot(velocity, velocity)
+    # vmag = np.sqrt(v2)
+
+    # Lax-Friedrichs type
+    # return state_tpair.avg * v_dot_n \
+    # + 0.5 * vmag * (state_tpair.int - state_tpair.ext)
+    # Simple upwind flux
+    # state_upwind = actx.np.where(v_n > 0, state_tpair.int, state_tpair.ext)
+    # return state_upwind * v_n
+    # Central flux
+    return state_tpair.avg * v_n
+
+
 @mpi_entry_point
-def main(actx_class, use_overintegration=False, use_esdg=False,
-         use_leap=False, casename=None, rst_filename=None):
-    """Drive example."""
+def main(actx_class, use_esdg=False,
+         use_overintegration=False, use_leap=False,
+         casename=None, rst_filename=None,
+         init_type=None):
+    """Drive the example."""
     if casename is None:
         casename = "mirgecom"
+    if init_type is None:
+        init_type = "gaussian"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    nparts = comm.Get_size()
+    num_parts = comm.Get_size()
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -101,28 +144,45 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     else:
         timestepper = rk4_step
 
-    t_final = 1
-    current_cfl = 0.1
-    current_dt = 1e-5
+    nsteps = 20000
+    current_cfl = 1.0
+    current_dt = 1e-2
+    t_final = nsteps * current_dt
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nstatus = 100
-    nrestart = 100
-    nviz = 10
-    nhealth = 100
+    nstatus = 1
+    nrestart = 5
+    nviz = 100
+    nhealth = 1
 
+    # Bunch of problem setup stuff
     dim = 3
     nel_1d = 8
     order = 3
 
-    wavelength = 2 * np.pi
-    wave_vector = np.ones(shape=(dim,))
-    wave_vector[1] = 0.5
-    k2 = np.dot(wave_vector, wave_vector)
-    wave_vector = wave_vector / np.sqrt(k2)
-    wave_vector = 2 * np.pi * wave_vector / wavelength
+    advect = True
+    diffuse = True
+    geom_scale = 1e-3
+    # wavelength = 2 * np.pi * geom_scale
+    wavelength = geom_scale
+    wavenumber = 2 * np.pi / wavelength
+    wavenumber2 = wavenumber * wavenumber
+    current_dt = wavelength / 5
+    wave_hat = np.ones(shape=(dim,))
+    # wave_hat[0] = 0.3
+    k2 = np.dot(wave_hat, wave_hat)
+    wave_hat = wave_hat / np.sqrt(k2)
+    amplitude = 1.0*geom_scale
+    alpha = 1e-1 / (geom_scale * geom_scale)
+    diffusivity = 1e-3 / alpha
+    print(f"{diffusivity=}")
+    diffusion_flux_penalty = 0.
+    velocity = np.ones(shape=(dim,))
+    # velocity[0] = .1
+    # velocity[1] = .1
+    velocity = velocity * geom_scale
 
     cos_axis = np.zeros(shape=(dim,))
     scal_fac = np.ones(shape=(dim,))
@@ -135,37 +195,31 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     for d in range(dim):
         axis = np.zeros(shape=(dim,))
         axis[d] = 1
-        cos_axis[d] = np.dot(wave_vector, axis)
-        if np.abs(cos_axis[d]) < 1e-12:
-            wave_vector[d] = 0
-            scal_fac[d] = 0.5
+        cos_axis[d] = np.abs(np.dot(wave_hat, axis))
+        if cos_axis[d] < 1e-12:
+            wave_hat[d] = 0
+            # Reduce the domain size for 3D to make it cheaper
+            if dim == 3:
+                scal_fac[d] = 0.25
         else:
             scal_fac[d] = 1./cos_axis[d]
-            boxl[d] = scal_fac[d]*boxl[d]
-            boxr[d] = scal_fac[d]*boxr[d]
-            nelax[d] = int(scal_fac[d]*nelax[d])
+        boxl[d] = scal_fac[d]*boxl[d]
+        boxr[d] = scal_fac[d]*boxr[d]
+        nelax[d] = int(scal_fac[d]*nelax[d])
+
     box_ll = tuple(boxl)
     box_ur = tuple(boxr)
     nel_axes = tuple(nelax)
-
     print(f"{box_ll=}, {box_ur=}, {nel_axes=}")
 
-    speed = 300.0
-    velocity = np.zeros(shape=(dim,))
-    velocity[0] = 1.
-    velocity = speed * velocity / np.sqrt(np.dot(velocity, velocity))
-
-    gspeed = np.dot(wave_vector, velocity)
-
-    # integrate until 2 wavelens flow-through
-    t_final = 2 * wavelength / gspeed
-    print(f"{t_final=}")
+    # renormalize wave_vector after it potentially changed
+    k2 = np.dot(wave_hat, wave_hat)
+    wave_hat = wave_hat / np.sqrt(k2)
 
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
     )
-
     if rst_filename:  # read the grid from restart data
         rst_filename = f"{rst_filename}-{rank:04d}.pkl"
         from mirgecom.restart import read_restart_data
@@ -173,80 +227,26 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         local_mesh = restart_data["local_mesh"]
         local_nelements = local_mesh.nelements
         global_nelements = restart_data["global_nelements"]
-        assert restart_data["num_parts"] == nparts
+        assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        periodic = (True, )*dim
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        generate_mesh = partial(generate_regular_rect_mesh, a=box_ll,
-                                b=box_ur, nelements_per_axis=nel_axes,
-                                periodic=periodic)
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
-                                                                    generate_mesh)
+        generate_mesh = partial(generate_regular_rect_mesh,
+            a=box_ll, b=box_ur, nelements_per_axis=nel_axes,
+            periodic=(True,)*dim
+        )
+
+        local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
+    # quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
-    if use_overintegration:
-        quadrature_tag = DISCR_TAG_QUAD
-    else:
-        quadrature_tag = None
-
-    def _limit_fluid_cv(cv, temperature_seed=None, gas_model=None, dd=None):
-        actx = cv.array_context
-
-        # limit species
-        spec_lim = make_obj_array([
-            bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0,
-                                     dd=dd)
-            for i in range(nspecies)
-        ])
-        spec_lim = actx.np.where(actx.np.greater(spec_lim, 0.0), spec_lim, 0.0)
-
-        # normalize to ensure sum_Yi = 1.0
-        # aux = cv.mass*0.0
-        # for i in range(0, nspecies):
-        #     aux = aux + spec_lim[i]
-        # spec_lim = spec_lim/aux
-
-        # recompute density
-        # mass_lim = eos.get_density(pressure=pressure,
-        #    temperature=temperature, species_mass_fractions=spec_lim)
-
-        # recompute energy
-        # energy_lim = mass_lim*(gas_model.eos.get_internal_energy(
-        #    temperature, species_mass_fractions=spec_lim)
-        #    + 0.5*np.dot(cv.velocity, cv.velocity)
-        # )
-
-        # make a new CV with the limited variables
-        return make_conserved(dim=dim, mass=cv.mass, energy=cv.energy,
-                              momentum=cv.momentum,
-                              species_mass=cv.mass*spec_lim)
-    use_limiter = False
-    limiter_function = _limit_fluid_cv if use_limiter else None
-
-    def vol_min(x):
-        from grudge.op import nodal_min
-        return actx.to_numpy(nodal_min(dcoll, "vol", x))[()]
-
-    def vol_max(x):
-        from grudge.op import nodal_max
-        return actx.to_numpy(nodal_max(dcoll, "vol", x))[()]
-
-    from grudge.dt_utils import characteristic_lengthscales
-    dx = characteristic_lengthscales(actx, dcoll)
-    dx_min, dx_max = vol_min(dx), vol_max(dx)
-
-    print(f"DX: ({dx_min}, {dx_max})")
     vis_timer = None
 
     if logmgr:
-        logmgr_add_device_name(logmgr, queue)
+        logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_many_discretization_quantities(logmgr, dcoll, dim,
-                             extract_vars_for_logging, units_for_logging)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -254,80 +254,97 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         logmgr.add_watches([
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
-            ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    # soln setup and init
-    nspecies = 4
-    centers = make_obj_array([np.zeros(shape=(dim,)) for i in range(nspecies)])
+    def my_scalar_gradient(state, state_interior_trace_pairs=None,
+                           dd_vol=None, dd_allfaces=None):
+        if dd_vol is None:
+            dd_vol = DD_VOLUME_ALL
+        if dd_allfaces is None:
+            dd_allfaces = dd_vol.trace(FACE_RESTR_ALL)
+        if state_interior_trace_pairs is None:
+            state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
 
-    spec_y0s = np.zeros(shape=(nspecies,))
-    spec_amplitudes = np.ones(shape=(nspecies,))
-    # spec_omegas = 2 * np.pi * np.ones(shape=(nspecies,))
-    spec_omegas = np.dot(wave_vector, velocity) * np.ones(shape=(nspecies,))
+        get_interior_flux = partial(_gradient_flux_interior, dcoll)
 
-    kappa = 0.0
-    mu = 1e-5
-    spec_diff = 1e-1
-    spec_diffusivities = np.array([spec_diff * 1./float(j+1)
-                                   for j in range(nspecies)])
-    transport_model = SimpleTransport(viscosity=mu, thermal_conductivity=kappa,
-                                      species_diffusivity=spec_diffusivities)
+        state_flux_bnd = sum(get_interior_flux(state_tpair) for state_tpair in
+                             state_interior_trace_pairs)
 
-    eos = IdealSingleGas()
-    from mirgecom.gas_model import GasModel, make_fluid_state
-    gas_model = GasModel(eos=eos, transport=transport_model)
+        return grad_operator(
+            dcoll, dd_vol, dd_allfaces, state, state_flux_bnd)
 
-    from mirgecom.initializers import MulticomponentTrig
-    initializer = MulticomponentTrig(dim=dim, nspecies=nspecies,
-                                     p0=101325, rho0=1.3,
-                                     spec_centers=centers, velocity=velocity,
-                                     spec_y0s=spec_y0s,
-                                     spec_amplitudes=spec_amplitudes,
-                                     spec_omegas=spec_omegas,
-                                     spec_diffusivities=spec_diffusivities,
-                                     wave_vector=wave_vector,
-                                     trig_function=actx.np.sin)
+    # These solution/gradient computers assume unit wave_hat
+    def wave_initializer(xyz_vec, t=0):
+        actx = get_container_context_recursively(xyz_vec)
+        expterm = 1.0
+        r_vec = 1.0*xyz_vec
+        if advect:
+            r_vec = xyz_vec - t*velocity
+        if diffuse:
+            expterm = np.exp(-diffusivity*wavenumber2*t)
+        wave_x = wavenumber*np.dot(wave_hat, r_vec)
+        trigterm = amplitude*actx.np.cos(wave_x)
+        return expterm*trigterm
 
-    def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(dd_bdry)
-        nodes = actx.thaw(bnd_discr.nodes())
-        return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
-                                            **kwargs), gas_model,
-                                limiter_func=limiter_function,
-                                limiter_dd=dd_bdry)
+    def wave_gradient(xyz_vec, t=0):
+        actx = get_container_context_recursively(xyz_vec)
+        r_vec = 1.0*xyz_vec
+        expterm = 1.0
+        if advect:
+            r_vec = xyz_vec - t*velocity
+        if diffuse:
+            expterm = np.exp(-diffusivity*wavenumber2*t)
+        wave_x = wavenumber*np.dot(wave_hat, r_vec)
+        trigterm = -1.0*amplitude*wavenumber*actx.np.sin(wave_x)
+        return expterm*trigterm*wave_hat
 
-    boundaries = {}
+    def gaussian_initializer(xyz_vec, t=0):
+        actx = get_container_context_recursively(xyz_vec)
+        expterm = 1.0
+        r_vec = 1.0*xyz_vec
+        if advect:
+            r_vec = xyz_vec - t*velocity
+        if diffuse:
+            expterm = amplitude*np.exp(-diffusivity*alpha*alpha*t)
+        r2 = np.dot(r_vec, r_vec)
+        return expterm*actx.np.exp(-alpha*r2)
+
+    def gaussian_gradient(xyz_vec, t=0):
+        r_vec = 1.0*xyz_vec
+        if advect:
+            r_vec = xyz_vec - t*velocity
+        dr2 = 2*r_vec
+        return -alpha*dr2*gaussian_initializer(xyz_vec, t)
+
+    if init_type == "gaussian":
+        exact_state_func = gaussian_initializer
+        exact_gradient_func = gaussian_gradient
+    elif init_type == "wave":
+        exact_state_func = wave_initializer
+        exact_gradient_func = wave_gradient
+    else:
+        raise ValueError(f"Unexpected {init_type=}")
+
+    init_state = exact_state_func(nodes)
 
     if rst_filename:
         current_t = restart_data["t"]
         current_step = restart_data["step"]
-        current_cv = restart_data["cv"]
-        if logmgr:
-            from mirgecom.logging_quantities import logmgr_set_time
-            logmgr_set_time(logmgr, current_step, current_t)
+        current_state = restart_data["state"]
     else:
         # Set the current state from time 0
-        current_cv = initializer(nodes)
+        current_state = init_state
 
-    current_state = make_fluid_state(current_cv, gas_model,
-                                     limiter_func=limiter_function)
-    convective_speed = np.sqrt(np.dot(velocity, velocity))
-    c = current_state.speed_of_sound
-    mach = vol_max(convective_speed / c)
-    cell_peclet = c * dx / (2 * spec_diff)
-    pe_min, pe_max = vol_min(cell_peclet), vol_max(cell_peclet)
-
-    print(f"Mach: {mach}")
-    print(f"Cell Peclet: ({pe_min, pe_max})")
+    if logmgr:
+        from mirgecom.logging_quantities import logmgr_set_time
+        logmgr_set_time(logmgr, current_step, current_t)
 
     visualizer = make_visualizer(dcoll)
-    initname = initializer.__class__.__name__
-    eosname = eos.__class__.__name__
+
+    initname = init_type
+    eosname = "none"
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
                                      global_nelements=global_nelements,
@@ -338,58 +355,60 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     if rank == 0:
         logger.info(init_message)
 
-    def my_write_status(component_errors):
-        if rank == 0:
-            logger.info(
-                "------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
+    dd_vol = DD_VOLUME_ALL
+    dd_allfaces = dd_vol.trace(FACE_RESTR_ALL)
 
-    def my_write_viz(step, t, cv, dv, exact):
-        resid = cv - exact
-        viz_fields = [("cv", cv),
-                       ("dv", dv),
-                       ("exact", exact),
-                       ("resid", resid)]
+    def my_write_viz(step, t, state, grad_state=None):
+        if grad_state is None:
+            grad_state = force_evaluation(actx, my_scalar_gradient(state))
+        exact_state = exact_state_func(nodes, t)
+        exact_grad = exact_gradient_func(nodes, t)
+        state_resid = state - exact_state
+        expterm = np.exp(-diffusivity*wavenumber2*t)
+        exact_amplitude = amplitude*expterm
+        state_err = state_resid / exact_amplitude
+        grad_resid = grad_state - exact_grad
+        exact_grad_amplitude = wavenumber*exact_amplitude
+        grad_err = grad_resid / exact_grad_amplitude
+        viz_fields = [("state", state),
+                      ("dstate", grad_state),
+                      ("exact_state", exact_state),
+                      ("exact_dstate", exact_grad),
+                      ("state_resid", state_resid),
+                      ("grad_resid", grad_resid),
+                      ("state_relerr", state_err),
+                      ("grad_relerr", grad_err)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True, vis_timer=vis_timer)
+                      step=step, t=t, overwrite=True, vis_timer=vis_timer,
+                      comm=comm)
 
-    def my_write_restart(step, t, cv):
+    def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
         if rst_fname != rst_filename:
             rst_data = {
                 "local_mesh": local_mesh,
-                "cv": cv,
+                "state": state,
                 "t": t,
                 "step": step,
                 "order": order,
                 "global_nelements": global_nelements,
-                "num_parts": nparts
+                "num_parts": num_parts
             }
             from mirgecom.restart import write_restart_file
             write_restart_file(actx, rst_data, rst_fname, comm)
 
-    def my_health_check(pressure, component_errors):
+    def my_health_check(state, grad_state=None):
+        if grad_state is None:
+            grad_state = force_evaluation(actx, my_scalar_gradient(state))
         health_error = False
-        from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure):
+        from mirgecom.simutil import check_naninf_local
+        if check_naninf_local(dcoll, "vol", state):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
-
-        if check_range_local(dcoll, "vol", pressure, 101324.99, 101325.01):
-            health_error = True
-            logger.info(f"{rank=}: Pressure out of expected range.")
-
-        exittol = .09
-        if max(component_errors) > exittol:
-            health_error = False
-            if rank == 0:
-                logger.info("Solution diverged from exact soln.")
-
         return health_error
 
     def my_pre_step(step, t, dt, state):
-        cv = force_evaluation(actx, state)
 
         try:
 
@@ -400,38 +419,32 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
-            do_status = check_step(step=step, interval=nstatus)
 
-            if do_viz or do_health or do_status:
-                fluid_state = make_fluid_state(state, gas_model)
-                dv = fluid_state.dv
-                exact = initializer(x_vec=nodes, eos=eos, time=t)
-
-            if do_health or do_status:
-                component_errors = compare_fluid_solutions(dcoll, cv, exact)
+            if do_viz or do_health:
+                grad_state = force_evaluation(actx, my_scalar_gradient(state))
 
             if do_health:
-                health_errors = global_reduce(
-                    my_health_check(dv.pressure, component_errors), op="lor")
+                health_errors = global_reduce(my_health_check(state, grad_state),
+                                              op="lor")
                 if health_errors:
                     if rank == 0:
-                        logger.info("Fluid solution failed health check.")
+                        logger.info("Scalar field failed health check.")
                     raise MyRuntimeError("Failed simulation health check.")
 
             if do_restart:
-                my_write_restart(step=step, t=t, cv=cv)
+                my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                my_write_viz(step=step, t=t, cv=cv, dv=dv, exact=exact)
-
-            if do_status:
-                my_write_status(component_errors=component_errors)
+                my_write_viz(step=step, t=t, state=state, grad_state=grad_state)
 
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
+            my_write_viz(step=step, t=t, state=state)
+            my_write_restart(step=step, t=t, state=state)
             raise
 
+        # Need a timestep calculator for scalar fields
         # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
         #                      constant_cfl)
 
@@ -442,53 +455,129 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         # imo this is a design/scope flaw
         if logmgr:
             set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
-        fluid_state = make_fluid_state(state, gas_model,
-                                       limiter_func=limiter_function)
-        return ns_operator(dcoll, state=fluid_state, time=t,
-                           boundaries=boundaries, gas_model=gas_model,
-                           quadrature_tag=quadrature_tag, use_esdg=use_esdg,
-                           limiter_func=limiter_function)
+    def my_diffusion_rhs(t, state, dstate=None, state_interior_trace_pairs=None,
+                         grad_state_interior_trace_pairs=None, flux_only=False):
 
+        if state_interior_trace_pairs is None:
+            state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
+        if dstate is None:
+            dstate = my_scalar_gradient(state, state_interior_trace_pairs)
+        if grad_state_interior_trace_pairs is None:
+            grad_state_interior_trace_pairs = op.interior_trace_pairs(dcoll, dstate)
+
+        all_trace_pairs = zip(grad_state_interior_trace_pairs,
+                              state_interior_trace_pairs)
+
+        vol_flux = diffusivity * dstate
+        get_interior_flux = partial(
+            _diffusion_flux_interior, dcoll, diffusivity=diffusivity,
+            alpha=diffusion_flux_penalty)
+
+        def flux(grad_tpair, state_tpair):
+            return op.project(
+                dcoll, grad_tpair.dd, "all_faces", get_interior_flux(grad_tpair,
+                                                                     state_tpair))
+
+        surf_flux = sum(flux(grad_tpair, state_tpair)
+                        for grad_tpair, state_tpair in all_trace_pairs)
+
+        if flux_only:
+            return vol_flux, surf_flux
+
+        return div_operator(dcoll, dd_vol, dd_allfaces, vol_flux, surf_flux)
+
+    def my_advection_rhs(t, state, state_interior_trace_pairs=None,
+                         flux_only=False):
+
+        if state_interior_trace_pairs is None:
+            state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
+
+        # This "flux" function returns the *numerical flux* that will
+        # be used in the divergence operation given a trace pair,
+        # i.e. the soln on the -/+ sides of the face.
+        def flux(tpair):
+            # why project to all_faces? to "size" the array correctly
+            # for all faces rather than just the selected "tpair.dd"
+            return op.project(dcoll, tpair.dd, "all_faces",
+                              _advection_flux_interior(dcoll, tpair, velocity))
+
+        vol_flux = state * velocity
+
+        # sums up the fluxes for each element boundary
+        surf_flux = sum(flux(tpair) for tpair in state_interior_trace_pairs)
+
+        if flux_only:
+            return vol_flux, surf_flux
+
+        return -div_operator(dcoll, dd_vol, dd_allfaces, vol_flux, surf_flux)
+
+    def my_rhs(t, state):
+        state_interior_trace_pairs = None
+        vol_fluxes = 0
+        surf_fluxes = 0
+
+        if advect:
+            if state_interior_trace_pairs is None:
+                state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
+            vol_fluxes, surf_fluxes = my_advection_rhs(
+                t, state, state_interior_trace_pairs, flux_only=True)
+
+        if diffuse:
+            if state_interior_trace_pairs is None:
+                state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
+            grad_state = my_scalar_gradient(state, state_interior_trace_pairs)
+            grad_state_interior_trace_pairs = \
+                op.interior_trace_pairs(dcoll, grad_state)
+            diff_vol_fluxes, diff_surf_fluxes = my_diffusion_rhs(
+                t, state, dstate=grad_state,
+                state_interior_trace_pairs=state_interior_trace_pairs,
+                grad_state_interior_trace_pairs=grad_state_interior_trace_pairs,
+                flux_only=True)
+            vol_fluxes = diff_vol_fluxes - vol_fluxes
+            surf_fluxes = diff_surf_fluxes - surf_fluxes
+
+        if diffuse or advect:
+            return div_operator(dcoll, dd_vol, dd_allfaces, vol_fluxes, surf_fluxes)
+
+        return 0*state
+
+    # Need to create a dt calculator for scalar field
     # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
     #                              current_cfl, t_final, constant_cfl)
 
-    current_step, current_t, current_cv = \
+    current_step, current_t, current_state = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
-                      pre_step_callback=my_pre_step, dt=current_dt,
-                      post_step_callback=my_post_step,
-                      state=current_state.cv, t=current_t, t_final=t_final)
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step, dt=current_dt,
+                      state=current_state, t=current_t, t_final=t_final)
 
     # Dump the final data
     if rank == 0:
         logger.info("Checkpointing final state ...")
+    final_state = current_state
 
-    current_state = make_fluid_state(current_cv, gas_model)
-    final_dv = current_state.dv
-    final_exact = initializer(x_vec=nodes, eos=eos, time=current_t)
-    my_write_viz(step=current_step, t=current_t, cv=current_state.cv, dv=final_dv,
-                 exact=final_exact)
-    my_write_restart(step=current_step, t=current_t, cv=current_state.cv)
+    my_write_viz(step=current_step, t=current_t, state=final_state)
+    my_write_restart(step=current_step, t=current_t, state=final_state)
 
     if logmgr:
         logmgr.close()
     elif use_profiling:
         print(actx.tabulate_profiling_data())
 
-    finish_tol = 1e-16
-    time_err = current_t - t_final
-    if np.abs(time_err) > finish_tol:
-        raise ValueError(f"Simulation did not finish at expected time {time_err=}.")
+    finish_tol = 1e-12
+    print(f"{current_t=}, {t_final=}, {(current_t - t_final)=}")
+    assert np.abs(current_t - t_final) < finish_tol
 
 
 if __name__ == "__main__":
     import argparse
-    casename = "scalar-advdiff"
+    casename = "scalar-transport"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
+    parser.add_argument("--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
@@ -496,12 +585,12 @@ if __name__ == "__main__":
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--esdg", action="store_true",
-        help="use entropy-stable rhs operator")
-    parser.add_argument("--overintegration", action="store_true",
-        help="use overintegration")
+        help="use entropy-stable dg for inviscid terms.")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
+    parser.add_argument("--init", type=str, help="name of the init type",
+                        default="gaussian")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
@@ -514,9 +603,8 @@ if __name__ == "__main__":
             warn("ESDG requires overintegration, enabling --overintegration.")
 
     from mirgecom.array_context import get_reasonable_array_context_class
-    actx_class = get_reasonable_array_context_class(lazy=args.lazy, distributed=True,
-                                                    profiling=args.profiling,
-                                                    numpy=args.numpy)
+    actx_class = get_reasonable_array_context_class(
+        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
@@ -525,8 +613,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
+    main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
+         use_leap=args.leap, init_type=args.init,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
