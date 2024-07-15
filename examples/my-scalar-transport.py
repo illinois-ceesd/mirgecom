@@ -28,9 +28,9 @@ import logging
 import numpy as np
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import DD_VOLUME_ALL
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
 
 from logpyle import IntervalTimer, set_dt
 
@@ -43,6 +43,7 @@ from mirgecom.simutil import (
 from mirgecom.io import make_init_message
 import grudge.op as op
 import grudge.geometry as geo
+from mirgecom.operators import div_operator, grad_operator
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
@@ -63,15 +64,34 @@ class MyRuntimeError(RuntimeError):
     pass
 
 
+def diffusion_numerical_flux(dcoll, diffusivity, soln_trace_pair,
+                             grad_soln_trace_pair):
+    """Diffusive flux."""
+    actx = soln_trace_pair.int.array_context  # = Q^-
+    dd = soln_trace_pair.dd
+    n_hat = geo.normal(actx, dcoll, dd)
+    j_dot_n = diffusivity * np.dot(grad_soln_trace_pair.avg, n_hat)
+    return j_dot_n
+
+
+def gradient_numerical_flux(dcoll, soln_trace_pair):
+    """Grad flux."""
+    actx = soln_trace_pair.int.array_context  # = Q^-
+    dd = soln_trace_pair.dd
+    n_hat = geo.normal(actx, dcoll, dd)
+    return soln_trace_pair.avg * n_hat
+
+
 def advection_numerical_flux(dcoll, soln_trace_pair, velocity):
-    actx = soln_trace_pair.int.array_context # = Q^-
+    """Advection flux."""
+    actx = soln_trace_pair.int.array_context  # = Q^-
     dd = soln_trace_pair.dd
     n_hat = geo.normal(actx, dcoll, dd)
     v_normal = np.dot(velocity, n_hat)
 
     return soln_trace_pair.avg * v_normal
 
-    
+
 @mpi_entry_point
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
@@ -108,6 +128,8 @@ def main(actx_class, use_esdg=False,
     current_cfl = 1.0
     current_dt = .005
     t_final = n_step * current_dt
+    dd_vol = DD_VOLUME_ALL
+    dd_allfaces = dd_vol.trace(FACE_RESTR_ALL)
 
     current_t = 0
     constant_cfl = False
@@ -171,21 +193,18 @@ def main(actx_class, use_esdg=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.01
-    velocity[1] = 0.04
-
-    orig = np.zeros(shape=(dim,))
+    velocity[0] = 0.05
+    velocity[1] = 0.05
 
     alpha = 5.0
 
-    def initializer(xyz_coords):
-        dim = len(xyz_coords)
+    def gaussian_init(xyz_coords):
         x = xyz_coords[0]
         actx = x.array_context
         r2 = np.dot(xyz_coords, xyz_coords)
         return actx.np.exp(-alpha * r2)
 
-    init_state = initializer(nodes)
+    init_state = gaussian_init(nodes)
 
     # boundaries = {}
 
@@ -216,7 +235,10 @@ def main(actx_class, use_esdg=False,
         logger.info(init_message)
 
     def my_write_viz(step, t, state):
+        state_ip = op.interior_trace_pairs(dcoll, state)
+        grad_state = my_scalar_gradient(dcoll, state, state_ip)
         viz_fields = [("state", state),
+                      ("grad_state", grad_state),
                       ("rank", rank_field)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
@@ -290,16 +312,48 @@ def main(actx_class, use_esdg=False,
             logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
+    def my_scalar_gradient(dcoll, state, state_trace_pairs):
+
+        def flux(tpair):
+            return op.project(dcoll, tpair.dd, "all_faces",
+                              gradient_numerical_flux(dcoll, tpair))
+
+        surface_flux = sum(flux(tpair) for tpair in state_trace_pairs)
+
+        return grad_operator(dcoll, dd_vol, dd_allfaces, state, surface_flux)
+
+    def advection_rhs(state, state_trace_pairs):
         def flux(tpair):
             return op.project(dcoll, tpair.dd, "all_faces",
                               advection_numerical_flux(dcoll, tpair, velocity))
 
         volume_flux = velocity * state
-        volume_term = op.weak_local_div(dcoll, volume_flux)
-        surface_term = sum(flux(tpair)
-                           for tpair in op.interior_trace_pairs(dcoll, state))
-        return op.inverse_mass(dcoll, volume_term - op.face_mass(dcoll, surface_term))
+        surface_flux = sum(flux(tpair) for tpair in state_trace_pairs)
+        return -div_operator(dcoll, dd_vol, dd_allfaces, volume_flux, surface_flux)
+
+    def diffusion_rhs(diffusivity, state, grad_state, state_trace_pairs,
+                      grad_state_trace_pairs):
+        all_trace_pairs = zip(state_trace_pairs, grad_state_trace_pairs)
+
+        def flux(diffusivity, state_tpair, grad_tpair):
+            return op.project(dcoll, state_tpair.dd, "all_faces",
+                              diffusion_numerical_flux(dcoll, diffusivity,
+                                                       state_tpair, grad_tpair))
+
+        surface_flux = sum(flux(diffusivity, state_tpair, grad_state_tpair)
+                           for state_tpair, grad_state_tpair in all_trace_pairs)
+        volume_flux = diffusivity*grad_state
+        return div_operator(dcoll, dd_vol, dd_allfaces, volume_flux, surface_flux)
+
+    def my_rhs(t, state):
+        state_trace_pairs = op.interior_trace_pairs(dcoll, state)
+        diffusivity = 1e-4
+        grad_state = my_scalar_gradient(dcoll, state, state_trace_pairs)
+        grad_state_trace_pairs = op.interior_trace_pairs(dcoll, grad_state)
+        rhs = advection_rhs(state, state_trace_pairs)
+        rhs = rhs + diffusion_rhs(diffusivity, state, grad_state, state_trace_pairs,
+                                  grad_state_trace_pairs)
+        return rhs
 
     # Need a DT calculation for scalar transport
     # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
