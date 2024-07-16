@@ -725,8 +725,8 @@ def grad_operator(
                 numerical_flux_func=numerical_flux_func))
 
     return op.inverse_mass(
-        dcoll, dd_vol,
-        op.weak_local_grad(dcoll, dd_vol, -u)
+        dcoll, dd_vol_quad,
+        op.weak_local_grad(dcoll, dd_vol_quad, -u)
         -  # noqa: W504
         op.face_mass(
             dcoll, dd_allfaces_quad,
@@ -888,7 +888,7 @@ def diffusion_operator(
                 numerical_flux_func=diffusion_numerical_flux_func))
 
     diff_u = op.inverse_mass(
-        dcoll, dd_vol,
+        dcoll, dd_vol_quad,
         op.weak_local_div(dcoll, dd_vol_quad, -kappa_quad*grad_u_quad)
         -  # noqa: W504
         op.face_mass(

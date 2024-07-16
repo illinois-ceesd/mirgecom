@@ -300,7 +300,7 @@ def entropy_stable_euler_operator(
 
     return op.inverse_mass(
         dcoll,
-        dd_vol,
+        dd_vol_quad,
         inviscid_vol_term - op.face_mass(dcoll, dd_allfaces_quad,
                                          inviscid_flux_bnd)
     )
