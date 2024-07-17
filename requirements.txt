@@ -13,7 +13,8 @@ git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 #--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
---editable git+https://github.com/illinois-ceesd/loopy.git@production#egg=loopy
+# Test whether updating loopy fixes https://github.com/illinois-ceesd/mirgecom/issues/1044
+--editable git+https://github.com/illinois-ceesd/loopy.git@production-pilot#egg=loopy
 --editable git+https://github.com/inducer/dagrt.git#egg=dagrt
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git#egg=modepy
