@@ -724,9 +724,11 @@ def grad_operator(
                 dcoll, dd_bdry_quad, kappa_minus_quad, u_minus_quad,
                 numerical_flux_func=numerical_flux_func))
 
+    u_quad = op.project(dcoll, dd_vol, dd_vol_quad, u)
+
     return op.inverse_mass(
         dcoll, dd_vol_quad,
-        op.weak_local_grad(dcoll, dd_vol_quad, -u)
+        op.weak_local_grad(dcoll, dd_vol_quad, -u_quad)
         -  # noqa: W504
         op.face_mass(
             dcoll, dd_allfaces_quad,
