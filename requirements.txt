@@ -19,7 +19,7 @@ git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git#egg=modepy
 --editable git+https://github.com/illinois-ceesd/arraycontext.git@new-production-rebase#egg=arraycontext
---editable git+https://github.com/illinois-ceesd/meshmode.git@production#egg=meshmode
+--editable git+https://github.com/illinois-ceesd/meshmode.git@new-production-rebase#egg=meshmode
 --editable git+https://github.com/illinois-ceesd/grudge.git@production#egg=grudge
 # Test whether updating pytato fixes https://github.com/illinois-ceesd/mirgecom/issues/1044
 --editable git+https://github.com/illinois-ceesd/pytato.git@production-pilot-update#egg=pytato
