@@ -11,7 +11,6 @@ git+https://github.com/pythological/kanren.git#egg=miniKanren
 git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 
 # The following packages will be git cloned by emirge:
---editable git+https://github.com/inducer/pytools.git@444c4b6#egg=pytools
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 #--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
 --editable git+https://github.com/illinois-ceesd/loopy.git@production#egg=loopy
@@ -25,4 +24,4 @@ git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 --editable git+https://github.com/pyrometheus/pyrometheus.git@tulio/entropy#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 --editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
---editable git+https://github.com/inducer/pyvisfile.git@09c01f2#egg=pyvisfile
+--editable git+https://github.com/inducer/pyvisfile.git#egg=pyvisfile
