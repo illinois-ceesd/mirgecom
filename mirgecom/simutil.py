@@ -982,7 +982,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
 
             else:
                 from grudge.discretization import \
-                PartID  # pylint: disable=no-name-in-module
+                    PartID  # pylint: disable=no-name-in-module
 
                 tag_to_volume = {
                     tag: vol
