@@ -56,20 +56,13 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
             raise ValueError("Can't specify both numpy and lazy")
 
         from warnings import warn
-
-        try:
-            from grudge.array_context import NumpyArrayContext, MPINumpyArrayContext
-        except ImportError:
-            warn("Error: The NumpyArrayContext is not available, exiting with "
-                 "exit code 0")
-            import sys
-            sys.exit()
-        else:
-            warn("The NumpyArrayContext is still under development")
+        warn("The NumpyArrayContext is still under development")
 
         if distributed:
+            from grudge.array_context import MPINumpyArrayContext
             return MPINumpyArrayContext
         else:
+            from grudge.array_context import NumpyArrayContext
             return NumpyArrayContext
 
     if profiling:
