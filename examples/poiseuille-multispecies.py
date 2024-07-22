@@ -30,7 +30,7 @@ from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from grudge.eager import EagerDGDiscretization
+from mirgecom.discretization import create_discretization_collection
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag
 
@@ -156,22 +156,11 @@ def main(actx_class, use_overintegration=False, use_leap=False, casename=None,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
-    from meshmode.discretization.poly_element import \
-        default_simplex_group_factory, QuadratureSimplexGroupFactory
-
     order = 2
-    dcoll = EagerDGDiscretization(
-        actx, local_mesh,
-        discr_tag_to_group_factory={
-            DISCR_TAG_BASE: default_simplex_group_factory(
-                base_dim=local_mesh.dim, order=order),
-            DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(2*order + 1)
-        },
-        mpi_communicator=comm
-    )
+    dcoll = create_discretization_collection(actx, local_mesh, order)
     nodes = actx.thaw(dcoll.nodes())
 
+    from grudge.dof_desc import DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
