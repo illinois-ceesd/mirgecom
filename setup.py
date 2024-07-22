@@ -60,7 +60,7 @@ def main():
               "importlib-resources>=1.1.0; python_version < '3.9'",
           ],
 
-          package_data={"mirgecom": ["py.typed"]},
+          package_data={"mirgecom": ["py.typed", "materials/*.dat"]},
 
           include_package_data=True,)
 

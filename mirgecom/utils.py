@@ -3,7 +3,10 @@
 .. autoclass:: StatisticsAccumulator
 .. autofunction:: asdict_shallow
 .. autofunction:: force_evaluation
+.. autofunction:: force_compile
 .. autofunction:: normalize_boundaries
+.. autofunction:: project_from_base
+.. autofunction:: mask_from_elements
 """
 
 __copyright__ = """
@@ -31,6 +34,11 @@ THE SOFTWARE.
 """
 
 from typing import Optional
+from arraycontext import tag_axes
+from meshmode.dof_array import DOFArray
+from meshmode.transform_metadata import (
+    DiscretizationElementAxisTag,
+    DiscretizationDOFAxisTag)
 
 
 def asdict_shallow(dc_instance) -> dict:
@@ -65,8 +73,8 @@ class StatisticsAccumulator:
         scale_factor
             Scale returned statistics by this factor.
         """
+        # Number of values stored in the StatisticsAccumulator
         self.num_values: int = 0
-        """Number of values stored in the StatisticsAccumulator."""
 
         self._sum: float = 0
         self._min: Optional[float] = None
@@ -120,6 +128,14 @@ def force_evaluation(actx, x):
     return actx.freeze_thaw(x)
 
 
+def force_compile(actx, f, *args):
+    """Force compilation of *f* with *args*."""
+    new_args = [force_evaluation(actx, arg) for arg in args]
+    f_compiled = actx.compile(f)
+    f_compiled(*new_args)
+    return f_compiled
+
+
 def normalize_boundaries(boundaries):
     """
     Normalize the keys of *boundaries*.
@@ -130,3 +146,48 @@ def normalize_boundaries(boundaries):
     return {
         as_dofdesc(key).domain_tag: bdry
         for key, bdry in boundaries.items()}
+
+
+def project_from_base(dcoll, tgt_dd, field):
+    """Project *field* from *DISCR_TAG_BASE* to the same discr. as *tgt_dd*."""
+    from grudge.dof_desc import DISCR_TAG_BASE, as_dofdesc
+    from grudge.op import project
+
+    tgt_dd = as_dofdesc(tgt_dd)
+
+    if tgt_dd.discretization_tag is not DISCR_TAG_BASE:
+        tgt_dd_base = tgt_dd.with_discr_tag(DISCR_TAG_BASE)
+        return project(dcoll, tgt_dd_base, tgt_dd, field)
+    else:
+        return field
+
+
+def mask_from_elements(dcoll, dd, actx, elements):
+    """Get a :class:`~meshmode.dof_array.DOFArray` mask corresponding to *elements*.
+
+    Returns
+    -------
+    mask: :class:`meshmode.dof_array.DOFArray`
+        A DOF array containing $1$ for elements that are in *elements* and $0$
+        for elements that aren't.
+    """
+    discr = dcoll.discr_from_dd(dd)
+    mesh = discr.mesh
+    zeros = discr.zeros(actx)
+
+    group_arrays = []
+
+    for igrp in range(len(mesh.groups)):
+        start_elem_nr = mesh.base_element_nrs[igrp]
+        end_elem_nr = start_elem_nr + mesh.groups[igrp].nelements
+        grp_elems = elements[
+            (elements >= start_elem_nr)
+            & (elements < end_elem_nr)] - start_elem_nr
+        grp_ary_np = actx.to_numpy(zeros[igrp])
+        grp_ary_np[grp_elems] = 1
+        group_arrays.append(actx.from_numpy(grp_ary_np))
+
+    return tag_axes(actx, {
+        0: DiscretizationElementAxisTag(),
+        1: DiscretizationDOFAxisTag()
+    }, DOFArray(actx, tuple(group_arrays)))

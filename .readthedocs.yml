@@ -2,7 +2,12 @@ version: 2
 
 conda:
   environment: .rtd-env-py3.yml
-  
+
+build:
+  os: "ubuntu-22.04"
+  tools:
+    python: "mambaforge-22.9"
+
 sphinx:
   fail_on_warning: true
 

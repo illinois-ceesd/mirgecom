@@ -166,7 +166,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         )
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -198,6 +198,176 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         rhoe_resid = rhs_resid.energy
         mom_resid = rhs_resid.momentum
         rhoy_resid = rhs_resid.species_mass
+
+        assert inf_norm(rho_resid) < tolerance
+        assert inf_norm(rhoe_resid) < tolerance
+
+        for i in range(dim):
+            assert inf_norm(mom_resid[i]) < tolerance
+        for i in range(nspecies):
+            assert inf_norm(rhoy_resid[i]) < tolerance
+
+        err_max = inf_norm(rho_resid)
+        eoc_rec1.add_data_point(1.0 / nel_1d, err_max)
+
+    logger.info(
+        f"V == 0 Errors:\n{eoc_rec0}"
+        f"V != 0 Errors:\n{eoc_rec1}"
+    )
+
+    assert (
+        eoc_rec0.order_estimate() >= order - 0.5
+        or eoc_rec0.max_error() < 1e-9
+    )
+    assert (
+        eoc_rec1.order_estimate() >= order - 0.5
+        or eoc_rec1.max_error() < 1e-9
+    )
+
+
+@pytest.mark.parametrize("nspecies", [0, 10])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [2, 3, 4])
+def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
+    """Test the entropy-to-conservative vars conversion utility.
+
+    The test is performed for 1, 2, and 3 dimensions, with orders 2, 3, and 4,
+    with and without passive species.
+    """
+    actx = actx_factory()
+
+    tolerance = 1e-9
+
+    from pytools.convergence import EOCRecorder
+    eoc_rec0 = EOCRecorder()
+    eoc_rec1 = EOCRecorder()
+
+    # for nel_1d in [4, 8, 12]:
+    for nel_1d in [4, 8]:
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+        mesh = generate_regular_rect_mesh(
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+        )
+
+        logger.info(
+            f"Number of {dim}d elements: {mesh.nelements}"
+        )
+
+        dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
+        # quadrature_tag = DISCR_TAG_QUAD
+
+        zeros = dcoll.zeros(actx)
+        ones = zeros + 1.0
+
+        mass_input = dcoll.zeros(actx) + 1
+        energy_input = dcoll.zeros(actx) + 2.5
+
+        mom_input = make_obj_array(
+            [dcoll.zeros(actx) for i in range(dcoll.dim)]
+        )
+
+        mass_frac_input = flat_obj_array(
+            [ones / ((i + 1) * 10) for i in range(nspecies)]
+        )
+        species_mass_input = mass_input * mass_frac_input
+        num_equations = dim + 2 + len(species_mass_input)
+
+        cv = make_conserved(
+            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
+            species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        # fluid_state = make_fluid_state(cv, gas_model)
+
+        from mirgecom.gas_model import (
+            conservative_to_entropy_vars,
+            entropy_to_conservative_vars
+        )
+        temp_state = make_fluid_state(cv, gas_model)
+        gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
+        # if isinstance(gamma, DOFArray):
+        #    gamma = op.project(dcoll, src, tgt, gamma)
+        ev_sd = conservative_to_entropy_vars(gamma, temp_state)
+        cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
+        cv_resid = cv - cv_sd
+
+        # expected_cv_diff = make_conserved(
+        #     dim, q=make_obj_array([dcoll.zeros(actx)
+        #                            for i in range(num_equations)])
+        # )
+
+        expected_rhs = make_conserved(  # noqa
+            dim, q=make_obj_array([dcoll.zeros(actx)
+                                   for i in range(num_equations)])
+        )
+
+        # boundaries = {BTAG_ALL: DummyBoundary()}
+        # inviscid_rhs = \
+        #    euler_operator(dcoll, state=fluid_state, gas_model=gas_model,
+        #                   boundaries=boundaries, time=0.0,
+        #                   quadrature_tag=quadrature_tag, use_esdg=True)
+
+        # rhs_resid = inviscid_rhs - expected_rhs
+
+        rho_resid = cv_resid.mass
+        rhoe_resid = cv_resid.energy
+        mom_resid = cv_resid.momentum
+        rhoy_resid = cv_resid.species_mass
+
+        rho_mcv = cv_sd.mass
+        rhoe_mcv = cv_sd.energy
+        rhov_mcv = cv_sd.momentum
+        rhoy_mcv = cv_sd.species_mass
+
+        print(
+            f"{rho_mcv=}\n"
+            f"{rhoe_mcv=}\n"
+            f"{rhov_mcv=}\n"
+            f"{rhoy_mcv=}\n"
+        )
+
+        def inf_norm(x):
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
+
+        assert inf_norm(rho_resid) < tolerance
+        assert inf_norm(rhoe_resid) < tolerance
+        for i in range(dim):
+            assert inf_norm(mom_resid[i]) < tolerance
+        for i in range(nspecies):
+            assert inf_norm(rhoy_resid[i]) < tolerance
+
+        err_max = inf_norm(rho_resid)
+        eoc_rec0.add_data_point(1.0 / nel_1d, err_max)
+
+        # set a non-zero, but uniform velocity component
+        for i in range(len(mom_input)):
+            mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
+
+        cv = make_conserved(
+            dim, mass=mass_input, energy=energy_input, momentum=mom_input,
+            species_mass=species_mass_input)
+        gas_model = GasModel(eos=IdealSingleGas())
+        # fluid_state = make_fluid_state(cv, gas_model)
+
+        temp_state = make_fluid_state(cv, gas_model)
+        gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
+        # if isinstance(gamma, DOFArray):
+        #    gamma = op.project(dcoll, src, tgt, gamma)
+        ev_sd = conservative_to_entropy_vars(gamma, temp_state)
+        cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
+        cv_resid = cv - cv_sd
+
+        # boundaries = {BTAG_ALL: DummyBoundary()}
+        # inviscid_rhs = 0
+        # inviscid_rhs = euler_operator(
+        #    dcoll, state=fluid_state, gas_model=gas_model, boundaries=boundaries,
+        #    time=0.0, inviscid_numerical_flux_func=numerical_flux_func)
+        # rhs_resid = inviscid_rhs - expected_rhs
+
+        rho_resid = cv_resid.mass
+        rhoe_resid = cv_resid.energy
+        mom_resid = cv_resid.momentum
+        rhoy_resid = cv_resid.species_mass
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -274,7 +444,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
+            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)  # noqa
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
@@ -354,7 +524,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
+            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),  # noqa
                                     gas_model)
 
         boundaries = {
@@ -449,7 +619,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
+            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)  # noqa
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
@@ -668,7 +838,7 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
+            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)  # noqa
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)

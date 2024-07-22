@@ -67,6 +67,9 @@ def initialize_logmgr(enable_logmgr: bool,
 
     logmgr = LogManager(filename=filename, mode=mode, mpi_comm=mpi_comm)
 
+    logmgr.add_quantity(PythonInitTime())
+    logmgr.enable_save_on_sigterm()
+
     add_run_info(logmgr)
     add_package_versions(logmgr)
     add_general_quantities(logmgr)
@@ -92,10 +95,11 @@ def initialize_logmgr(enable_logmgr: bool,
 
 def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> None:
     """Add information about the OpenCL device to the log."""
-    dev = queue.device
-    logmgr.set_constant("cl_device_name", str(dev))
-    logmgr.set_constant("cl_device_version", dev.version)
-    logmgr.set_constant("cl_platform_version", dev.platform.version)
+    if queue:
+        dev = queue.device
+        logmgr.set_constant("cl_device_name", str(dev))
+        logmgr.set_constant("cl_device_version", dev.version)
+        logmgr.set_constant("cl_platform_version", dev.platform.version)
 
 
 def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
@@ -110,7 +114,7 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa:
 def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue) \
         -> None:
     """Add the OpenCL device memory usage to the log."""
-    if not (queue.device.type & cl.device_type.GPU):
+    if not queue or not (queue.device.type & cl.device_type.GPU):
         return
     logmgr.add_quantity(DeviceMemoryUsage())
 
@@ -455,5 +459,34 @@ class MempoolMemoryUsage(MultiPostLogQuantity):
         """Return the memory pool usage in MByte."""
         return (self.pool.managed_bytes/1024/1024,
                 self.pool.active_bytes/1024/1024)
+
+
+class PythonInitTime(PostLogQuantity):
+    """Stores the Python startup time.
+
+    Measures the time from process start to when this quantity is initialized.
+    """
+
+    def __init__(self, name: str = "t_python_init") -> None:
+        LogQuantity.__init__(self, name, "s", "Python init time")
+
+        try:
+            import psutil
+        except ModuleNotFoundError:
+            from warnings import warn
+            warn("Measuring the Python init time requires the 'psutil' module.")
+            self.done = True
+        else:
+            from time import time
+            self.python_init_time = time() - psutil.Process().create_time()
+            self.done = False
+
+    def __call__(self) -> Optional[float]:
+        """Return the Python init time in seconds."""
+        if self.done:
+            return None
+
+        self.done = True
+        return self.python_init_time
 
 # }}}

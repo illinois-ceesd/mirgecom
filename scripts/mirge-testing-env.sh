@@ -21,8 +21,9 @@ MIRGE_MPI_EXEC="mpiexec"
 PYOPENCL_TEST=""
 PYOPENCL_CTX=""
 
+# Add new hosts here, and <hostname>-parallel-spawner.sh
 if [[ $(hostname) == "porter" ]]; then
-    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/run-gpus-generic.sh"
+    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/porter-parallel-spawner.sh"
     PYOPENCL_TEST="port:nv"
     PYOPENCL_CTX="port:nv"
 
@@ -31,6 +32,17 @@ elif [[ $(hostname) == "lassen"* ]]; then
     PYOPENCL_TEST="port:tesla"
     PYOPENCL_CTX="port:tesla"
     MIRGE_MPI_EXEC="jsrun -g 1 -a 1"
+
+elif [[ $(hostname) == "delta"* ]]; then
+    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/delta-parallel-spawner.sh"
+    PYOPENCL_CTX="port:nvidia"
+    PYOPENCL_TEST="port:nvidia"
+    MIRGE_MPI_EXEC="srun"
+elif [[ $(hostname) == "tioga"* ]]; then
+    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/tioga-parallel-spawner.sh"
+    PYOPENCL_CTX="AMD:0"  # ROCR_VISIBLE_DEVICES handles device visibility
+    PYOPENCL_TEST="AMD:0"
+    MIRGE_MPI_EXEC="flux run --exclusive"
 fi
 
 export MIRGE_HOME

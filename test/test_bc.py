@@ -50,6 +50,7 @@ from mirgecom.gas_model import (
     make_fluid_state_trace_pairs
 )
 import grudge.op as op
+from mirgecom.simutil import get_box_mesh
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
@@ -78,10 +79,10 @@ def test_normal_axes_utility(actx_factory, dim):
 
     from mirgecom.boundary import _get_normal_axes as gna
     order = 1
-    npts_geom = 6
+    nels_geom = 5
     a = -.01
     b = .01
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -147,7 +148,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
     ff_energy = ff_press/(gamma-1) + ff_ke
 
     from mirgecom.initializers import Uniform
-    ff_init = Uniform(dim=dim, rho=ff_dens, p=ff_press,
+    ff_init = Uniform(dim=dim, rho=ff_dens, pressure=ff_press,
                       velocity=ff_vel)
     ff_momentum = ff_dens*ff_vel
 
@@ -156,15 +157,14 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=SimpleTransport(viscosity=sigma,
                                                    thermal_conductivity=kappa))
-    bndry = FarfieldBoundary(numdim=dim,
-                             free_stream_velocity=ff_vel,
+    bndry = FarfieldBoundary(free_stream_velocity=ff_vel,
                              free_stream_pressure=ff_press,
                              free_stream_temperature=ff_temp)
 
-    npts_geom = 17
+    nels_geom = 16
     a = -1.0
     b = 1.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -197,7 +197,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
         # for velocity directions +1, and -1
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -216,7 +216,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
             cv_flux_int = gradient_flux_interior(cv_int_tpair)
             print(f"{cv_flux_int=}")
 
-            ff_bndry_state = bndry.farfield_state(
+            ff_bndry_state = bndry.state_plus(
                 dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                 state_minus=state_minus)
             print(f"{ff_bndry_state=}")
@@ -291,7 +291,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                                                       grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
 
-            assert ff_bndry_state.cv == exp_ff_cv
+            assert actx.np.equal(ff_bndry_state.cv, exp_ff_cv)
             assert actx.np.all(temperature_bc == ff_temp)
             for idim in range(dim):
                 assert actx.np.all(ff_bndry_state.momentum_density[idim]
@@ -330,10 +330,10 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
                                                    thermal_conductivity=kappa))
     bndry = PressureOutflowBoundary(boundary_pressure=flowbnd_press)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -355,7 +355,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
 
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -368,7 +368,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             print(f"Volume state: {temper=}")
             print(f"Volume state: {speed_of_sound=}")
 
-            flowbnd_bndry_state = bndry.outflow_state(
+            flowbnd_bndry_state = bndry.state_plus(
                 dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                 state_minus=state_minus)
             print(f"{flowbnd_bndry_state=}")
@@ -387,13 +387,13 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
 
             print(f"{exp_flowbnd_cv=}")
 
-            assert flowbnd_bndry_state.cv == exp_flowbnd_cv
+            assert actx.np.equal(flowbnd_bndry_state.cv, exp_flowbnd_cv)
             assert actx.np.all(flowbnd_bndry_temperature == flowbnd_press_bc)
             assert actx.np.all(flowbnd_bndry_pressure == flowbnd_press_bc)
 
             vel = 1.5*vel
 
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
 
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
@@ -406,7 +406,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             print(f"Volume state: {temper=}")
             print(f"Volume state: {speed_of_sound=}")
 
-            flowbnd_bndry_state = bndry.outflow_state(
+            flowbnd_bndry_state = bndry.state_plus(
                 dcoll, dd_bdry=BTAG_ALL, gas_model=gas_model,
                 state_minus=state_minus)
             print(f"{flowbnd_bndry_state=}")
@@ -421,7 +421,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             exp_flowbnd_cv = make_conserved(dim=dim, mass=bnd_dens,
                                               momentum=bnd_mom, energy=bnd_ener)
 
-            assert flowbnd_bndry_state.cv == exp_flowbnd_cv
+            assert actx.np.equal(flowbnd_bndry_state.cv, exp_flowbnd_cv)
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -446,10 +446,10 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
     wall = IsothermalWallBoundary(wall_temperature=wall_temp)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -480,7 +480,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -585,7 +585,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
                                                      grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
 
-            assert wall_state.cv == expected_noslip_cv
+            assert actx.np.equal(wall_state.cv, expected_noslip_cv)
             assert actx.np.all(temperature_bc == expected_wall_temperature)
             for idim in range(dim):
                 assert actx.np.all(wall_state.momentum_density[idim]
@@ -613,10 +613,10 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
     wall = AdiabaticNoslipWallBoundary()
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -647,7 +647,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -762,8 +762,8 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
                                                      grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
 
-            assert adv_wall_state.cv == expected_adv_wall_cv
-            assert diff_wall_state.cv == expected_diff_wall_cv
+            assert actx.np.equal(adv_wall_state.cv, expected_adv_wall_cv)
+            assert actx.np.equal(diff_wall_state.cv, expected_diff_wall_cv)
             assert actx.np.all(temperature_bc == expected_wall_temperature)
             for idim in range(dim):
                 assert actx.np.all(adv_wall_state.momentum_density[idim]
@@ -795,10 +795,10 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
     wall = AdiabaticSlipBoundary()
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -829,7 +829,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             uniform_cv = initializer(nodes, eos=gas_model.eos)
             uniform_state = make_fluid_state(cv=uniform_cv, gas_model=gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -956,8 +956,8 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             temperature_bc = wall.temperature_bc(
                 dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
 
-            assert adv_wall_state.cv == expected_adv_wall_cv
-            assert diff_wall_state.cv == expected_diff_wall_cv
+            assert actx.np.equal(adv_wall_state.cv, expected_adv_wall_cv)
+            assert actx.np.equal(diff_wall_state.cv, expected_diff_wall_cv)
             assert actx.np.all(temperature_bc == expected_temp_boundary)
 
             for idim in range(dim):
@@ -1057,7 +1057,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
 
     from mirgecom.boundary import AdiabaticSlipBoundary
     wall = AdiabaticSlipBoundary()
-    gas_model = GasModel(eos=IdealSingleGas())
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos)
 
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
@@ -1087,8 +1088,8 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
             for parity in [1.0, -1.0]:
                 vel[vdir] = parity
                 from mirgecom.initializers import Uniform
-                initializer = Uniform(dim=dim, velocity=vel)
-                uniform_state = initializer(nodes)
+                initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
+                uniform_state = initializer(nodes, eos)
                 fluid_state = make_fluid_state(uniform_state, gas_model)
 
                 interior_soln = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -1127,18 +1128,6 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < 1e-12
     )
-
-
-# Box grid generator widget lifted from @majosm's diffusion tester
-def _get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
 
 
 class _VortexSoln:
@@ -1230,10 +1219,10 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=transport_model)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -1264,7 +1253,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
         for parity in [1.0, -1.0]:
             vel[vdir] = parity
             from mirgecom.initializers import Uniform
-            initializer = Uniform(dim=dim, velocity=vel)
+            initializer = Uniform(dim=dim, velocity=vel, pressure=1.0, rho=1.0)
             cv = initializer(nodes, eos=gas_model.eos)
             state = make_fluid_state(cv, gas_model)
             state_minus = project_fluid_state(dcoll, "vol", BTAG_ALL,
@@ -1342,4 +1331,96 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             bc_soln = \
                 domain_boundary._boundary_state_pair(dcoll, BTAG_ALL, gas_model,
                                                      state_minus=state_minus).ext.cv
-            assert bc_soln == expected_boundary_solution
+            assert actx.np.equal(bc_soln, expected_boundary_solution)
+
+
+@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("flux_func", [inviscid_facial_flux_rusanov,
+                                       inviscid_facial_flux_hll])
+def test_dummy_boundary(actx_factory, order, flux_func):
+    """Check dummy boundary treatment."""
+    actx = actx_factory()
+    dim = 2
+
+    kappa = 1.0
+    sigma = 1.0
+
+    from mirgecom.transport import SimpleTransport
+    transport_model = SimpleTransport(viscosity=sigma, thermal_conductivity=kappa)
+    eos = IdealSingleGas()
+    gas_model = GasModel(eos=eos, transport=transport_model)
+
+    a = -1.0
+    b = 1.0
+
+    from pytools.convergence import EOCRecorder
+    eoc_ux = EOCRecorder()
+    eoc_vy = EOCRecorder()
+    eoc_tx = EOCRecorder()
+    eoc_ty = EOCRecorder()
+    eoc_rhox = EOCRecorder()
+    eoc_rhoy = EOCRecorder()
+
+    for nel_1d in [8, 16, 32, 64]:
+        mesh = get_box_mesh(dim=dim, a=a, b=b, n=nel_1d)
+        h = 1.0 / nel_1d
+
+        dcoll = create_discretization_collection(actx, mesh, order=order)
+        nodes = actx.thaw(dcoll.nodes())
+
+        temperature = 1000.0 + 500.0*nodes[0] + 250.0*nodes[1]
+        velocity = make_obj_array([10. + 5.0*nodes[0], 5.0 + 2.5*nodes[1]])
+        pressure = 100000.0 + actx.np.zeros_like(nodes[0])
+        mass = eos.get_density(pressure=pressure, temperature=temperature)
+        mom = mass*velocity
+        energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
+
+        cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom)
+        fluid_state = make_fluid_state(cv, gas_model)
+
+        grad_u_x = 5.0 + nodes[0]*0.0
+        grad_v_y = 2.5 + nodes[0]*0.0
+        grad_t_x = 500. + nodes[0]*0.0
+        grad_t_y = 250. + nodes[0]*0.0
+        grad_rho_x = -cv.mass/fluid_state.temperature*grad_t_x
+        grad_rho_y = -cv.mass/fluid_state.temperature*grad_t_y
+
+        from mirgecom.boundary import DummyBoundary
+        boundaries = {BTAG_ALL: DummyBoundary()}
+
+        from mirgecom.navierstokes import grad_cv_operator, grad_t_operator
+        grad_cv = grad_cv_operator(dcoll, gas_model, boundaries, fluid_state)
+        grad_t = grad_t_operator(dcoll, gas_model, boundaries, fluid_state)
+
+        from mirgecom.fluid import velocity_gradient
+        grad_u = velocity_gradient(cv, grad_cv)
+
+        def vec_norm(vec1, vec2):
+            return actx.to_numpy(op.norm(dcoll, vec1 - vec2, p=2)) # noqa
+
+        eoc_ux.add_data_point(h, vec_norm(grad_u_x, grad_u[0][0]))
+        eoc_vy.add_data_point(h, vec_norm(grad_v_y, grad_u[1][1]))
+        eoc_tx.add_data_point(h, vec_norm(grad_t_x, grad_t[0]))
+        eoc_ty.add_data_point(h, vec_norm(grad_t_y, grad_t[1]))
+        eoc_rhox.add_data_point(h, vec_norm(grad_rho_x, grad_cv.mass[0]))
+        eoc_rhoy.add_data_point(h, vec_norm(grad_rho_y, grad_cv.mass[1]))
+
+    print(eoc_ux)
+    print(eoc_vy)
+    print(eoc_tx)
+    print(eoc_ty)
+    print(eoc_rhox)
+    print(eoc_rhoy)
+
+    assert (eoc_ux.order_estimate() >= order - 0.1
+            or eoc_ux.max_error() < 1e-9)
+    assert (eoc_vy.order_estimate() >= order - 0.1
+            or eoc_vy.max_error() < 1e-9)
+    assert (eoc_tx.order_estimate() >= order - 0.1
+            or eoc_tx.max_error() < 1e-7)
+    assert (eoc_ty.order_estimate() >= order - 0.1
+            or eoc_ty.max_error() < 1e-7)
+    assert (eoc_rhox.order_estimate() >= order - 0.1
+            or eoc_rhox.max_error() < 1e-9)
+    assert (eoc_rhoy.order_estimate() >= order - 0.1
+            or eoc_rhoy.max_error() < 1e-9)

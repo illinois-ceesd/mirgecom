@@ -58,6 +58,7 @@ THE SOFTWARE.
 """
 
 from functools import partial
+from warnings import warn
 
 from meshmode.discretization.connection import FACE_RESTR_ALL
 
@@ -74,10 +75,14 @@ from grudge.dof_desc import (
 
 import grudge.op as op
 
+from mirgecom.euler import (
+    euler_operator,
+    entropy_stable_euler_operator
+)
 from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux_rusanov,
-    inviscid_flux_on_element_boundary
+    inviscid_flux_on_element_boundary,
 )
 from mirgecom.viscous import (
     viscous_flux,
@@ -101,6 +106,14 @@ class _NSGradTemperatureTag:
     pass
 
 
+class _ESFluidCVTag():
+    pass
+
+
+class _ESFluidTemperatureTag():
+    pass
+
+
 def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
     """Compute interior face flux for gradient operator."""
     from arraycontext import outer
@@ -118,7 +131,8 @@ def grad_cv_operator(
         quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        operator_states_quad=None):
+        operator_states_quad=None, limiter_func=None,
+        use_esdg=False):
     r"""Compute the gradient of the fluid conserved variables.
 
     Parameters
@@ -175,9 +189,15 @@ def grad_cv_operator(
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
+        if state.is_mixture and limiter_func is None:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states or pass a limiter_func to this operator.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
+            entropy_stable=use_esdg)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -220,7 +240,7 @@ def grad_t_operator(
         quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        operator_states_quad=None):
+        operator_states_quad=None, limiter_func=None, use_esdg=False):
     r"""Compute the gradient of the fluid temperature.
 
     Parameters
@@ -276,9 +296,15 @@ def grad_t_operator(
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     if operator_states_quad is None:
+        if state.is_mixture and limiter_func is None:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states or pass a limiter_func to this operator.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
+            entropy_stable=use_esdg)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -320,15 +346,17 @@ def grad_t_operator(
 
 
 def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
+                inviscid_fluid_operator=None,
                 inviscid_numerical_flux_func=inviscid_facial_flux_rusanov,
                 gradient_numerical_flux_func=num_flux_central,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
-                dd=DD_VOLUME_ALL, comm_tag=None,
+                dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
-                operator_states_quad=None,
-                grad_cv=None, grad_t=None, inviscid_terms_on=True):
+                operator_states_quad=None, use_esdg=False,
+                grad_cv=None, grad_t=None, inviscid_terms_on=True,
+                entropy_conserving_flux_func=None):
     r"""Compute RHS of the Navier-Stokes equations.
 
     Parameters
@@ -421,6 +449,11 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     if dd.discretization_tag != DISCR_TAG_BASE:
         raise ValueError("dd must belong to the base discretization")
 
+    if inviscid_fluid_operator is None and use_esdg:
+        inviscid_fluid_operator = entropy_stable_euler_operator
+    elif use_esdg and inviscid_fluid_operator == euler_operator:
+        raise RuntimeError("Standard Euler operator is incompatible with ESDG.")
+
     dd_vol = dd
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
@@ -433,9 +466,14 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     # Note: these states will live on the quadrature domain if one is given,
     # otherwise they stay on the interpolatory/base domain.
     if operator_states_quad is None:
+        if state.is_mixture and limiter_func is None:
+            warn("Mixtures often require species limiting, and a non-limited "
+                 "state is being created for this operator. For mixtures, "
+                 "one should pass the operator_states_quad argument with "
+                 "limited states or provide a limiter_func to this operator.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            dd=dd_vol, comm_tag=comm_tag)
+            limiter_func=limiter_func, dd=dd_vol, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -454,7 +492,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dcoll, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
-            operator_states_quad=operator_states_quad, comm_tag=comm_tag)
+            operator_states_quad=operator_states_quad, comm_tag=comm_tag,
+            use_esdg=use_esdg, limiter_func=limiter_func)
 
     # Communicate grad(CV) and put it on the quadrature domain
     grad_cv_interior_pairs = [
@@ -474,7 +513,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dcoll, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
-            operator_states_quad=operator_states_quad, comm_tag=comm_tag)
+            operator_states_quad=operator_states_quad, comm_tag=comm_tag,
+            use_esdg=use_esdg, limiter_func=limiter_func)
 
     # Create the interior face trace pairs, perform MPI exchange, interp to quad
     grad_t_interior_pairs = [
@@ -505,7 +545,10 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         dd=dd_vol)
 
     # Add corresponding inviscid parts if enabled
-    if inviscid_terms_on:
+    # Note that this is the default, and highest performing path.
+    # To get separate inviscid operator, set inviscid_fluid_operator explicitly
+    # or use ESDG.
+    if inviscid_terms_on and inviscid_fluid_operator is None:
         vol_term = vol_term - inviscid_flux(state=vol_state_quad)
         bnd_term = bnd_term - inviscid_flux_on_element_boundary(
             dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
@@ -514,6 +557,14 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dd=dd_vol)
 
     ns_rhs = div_operator(dcoll, dd_vol_quad, dd_allfaces_quad, vol_term, bnd_term)
+
+    # Call an external operator for the inviscid terms (Euler by default)
+    # ESDG *always* uses this branch
+    if inviscid_terms_on and inviscid_fluid_operator is not None:
+        ns_rhs = ns_rhs + inviscid_fluid_operator(
+            dcoll, state=state, gas_model=gas_model, boundaries=boundaries,
+            time=time, dd=dd, comm_tag=comm_tag, quadrature_tag=quadrature_tag,
+            operator_states_quad=operator_states_quad)
 
     if return_gradients:
         return ns_rhs, grad_cv, grad_t

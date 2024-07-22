@@ -1,1 +1,0 @@
-thermally-coupled-mpi.py

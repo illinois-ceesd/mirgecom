@@ -50,11 +50,6 @@ def get_mechanism_file_name(mechanism_name: str) -> str:
     return f"{mechanism_name}.yaml"
 
 
-def get_mechanism_cti_file_name(mechanism_name: str) -> str:
-    """Form the CTI file name for a mechanism."""
-    return f"{mechanism_name}.cti"
-
-
 def import_mechdata():
     """Import the mechanism data as a mechanism data resource.
 
@@ -68,25 +63,17 @@ def import_mechdata():
     return importlib_resources.files(get_mechanisms_pkgname())
 
 
-def get_mechanism_cti(mechanism_name: str) -> str:
-    """Get the contents of a mechanism CTI file."""
-    from warnings import warn
-    warn("get_mechanism_cti is deprecated due to CTI phase-out in Cantera. Switch "
-         "from 'get_mechanism_cti' to 'get_mechanism_input' to switch to YAML-based "
-         "mechanisms and update any Cantera calls accordingly.  For example:\n"
-         " ------- old way --------\n"
-         "> mech_cti = get_mechanism_cti('uiuc')\n"
-         "> sol = cantera.Solution(phase_id='gas', input=mech_cti)\n"
-         " ------- new way --------\n"
-         "> mech_input = get_mechanism_input('uiuc')\n"
-         "> sol = cantera.Solution(name='gas', yaml=mech_input)\n")
-    mech_data = import_mechdata()
-    mech_file = mech_data / get_mechanism_cti_file_name(mechanism_name)
-    return mech_file.read_text()
-
-
 def get_mechanism_input(mechanism_name: str) -> str:
     """Get the contents of a mechanism YAML input file."""
+    import os
+    from pathlib import Path
+
     mech_data = import_mechdata()
     mech_file = mech_data / get_mechanism_file_name(mechanism_name)
+    if not os.path.isfile(mech_file):
+        from warnings import warn
+        warn("Mechanism not found in default location.", stacklevel=2)
+        current_path = os.path.abspath(os.getcwd()) + "/"
+        mech_file = Path(current_path + get_mechanism_file_name(mechanism_name))
+        warn("Trying " + current_path, stacklevel=2)
     return mech_file.read_text()

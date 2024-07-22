@@ -54,7 +54,7 @@ from mirgecom.discretization import create_discretization_collection
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-
+from mirgecom.simutil import get_box_mesh
 from pytools.obj_array import make_obj_array
 
 logger = logging.getLogger(__name__)
@@ -337,18 +337,6 @@ def test_trig(ctx_factory, dim, order):
     )
 
 
-# Box grid generator widget lifted from @majosm's diffusion tester
-def _get_box_mesh(dim, a, b, n):
-    dim_names = ["x", "y", "z"]
-    boundary_tag_to_face = {}
-    for i in range(dim):
-        boundary_tag_to_face["-"+str(i+1)] = ["-"+dim_names[i]]
-        boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh
-    return generate_regular_rect_mesh(a=(a,)*dim, b=(b,)*dim, n=(n,)*dim,
-        boundary_tag_to_face=boundary_tag_to_face)
-
-
 class _VortexSoln:
 
     def __init__(self, **kwargs):
@@ -372,7 +360,8 @@ class _TestSoln:
         from mirgecom.initializers import Uniform
         origin = np.zeros(self._dim)
         velocity = origin + 1
-        self._initializer = Uniform(dim=self._dim, velocity=velocity)
+        self._initializer = Uniform(dim=self._dim, velocity=velocity,
+                                    pressure=1.0, rho=1.0)
 
     def dim(self):
         return self._dim
@@ -411,10 +400,10 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
         return make_fluid_state(prescribed_soln(r=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
-    npts_geom = 17
+    nels_geom = 16
     a = 1.0
     b = 2.0
-    mesh = _get_box_mesh(dim=dim, a=a, b=b, n=npts_geom)
+    mesh = get_box_mesh(dim=dim, a=a, b=b, n=nels_geom)
     from mirgecom.discretization import create_discretization_collection
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
@@ -454,10 +443,10 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
 
     bnd_flux_resid = (prescribed_boundary_av_flux - exp_av_flux)
     print(f"{bnd_flux_resid=}")
-    assert bnd_flux_resid == 0
+    assert actx.np.equal(bnd_flux_resid, 0)
 
     # Solid wall boundaries are expected to have 0 AV flux
     wall_bnd_flux = \
         adiabatic_noslip.av_flux(dcoll, BTAG_ALL, av_diffusion)
     print(f"adiabatic_noslip: {wall_bnd_flux=}")
-    assert wall_bnd_flux == 0
+    assert actx.np.equal(wall_bnd_flux, 0)

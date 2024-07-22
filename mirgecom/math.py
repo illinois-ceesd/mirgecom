@@ -78,18 +78,24 @@ def harmonic_mean(x, y):
     y:
         A number, array type, or symbolic expression.
     """
-    if any(isinstance(arg, Expression) for arg in (x, y)):
-        return 2*x*y/(x + y)
-    else:
-        for arg in (x, y):
-            actx = get_container_context_recursively_opt(arg)
-            if actx is not None:
-                break
-        if actx is not None:
-            x_plus_y = actx.np.where(actx.np.greater(x + y, 0*x), x + y, 0*x+1)
+    def scalar_harmonic_mean(a, b):
+        if any(isinstance(arg, Expression) for arg in (a, b)):
+            return 2*a*b/(a + b)
         else:
-            x_plus_y = x + y if x + y > 0 else 1
-        return 2*x*y/x_plus_y
+            for arg in (a, b):
+                actx = get_container_context_recursively_opt(arg)
+                if actx is not None:
+                    break
+            if actx is not None:
+                a_plus_b = actx.np.where(actx.np.greater(a + b, 0*a), a + b, 0*a+1)
+            else:
+                a_plus_b = a + b if a + b > 0 else 1
+            return 2*a*b/a_plus_b
+
+    from arraycontext import rec_multimap_array_container
+    from meshmode.dof_array import DOFArray
+    return rec_multimap_array_container(
+        scalar_harmonic_mean, x, y, leaf_class=DOFArray)
 
 
 def __getattr__(name):

@@ -30,11 +30,14 @@ THE SOFTWARE.
 """
 
 from functools import wraps
-import os
 import sys
 
 from contextlib import contextmanager
 from typing import Callable, Any, Generator, TYPE_CHECKING
+
+import logging
+logger = logging.getLogger(__name__)
+
 
 if TYPE_CHECKING:
     from mpi4py.MPI import Comm
@@ -52,108 +55,43 @@ def shared_split_comm_world() -> Generator["Comm", None, None]:
         comm.Free()
 
 
-def _check_cache_dirs() -> None:
-    """Check whether multiple ranks share cache directories on the same node."""
-    from mpi4py import MPI
-
-    size = MPI.COMM_WORLD.Get_size()
-
-    if size <= 1:
-        return
-
-    with shared_split_comm_world() as node_comm:
-        node_rank = node_comm.Get_rank()
-
-        def _check_var(var: str) -> None:
-            from warnings import warn
-
-            try:
-                my_path = os.environ[var]
-            except KeyError:
-                warn(f"Please set the '{var}' variable in your job script to "
-                    "avoid file system overheads when running on large numbers of "
-                    "ranks. See https://mirgecom.readthedocs.io/en/latest/running/large-systems.html "  # noqa: E501
-                    "for more information.")
-                # Create a fake path so there will not be a second warning below.
-                my_path = f"no/such/path/rank{node_rank}"
-
-            all_paths = node_comm.gather(my_path, root=0)
-
-            if node_rank == 0:
-                assert all_paths
-                if len(all_paths) != len(set(all_paths)):
-                    hostname = MPI.Get_processor_name()
-                    dup = [path for path in set(all_paths)
-                                if all_paths.count(path) > 1]
-
-                    from warnings import warn
-                    warn(f"Multiple ranks are sharing '{var}' on node '{hostname}'. "
-                        f"Duplicate '{var}'s: {dup}.")
-
-        _check_var("XDG_CACHE_HOME")
-        _check_var("POCL_CACHE_DIR")
-
-        # We haven't observed an issue yet that 'CUDA_CACHE_PATH' fixes,
-        # so disable this check for now.
-        # _check_var("CUDA_CACHE_PATH")
-
-
-def _check_gpu_oversubscription() -> None:
+def _check_isl_version() -> None:
     """
-    Check whether multiple ranks are running on the same GPU on each node.
+    Check that we run with a non-GMP ISL version.
 
-    Only works with CUDA devices currently due to the use of the
-    PCI_DOMAIN_ID_NV extension.
+    In general, ISL can be built with 3 options, imath-32, GMP, and imath,
+    in descending order of speed.
+    Since https://github.com/conda-forge/isl-feedstock only offers imath-32
+    or GMP, we can check for the presence of GMP-only symbols in the loaded
+    library to determine if we are running with imath-32.
     """
-    from mpi4py import MPI
-    import pyopencl as cl
+    import ctypes
+    import islpy  # type: ignore[import-untyped]
 
-    size = MPI.COMM_WORLD.Get_size()
+    try:
+        ctypes.cdll.LoadLibrary(islpy._isl.__file__).isl_val_get_num_gmp
+    except AttributeError:
+        # We are running with imath or imath-32.
+        pass
+    else:
+        from warnings import warn
+        warn("Running with the GMP version of ISL, which is considerably "
+             "slower than imath-32. Please install a faster ISL version with "
+             "a command such as 'conda install \"isl * imath32_*\"' .")
 
-    if size <= 1:
-        return
 
-    cl_ctx = cl.create_some_context()
-    dev = cl_ctx.devices
+def _check_mpi4py_version() -> None:
+    import mpi4py
 
-    # No support for multi-device contexts
-    if len(dev) > 1:
-        raise NotImplementedError("multi-device contexts not yet supported")
+    if mpi4py.__version__ < "4":
+        from warnings import warn
+        warn(f"mpi4py version {mpi4py.__version__} does not support pkl5 "
+              "scatter. This may lead to errors when distributing large meshes. "
+              "Please upgrade to the git version of mpi4py.")
 
-    dev = dev[0]
-
-    # Allow running multiple ranks on non-GPU devices
-    if not (dev.type & cl.device_type.GPU):
-        return
-
-    with shared_split_comm_world() as node_comm:
-        try:
-            domain_id = hex(dev.pci_domain_id_nv)
-        except (cl._cl.LogicError, AttributeError):
-            from warnings import warn
-            warn("Cannot detect whether multiple ranks are running on the"
-                 " same GPU because it requires Nvidia GPUs running with"
-                 " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
-            return
-
-        node_rank = node_comm.Get_rank()
-
-        bus_id = hex(dev.pci_bus_id_nv)
-        slot_id = hex(dev.pci_slot_id_nv)
-
-        dev_id = (domain_id, bus_id, slot_id)
-
-        dev_ids = node_comm.gather(dev_id, root=0)
-
-        if node_rank == 0:
-            assert dev_ids
-            if len(dev_ids) != len(set(dev_ids)):
-                hostname = MPI.Get_processor_name()
-                dup = [item for item in dev_ids if dev_ids.count(item) > 1]
-
-                from warnings import warn
-                warn(f"Multiple ranks are sharing GPUs on node '{hostname}'. "
-                     f"Duplicate PCIe IDs: {dup}.")
+    else:
+        logger.info(f"Using mpi4py version {mpi4py.__version__} with pkl5 "
+                     "scatter support.")
 
 
 def mpi_entry_point(func) -> Callable:
@@ -194,8 +132,8 @@ def mpi_entry_point(func) -> Callable:
         # exit
         from mpi4py import MPI  # noqa
 
-        _check_gpu_oversubscription()
-        _check_cache_dirs()
+        _check_isl_version()
+        _check_mpi4py_version()
 
         func(*args, **kwargs)
 

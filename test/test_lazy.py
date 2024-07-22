@@ -215,11 +215,12 @@ def _get_pulse():
     gas_model = GasModel(eos=IdealSingleGas())
 
     from mirgecom.initializers import Uniform, AcousticPulse
-    uniform_init = Uniform(dim=2)
+    uniform_init = Uniform(dim=2, pressure=1.0, rho=1.0)
     pulse_init = AcousticPulse(dim=2, center=np.zeros(2), amplitude=1.0, width=.1)
 
     def init(nodes):
-        return pulse_init(x_vec=nodes, cv=uniform_init(nodes), eos=gas_model.eos)
+        cv = uniform_init(x_vec=nodes, eos=gas_model.eos)
+        return pulse_init(x_vec=nodes, cv=cv, eos=gas_model.eos)
 
     from meshmode.mesh import BTAG_ALL
     from mirgecom.boundary import AdiabaticSlipBoundary

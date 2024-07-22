@@ -86,3 +86,13 @@ References
     `(DOI) <https://doi.org/10.1002/0471461296>`__
 .. [Giles_1988] Michael Giles (1988), Non-Reflecting Boundary Conditions for the Euler \
     Equations, CFDL-TR-88-1
+.. [Lachaud_2014] Jean Lachaud and Nagi Mansour (2014), Porous-Material Analysis Toolbox Based
+    on OpenFOAM and Applications, Journal of Thermophysics and Heat Transfer 28 2
+.. [Chandrashekar_2013] Praveen Chandrashekar, Kinetic Energy Preserving and Entropy Stable Finite Volume Schemes \
+   for Compressible Euler and Navier-Stokes Equations, Communications in Computational Physics 14, 5 \
+   `(DOI) <https://doi.org/10.4208/cicp.170712.010313a>`__
+.. [Renac_2021] Florent Renac, Entropy stable, robust and high-order DGSEM for the compressible multicomponent \
+   Euler equations, Journal of Computational Physics, 445 `(DOI) <https://doi.org/10.1016/j.jcp.2021.110584>`__
+.. [Ern_2008] Daniele A. Di Pietro, Alexandre Ern, Jean-Luc Guermond, Discontinuous Galerkin Methods for \
+   Anisotropic Semidefinite Diffusion with Advection, SIAM Journal on Numerical Analysis 46 2 \
+   `(DOI) <https://www.jstor.org/stable/40233233?seq=12>`__

@@ -1,1 +1,0 @@
-mixture-mpi.py

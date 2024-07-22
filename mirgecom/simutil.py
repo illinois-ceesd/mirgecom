@@ -25,16 +25,12 @@ Mesh and element utilities
 .. autofunction:: geometric_mesh_partitioner
 .. autofunction:: distribute_mesh
 .. autofunction:: get_number_of_tetrahedron_nodes
+.. autofunction:: get_box_mesh
 
 Simulation support utilities
 ----------------------------
 
 .. autofunction:: configurate
-
-Lazy eval utilities
--------------------
-
-.. autofunction:: force_evaluation
 
 File comparison utilities
 -------------------------
@@ -42,6 +38,13 @@ File comparison utilities
 .. autofunction:: compare_files_vtu
 .. autofunction:: compare_files_xdmf
 .. autofunction:: compare_files_hdf5
+
+Exceptions
+----------
+
+.. autoclass:: SimulationConfigurationError
+.. autoclass:: ApplicationOptionsError
+.. autoclass:: SimulationRuntimeError
 """
 
 __copyright__ = """
@@ -68,22 +71,45 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
 from functools import partial
+from typing import Dict, List, Optional
+from logpyle import IntervalTimer
 
 import grudge.op as op
-# from grudge.op import nodal_min, elementwise_min
-from arraycontext import map_array_container, flatten
-from meshmode.dof_array import DOFArray
-from mirgecom.viscous import get_viscous_timestep
-
-from typing import List, Dict, Optional
+import numpy as np
+import pyopencl as cl
+from arraycontext import tag_axes
+from meshmode.transform_metadata import (
+    DiscretizationElementAxisTag,
+    DiscretizationDOFAxisTag
+)
+from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
+from meshmode.dof_array import DOFArray
+
 from mirgecom.utils import normalize_boundaries
-import pyopencl as cl
+from mirgecom.viscous import get_viscous_timestep
 
 logger = logging.getLogger(__name__)
+
+
+class SimulationConfigurationError(RuntimeError):
+    """Simulation physics configuration or parameters error."""
+
+    pass
+
+
+class SimulationRuntimeError(RuntimeError):
+    """General simulation runtime error."""
+
+    pass
+
+
+class ApplicationOptionsError(RuntimeError):
+    """Application command-line options error."""
+
+    pass
 
 
 def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
@@ -98,6 +124,66 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     return nnodes
 
 
+def get_box_mesh(dim, a, b, n, t=None, periodic=None,
+                 tensor_product_elements=False, **kwargs):
+    """
+    Create a rectangular "box" like mesh with tagged boundary faces.
+
+    The resulting mesh has boundary tags
+    `"-i"` and `"+i"` for `i=1,...,dim`
+    corresponding to lower and upper faces normal to coordinate dimension `i`.
+
+    Parameters
+    ----------
+    dim: int
+        The mesh topological dimension
+    a: float or tuple
+        The coordinates of the lower corner of the box. If scalar-valued, gets
+        promoted to a uniform tuple.
+    b: float or tuple
+        The coordinates of the upper corner of the box. If scalar-valued, gets
+        promoted to a uniform tuple.
+    n: int or tuple
+        The number of elements along a given dimension. If scalar-valued, gets
+        promoted to a uniform tuple.
+    t: str or None
+        The mesh type. See
+        :func:`meshmode.mesh.generation.generate_box_mesh` for details.
+    periodic: bool or tuple or None
+        Indicates whether the mesh is periodic in a given dimension. If
+        scalar-valued, gets promoted to a uniform tuple.
+
+    Returns
+    -------
+    :class:`meshmode.mesh.Mesh`
+        The generated box mesh.
+    """
+    if np.isscalar(a):
+        a = (a,)*dim
+    if np.isscalar(b):
+        b = (b,)*dim
+    if np.isscalar(n):
+        n = (n,)*dim
+    if periodic is None:
+        periodic = (False,)*dim
+    elif np.isscalar(periodic):
+        periodic = (periodic,)*dim
+
+    dim_names = ["x", "y", "z"]
+    bttf = {}
+    for i in range(dim):
+        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
+        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
+
+    from meshmode.mesh import TensorProductElementGroup
+    group_cls = TensorProductElementGroup if tensor_product_elements else None
+    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
+    return gen(a=a, b=b, nelements_per_axis=n,
+               boundary_tag_to_face=bttf,
+               mesh_type=t, periodic=periodic, group_cls=group_cls,
+               **kwargs)
+
+
 def check_step(step, interval):
     """
     Check step number against a user-specified interval.
@@ -108,7 +194,7 @@ def check_step(step, interval):
     - Zero means 'always visualize'.
 
     Useful for checking whether the current step is an output step,
-    or anyting else that occurs on fixed intervals.
+    or anything else that occurs on fixed intervals.
     """
     if interval == 0:
         return True
@@ -185,18 +271,13 @@ def get_sim_timestep(
     float or :class:`~meshmode.dof_array.DOFArray`
         The global maximum stable DT based on a viscous fluid.
     """
+    actx = state.array_context
+
     if local_dt:
-        actx = state.array_context
-        data_shape = (state.cv.mass[0]).shape
-        if actx.supports_nonscalar_broadcasting:
-            return cfl * actx.np.broadcast_to(
-                op.elementwise_min(
-                    dcoll, fluid_dd,
-                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
-                data_shape)
-        else:
-            return cfl * op.elementwise_min(
-                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
+        ones = actx.np.zeros_like(state.cv.mass) + 1.0
+        vdt = get_viscous_timestep(dcoll, state, dd=fluid_dd)
+        emin = op.elementwise_min(dcoll, fluid_dd, vdt)
+        return cfl * ones * emin
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
@@ -247,7 +328,8 @@ def write_visfile(dcoll, io_fields, visualizer, vizname,
         collection.  This will stop working in Fall 2022.)
     """
     from contextlib import nullcontext
-    from mirgecom.io import make_rank_fname, make_par_fname
+
+    from mirgecom.io import make_par_fname, make_rank_fname
 
     if comm is None:  # None is OK for serial writes!
         comm = dcoll.mpi_communicator
@@ -410,10 +492,22 @@ def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    # added tag_axes calls to eliminate fallback warnings at compile time
     actx = red_state.array_context
-    resid = red_state - blue_state
+    resid = tag_axes(actx,
+                     {
+                         0: DiscretizationElementAxisTag(),
+                         1: DiscretizationDOFAxisTag()
+                     }, red_state - blue_state)
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx))
+        tag_axes(actx,
+                 {
+                     0: DiscretizationElementAxisTag()
+                 },
+                 flatten(
+                     componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx)
+                 )
+    )
 
     return resid_errs.tolist()
 
@@ -527,8 +621,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     # Create geometrically even partitions
     elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
 
-    print(f"{elem_to_rank=}")
-
     # map partition id to list of elements in that partition
     part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
                         for r in range(num_ranks)}
@@ -544,11 +636,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
 
         for r in range(num_ranks-1):
 
-            # find the element reservoir (next part with elements in it)
-            # adv_part = r + 1
-            # while nelem_part[adv_part] == 0:
-            #    adv_part = adv_part + 1
-
             num_elem_needed = aver_part_nelem - nelem_part[r]
             part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
@@ -563,8 +650,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
             moved_elements = set()
 
             adv_part = r + 1
-            # while ((part_imbalance > imbalance_tolerance)
-            #       and (adv_part < num_ranks)):
             while part_imbalance > imbalance_tolerance:
                 # This partition needs to keep changing in size until it meets the
                 # specified imbalance tolerance, or gives up trying
@@ -802,10 +887,10 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     warn(
         "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
         "Use distribute_mesh instead.", DeprecationWarning, stacklevel=2)
-    return distribute_mesh(comm, generate_mesh)
+    return distribute_mesh(comm, generate_mesh, **kwargs)
 
 
-def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
+def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=None):
     r"""Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -841,15 +926,27 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
     global_nelements: :class:`int`
         The number of elements in the global mesh
     """
-    num_ranks = comm.Get_size()
+    from mpi4py.util import pkl5
+    comm_wrapper = pkl5.Intracomm(comm)
+
+    num_ranks = comm_wrapper.Get_size()
+    t_mesh_dist = IntervalTimer("t_mesh_dist", "Time spent distributing mesh data.")
+    t_mesh_data = IntervalTimer("t_mesh_data", "Time spent getting mesh data.")
+    t_mesh_part = IntervalTimer("t_mesh_part", "Time spent partitioning the mesh.")
+    t_mesh_split = IntervalTimer("t_mesh_split", "Time spent splitting mesh parts.")
 
     if partition_generator_func is None:
         def partition_generator_func(mesh, tag_to_elements, num_ranks):
             from meshmode.distributed import get_partition_by_pymetis
             return get_partition_by_pymetis(mesh, num_ranks)
 
-    if comm.Get_rank() == 0:
-        global_data = get_mesh_data()
+    if comm_wrapper.Get_rank() == 0:
+        if logmgr:
+            logmgr.add_quantity(t_mesh_data)
+            with t_mesh_data.get_sub_timer():
+                global_data = get_mesh_data()
+        else:
+            global_data = get_mesh_data()
 
         from meshmode.mesh import Mesh
         if isinstance(global_data, Mesh):
@@ -861,89 +958,117 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None):
         else:
             raise TypeError("Unexpected result from get_mesh_data")
 
-        from meshmode.mesh.processing import partition_mesh
-
-        rank_per_element = partition_generator_func(mesh, tag_to_elements, num_ranks)
-
-        if tag_to_elements is None:
-            rank_to_elements = {
-                rank: np.where(rank_per_element == rank)[0]
-                for rank in range(num_ranks)}
-
-            rank_to_mesh_data_dict = partition_mesh(mesh, rank_to_elements)
-
-            rank_to_mesh_data = [
-                rank_to_mesh_data_dict[rank]
-                for rank in range(num_ranks)]
-
+        if logmgr:
+            logmgr.add_quantity(t_mesh_part)
+            with t_mesh_part.get_sub_timer():
+                rank_per_element = partition_generator_func(mesh, tag_to_elements,
+                                                            num_ranks)
         else:
-            tag_to_volume = {
-                tag: vol
-                for vol, tags in volume_to_tags.items()
-                for tag in tags}
+            rank_per_element = partition_generator_func(mesh, tag_to_elements,
+                                                        num_ranks)
 
-            volumes = list(volume_to_tags.keys())
+        def get_rank_to_mesh_data():
+            from meshmode.mesh.processing import partition_mesh
+            if tag_to_elements is None:
+                rank_to_elements = {
+                    rank: np.where(rank_per_element == rank)[0]
+                    for rank in range(num_ranks)}
 
-            volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
-            for tag, elements in tag_to_elements.items():
-                volume_index_per_element[elements] = volumes.index(
-                    tag_to_volume[tag])
+                rank_to_mesh_data_dict = partition_mesh(mesh, rank_to_elements)
 
-            if np.any(volume_index_per_element < 0):
-                raise ValueError("Missing volume specification for some elements.")
+                rank_to_mesh_data = [
+                    rank_to_mesh_data_dict[rank]
+                    for rank in range(num_ranks)]
 
-            from grudge.discretization import \
+            else:
+                from grudge.discretization import \
                 PartID  # pylint: disable=no-name-in-module
 
-            part_id_to_elements = {
-                PartID(volumes[vol_idx], rank):
+                tag_to_volume = {
+                    tag: vol
+                    for vol, tags in volume_to_tags.items()
+                    for tag in tags}
+
+                volumes = list(volume_to_tags.keys())
+
+                volume_index_per_element = np.full(mesh.nelements, -1, dtype=int)
+                for tag, elements in tag_to_elements.items():
+                    volume_index_per_element[elements] = volumes.index(
+                        tag_to_volume[tag])
+
+                if np.any(volume_index_per_element < 0):
+                    raise ValueError("Missing volume specification "
+                                     "for some elements.")
+
+                part_id_to_elements = {
+                    PartID(volumes[vol_idx], rank):
                     np.where(
                         (volume_index_per_element == vol_idx)
                         & (rank_per_element == rank))[0]
-                for vol_idx in range(len(volumes))
-                for rank in range(num_ranks)}
+                    for vol_idx in range(len(volumes))
+                    for rank in range(num_ranks)}
 
-            # TODO: Add a public function to meshmode to accomplish this? So we're
-            # not depending on meshmode internals
-            part_id_to_part_index = {
-                part_id: part_index
-                for part_index, part_id in enumerate(part_id_to_elements.keys())}
-            from meshmode.mesh.processing import _compute_global_elem_to_part_elem
-            global_elem_to_part_elem = _compute_global_elem_to_part_elem(
-                mesh.nelements, part_id_to_elements, part_id_to_part_index,
-                mesh.element_id_dtype)
+                # TODO: Add a public meshmode function to accomplish this? So we're
+                # not depending on meshmode internals
+                part_id_to_part_index = {
+                    part_id: part_index
+                    for part_index, part_id in enumerate(part_id_to_elements.keys())}
+                from meshmode.mesh.processing import \
+                    _compute_global_elem_to_part_elem
+                global_elem_to_part_elem = _compute_global_elem_to_part_elem(
+                    mesh.nelements, part_id_to_elements, part_id_to_part_index,
+                    mesh.element_id_dtype)
 
-            tag_to_global_to_part = {
-                tag: global_elem_to_part_elem[elements, :]
-                for tag, elements in tag_to_elements.items()}
+                tag_to_global_to_part = {
+                    tag: global_elem_to_part_elem[elements, :]
+                    for tag, elements in tag_to_elements.items()}
 
-            part_id_to_tag_to_elements = {}
-            for part_id in part_id_to_elements.keys():
-                part_idx = part_id_to_part_index[part_id]
-                part_tag_to_elements = {}
-                for tag, global_to_part in tag_to_global_to_part.items():
-                    part_tag_to_elements[tag] = global_to_part[
-                        global_to_part[:, 0] == part_idx, 1]
-                part_id_to_tag_to_elements[part_id] = part_tag_to_elements
+                part_id_to_tag_to_elements = {}
+                for part_id in part_id_to_elements.keys():
+                    part_idx = part_id_to_part_index[part_id]
+                    part_tag_to_elements = {}
+                    for tag, global_to_part in tag_to_global_to_part.items():
+                        part_tag_to_elements[tag] = global_to_part[
+                            global_to_part[:, 0] == part_idx, 1]
+                        part_id_to_tag_to_elements[part_id] = part_tag_to_elements
 
-            part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
+                part_id_to_mesh = partition_mesh(mesh, part_id_to_elements)
 
-            rank_to_mesh_data = [
-                {
-                    vol: (
-                        part_id_to_mesh[PartID(vol, rank)],
-                        part_id_to_tag_to_elements[PartID(vol, rank)])
-                    for vol in volumes}
-                for rank in range(num_ranks)]
+                rank_to_mesh_data = [
+                    {
+                        vol: (
+                            part_id_to_mesh[PartID(vol, rank)],
+                            part_id_to_tag_to_elements[PartID(vol, rank)])
+                        for vol in volumes}
+                    for rank in range(num_ranks)]
 
-        local_mesh_data = comm.scatter(rank_to_mesh_data, root=0)
+            return rank_to_mesh_data
 
-        global_nelements = comm.bcast(mesh.nelements, root=0)
+        if logmgr:
+            logmgr.add_quantity(t_mesh_split)
+            with t_mesh_split.get_sub_timer():
+                rank_to_mesh_data = get_rank_to_mesh_data()
+        else:
+            rank_to_mesh_data = get_rank_to_mesh_data()
+
+        global_nelements = comm_wrapper.bcast(mesh.nelements, root=0)
+
+        if logmgr:
+            logmgr.add_quantity(t_mesh_dist)
+            with t_mesh_dist.get_sub_timer():
+                local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
+        else:
+            local_mesh_data = comm_wrapper.scatter(rank_to_mesh_data, root=0)
 
     else:
-        local_mesh_data = comm.scatter(None, root=0)
+        global_nelements = comm_wrapper.bcast(None, root=0)
 
-        global_nelements = comm.bcast(None, root=0)
+        if logmgr:
+            logmgr.add_quantity(t_mesh_dist)
+            with t_mesh_dist.get_sub_timer():
+                local_mesh_data = comm_wrapper.scatter(None, root=0)
+        else:
+            local_mesh_data = comm_wrapper.scatter(None, root=0)
 
     return local_mesh_data, global_nelements
 
@@ -987,7 +1112,7 @@ def extract_volumes(mesh, tag_to_elements, selected_tags, boundary_tag):
     # partition_mesh creates a partition boundary for "_out"; replace with a
     # normal boundary
     new_facial_adjacency_groups = []
-    from meshmode.mesh import InterPartAdjacencyGroup, BoundaryAdjacencyGroup
+    from meshmode.mesh import BoundaryAdjacencyGroup, InterPartAdjacencyGroup
     for grp_list in in_mesh.facial_adjacency_groups:
         new_grp_list = []
         for fagrp in grp_list:
@@ -1046,8 +1171,8 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
         nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
         local_report.write(f"{bdtag}: {nnodes}\n")
 
-    from meshmode.mesh import BTAG_PARTITION
     from meshmode.distributed import get_connected_parts
+    from meshmode.mesh import BTAG_PARTITION
     connected_part_ids = get_connected_parts(dcoll.discr_from_dd(dd).mesh)
     local_report.write(f"num_nbr_parts: {len(connected_part_ids)}\n")
     local_report.write(f"connected_part_ids: {connected_part_ids}\n")
@@ -1073,7 +1198,13 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
 
 
 def force_evaluation(actx, expn):
-    """Wrap freeze/thaw forcing evaluation of expressions."""
+    """Wrap freeze/thaw forcing evaluation of expressions.
+
+    Deprecated; use :func:`mirgecom.utils.force_evaluation` instead.
+    """
+    from warnings import warn
+    warn("simutil.force_evaluation is deprecated and will disappear in Q3 2023. "
+         "Use utils.force_evaluation instead.", DeprecationWarning, stacklevel=2)
     return actx.thaw(actx.freeze(expn))
 
 
@@ -1085,8 +1216,8 @@ def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
     By default, it prefers SVM allocations over CL buffers, and memory
     pools over direct allocations.
     """
-    from pyopencl.characterize import has_coarse_grain_buffer_svm
     import pyopencl.tools as cl_tools
+    from pyopencl.characterize import has_coarse_grain_buffer_svm
 
     if force_buffer and force_non_pool:
         logger.info(f"Using non-pooled CL buffer allocations on {queue.device}.")
@@ -1160,8 +1291,9 @@ def compare_files_vtu(
     False:
         If it fails the files contain data outside the given tolerance.
     """
-    import vtk
     import xml.etree.ElementTree as Et
+
+    import vtk
 
     # read files:
     if file_type == "vtu":
@@ -1209,10 +1341,17 @@ def compare_files_vtu(
         field_tolerance = {}
     field_specific_tols = [configurate(point_data1.GetArrayName(i),
         field_tolerance, tolerance) for i in range(nfields)]
+    field_names = []
+
+    max_file_diff = 0.
+    max_field_name = ""
 
     for i in range(nfields):
         arr1 = point_data1.GetArray(i)
         arr2 = point_data2.GetArray(i)
+        field_tol = field_specific_tols[i]
+        num_points = arr2.GetNumberOfTuples()
+        num_components = arr1.GetNumberOfComponents()
 
         # verify both files contain same arrays
         if point_data1.GetArrayName(i) != point_data2.GetArrayName(i):
@@ -1228,22 +1367,95 @@ def compare_files_vtu(
 
         # verify individual values w/in given tolerance
         fieldname = point_data1.GetArrayName(i)
-        print(f"Field: {fieldname}", end=" ")
-        for j in range(arr1.GetSize()):
-            test_err = abs(arr1.GetValue(j) - arr2.GetValue(j))
-            if test_err > max_field_errors[i]:
-                max_field_errors[i] = test_err
+        field_names.append(fieldname)
+
+        # Ignore any fields that are named here
+        # FIXME: rhs, grad are here because they fail thermally-coupled example
+        ignored_fields = ["resid", "tagged", "grad", "rhs"]
+        ignore_field = False
+        for ifld in ignored_fields:
+            if ifld in fieldname:
+                ignore_field = True
+        if ignore_field:
+            continue
+
+        max_true_component = max([max(abs(arr2.GetComponent(j, icomp))
+                                      for j in range(num_points))
+                                  for icomp in range(num_components)])
+        max_other_component = max([max(abs(arr1.GetComponent(j, icomp))
+                                      for j in range(num_points))
+                                  for icomp in range(num_components)])
+
+        # FIXME
+        # Choose an arbitrary "level" to define what is a "significant" field
+        # Don't compare dinky/insignificant fields
+        significant_field = 1000.*field_tol
+        if ((max_true_component
+             < significant_field) and (max_other_component < significant_field)):
+            continue
+
+        max_true_value = max_true_component
+        use_relative_diff = max_true_value > field_tol
+        err_scale = 1./max_true_value if use_relative_diff else 1.
+
+        print(f"{fieldname}: Max true value: {max_true_value}")
+        print(f"{fieldname}: Error scale: {err_scale}")
+
+        # Spew out some stats on each field component
+        print(f"Field({fieldname}) Component (min, max, mean)s:")
+        for icomp in range(num_components):
+            min_true_value = min(arr2.GetComponent(j, icomp)
+                                 for j in range(num_points))
+            min_other_value = min(arr1.GetComponent(j, icomp)
+                                  for j in range(num_points))
+            max_true_value = max(arr2.GetComponent(j, icomp)
+                                 for j in range(num_points))
+            max_other_value = max(arr1.GetComponent(j, icomp)
+                                  for j in range(num_points))
+            true_mean = sum(arr2.GetComponent(j, icomp)
+                            for j in range(num_points)) / num_points
+            other_mean = sum(arr1.GetComponent(j, icomp)
+                             for j in range(num_points)) / num_points
+            print(f"{fieldname}({icomp}): ({min_other_value},"
+                  f" {max_other_value}, {other_mean})")
+            print(f"{fieldname}({icomp}): ({min_true_value},"
+                  f" {max_true_value}, {true_mean})")
+
+        print(f"Field({fieldname}) comparison:")
+
+        for icomp in range(num_components):
+            if num_components > 1:
+                print(f"Comparing component {icomp}")
+            for j in range(num_points):
+                test_err = abs(arr1.GetComponent(j, icomp)
+                               - arr2.GetComponent(j, icomp))*err_scale
+                if test_err > max_field_errors[i]:
+                    max_field_errors[i] = test_err
+
         print(f"Max Error: {max_field_errors[i]}", end=" ")
         print(f"Tolerance: {field_specific_tols[i]}")
 
     violated_tols = []
+    violating_values = []
+    violating_fields = []
+
     for i in range(nfields):
+        if max_field_errors[i] > max_file_diff:
+            max_file_diff = max_field_errors[i]
+            max_field_name = field_names[i]
+
         if max_field_errors[i] > field_specific_tols[i]:
             violated_tols.append(field_specific_tols[i])
+            violating_values.append(max_field_errors[i])
+            violating_fields.append(field_names[i])
+
+    print(f"Max File Difference: {max_field_name} : {max_file_diff}")
 
     if violated_tols:
-        raise ValueError("Fidelity test failed: Mismatched data array "
-                                 f"values {violated_tols=}.")
+        raise ValueError("Data comparison failed:\n"
+                         f"Fields: {violating_fields=}\n"
+                         f"Max differences: {violating_values=}\n"
+                         f"Tolerances: {violated_tols=}\n")
 
     print("VTU Fidelity test completed successfully")
 

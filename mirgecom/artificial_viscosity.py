@@ -155,7 +155,8 @@ import grudge.op as op
 
 from mirgecom.boundary import (
     AdiabaticNoslipWallBoundary,
-    PrescribedFluidBoundary
+    PrescribedFluidBoundary,
+    IsothermalWallBoundary
 )
 
 
@@ -180,6 +181,39 @@ class AdiabaticNoSlipWallAV(AdiabaticNoslipWallBoundary):
         self._bnd_grad_av_func = boundary_grad_av_func
         self._av_num_flux_func = av_num_flux_func
         AdiabaticNoslipWallBoundary.__init__(self, **kwargs)
+
+    def _boundary_quantity(self, dcoll, dd_bdry, quantity, local=False, **kwargs):
+        """Get a boundary quantity on local boundary, or projected to "all_faces"."""
+        dd_allfaces = dd_bdry.with_boundary_tag(FACE_RESTR_ALL)
+        return quantity if local else op.project(dcoll,
+            dd_bdry, dd_allfaces, quantity)
+
+    def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
+        """Get the diffusive fluxes for the AV operator API."""
+        dd_bdry = as_dofdesc(dd_bdry)
+        grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
+        actx = get_container_context_recursively(grad_av_minus)
+        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        grad_av_plus = grad_av_minus
+        bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
+                                  exterior=grad_av_plus)
+        num_flux = self._av_num_flux_func(bnd_grad_pair.int, bnd_grad_pair.ext)@nhat
+        return self._boundary_quantity(dcoll, dd_bdry, num_flux, **kwargs)
+
+
+class IsothermalWallAV(IsothermalWallBoundary):
+    r"""Interface to a prescribed isothermal noslip wall boundary with AV.
+
+    .. automethod:: __init__
+    .. automethod:: av_flux
+    """
+
+    def __init__(self, boundary_grad_av_func=_identical_grad_av,
+                 av_num_flux_func=num_flux_central, **kwargs):
+        """Initialize the PrescribedFluidBoundaryAV and methods."""
+        self._bnd_grad_av_func = boundary_grad_av_func
+        self._av_num_flux_func = av_num_flux_func
+        IsothermalWallBoundary.__init__(self, **kwargs)
 
     def _boundary_quantity(self, dcoll, dd_bdry, quantity, local=False, **kwargs):
         """Get a boundary quantity on local boundary, or projected to "all_faces"."""
@@ -458,14 +492,14 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
                     DiscretizationDOFAxisTag(),
                     actx.np.broadcast_to(
                         ((actx.einsum("ek,k->e",
-                                      uhat[grp.index]**2,
+                                      uhat[igrp]**2,
                                       highest_mode(grp))
                           / (actx.einsum("ej->e",
-                                         (uhat[grp.index]**2+(1e-12/grp.nunit_dofs))
+                                         (uhat[igrp]**2+(1e-12/grp.nunit_dofs))
                                          )))
                          .reshape(-1, 1)),
-                        uhat[grp.index].shape))
-                for grp in dcoll.discr_from_dd(dd_vol).groups
+                        uhat[igrp].shape))
+                for igrp, grp in enumerate(dcoll.discr_from_dd(dd_vol).groups)
             )
         )
     else:
@@ -474,10 +508,10 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
             data=tuple(
                 actx.call_loopy(
                     indicator_prg(),
-                    vec=uhat[grp.index],
+                    vec=uhat[igrp],
                     modes_active_flag=highest_mode(grp)
                 )["result"]
-                for grp in dcoll.discr_from_dd(dd_vol).groups
+                for igrp, grp in enumerate(dcoll.discr_from_dd(dd_vol).groups)
             )
         )
 

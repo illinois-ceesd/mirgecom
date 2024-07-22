@@ -1,7 +1,7 @@
 """Multiphysics module for MIRGE-Com."""
 
 __copyright__ = """
-Copyright (C) 2022 University of Illinois Board of Trustees
+Copyright (C) 2023 University of Illinois Board of Trustees
 """
 
 __license__ = """
@@ -26,4 +26,38 @@ THE SOFTWARE.
 
 __doc__ = """
 .. automodule:: mirgecom.multiphysics.thermally_coupled_fluid_wall
+
+.. autofunction:: make_interface_boundaries
 """
+
+
+def make_interface_boundaries(bdry_factories, inter_volume_tpairs):
+    """
+    Create volume-pairwise interface boundaries from inter-volume data.
+
+    Return a :class:`dict` mapping a (directional) pair of
+    :class:`grudge.dof_desc.DOFDesc` *(other_vol_dd, self_vol_dd)* representing
+    neighboring volumes to a :class:`dict` of boundary objects. Specifically,
+    *interface_boundaries[other_vol_dd, self_vol_dd]* maps each interface boundary
+    :class:`~grudge.dof_desc.DOFDesc` to a boundary object.
+
+    Parameters
+    ----------
+
+    bdry_factories
+
+        Mapping from directional volume :class:`~grudge.dof_desc.DOFDesc` pair to
+        a function that takes a :class:`grudge.trace_pair.TracePair` and returns
+        an interface boundary object.
+
+    inter_volume_tpairs
+
+        Mapping from directional volume :class:`~grudge.dof_desc.DOFDesc` pair to
+        a :class:`list` of :class:`grudge.trace_pair.TracePair` (as is returned by
+        :func:`grudge.trace_pair.inter_volume_trace_pairs`).
+    """
+    return {
+        vol_dd_pair: {
+            tpair.dd: bdry_factories[vol_dd_pair](tpair)
+            for tpair in tpairs}
+        for vol_dd_pair, tpairs in inter_volume_tpairs.items()}
