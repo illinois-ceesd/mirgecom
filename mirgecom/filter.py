@@ -49,20 +49,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
 from functools import partial
 
+import numpy as np
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     DISCR_TAG_BASE,
     DISCR_TAG_MODAL,
 )
-
-from arraycontext import map_array_container
-
 from meshmode.dof_array import DOFArray
 
 from pytools import keyed_memoize_in
+
+from arraycontext import map_array_container
 
 
 # TODO: Revisit for multi-group meshes

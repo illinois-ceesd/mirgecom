@@ -47,14 +47,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Optional
 from dataclasses import dataclass
-from arraycontext import dataclass_array_container
+from typing import Optional
+
 import numpy as np
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+from mirgecom.eos import GasDependentVars, GasEOS
 from mirgecom.fluid import ConservedVars
-from mirgecom.eos import GasEOS, GasDependentVars
+
+from arraycontext import dataclass_array_container
 
 
 class TransportModelError(Exception):

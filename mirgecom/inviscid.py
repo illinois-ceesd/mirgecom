@@ -43,22 +43,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import grudge.op as op
 import numpy as np
-from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
-    VolumeDomainTag,
     DISCR_TAG_BASE,
+    VolumeDomainTag,
 )
-import grudge.op as op
-from mirgecom.fluid import (
-    make_conserved,
-    ConservedVars
-)
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.dof_array import DOFArray
+
+from mirgecom.fluid import ConservedVars, make_conserved
 from mirgecom.utils import normalize_boundaries
 
 from arraycontext import outer
-from meshmode.dof_array import DOFArray
 
 
 def inviscid_flux(state):
@@ -443,7 +441,7 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     specific_kin_rr = 0.5 * np.dot(u_rr, u_rr)
 
     rho_avg = 0.5 * (rho_ll + rho_rr)
-    rho_mean = ln_mean(rho_ll,  rho_rr)
+    rho_mean = ln_mean(rho_ll, rho_rr)
     y_mean = 0.5 * (y_ll + y_rr)
     rho_species_mean = rho_mean * y_mean
 
@@ -525,7 +523,7 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
 
     kin_comb = 0.5 * np.dot(u_ll, u_rr)
 
-    rho_mean = ln_mean(rho_ll,  rho_rr)
+    rho_mean = ln_mean(rho_ll, rho_rr)
     y_avg = 0.5 * (y_ll + y_rr)
     species_mass_mean = rho_mean * y_avg
 

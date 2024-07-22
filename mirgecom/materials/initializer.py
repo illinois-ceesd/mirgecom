@@ -28,9 +28,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from pytools.obj_array import make_obj_array
 from mirgecom.fluid import make_conserved
 from mirgecom.wall_model import SolidWallConservedVars
+from pytools.obj_array import make_obj_array
 
 
 class SolidWallInitializer:

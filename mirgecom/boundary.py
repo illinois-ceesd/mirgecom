@@ -52,18 +52,21 @@ THE SOFTWARE.
 """
 
 from abc import ABCMeta, abstractmethod
-import numpy as np
+
 import grudge.op as op
-from arraycontext import outer, get_container_context_recursively
-from meshmode.discretization.connection import FACE_RESTR_ALL
+import numpy as np
 from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
-from pytools.obj_array import make_obj_array
+from meshmode.discretization.connection import FACE_RESTR_ALL
+
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import make_fluid_state, replace_fluid_state
+from mirgecom.inviscid import inviscid_facial_flux_rusanov, inviscid_flux
 from mirgecom.utils import project_from_base
 from mirgecom.viscous import viscous_facial_flux_central, viscous_flux
-from mirgecom.inviscid import inviscid_facial_flux_rusanov, inviscid_flux
+from pytools.obj_array import make_obj_array
+
+from arraycontext import get_container_context_recursively, outer
 
 
 def _ldg_bnd_flux_for_grad(internal_quantity, external_quantity):

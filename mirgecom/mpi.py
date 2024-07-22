@@ -29,13 +29,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from functools import wraps
-import sys
-
-from contextlib import contextmanager
-from typing import Callable, Any, Generator, TYPE_CHECKING
-
 import logging
+import sys
+from contextlib import contextmanager
+from functools import wraps
+from typing import TYPE_CHECKING, Any, Callable, Generator
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -66,6 +66,7 @@ def _check_isl_version() -> None:
     library to determine if we are running with imath-32.
     """
     import ctypes
+
     import islpy  # type: ignore[import-untyped]
 
     try:
@@ -161,8 +162,8 @@ def pudb_remote_debug_on_single_rank(func: Callable) -> Callable:
     @wraps(func)
     def wrapped_func(*args: Any, **kwargs: Any) -> None:
         # pylint: disable=import-error
-        from pudb.remote import debug_remote_on_single_rank
         from mpi4py import MPI
+        from pudb.remote import debug_remote_on_single_rank
         debug_remote_on_single_rank(MPI.COMM_WORLD, 0, func, *args, **kwargs)
 
     return wrapped_func

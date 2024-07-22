@@ -22,27 +22,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
+import logging
 from functools import partial
-from pytools.obj_array import make_obj_array, obj_array_vectorize  # noqa
-import pyopencl as cl
-import pyopencl.tools as cl_tools
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath  # noqa
-from meshmode.array_context import (  # noqa
+
+import grudge.op as op
+import numpy as np
+import pytest
+from meshmode.array_context import (  # noqa  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext,
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
 from meshmode.discretization.connection import FACE_RESTR_ALL
+
+import pyopencl as cl
+import pyopencl.array as cla  # noqa
+import pyopencl.clmath as clmath  # noqa
+import pyopencl.tools as cl_tools
 from mirgecom.discretization import create_discretization_collection
-import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from pytools.obj_array import make_obj_array, obj_array_vectorize  # noqa
 
-import pytest  # noqa
 
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +80,7 @@ def op_test_data(ctx_factory):
 def _isclose(dcoll, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
     from mirgecom.simutil import componentwise_norms
+
     from arraycontext import flatten
     actx = x.array_context
     lhs = actx.to_numpy(flatten(componentwise_norms(dcoll, x - y, np.inf), actx))
@@ -128,8 +129,9 @@ def test_lazy_op_divergence(op_test_data, order):
     eager_actx, lazy_actx, get_dcoll = op_test_data
     dcoll = get_dcoll(order)
 
-    from grudge.trace_pair import interior_trace_pair
     from grudge.dof_desc import as_dofdesc
+    from grudge.trace_pair import interior_trace_pair
+
     from mirgecom.operators import div_operator
 
     dd_vol = as_dofdesc("vol")
@@ -175,10 +177,12 @@ def test_lazy_op_diffusion(op_test_data, order):
     dcoll = get_dcoll(order)
 
     from grudge.dof_desc import BoundaryDomainTag
+
     from mirgecom.diffusion import (
-        diffusion_operator,
         DirichletDiffusionBoundary,
-        NeumannDiffusionBoundary)
+        NeumannDiffusionBoundary,
+        diffusion_operator,
+    )
 
     boundaries = {
         BoundaryDomainTag("x"): DirichletDiffusionBoundary(0),
@@ -214,7 +218,7 @@ def _get_pulse():
     from mirgecom.gas_model import GasModel
     gas_model = GasModel(eos=IdealSingleGas())
 
-    from mirgecom.initializers import Uniform, AcousticPulse
+    from mirgecom.initializers import AcousticPulse, Uniform
     uniform_init = Uniform(dim=2, pressure=1.0, rho=1.0)
     pulse_init = AcousticPulse(dim=2, center=np.zeros(2), amplitude=1.0, width=.1)
 
@@ -223,6 +227,7 @@ def _get_pulse():
         return pulse_init(x_vec=nodes, cv=cv, eos=gas_model.eos)
 
     from meshmode.mesh import BTAG_ALL
+
     from mirgecom.boundary import AdiabaticSlipBoundary
     boundaries = {
         BTAG_ALL: AdiabaticSlipBoundary()
@@ -249,6 +254,7 @@ def _get_scalar_lump():
                                      **kwargs), gas_model)
 
     from meshmode.mesh import BTAG_ALL
+
     from mirgecom.boundary import PrescribedFluidBoundary
     boundaries = {
         BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)

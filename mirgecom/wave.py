@@ -27,12 +27,13 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import grudge.op as op
 import numpy as np
 import numpy.linalg as la  # noqa
-from pytools.obj_array import flat_obj_array
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.trace_pair import TracePair, interior_trace_pairs
-import grudge.op as op
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+from pytools.obj_array import flat_obj_array
 
 
 def _flux(dcoll, c, w_tpair):
@@ -93,7 +94,7 @@ def wave_operator(dcoll, c, w, *, comm_tag=None):
                 -c*op.weak_local_div(dcoll, v),
                 -c*op.weak_local_grad(dcoll, u)
                 )
-            +  # noqa: W504
+            +
             op.face_mass(dcoll,
                 _flux(dcoll, c=c,
                       w_tpair=TracePair(BTAG_ALL, interior=dir_bval,

@@ -24,36 +24,31 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
-import pytest  # noqa
 
-from pytools.obj_array import make_obj_array
+import grudge.op as op
+import numpy as np
+import numpy.linalg as la  # noqa
+import numpy.random
+import pytest
+from grudge.dof_desc import as_dofdesc
+from grudge.trace_pair import interior_trace_pairs
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
-from grudge.dof_desc import as_dofdesc
-import grudge.op as op
-from grudge.trace_pair import interior_trace_pairs
+
+import pyopencl.clmath  # noqa
 from mirgecom.discretization import create_discretization_collection
-
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-
-from mirgecom.fluid import make_conserved
-from mirgecom.transport import (
-    SimpleTransport,
-    PowerLawTransport
-)
 from mirgecom.eos import IdealSingleGas
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.simutil import get_box_mesh
+from mirgecom.transport import PowerLawTransport, SimpleTransport
+from pytools.obj_array import make_obj_array
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -417,7 +412,7 @@ def test_diffusive_heat_flux(actx_factory):
     gas_model = GasModel(eos=eos, transport=tv_model)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    from mirgecom.viscous import diffusive_flux, conductive_heat_flux
+    from mirgecom.viscous import conductive_heat_flux, diffusive_flux
     q = conductive_heat_flux(fluid_state, grad_t)
     j = diffusive_flux(fluid_state, grad_cv)
 

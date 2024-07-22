@@ -34,11 +34,14 @@ THE SOFTWARE.
 """
 
 from typing import Optional
-from arraycontext import tag_axes
+
 from meshmode.dof_array import DOFArray
 from meshmode.transform_metadata import (
+    DiscretizationDOFAxisTag,
     DiscretizationElementAxisTag,
-    DiscretizationDOFAxisTag)
+)
+
+from arraycontext import tag_axes
 
 
 def asdict_shallow(dc_instance) -> dict:

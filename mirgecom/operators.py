@@ -29,7 +29,6 @@ THE SOFTWARE.
 """
 
 import grudge.op as op
-
 from grudge.dof_desc import DISCR_TAG_BASE
 
 

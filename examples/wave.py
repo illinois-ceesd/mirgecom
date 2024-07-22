@@ -22,25 +22,27 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-
 import sys
+
 import grudge.op as op
 import numpy as np
 from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from pytools.obj_array import flat_obj_array
 
 from mirgecom.array_context import initialize_actx
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
-from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_cl_device_info,
-                                         logmgr_add_device_memory_usage,
-                                         logmgr_add_mempool_usage)
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_cl_device_info,
+    logmgr_add_device_memory_usage,
+    logmgr_add_mempool_usage,
+)
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.utils import force_evaluation
 from mirgecom.wave import wave_operator
+from pytools.obj_array import flat_obj_array
 
 
 def bump(actx, nodes, t=0):
@@ -98,6 +100,7 @@ def main(actx_class, casename="wave",
         nel_1d = 16
 
         from functools import partial
+
         from meshmode.mesh.generation import generate_regular_rect_mesh
 
         generate_mesh = partial(generate_regular_rect_mesh,
@@ -159,8 +162,7 @@ def main(actx_class, casename="wave",
         if old_order != order:
             old_dcoll = create_discretization_collection(
                 actx, local_mesh, order=old_order)
-            from meshmode.discretization.connection import \
-                make_same_mesh_connection
+            from meshmode.discretization.connection import make_same_mesh_connection
             connection = make_same_mesh_connection(actx, dcoll.discr_from_dd("vol"),
                                                    old_dcoll.discr_from_dd("vol"))
             fields = connection(restart_fields)

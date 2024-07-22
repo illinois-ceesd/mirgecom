@@ -125,39 +125,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-
-from pytools import memoize_in, keyed_memoize_in
 from functools import partial
-from meshmode.dof_array import DOFArray
-from meshmode.discretization.connection import FACE_RESTR_ALL
 
-from mirgecom.flux import num_flux_central
-from mirgecom.operators import div_operator
-
-from grudge.trace_pair import (
-    interior_trace_pairs,
-    tracepair_with_discr_tag
-)
-
+import grudge.op as op
+import numpy as np
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
-    VolumeDomainTag,
     DISCR_TAG_BASE,
     DISCR_TAG_MODAL,
+    VolumeDomainTag,
+    as_dofdesc,
 )
-
-from mirgecom.utils import normalize_boundaries
-from arraycontext import get_container_context_recursively
-from grudge.dof_desc import as_dofdesc
-from grudge.trace_pair import TracePair
-import grudge.op as op
+from grudge.trace_pair import TracePair, interior_trace_pairs, tracepair_with_discr_tag
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.dof_array import DOFArray
 
 from mirgecom.boundary import (
     AdiabaticNoslipWallBoundary,
+    IsothermalWallBoundary,
     PrescribedFluidBoundary,
-    IsothermalWallBoundary
 )
+from mirgecom.flux import num_flux_central
+from mirgecom.operators import div_operator
+from mirgecom.utils import normalize_boundaries
+from pytools import keyed_memoize_in, memoize_in
+
+from arraycontext import get_container_context_recursively
 
 
 class _AVRTag:
@@ -443,10 +436,14 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
     @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl", dd))
     def indicator_prg():
         """Compute the smoothness indicator for all elements."""
-        from arraycontext import make_loopy_program
-        from meshmode.transform_metadata import (ConcurrentElementInameTag,
-                                                 ConcurrentDOFInameTag)
+        from meshmode.transform_metadata import (
+            ConcurrentDOFInameTag,
+            ConcurrentElementInameTag,
+        )
+
         import loopy as lp
+
+        from arraycontext import make_loopy_program
         t_unit = make_loopy_program([
             "{[iel]: 0 <= iel < nelements}",
             "{[idof]: 0 <= idof < ndiscr_nodes_in}",

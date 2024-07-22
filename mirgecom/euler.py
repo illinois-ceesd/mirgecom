@@ -63,7 +63,7 @@ from grudge.dof_desc import (
 )
 
 from mirgecom.gas_model import make_operator_fluid_states
-from mirgecom.inviscid import (  # noqa
+from mirgecom.inviscid import (
     inviscid_flux,
     inviscid_facial_flux_rusanov,
     inviscid_flux_on_element_boundary,
@@ -99,11 +99,11 @@ from grudge.flux_differencing import volume_flux_differencing
 import grudge.op as op
 
 
-class _ESFluidCVTag():
+class _ESFluidCVTag:
     pass
 
 
-class _ESFluidTemperatureTag():
+class _ESFluidTemperatureTag:
     pass
 
 

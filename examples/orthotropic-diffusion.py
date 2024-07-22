@@ -22,20 +22,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
+
 import numpy as np
-from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag
+from grudge.shortcuts import make_visualizer
+from logpyle import IntervalTimer, set_dt
+
+from mirgecom.diffusion import DirichletDiffusionBoundary, diffusion_operator
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
-from mirgecom.diffusion import diffusion_operator, DirichletDiffusionBoundary
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_cl_device_info,
+    logmgr_add_device_memory_usage,
+)
 from mirgecom.mpi import mpi_entry_point
+from mirgecom.simutil import check_step, generate_and_distribute_mesh, write_visfile
 from mirgecom.utils import force_evaluation
-from mirgecom.simutil import (generate_and_distribute_mesh,
-                              write_visfile, check_step)
-from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_cl_device_info,
-                                         logmgr_add_device_memory_usage)
-from logpyle import IntervalTimer, set_dt
 
 
 logger = logging.getLogger(__name__)
@@ -58,7 +61,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     logmgr = initialize_logmgr(True,
         filename="heat-diffusion.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -83,6 +86,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     _kappa[0] = factor*_kappa[1]
 
     from functools import partial
+
     from meshmode.mesh.generation import generate_regular_rect_mesh
     generate_mesh = partial(generate_regular_rect_mesh,
         a=(-1.0*np.sqrt(factor), -1.0), b=(+1.0*np.sqrt(factor), +1.0),

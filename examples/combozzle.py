@@ -25,56 +25,44 @@ THE SOFTWARE.
 """
 import logging
 import time
-import yaml
-import numpy as np
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
-from mirgecom.discretization import create_discretization_collection
-
-
+import cantera
+import numpy as np
+import yaml
+from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
+from grudge.shortcuts import compiled_lsrk45_step, make_visualizer
 from logpyle import IntervalTimer, set_dt
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.euler import euler_operator
-from mirgecom.navierstokes import ns_operator
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from mirgecom.simutil import (
-    get_sim_timestep,
-    generate_and_distribute_mesh,
-    write_visfile,
-    force_evaluation,
-    get_box_mesh,
-    ApplicationOptionsError
-)
-from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import (
-    rk4_step, euler_step,
-    lsrk54_step, lsrk144_step
-)
-from grudge.shortcuts import compiled_lsrk45_step
-from mirgecom.steppers import advance_state
-from mirgecom.initializers import Uniform
-from mirgecom.eos import (
-    PyrometheusMixture,
-    IdealSingleGas
-)
-from mirgecom.transport import SimpleTransport
+from mirgecom.artificial_viscosity import av_laplacian_operator, smoothness_indicator
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas, PyrometheusMixture
+from mirgecom.euler import euler_operator, extract_vars_for_logging, units_for_logging
 from mirgecom.gas_model import GasModel
-from mirgecom.artificial_viscosity import (
-    av_laplacian_operator,
-    smoothness_indicator
-)
+from mirgecom.initializers import Uniform
+from mirgecom.integrators import euler_step, lsrk54_step, lsrk144_step, rk4_step
+from mirgecom.io import make_init_message
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_many_discretization_quantities,
+    set_sim_state,
 )
-import cantera
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.navierstokes import ns_operator
+from mirgecom.simutil import (
+    ApplicationOptionsError,
+    force_evaluation,
+    generate_and_distribute_mesh,
+    get_box_mesh,
+    get_sim_timestep,
+    write_visfile,
+)
+from mirgecom.steppers import advance_state
+from mirgecom.transport import SimpleTransport
+
 
 logger = logging.getLogger(__name__)
 
@@ -471,7 +459,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
     # param sanity check
     allowed_integrators = ["rk4", "euler", "lsrk54", "lsrk144", "compiled_lsrk45"]
     if integrator not in allowed_integrators:
-        error_message = "Invalid time integrator: {}".format(integrator)
+        error_message = f"Invalid time integrator: {integrator}"
         raise RuntimeError(error_message)
 
     if rank == 0:
@@ -579,7 +567,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         print(f"ACTX setup start: {time.ctime(time.time())}")
     comm.Barrier()
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -700,9 +688,9 @@ def main(actx_class, rst_filename=None, use_tpe=False,
                                                       units_for_logging)
             logmgr.add_watches([
                 ("min_pressure", "\n------- P (min, max) (Pa) = ({value:1.9e}, "),
-                ("max_pressure",    "{value:1.9e})\n"),
+                ("max_pressure", "{value:1.9e})\n"),
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
-                ("max_temperature",    "{value:7g})\n")])
+                ("max_temperature", "{value:7g})\n")])
 
     init_y = 0
     if single_gas_only:
@@ -766,15 +754,17 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         eos = IdealSingleGas()
     else:
         if use_cantera:
-            from mirgecom.thermochemistry \
-                import get_pyrometheus_wrapper_class_from_cantera
+            from mirgecom.thermochemistry import (
+                get_pyrometheus_wrapper_class_from_cantera,
+            )
             pyro_mechanism = \
                 get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
             eos = PyrometheusMixture(pyro_mechanism,
                                      temperature_guess=temperature_seed)
         else:
-            from mirgecom.thermochemistry \
-                import get_thermochemistry_class_by_mechanism_name
+            from mirgecom.thermochemistry import (
+                get_thermochemistry_class_by_mechanism_name,
+            )
             pyro_mechanism = \
                 get_thermochemistry_class_by_mechanism_name("uiuc_7sp")(actx.np)
             nspecies = pyro_mechanism.num_species
@@ -833,10 +823,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
             dim=dim, pressure=init_pressure, velocity=velocity,
             temperature=init_temperature, species_mass_fractions=init_y)
 
-    from mirgecom.boundary import (
-        AdiabaticNoslipWallBoundary,
-        IsothermalWallBoundary
-    )
+    from mirgecom.boundary import AdiabaticNoslipWallBoundary, IsothermalWallBoundary
     adiabatic_wall = AdiabaticNoslipWallBoundary()
     isothermal_wall = IsothermalWallBoundary(wall_temperature=wall_temperature)
     if adiabatic_boundary:
@@ -938,7 +925,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
             temp = dv.temperature
             press = dv.pressure
 
-            from grudge.op import nodal_min_loc, nodal_max_loc
+            from grudge.op import nodal_max_loc, nodal_min_loc
             tmin = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", temp)),
                                  op="min")
             tmax = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", temp)),
@@ -1076,8 +1063,8 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         return state, dt
 
     from mirgecom.inviscid import (
+        entropy_stable_inviscid_facial_flux_rusanov,
         inviscid_facial_flux_rusanov,
-        entropy_stable_inviscid_facial_flux_rusanov
     )
     inv_num_flux_func = entropy_stable_inviscid_facial_flux_rusanov if use_esdg \
         else inviscid_facial_flux_rusanov

@@ -24,51 +24,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
-import pytest
 import math
 from functools import partial
 
+import grudge.op as op
+import numpy as np
+import numpy.linalg as la  # noqa
+import numpy.random
+import pytest
+from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.shortcuts import make_visualizer
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+import pyopencl.clmath  # noqa
+from mirgecom.boundary import DummyBoundary, PrescribedFluidBoundary
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.euler import euler_operator
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.initializers import Lump, MulticomponentLump, Vortex2D
+from mirgecom.integrators import rk4_step
+from mirgecom.inviscid import (
+    get_inviscid_timestep,
+    inviscid_facial_flux_hll,
+    inviscid_facial_flux_rusanov,
+)
+from mirgecom.simutil import max_component_norm
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.euler import euler_operator
-from mirgecom.fluid import make_conserved
-from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
-from mirgecom.boundary import (
-    PrescribedFluidBoundary,
-    DummyBoundary
-)
-from mirgecom.eos import IdealSingleGas
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
-import grudge.op as op
-from mirgecom.discretization import create_discretization_collection
-from grudge.dof_desc import DISCR_TAG_QUAD
-
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-
-from mirgecom.simutil import max_component_norm
-
-from grudge.shortcuts import make_visualizer
-from mirgecom.inviscid import (
-    get_inviscid_timestep,
-    inviscid_facial_flux_rusanov,
-    inviscid_facial_flux_hll
-)
-
-from mirgecom.integrators import rk4_step
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +272,7 @@ def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
 
         from mirgecom.gas_model import (
             conservative_to_entropy_vars,
-            entropy_to_conservative_vars
+            entropy_to_conservative_vars,
         )
         temp_state = make_fluid_state(cv, gas_model)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
@@ -749,7 +740,7 @@ def _euler_flow_stepper(actx, parameters):
     filter_order = 8
     eta = .5
     alpha = -1.0*np.log(np.finfo(float).eps)
-    nummodes = int(1)
+    nummodes = 1
     for _ in range(dim):
         nummodes *= int(order + dim + 1)
     nummodes /= math.factorial(int(dim))
@@ -757,7 +748,7 @@ def _euler_flow_stepper(actx, parameters):
 
     from mirgecom.filter import (
         exponential_mode_response_function as xmrfunc,
-        filter_modally
+        filter_modally,
     )
     frfunc = partial(xmrfunc, alpha=alpha, filter_order=filter_order)
 

@@ -23,42 +23,44 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import sys
 import logging
-import numpy as np
+import sys
 from functools import partial
 
-from pytools.obj_array import make_obj_array
-from grudge.shortcuts import make_visualizer
+import cantera
 import grudge.op as op
+import numpy as np
+from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
+
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
-from mirgecom.simutil import (
-    get_sim_timestep,
-    generate_and_distribute_mesh,
-    write_visfile,
-    ApplicationOptionsError,
-    check_step, check_naninf_local, check_range_local
-)
-from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state
-from mirgecom.initializers import Uniform
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.gas_model import GasModel, make_fluid_state
-from mirgecom.utils import force_evaluation
-from mirgecom.limiter import bound_preserving_limiter
+from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.initializers import Uniform
+from mirgecom.integrators import rk4_step
+from mirgecom.io import make_init_message
+from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
+    logmgr_add_many_discretization_quantities,
 )
-
-import cantera
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.simutil import (
+    ApplicationOptionsError,
+    check_naninf_local,
+    check_range_local,
+    check_step,
+    generate_and_distribute_mesh,
+    get_sim_timestep,
+    write_visfile,
+)
+from mirgecom.steppers import advance_state
+from mirgecom.utils import force_evaluation
+from pytools.obj_array import make_obj_array
 
 
 class SingleLevelFilter(logging.Filter):
@@ -112,7 +114,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -207,9 +209,9 @@ def main(actx_class, use_leap=False, use_overintegration=False,
                                                       units_for_logging)
             logmgr.add_watches([
                 ("min_pressure", "\n------- P (min, max) (Pa) = ({value:1.9e}, "),
-                ("max_pressure",    "{value:1.9e})\n"),
+                ("max_pressure", "{value:1.9e})\n"),
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
-                ("max_temperature",    "{value:7g})\n")])
+                ("max_temperature", "{value:7g})\n")])
 
     # {{{  Set up initial state using Cantera
 
@@ -446,7 +448,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
             temp = dv.temperature
             press = dv.pressure
 
-            from grudge.op import nodal_min_loc, nodal_max_loc
+            from grudge.op import nodal_max_loc, nodal_min_loc
             tmin = global_reduce(actx.to_numpy(nodal_min_loc(dcoll, "vol", temp)),
                                  op="min")
             tmax = global_reduce(actx.to_numpy(nodal_max_loc(dcoll, "vol", temp)),

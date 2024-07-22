@@ -44,26 +44,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import grudge.op as op
 import numpy as np
-from arraycontext import outer
-from grudge.trace_pair import TracePair
-from meshmode.dof_array import DOFArray
-from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
-    VolumeDomainTag,
     DISCR_TAG_BASE,
+    VolumeDomainTag,
 )
-
-import grudge.op as op
+from grudge.trace_pair import TracePair
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.dof_array import DOFArray
 
 from mirgecom.fluid import (
-    velocity_gradient,
+    make_conserved,
     species_mass_fraction_gradient,
-    make_conserved
+    velocity_gradient,
 )
-
 from mirgecom.utils import normalize_boundaries
+
+from arraycontext import outer
 
 
 # low level routine works with numpy arrays and can be tested without
@@ -523,7 +522,7 @@ def viscous_flux_on_element_boundary(
     bnd_term = (
 
         # All surface contributions from the viscous fluxes
-        (
+
             # Domain boundary contributions for the viscous terms
             sum(_fvisc_divergence_flux_boundary(
                 bdtag,
@@ -537,7 +536,7 @@ def viscous_flux_on_element_boundary(
                 for q_p, dq_p, dt_p in zip(interior_state_pairs,
                                            interior_grad_cv_pairs,
                                            interior_grad_t_pairs))
-        )
+
     )
 
     return bnd_term

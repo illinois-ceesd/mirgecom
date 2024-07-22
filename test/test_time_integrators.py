@@ -24,18 +24,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import logging
-import pytest
 import importlib
+import logging
+
+import numpy as np
+import pytest
 from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
 
 from mirgecom.integrators import (
-    euler_step, lsrk54_step, lsrk144_step,
-    rk4_step, ssprk43_step
+    euler_step,
+    lsrk54_step,
+    lsrk144_step,
+    rk4_step,
+    ssprk43_step,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -140,14 +145,20 @@ leap_spec = importlib.util.find_spec("leap")
 found = leap_spec is not None
 if found:
     from leap.rk import (
-        ODE23MethodBuilder, ODE45MethodBuilder,
         ForwardEulerMethodBuilder,
-        MidpointMethodBuilder, HeunsMethodBuilder,
-        RK3MethodBuilder, RK4MethodBuilder, RK5MethodBuilder,
+        HeunsMethodBuilder,
         LSRK4MethodBuilder,
-        SSPRK22MethodBuilder, SSPRK33MethodBuilder,
-        )
+        MidpointMethodBuilder,
+        ODE23MethodBuilder,
+        ODE45MethodBuilder,
+        RK3MethodBuilder,
+        RK4MethodBuilder,
+        RK5MethodBuilder,
+        SSPRK22MethodBuilder,
+        SSPRK33MethodBuilder,
+    )
     from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
+
     from mirgecom.steppers import advance_state
 
     @pytest.mark.parametrize(("method", "method_order"), [

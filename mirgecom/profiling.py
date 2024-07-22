@@ -24,18 +24,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from meshmode.array_context import PyOpenCLArrayContext
-import pyopencl as cl
-from pytools.py_codegen import PythonFunctionGenerator
-import loopy as lp
-import numpy as np
 from dataclasses import dataclass
-import pytools
+from typing import Dict, List, Optional
+
+import numpy as np
 from logpyle import LogManager
+from meshmode.array_context import PyOpenCLArrayContext
+
+import loopy as lp
+import pyopencl as cl
+import pytools
 from mirgecom.logging_quantities import KernelProfile
 from mirgecom.utils import StatisticsAccumulator
+from pytools.py_codegen import PythonFunctionGenerator
 
-from typing import List, Dict, Optional
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -344,7 +346,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
 
             param_names = kernel.all_params()
             gen("return {%s}" % ", ".join(
-                f"{repr(name)}: {name}" for name in param_names))
+                f"{name!r}: {name}" for name in param_names))
 
             # Run the wrapper code, save argument values in domain_params
             domain_params = gen.get_picklable_function()(**param_dict)

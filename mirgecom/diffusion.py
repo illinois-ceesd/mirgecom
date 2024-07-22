@@ -86,22 +86,24 @@ THE SOFTWARE.
 
 import abc
 from functools import partial
+
 import numpy as np
-from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
-from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
+from grudge import op
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
-    VolumeDomainTag,
     DISCR_TAG_BASE,
+    VolumeDomainTag,
 )
 from grudge.trace_pair import (
     TracePair,
     interior_trace_pairs,
     tracepair_with_discr_tag,
 )
-from grudge import op
+from meshmode.discretization.connection import FACE_RESTR_ALL
+
 from mirgecom.math import harmonic_mean
 from mirgecom.utils import normalize_boundaries
+from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 
 
 def grad_facial_flux_central(kappa_tpair, u_tpair, normal):
@@ -324,7 +326,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+            numerical_flux_func=grad_facial_flux_weighted):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -338,7 +340,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, *, penalty_amount=None,
-            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+            numerical_flux_func=diffusion_facial_flux_harmonic):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -397,7 +399,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+            numerical_flux_func=grad_facial_flux_weighted):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -411,7 +413,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, *, penalty_amount=None,
-            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+            numerical_flux_func=diffusion_facial_flux_harmonic):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -484,7 +486,7 @@ class RobinDiffusionBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+            numerical_flux_func=grad_facial_flux_weighted):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -498,7 +500,7 @@ class RobinDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, *, penalty_amount=None,
-            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+            numerical_flux_func=diffusion_facial_flux_harmonic):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -555,7 +557,7 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
         self.value = value
 
     def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+            numerical_flux_func=grad_facial_flux_weighted):
         actx = u_minus.array_context
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_minus)
@@ -567,7 +569,7 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, *, penalty_amount=None,
-            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+            numerical_flux_func=diffusion_facial_flux_harmonic):
         actx = u_minus.array_context
 
         # returns the product "flux @ normal"
@@ -578,7 +580,7 @@ class DummyDiffusionBoundary(DiffusionBoundary):
     """Dummy boundary condition that duplicates the internal values."""
 
     def get_grad_flux(self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-                      numerical_flux_func):  # noqa: D102
+                      numerical_flux_func):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -592,7 +594,7 @@ class DummyDiffusionBoundary(DiffusionBoundary):
     def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
                            grad_u_minus, lengthscales_minus, *,
                            numerical_flux_func=diffusion_facial_flux_harmonic,
-                           penalty_amount=None):  # noqa: D102
+                           penalty_amount=None):
         actx = u_minus.array_context
         kappa_tpair = TracePair(dd_bdry,
             interior=kappa_minus,
@@ -727,7 +729,7 @@ def grad_operator(
     return op.inverse_mass(
         dcoll, dd_vol,
         op.weak_local_grad(dcoll, dd_vol, -u)
-        -  # noqa: W504
+        -
         op.face_mass(
             dcoll, dd_allfaces_quad,
             sum(
@@ -890,7 +892,7 @@ def diffusion_operator(
     diff_u = op.inverse_mass(
         dcoll, dd_vol,
         op.weak_local_div(dcoll, dd_vol_quad, -kappa_quad*grad_u_quad)
-        -  # noqa: W504
+        -
         op.face_mass(
             dcoll, dd_allfaces_quad,
             sum(

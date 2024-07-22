@@ -30,46 +30,34 @@ THE SOFTWARE.
 """
 
 import logging
-from mirgecom.mpi import mpi_entry_point
-import numpy as np
 from functools import partial
-from pytools.obj_array import make_obj_array
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+import numpy as np
+from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DOFDesc, VolumeDomainTag
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import VolumeDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD, DOFDesc
-
-from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import (
-    euler_operator,
-    extract_vars_for_logging
-)
-from mirgecom.simutil import (
-    get_sim_timestep,
-    generate_and_distribute_mesh
-)
-from mirgecom.io import make_init_message
-
-from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state
-from mirgecom.boundary import AdiabaticSlipBoundary
-from mirgecom.initializers import (
-    Lump,
-    AcousticPulse
-)
-from mirgecom.eos import IdealSingleGas
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
 from logpyle import IntervalTimer, set_dt
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+from mirgecom.boundary import AdiabaticSlipBoundary
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.euler import euler_operator, extract_vars_for_logging
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.initializers import AcousticPulse, Lump
+from mirgecom.integrators import rk4_step
+from mirgecom.io import make_init_message
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_many_discretization_quantities,
+    set_sim_state,
 )
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.simutil import generate_and_distribute_mesh, get_sim_timestep
+from mirgecom.steppers import advance_state
+from pytools.obj_array import make_obj_array
+
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +87,7 @@ def main(actx_class, use_esdg=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -147,7 +135,7 @@ def main(actx_class, use_esdg=False,
         local_prototype_mesh, global_prototype_nelements = \
             generate_and_distribute_mesh(comm, generate_mesh)
 
-    volume_to_local_mesh = {i: local_prototype_mesh for i in range(nvolumes)}
+    volume_to_local_mesh = dict.fromkeys(range(nvolumes), local_prototype_mesh)
 
     local_nelements = local_prototype_mesh.nelements * nvolumes
     global_nelements = global_prototype_nelements * nvolumes
@@ -198,7 +186,7 @@ def main(actx_class, use_esdg=False,
             logmgr.add_watches([
                 (f"min_pressure_{i}", "------- P (vol. " + str(i)
                     + ") (min, max) (Pa) = ({value:1.9e}, "),
-                (f"max_pressure_{i}",    "{value:1.9e})\n"),
+                (f"max_pressure_{i}", "{value:1.9e})\n"),
             ])
 
     eos = IdealSingleGas()
@@ -395,6 +383,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from warnings import warn
+
     from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
         if not args.lazy and not args.numpy:

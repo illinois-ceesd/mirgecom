@@ -34,8 +34,9 @@ THE SOFTWARE.
 
 import numpy as np
 from meshmode.dof_array import DOFArray
-from pytools.obj_array import make_obj_array
+
 from mirgecom.wall_model import PorousWallEOS
+from pytools.obj_array import make_obj_array
 
 
 class Pyrolysis:

@@ -37,7 +37,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from meshmode.dof_array import DOFArray  # noqa
+from meshmode.dof_array import DOFArray
 from dataclasses import dataclass, fields, field
 from arraycontext import (
     dataclass_array_container,

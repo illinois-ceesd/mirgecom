@@ -24,40 +24,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
-from pytools.obj_array import make_obj_array
 from functools import partial
 
+import numpy as np
+from grudge.dof_desc import BoundaryDomainTag
+from grudge.shortcuts import make_visualizer
+from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+from mirgecom.boundary import IsothermalWallBoundary, PrescribedFluidBoundary
 from mirgecom.discretization import create_discretization_collection
-from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag
-
-from mirgecom.fluid import make_conserved
-from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import get_sim_timestep
-
-from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
-from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    PrescribedFluidBoundary,
-    IsothermalWallBoundary
-)
-from mirgecom.transport import SimpleTransport
 from mirgecom.eos import IdealSingleGas  # , PyrometheusMixture
-from mirgecom.gas_model import GasModel, make_fluid_state
-from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.integrators import rk4_step
+from mirgecom.io import make_init_message
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
     logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_device_name,
+    logmgr_add_many_discretization_quantities,
+    set_sim_state,
 )
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.navierstokes import ns_operator
+from mirgecom.simutil import get_sim_timestep
+from mirgecom.steppers import advance_state
+from mirgecom.transport import SimpleTransport
+from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)
@@ -98,7 +93,7 @@ def main(actx_class, use_overintegration=False, use_leap=False, casename=None,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -176,9 +171,9 @@ def main(actx_class, use_overintegration=False, use_leap=False, casename=None,
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
             ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
+            ("max_pressure", "{value:1.9e})\n"),
             ("min_temperature", "------- T (min, max) (K) = ({value:1.9e}, "),
-            ("max_temperature",    "{value:1.9e})\n"),
+            ("max_temperature", "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
@@ -285,7 +280,7 @@ def main(actx_class, use_overintegration=False, use_leap=False, casename=None,
 
     def my_write_status(step, t, dt, state, component_errors):
         dv = state.dv
-        from grudge.op import nodal_min, nodal_max
+        from grudge.op import nodal_max, nodal_min
         p_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.pressure))
         p_max = actx.to_numpy(nodal_max(dcoll, "vol", dv.pressure))
         t_min = actx.to_numpy(nodal_min(dcoll, "vol", dv.temperature))
@@ -498,6 +493,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from warnings import warn
+
     from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
         if not args.lazy and not args.numpy:

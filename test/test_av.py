@@ -26,36 +26,34 @@ THE SOFTWARE.
 """
 
 import logging
-import numpy as np
-import pyopencl as cl
-import pytest
-from meshmode.array_context import (  # noqa
-    PyOpenCLArrayContext,
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests
-)
-from meshmode.mesh import BTAG_ALL
-from meshmode.discretization.connection import FACE_RESTR_ALL
+
 import grudge.op as op
+import numpy as np
+import pytest
+from meshmode.array_context import (
+    PyOpenCLArrayContext,
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.mesh import BTAG_ALL
+
+import pyopencl as cl
 from mirgecom.artificial_viscosity import (
+    AdiabaticNoSlipWallAV,
+    PrescribedFluidBoundaryAV,
     av_laplacian_operator,
     smoothness_indicator,
-    AdiabaticNoSlipWallAV,
-    PrescribedFluidBoundaryAV
 )
-from mirgecom.fluid import make_conserved
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
-from mirgecom.eos import IdealSingleGas
-
 from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.simutil import get_box_mesh
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-from mirgecom.simutil import get_box_mesh
 from pytools.obj_array import make_obj_array
+
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +67,8 @@ logger = logging.getLogger(__name__)
 # Tracking the replacement endeavor:
 # https://github.com/illinois-ceesd/mirgecom/issues/684
 
-@pytest.mark.parametrize("dim",  [1, 2, 3])
-@pytest.mark.parametrize("order",  [1, 5])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [1, 5])
 def test_tag_cells(ctx_factory, dim, order):
     """Test tag_cells.
 
@@ -96,7 +94,7 @@ def test_tag_cells(ctx_factory, dim, order):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-1.0, )*dim,  b=(1.0, )*dim,  n=(nel_1d, ) * dim
+        a=(-1.0, )*dim, b=(1.0, )*dim, n=(nel_1d, ) * dim
     )
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
@@ -107,7 +105,7 @@ def test_tag_cells(ctx_factory, dim, order):
     # Test jump discontinuity
     soln = actx.np.where(nodes[0] > 0.0+zeros, 1.0+zeros, zeros)
     err = norm_indicator(1.0, dcoll, soln)
-    assert err < tolerance,  "Jump discontinuity should trigger indicator (1.0)"
+    assert err < tolerance, "Jump discontinuity should trigger indicator (1.0)"
 
     # get meshmode polynomials
     group = dcoll.discr_from_dd("vol").groups[0]
@@ -125,7 +123,7 @@ def test_tag_cells(ctx_factory, dim, order):
         else:
             expected = 0.0
         err = norm_indicator(expected, dcoll, soln)
-        assert err < tolerance,  "Only highest modes should trigger indicator (1.0)"
+        assert err < tolerance, "Only highest modes should trigger indicator (1.0)"
 
     # Test s0
     s0 = -1.
@@ -135,8 +133,8 @@ def test_tag_cells(ctx_factory, dim, order):
     phi_n_pm1 = np.sqrt(1. - np.power(10, s0))
 
     # pick a polynomial of order n_p, n_p-1
-    n_p = np.array(np.nonzero((np.sum(modes, axis=1) == order))).flat[0]
-    n_pm1 = np.array(np.nonzero((np.sum(modes, axis=1) == order-1))).flat[0]
+    n_p = np.array(np.nonzero(np.sum(modes, axis=1) == order)).flat[0]
+    n_pm1 = np.array(np.nonzero(np.sum(modes, axis=1) == order-1)).flat[0]
 
     # create test soln perturbed around
     # Solution above s0
@@ -144,7 +142,7 @@ def test_tag_cells(ctx_factory, dim, order):
                 + phi_n_pm1*basis[n_pm1](unit_nodes))
     soln[0].set(np.tile(ele_soln, (nele, 1)))
     err = norm_indicator(1.0, dcoll, soln, s0=s0, kappa=0.0)
-    assert err < tolerance,  (
+    assert err < tolerance, (
         "A function with an indicator >s0 should trigger indicator")
 
     # Solution below s0
@@ -163,15 +161,15 @@ def test_tag_cells(ctx_factory, dim, order):
                 + phi_n_pm1*basis[n_pm1](unit_nodes))
     soln[0].set(np.tile(ele_soln, (nele, 1)))
     err = norm_indicator(0.5, dcoll, soln, s0=s0, kappa=kappa)
-    assert err < 1.0e-10,  "A function with s_e=s_0 should return 0.5"
+    assert err < 1.0e-10, "A function with s_e=s_0 should return 0.5"
 
     # test bounds
     # lower bound
     shift = 1.0e-5
     err = norm_indicator(0.0, dcoll, soln, s0=s0+kappa+shift, kappa=kappa)
-    assert err < tolerance,  "s_e<s_0-kappa should not trigger indicator"
+    assert err < tolerance, "s_e<s_0-kappa should not trigger indicator"
     err = norm_indicator(0.0, dcoll, soln, s0=s0+kappa-shift, kappa=kappa)
-    assert err > tolerance,  "s_e>s_0-kappa should trigger indicator"
+    assert err > tolerance, "s_e>s_0-kappa should trigger indicator"
 
     # upper bound
     err = norm_indicator(1.0, dcoll, soln, s0=s0-(kappa+shift), kappa=kappa)
@@ -182,8 +180,8 @@ def test_tag_cells(ctx_factory, dim, order):
     assert err > tolerance
 
 
-@pytest.mark.parametrize("dim",  [1, 2, 3])
-@pytest.mark.parametrize("order",  [2, 3])
+@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("order", [2, 3])
 def test_artificial_viscosity(ctx_factory, dim, order):
     """Test artificial_viscosity.
 
@@ -216,6 +214,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
                                  exterior=cv_int)
             nhat = actx.thaw(dcoll.normal(dd_bdry))
             from mirgecom.flux import num_flux_central
+
             from arraycontext import outer
             # Do not project to "all_faces" as now we use built-in grad_cv_operator
             return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
@@ -271,8 +270,8 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     assert err < tolerance
 
 
-@pytest.mark.parametrize("order",  [2, 3])
-@pytest.mark.parametrize("dim",  [1, 2])
+@pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize("dim", [1, 2])
 def test_trig(ctx_factory, dim, order):
     """Test artificial_viscosity.
 

@@ -30,7 +30,9 @@ THE SOFTWARE.
 """
 
 from typing import Optional
+
 from meshmode.dof_array import DOFArray
+
 from mirgecom.wall_model import PorousWallEOS
 
 

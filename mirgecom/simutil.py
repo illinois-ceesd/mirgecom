@@ -73,23 +73,24 @@ THE SOFTWARE.
 import logging
 from functools import partial
 from typing import Dict, List, Optional
-from logpyle import IntervalTimer
 
 import grudge.op as op
 import numpy as np
-import pyopencl as cl
-from arraycontext import tag_axes
-from meshmode.transform_metadata import (
-    DiscretizationElementAxisTag,
-    DiscretizationDOFAxisTag
-)
-from arraycontext import flatten, map_array_container
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
+from logpyle import IntervalTimer
 from meshmode.dof_array import DOFArray
+from meshmode.transform_metadata import (
+    DiscretizationDOFAxisTag,
+    DiscretizationElementAxisTag,
+)
 
+import pyopencl as cl
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
+
+from arraycontext import flatten, map_array_container, tag_axes
+
 
 logger = logging.getLogger(__name__)
 
@@ -1010,8 +1011,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                 part_id_to_part_index = {
                     part_id: part_index
                     for part_index, part_id in enumerate(part_id_to_elements.keys())}
-                from meshmode.mesh.processing import \
-                    _compute_global_elem_to_part_elem
+                from meshmode.mesh.processing import _compute_global_elem_to_part_elem
                 global_elem_to_part_elem = _compute_global_elem_to_part_elem(
                     mesh.nelements, part_id_to_elements, part_id_to_part_index,
                     mesh.element_id_dtype)
