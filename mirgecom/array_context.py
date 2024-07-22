@@ -59,10 +59,12 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
         warn("The NumpyArrayContext is still under development")
 
         if distributed:
-            from grudge.array_context import MPINumpyArrayContext
+            from grudge.array_context import MPINumpyArrayContext  \
+                # pylint: disable=no-name-in-module
             return MPINumpyArrayContext
         else:
-            from grudge.array_context import NumpyArrayContext
+            from grudge.array_context import NumpyArrayContext  \
+                # pylint: disable=no-name-in-module
             return NumpyArrayContext
 
     if profiling:
@@ -287,7 +289,8 @@ def initialize_actx(
         actx_kwargs["mpi_communicator"] = comm
 
     if actx_class_is_numpy(actx_class):
-        from grudge.array_context import MPINumpyArrayContext
+        from grudge.array_context import MPINumpyArrayContext  \
+            # pylint: disable=no-name-in-module
         if comm:
             assert issubclass(actx_class, MPINumpyArrayContext)
         else:

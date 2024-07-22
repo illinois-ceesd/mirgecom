@@ -787,7 +787,8 @@ def _get_interface_trace_pairs_no_grad(
             _make_thermal_data(fluid_kappa, fluid_temperature),
             _make_thermal_data(wall_kappa, wall_temperature))}
 
-    from grudge.trace_pair import inter_volume_trace_pairs
+    from grudge.trace_pair import inter_volume_trace_pairs  \
+        # pylint: disable=no-name-in-module
 
     return inter_volume_trace_pairs(
         dcoll, pairwise_thermal_data,
@@ -813,7 +814,8 @@ def _get_interface_trace_pairs(
                 wall_temperature,
                 wall_grad_temperature))}
 
-    from grudge.trace_pair import inter_volume_trace_pairs
+    from grudge.trace_pair import inter_volume_trace_pairs  \
+        # pylint: disable=no-name-in-module
 
     return inter_volume_trace_pairs(
         dcoll, pairwise_thermal_data,
