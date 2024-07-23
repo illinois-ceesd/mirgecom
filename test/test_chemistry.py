@@ -34,9 +34,10 @@ from grudge import op
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.mesh.generation import generate_regular_rect_mesh
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import PyrometheusMixture

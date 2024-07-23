@@ -29,9 +29,11 @@ from meshmode.mesh.generation import generate_regular_rect_mesh
 import mirgecom.symbolic as sym
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+        [PytestPyOpenCLArrayContextFactory])
 
 import pytest
 

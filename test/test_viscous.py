@@ -39,9 +39,10 @@ import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.fluid import make_conserved
 from mirgecom.transport import (

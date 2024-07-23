@@ -33,9 +33,12 @@ from grudge import op
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 from meshmode.dof_array import DOFArray
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+        [PytestPyOpenCLArrayContextFactory])
+
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,

@@ -30,9 +30,11 @@ import logging
 import pytest
 from pytools.obj_array import make_obj_array
 from mirgecom.discretization import create_discretization_collection
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+        [PytestPyOpenCLArrayContextFactory])
 
 
 logger = logging.getLogger(__name__)

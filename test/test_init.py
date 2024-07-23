@@ -44,9 +44,10 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
 
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+        [PytestPyOpenCLArrayContextFactory])
 
 logger = logging.getLogger(__name__)
 

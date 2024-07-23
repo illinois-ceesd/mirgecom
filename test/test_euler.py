@@ -55,9 +55,10 @@ import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from grudge.dof_desc import DISCR_TAG_QUAD
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.simutil import max_component_norm
 
