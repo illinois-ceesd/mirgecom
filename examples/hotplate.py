@@ -257,7 +257,7 @@ def main(actx_class, use_esdg=False, use_leap=False, casename=None,
                         f"----- Pressure({p_min}, {p_max})\n"
                         f"----- Temperature({t_min}, {t_max})\n"
                         "----- errors="
-                        + ", ".join("%.3g" % en for en in component_errors))
+                        + ", ".join(f"{en:.3g}" for en in component_errors))
 
     def my_write_viz(step, t, state, dv):
         resid = state - exact

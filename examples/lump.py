@@ -298,7 +298,7 @@ def main(actx_class, use_esdg=False,
                 component_errors = compare_fluid_solutions(dcoll, state, exact)
                 status_msg = (
                     "------- errors="
-                    + ", ".join("%.3g" % en for en in component_errors))
+                    + ", ".join(f"{en:.3g}" for en in component_errors))
                 if rank == 0:
                     logger.info(status_msg)
 

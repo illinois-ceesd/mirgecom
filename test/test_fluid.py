@@ -224,8 +224,8 @@ def test_species_mass_gradient(actx_factory, dim):
     y = make_obj_array([ones for _ in range(nspecies)])
     for idim in range(dim):
         ispec = 2*idim
-        y[ispec] = ispec*(idim*dim+1)*sum([(iidim+1)*nodes[iidim]
-                                           for iidim in range(dim)])
+        y[ispec] = ispec*(idim*dim+1)*sum((iidim+1)*nodes[iidim]
+                                           for iidim in range(dim))
         y[ispec+1] = -y[ispec]
     species_mass = mass*y
 

@@ -108,7 +108,7 @@ def linear_advection_operator(dcoll, u, u_bc, *, comm_tag=None):
     el_bnd_flux = (
         _facial_flux(dcoll, u_tpair=TracePair(dd=dd.with_domain_tag(BTAG_ALL),
                                               interior=u_bnd, exterior=u_bc))
-        + sum([_facial_flux(dcoll, u_tpair=tpair) for tpair in itp]))
+        + sum(_facial_flux(dcoll, u_tpair=tpair) for tpair in itp))
 
     # volume term
     vol_flux = op.weak_local_d_dx(dcoll, 0, u)
@@ -303,7 +303,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
 
     # ~~~ compute BC error
     dd = DD_VOLUME_ALL
-    visc, grad = diffusion_operator(dcoll, kappa=kappa, boundaries=boundaries,
+    _visc, grad = diffusion_operator(dcoll, kappa=kappa, boundaries=boundaries,
                                     u=current_cv, penalty_amount=0.0,
                                     return_grad_u=True)
 

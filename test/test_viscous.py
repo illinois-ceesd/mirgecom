@@ -188,7 +188,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         nodes = actx.thaw(dcoll.nodes())
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
@@ -301,8 +301,8 @@ def test_species_diffusive_flux(actx_factory):
     y = make_obj_array([ones for _ in range(nspecies)])
     for idim in range(dim):
         ispec = 2*idim
-        y[ispec] = (ispec+1)*(idim*dim+1)*sum([(iidim+1)*nodes[iidim]
-                                               for iidim in range(dim)])
+        y[ispec] = (ispec+1)*(idim*dim+1)*sum((iidim+1)*nodes[iidim]
+                                               for iidim in range(dim))
         y[ispec+1] = -y[ispec]
 
     massval = 2
@@ -379,8 +379,8 @@ def test_diffusive_heat_flux(actx_factory):
     y = make_obj_array([ones for _ in range(nspecies)])
     for idim in range(dim):
         ispec = 2*idim
-        y[ispec] = (ispec+1)*(idim*dim+1)*sum([(iidim+1)*nodes[iidim]
-                                               for iidim in range(dim)])
+        y[ispec] = (ispec+1)*(idim*dim+1)*sum((iidim+1)*nodes[iidim]
+                                               for iidim in range(dim))
         y[ispec+1] = -y[ispec]
 
     # create a gradient of temperature

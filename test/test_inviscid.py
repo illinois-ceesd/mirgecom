@@ -91,7 +91,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
         from meshmode.dof_array import DOFArray
         return DOFArray(
             actx,
-            tuple(actx.from_numpy(np.random.rand(grp.nelements, grp.nunit_dofs))
+            tuple(actx.from_numpy(np.random.rand(grp.nelements, grp.nunit_dofs))  # noqa: NPY002
                   for grp in dcoll.discr_from_dd("vol").groups)
         )
 

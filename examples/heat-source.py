@@ -217,7 +217,7 @@ def main(actx_class, use_esdg=False,
         return state, dt
 
     from mirgecom.steppers import advance_state
-    current_step, current_t, advanced_state = \
+    _current_step, _current_t, advanced_state = \
         advance_state(rhs=my_rhs, timestepper=rk4_step,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=dt, state=u, t=t,

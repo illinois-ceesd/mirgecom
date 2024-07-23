@@ -296,7 +296,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_min, fprint_mean, fprint_max,
                 bytes_per_flop_mean))
 
-        tbl.add_row(("Total", total_calls, f"{total_time:{g}}") + tuple(["--"] * 13))
+        tbl.add_row(("Total", total_calls, f"{total_time:{g}}", *tuple(["--"] * 13)))
 
         return tbl
 
@@ -346,8 +346,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
             param_names = kernel.all_params()
-            gen("return {%s}" % ", ".join(
-                f"{name!r}: {name}" for name in param_names))
+            gen("return {{{}}}".format(", ".join(
+                f"{name!r}: {name}" for name in param_names)))
 
             # Run the wrapper code, save argument values in domain_params
             domain_params = gen.get_picklable_function()(**param_dict)

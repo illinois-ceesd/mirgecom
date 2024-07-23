@@ -70,7 +70,7 @@ def _check_isl_version() -> None:
     import islpy  # type: ignore[import-untyped]
 
     try:
-        ctypes.cdll.LoadLibrary(islpy._isl.__file__).isl_val_get_num_gmp
+        ctypes.cdll.LoadLibrary(islpy._isl.__file__).isl_val_get_num_gmp  # noqa: B018
     except AttributeError:
         # We are running with imath or imath-32.
         pass

@@ -540,7 +540,7 @@ def main(actx_class, use_esdg=False,
                 if do_viz:
                     my_write_viz(step=step, t=t, fluid_state=fluid_state)
 
-                ts_field, cfl, dt = my_get_timestep(t, dt, fluid_state)
+                _ts_field, cfl, dt = my_get_timestep(t, dt, fluid_state)
 
                 if do_health:
                     health_errors = \
@@ -677,7 +677,7 @@ def main(actx_class, use_esdg=False,
         current_state = replace(current_state, dv=new_dv)
 
     final_dv = current_state.dv
-    ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
+    _ts_field, cfl, dt = my_get_timestep(t=current_t, dt=current_dt,
                                         state=current_state)
     my_write_status(dt=dt, cfl=cfl, cv=current_cv, dv=final_dv)
     my_write_viz(step=current_step, t=current_t, fluid_state=current_state)

@@ -158,7 +158,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         )
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -319,7 +319,7 @@ def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
         )
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
         assert inf_norm(rho_resid) < tolerance
         assert inf_norm(rhoe_resid) < tolerance
@@ -436,7 +436,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)  # noqa
+            return make_fluid_state(vortex(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)
@@ -516,7 +516,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),  # noqa
+            return make_fluid_state(lump(x_vec=nodes, cv=state_minus, **kwargs),
                                     gas_model)
 
         boundaries = {
@@ -611,7 +611,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)  # noqa
+            return make_fluid_state(lump(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_my_boundary)
@@ -830,7 +830,7 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
             actx = state_minus.array_context
             bnd_discr = dcoll.discr_from_dd(dd_bdry)
             nodes = actx.thaw(bnd_discr.nodes())
-            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)  # noqa
+            return make_fluid_state(initializer(x_vec=nodes, **kwargs), gas_model)
 
         boundaries = {
             BTAG_ALL: PrescribedFluidBoundary(boundary_state_func=_vortex_boundary)

@@ -303,7 +303,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         if rank == 0:
             logger.info(
                 "------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
+                + ", ".join(f"{en:.3g}" for en in component_errors))
 
     def my_write_viz(step, t, cv, dv, exact):
         resid = cv - exact

@@ -187,7 +187,7 @@ def main(actx_class, use_esdg=False,
     y0s = np.zeros(shape=(nspecies,))
     for i in range(nspecies-1):
         y0s[i] = 1.0 / (10.0 ** (i + 1))
-    spec_sum = sum([y0s[i] for i in range(nspecies-1)])
+    spec_sum = sum(y0s[i] for i in range(nspecies-1))
     y0s[nspecies-1] = 1.0 - spec_sum
 
     # Mixture defaults to STP (p, T) = (1atm, 300K)
@@ -247,7 +247,7 @@ def main(actx_class, use_esdg=False,
     def my_write_status(component_errors, dv=None):
         status_msg = (
             "------- errors="
-            + ", ".join("%.3g" % en for en in component_errors))
+            + ", ".join(f"{en:.3g}" for en in component_errors))
         if ((dv is not None) and (not log_dependent)):
             temp = dv.temperature
             press = dv.pressure

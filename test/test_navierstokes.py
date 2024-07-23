@@ -691,7 +691,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         fluid_state = exact_fluid_state
 
         # Exact solution should have RHS=0, so the RHS itself is the residual
-        ns_rhs, grad_cv, grad_t = ns_operator(dcoll, gas_model=gas_model,
+        ns_rhs, grad_cv, _grad_t = ns_operator(dcoll, gas_model=gas_model,
                                               state=fluid_state,
                                               boundaries=boundaries,
                                               return_gradients=True)

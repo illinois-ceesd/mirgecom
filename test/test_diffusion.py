@@ -540,7 +540,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     from numpy.random import rand
     perturb_np = np.empty((n, order+1), dtype=float)
     for i in range(n):
-        perturb_np[i, :] = 0.1*(rand()-0.5)
+        perturb_np[i, :] = 0.1*(rand()-0.5)  # noqa: NPY002
     perturb = DOFArray(actx, (actx.from_numpy(perturb_np),))
 
     u = u_steady + perturb

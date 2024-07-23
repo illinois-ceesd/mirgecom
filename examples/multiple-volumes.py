@@ -233,10 +233,9 @@ def main(actx_class, use_esdg=False,
         logger.info(init_message)
 
     def my_get_timestep(step, t, dt, fluid_states):
-        return min([
-            get_sim_timestep(
+        return min(get_sim_timestep(
                 dcoll, fluid_state, t, dt, current_cfl, t_final, constant_cfl)
-            for fluid_state in fluid_states])
+            for fluid_state in fluid_states)
 
     def my_write_viz(step, t, cvs, dvs=None):
         if dvs is None:

@@ -324,7 +324,7 @@ def _join_conserved(dim, mass, energy, momentum, species_mass=None):
     from pytools import single_valued
     aux_shape = single_valued(aux_shapes)
 
-    result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
+    result = np.empty((2 + dim + nspec, *aux_shape), dtype=object)
     result[0] = mass
     result[1] = energy
     result[2:dim+2] = momentum

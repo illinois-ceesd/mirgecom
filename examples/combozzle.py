@@ -1052,7 +1052,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        cv, tseed = state
+        cv, _tseed = state
 
         if logmgr:
             set_dt(logmgr, dt)

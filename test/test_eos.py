@@ -423,7 +423,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         yin = y0s * ones
 
         # avoid starting too far from the actual temperature
-        tguess = tempin + ones*100.0*np.random.random()
+        tguess = tempin + ones*100.0*np.random.random()  # noqa: NPY002
         assert inf_norm(tguess) > 0.0
 
         pyro_rho = pyro_mechanism.get_density(pin, tin, yin)

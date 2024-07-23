@@ -355,7 +355,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
             dcoll, fluid_state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag)
 
-    vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
+    _vol_state_quad, _inter_elem_bnd_states_quad, _domain_bnd_states_quad = \
         operator_states_quad
 
     # Get smoothness indicator based on mass component

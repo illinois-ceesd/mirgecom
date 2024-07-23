@@ -223,7 +223,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     p = problem
 
-    sym_u, sym_v, sym_f, sym_rhs = sym_wave(p.dim, p.sym_phi)
+    sym_u, sym_v, sym_f, _sym_rhs = sym_wave(p.dim, p.sym_phi)
 
     mesh = p.mesh_factory(8)
 

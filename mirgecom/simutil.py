@@ -825,9 +825,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                 print(f"-Part({adv_part}): {nelem_part[adv_part]=}")
 
     # Validate the partitioning before returning
-    total_partitioned_elements = sum([len(part_to_elements[r])
-                                      for r in range(num_ranks)])
-    total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
+    total_partitioned_elements = sum(len(part_to_elements[r])
+                                      for r in range(num_ranks))
+    total_nelem_part = sum(nelem_part[r] for r in range(num_ranks))
 
     if debug:
         print("Validating mesh parts.")
@@ -1165,7 +1165,7 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
 
     for bdtag in boundaries:
         boundary_discr = dcoll.discr_from_dd(bdtag)
-        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        nnodes = sum(grp.ndofs for grp in boundary_discr.groups)
         local_report.write(f"{bdtag}: {nnodes}\n")
 
     from meshmode.distributed import get_connected_parts
@@ -1177,7 +1177,7 @@ def boundary_report(dcoll, boundaries, outfile_name, *, dd=DD_VOLUME_ALL,
     for connected_part_id in connected_part_ids:
         boundary_discr = dcoll.discr_from_dd(
             dd.trace(BTAG_PARTITION(connected_part_id)))
-        nnodes = sum([grp.ndofs for grp in boundary_discr.groups])
+        nnodes = sum(grp.ndofs for grp in boundary_discr.groups)
         part_nodes.append(nnodes)
     if part_nodes:
         local_report.write(f"nnodes_pb: {part_nodes}\n")
@@ -1376,12 +1376,12 @@ def compare_files_vtu(
         if ignore_field:
             continue
 
-        max_true_component = max([max(abs(arr2.GetComponent(j, icomp))
+        max_true_component = max(max(abs(arr2.GetComponent(j, icomp))
                                       for j in range(num_points))
-                                  for icomp in range(num_components)])
-        max_other_component = max([max(abs(arr1.GetComponent(j, icomp))
+                                  for icomp in range(num_components))
+        max_other_component = max(max(abs(arr1.GetComponent(j, icomp))
                                       for j in range(num_points))
-                                  for icomp in range(num_components)])
+                                  for icomp in range(num_components))
 
         # FIXME
         # Choose an arbitrary "level" to define what is a "significant" field
@@ -1575,8 +1575,8 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
         raise ValueError("Fidelity test failed: Mismatched topology type")
 
     # check number of connectivity values
-    connectivities1 = file_reader1.read_data_item(tuple(top1)[0])
-    connectivities2 = file_reader2.read_data_item(tuple(top2)[0])
+    connectivities1 = file_reader1.read_data_item(next(iter(top1)))
+    connectivities2 = file_reader2.read_data_item(next(iter(top2)))
 
     connectivities1 = np.array(connectivities1)
     connectivities2 = np.array(connectivities2)
@@ -1602,8 +1602,8 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
         raise ValueError("Fidelity test failed: Mismatched geometry type")
 
     # check number of node values
-    nodes1 = file_reader1.read_data_item(tuple(geo1)[0])
-    nodes2 = file_reader2.read_data_item(tuple(geo2)[0])
+    nodes1 = file_reader1.read_data_item(next(iter(geo1)))
+    nodes2 = file_reader2.read_data_item(next(iter(geo2)))
 
     nodes1 = np.array(nodes1)
     nodes2 = np.array(nodes2)
@@ -1640,8 +1640,8 @@ def compare_files_xdmf(first_file: str, second_file: str, tolerance: float = 1e-
             raise ValueError("Fidelity test failed: Mismatched cell name")
 
         # check number of Attribute values
-        values1 = file_reader1.read_data_item(tuple(curr_cell1)[0])
-        values2 = file_reader2.read_data_item(tuple(curr_cell2)[0])
+        values1 = file_reader1.read_data_item(next(iter(curr_cell1)))
+        values2 = file_reader2.read_data_item(next(iter(curr_cell2)))
 
         if len(values1) != len(values2):
             print("File 1,", curr_cell1.get("Name"), ":", len(values1), "\n",

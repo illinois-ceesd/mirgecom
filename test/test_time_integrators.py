@@ -118,7 +118,7 @@ def test_state_advancer(integrator, method_order, local_dt):
         t = 0*dt
         state = exact_soln(t)
 
-        advanced_step, advanced_t, advanced_state = \
+        _advanced_step, advanced_t, advanced_state = \
             advance_state(rhs=rhs, timestepper=integrator, dt=dt,
                           state=state, t=t, t_final=t_final,
                           max_steps=max_steps, local_dt=local_dt,
@@ -196,9 +196,8 @@ if found:
             state = exact_soln(t)
 
             t_final = 4
-            step = 0
 
-            (step, t, state) = \
+            (_step, t, state) = \
                 advance_state(rhs=rhs, timestepper=method, dt=dt,
                               state=state, t=t, t_final=t_final,
                               component_id="y")

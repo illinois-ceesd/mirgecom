@@ -268,7 +268,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         # Pull temperature, total density, mass fractions, and pressure
         # from Cantera. We need total density, and mass fractions to initialize
         # the fluid/gas state.
-        can_t, can_rho, can_y = cantera_soln.TDY
+        can_t, _can_rho, can_y = cantera_soln.TDY
         can_p = cantera_soln.P
         # *can_t*, *can_p* should not differ (significantly) from user's
         # initial data, but we want to ensure that we use exactly the same
