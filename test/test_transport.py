@@ -39,6 +39,11 @@ from meshmode.array_context import (  # noqa  # noqa
 from meshmode.mesh.generation import generate_regular_rect_mesh
 
 import pyopencl as cl
+from pyopencl.tools import (  # noqa
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.fluid import make_conserved
@@ -49,10 +54,6 @@ from mirgecom.thermochemistry import (
     get_pyrometheus_wrapper_class_from_cantera,
 )
 from mirgecom.transport import MixtureAveragedTransport
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

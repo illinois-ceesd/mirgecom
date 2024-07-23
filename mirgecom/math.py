@@ -53,14 +53,13 @@ THE SOFTWARE.
 import numpy as np
 import numpy.linalg as la  # noqa
 import pymbolic as pmbl
-from pymbolic.primitives import Expression
-
-from pytools.obj_array import make_obj_array
-
 from arraycontext import (
     get_container_context_recursively,
     get_container_context_recursively_opt,
 )
+from pymbolic.primitives import Expression
+
+from pytools.obj_array import make_obj_array
 
 
 def harmonic_mean(x, y):
@@ -94,9 +93,8 @@ def harmonic_mean(x, y):
                 a_plus_b = a + b if a + b > 0 else 1
             return 2*a*b/a_plus_b
 
-    from meshmode.dof_array import DOFArray
-
     from arraycontext import rec_multimap_array_container
+    from meshmode.dof_array import DOFArray
     return rec_multimap_array_container(
         scalar_harmonic_mean, x, y, leaf_class=DOFArray)
 

@@ -52,6 +52,7 @@ THE SOFTWARE.
 from functools import partial
 
 import numpy as np
+from arraycontext import map_array_container
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     DISCR_TAG_BASE,
@@ -60,8 +61,6 @@ from grudge.dof_desc import (
 from meshmode.dof_array import DOFArray
 
 from pytools import keyed_memoize_in
-
-from arraycontext import map_array_container
 
 
 # TODO: Revisit for multi-group meshes

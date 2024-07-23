@@ -36,6 +36,8 @@ from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.boundary import AdiabaticSlipBoundary, IsothermalWallBoundary
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
@@ -65,7 +67,6 @@ from mirgecom.transport import (
     SimpleTransport,
 )
 from mirgecom.utils import force_evaluation
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

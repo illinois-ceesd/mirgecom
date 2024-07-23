@@ -47,11 +47,10 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
+from arraycontext import dataclass_array_container
 from meshmode.dof_array import DOFArray
 
 from mirgecom.fluid import ConservedVars, make_conserved
-
-from arraycontext import dataclass_array_container
 
 
 class TemperatureSeedMissingError(Exception):

@@ -32,9 +32,10 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.filter import make_spectral_filter
-from pytools.obj_array import make_obj_array
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])

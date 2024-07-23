@@ -39,8 +39,13 @@ from meshmode.array_context import (  # noqa
 from meshmode.dof_array import DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-import mirgecom.math as mm
 import pyopencl.clmath  # noqa
+from pytools.obj_array import (
+    flat_obj_array,
+    make_obj_array,
+)
+
+import mirgecom.math as mm
 from mirgecom.boundary import (
     DummyBoundary,
     PrescribedFluidBoundary,
@@ -53,10 +58,6 @@ from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import compare_fluid_solutions, componentwise_norms, get_box_mesh
 from mirgecom.symbolic import diff as sym_diff, evaluate
 from mirgecom.transport import SimpleTransport
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
 
 
 logger = logging.getLogger(__name__)

@@ -38,6 +38,11 @@ from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
 
 import pyopencl as cl
+from pyopencl.tools import (  # noqa
+    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
+)
+from pytools.obj_array import make_obj_array
+
 from mirgecom.artificial_viscosity import (
     AdiabaticNoSlipWallAV,
     PrescribedFluidBoundaryAV,
@@ -49,10 +54,6 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.simutil import get_box_mesh
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)
@@ -213,9 +214,9 @@ def test_artificial_viscosity(ctx_factory, dim, order):
                                  interior=cv_int,
                                  exterior=cv_int)
             nhat = actx.thaw(dcoll.normal(dd_bdry))
-            from mirgecom.flux import num_flux_central
-
             from arraycontext import outer
+
+            from mirgecom.flux import num_flux_central
             # Do not project to "all_faces" as now we use built-in grad_cv_operator
             return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 

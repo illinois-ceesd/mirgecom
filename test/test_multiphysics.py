@@ -32,9 +32,11 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
 
-import mirgecom.math as mm
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
+from pytools.obj_array import make_obj_array
+
+import mirgecom.math as mm
 from mirgecom.boundary import (
     AdiabaticNoslipWallBoundary,
     IsothermalWallBoundary,
@@ -53,7 +55,6 @@ from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
 )
 from mirgecom.simutil import get_box_mesh, max_component_norm
 from mirgecom.transport import SimpleTransport
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

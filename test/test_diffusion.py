@@ -36,6 +36,8 @@ from meshmode.array_context import (  # noqa
 )
 from meshmode.dof_array import DOFArray
 
+from pytools.obj_array import make_obj_array
+
 import mirgecom.math as mm
 from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
@@ -55,7 +57,6 @@ from mirgecom.symbolic import (
     evaluate,
     grad as sym_grad,
 )
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

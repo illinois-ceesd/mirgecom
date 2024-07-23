@@ -36,9 +36,9 @@ import logging
 import os
 from typing import Any, Dict, Type
 
-import pyopencl as cl
-
 from arraycontext import ArrayContext, PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
+
+import pyopencl as cl
 
 
 logger = logging.getLogger(__name__)

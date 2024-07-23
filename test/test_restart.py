@@ -33,8 +33,9 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
 
-from mirgecom.discretization import create_discretization_collection
 from pytools.obj_array import make_obj_array
+
+from mirgecom.discretization import create_discretization_collection
 
 
 logger = logging.getLogger(__name__)

@@ -41,6 +41,11 @@ from meshmode.array_context import (  # noqa
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 import pyopencl.clmath  # noqa
+from pytools.obj_array import (
+    flat_obj_array,
+    make_obj_array,
+)
+
 from mirgecom.boundary import DummyBoundary, PrescribedFluidBoundary
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas
@@ -55,10 +60,6 @@ from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
 )
 from mirgecom.simutil import max_component_norm
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
-)
 
 
 logger = logging.getLogger(__name__)

@@ -34,7 +34,7 @@ multiline-quotes = "double"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 known-local-folder = [
-    "arraycontext",
+    "mirgecom",
 ]
 known-first-party = [
   "pytools",

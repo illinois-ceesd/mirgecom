@@ -31,6 +31,8 @@ from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 
 # from mirgecom.boundary import PrescribedFluidBoundary
@@ -57,7 +59,6 @@ from mirgecom.simutil import (
 )
 from mirgecom.steppers import advance_state
 from mirgecom.transport import SimpleTransport
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

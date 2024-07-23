@@ -46,6 +46,7 @@ THE SOFTWARE.
 
 import grudge.op as op
 import numpy as np
+from arraycontext import outer
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     DISCR_TAG_BASE,
@@ -61,8 +62,6 @@ from mirgecom.fluid import (
     velocity_gradient,
 )
 from mirgecom.utils import normalize_boundaries
-
-from arraycontext import outer
 
 
 # low level routine works with numpy arrays and can be tested without

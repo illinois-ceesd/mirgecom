@@ -38,6 +38,8 @@ from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas
@@ -56,7 +58,6 @@ from mirgecom.logging_quantities import (
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.simutil import generate_and_distribute_mesh, get_sim_timestep
 from mirgecom.steppers import advance_state
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

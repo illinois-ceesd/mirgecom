@@ -30,6 +30,8 @@ from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+from pytools.obj_array import flat_obj_array
+
 from mirgecom.array_context import initialize_actx
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
@@ -42,7 +44,6 @@ from mirgecom.logging_quantities import (
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.utils import force_evaluation
 from mirgecom.wave import wave_operator
-from pytools.obj_array import flat_obj_array
 
 
 def bump(actx, nodes, t=0):

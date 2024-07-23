@@ -34,9 +34,10 @@ from meshmode.array_context import PyOpenCLArrayContext
 import loopy as lp
 import pyopencl as cl
 import pytools
+from pytools.py_codegen import PythonFunctionGenerator
+
 from mirgecom.logging_quantities import KernelProfile
 from mirgecom.utils import StatisticsAccumulator
-from pytools.py_codegen import PythonFunctionGenerator
 
 
 __doc__ = """

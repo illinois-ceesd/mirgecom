@@ -40,6 +40,11 @@ from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 import pyopencl.clmath  # noqa
+from pytools.obj_array import (
+    flat_obj_array,
+    make_obj_array,
+)
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
@@ -47,10 +52,6 @@ from mirgecom.inviscid import (
     inviscid_facial_flux_hll,
     inviscid_facial_flux_rusanov,
     inviscid_flux,
-)
-from pytools.obj_array import (
-    flat_obj_array,
-    make_obj_array,
 )
 
 

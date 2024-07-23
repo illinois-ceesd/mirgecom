@@ -31,11 +31,12 @@ from meshmode.array_context import (  # noqa
 )
 from meshmode.mesh.generation import generate_regular_rect_mesh
 
-import mirgecom.symbolic as sym
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
-from mirgecom.discretization import create_discretization_collection
 from pytools.obj_array import make_obj_array
+
+import mirgecom.symbolic as sym
+from mirgecom.discretization import create_discretization_collection
 
 
 logger = logging.getLogger(__name__)

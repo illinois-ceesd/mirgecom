@@ -76,6 +76,7 @@ from typing import Dict, List, Optional
 
 import grudge.op as op
 import numpy as np
+from arraycontext import flatten, map_array_container, tag_axes
 from grudge.discretization import DiscretizationCollection, PartID
 from grudge.dof_desc import DD_VOLUME_ALL
 from logpyle import IntervalTimer
@@ -86,10 +87,9 @@ from meshmode.transform_metadata import (
 )
 
 import pyopencl as cl
+
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
-
-from arraycontext import flatten, map_array_container, tag_axes
 
 
 logger = logging.getLogger(__name__)

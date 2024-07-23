@@ -71,6 +71,7 @@ from functools import partial
 
 import grudge.op as op
 import numpy as np
+from arraycontext import dataclass_array_container
 from grudge.dof_desc import (
     DISCR_TAG_BASE,
     as_dofdesc,
@@ -107,8 +108,6 @@ from mirgecom.navierstokes import (
 )
 from mirgecom.utils import project_from_base
 from mirgecom.viscous import viscous_facial_flux_harmonic
-
-from arraycontext import dataclass_array_container
 
 
 class _ThermalDataNoGradInterVolTag:

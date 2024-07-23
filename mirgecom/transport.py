@@ -51,13 +51,12 @@ from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
+from arraycontext import dataclass_array_container
 from meshmode.dof_array import DOFArray
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.eos import GasDependentVars, GasEOS
 from mirgecom.fluid import ConservedVars
-
-from arraycontext import dataclass_array_container
 
 
 class TransportModelError(Exception):

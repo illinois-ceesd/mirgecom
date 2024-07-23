@@ -45,6 +45,7 @@ THE SOFTWARE.
 
 import grudge.op as op
 import numpy as np
+from arraycontext import outer
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     DISCR_TAG_BASE,
@@ -55,8 +56,6 @@ from meshmode.dof_array import DOFArray
 
 from mirgecom.fluid import ConservedVars, make_conserved
 from mirgecom.utils import normalize_boundaries
-
-from arraycontext import outer
 
 
 def inviscid_flux(state):

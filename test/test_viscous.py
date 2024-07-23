@@ -40,13 +40,14 @@ from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
 
 import pyopencl.clmath  # noqa
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.simutil import get_box_mesh
 from mirgecom.transport import PowerLawTransport, SimpleTransport
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

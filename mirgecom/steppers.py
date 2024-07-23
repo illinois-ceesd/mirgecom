@@ -29,11 +29,11 @@ THE SOFTWARE.
 """
 
 import numpy as np
+from arraycontext import get_container_context_recursively_opt
 
-from mirgecom.utils import force_evaluation
 from pytools import memoize_in
 
-from arraycontext import get_container_context_recursively_opt
+from mirgecom.utils import force_evaluation
 
 
 def _compile_timestepper(actx, timestepper, rhs):

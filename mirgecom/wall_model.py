@@ -73,17 +73,16 @@ from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
-from meshmode.dof_array import DOFArray
-
-from mirgecom.eos import GasDependentVars, GasEOS, MixtureEOS
-from mirgecom.fluid import ConservedVars
-from mirgecom.transport import GasTransportVars, TransportModel
-
 from arraycontext import (
     dataclass_array_container,
     get_container_context_recursively,
     with_container_arithmetic,
 )
+from meshmode.dof_array import DOFArray
+
+from mirgecom.eos import GasDependentVars, GasEOS, MixtureEOS
+from mirgecom.fluid import ConservedVars
+from mirgecom.transport import GasTransportVars, TransportModel
 
 
 @with_container_arithmetic(bcast_obj_array=False,

@@ -38,6 +38,8 @@ from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.dof_array import DOFArray
 from scipy.interpolate import CubicSpline  # type: ignore[import-untyped]
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary,
@@ -69,7 +71,6 @@ from mirgecom.wall_model import (
     PorousWallTransport,
     PorousWallVars,
 )
-from pytools.obj_array import make_obj_array
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

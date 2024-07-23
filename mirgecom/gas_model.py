@@ -55,6 +55,7 @@ from typing import Optional
 
 import grudge.op as op
 import numpy as np
+from arraycontext import dataclass_array_container
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     DISCR_TAG_BASE,
@@ -72,8 +73,6 @@ from mirgecom.fluid import ConservedVars
 from mirgecom.transport import GasTransportVars, TransportModel
 from mirgecom.utils import normalize_boundaries
 from mirgecom.wall_model import PorousFlowModel, PorousWallVars
-
-from arraycontext import dataclass_array_container
 
 
 @dataclass(frozen=True)

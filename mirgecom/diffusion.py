@@ -101,9 +101,10 @@ from grudge.trace_pair import (
 )
 from meshmode.discretization.connection import FACE_RESTR_ALL
 
+from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
+
 from mirgecom.math import harmonic_mean
 from mirgecom.utils import normalize_boundaries
-from pytools.obj_array import make_obj_array, obj_array_vectorize_n_args
 
 
 def grad_facial_flux_central(kappa_tpair, u_tpair, normal):

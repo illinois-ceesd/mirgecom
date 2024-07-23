@@ -129,6 +129,7 @@ from functools import partial
 
 import grudge.op as op
 import numpy as np
+from arraycontext import get_container_context_recursively
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
     DISCR_TAG_BASE,
@@ -140,6 +141,8 @@ from grudge.trace_pair import TracePair, interior_trace_pairs, tracepair_with_di
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.dof_array import DOFArray
 
+from pytools import keyed_memoize_in, memoize_in
+
 from mirgecom.boundary import (
     AdiabaticNoslipWallBoundary,
     IsothermalWallBoundary,
@@ -148,9 +151,6 @@ from mirgecom.boundary import (
 from mirgecom.flux import num_flux_central
 from mirgecom.operators import div_operator
 from mirgecom.utils import normalize_boundaries
-from pytools import keyed_memoize_in, memoize_in
-
-from arraycontext import get_container_context_recursively
 
 
 class _AVRTag:
@@ -436,14 +436,13 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
     @memoize_in(actx, (smoothness_indicator, "smooth_comp_knl", dd))
     def indicator_prg():
         """Compute the smoothness indicator for all elements."""
+        from arraycontext import make_loopy_program
         from meshmode.transform_metadata import (
             ConcurrentDOFInameTag,
             ConcurrentElementInameTag,
         )
 
         import loopy as lp
-
-        from arraycontext import make_loopy_program
         t_unit = make_loopy_program([
             "{[iel]: 0 <= iel < nelements}",
             "{[idof]: 0 <= idof < ndiscr_nodes_in}",

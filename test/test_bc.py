@@ -38,6 +38,8 @@ from meshmode.array_context import (  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
@@ -50,7 +52,6 @@ from mirgecom.gas_model import (
 from mirgecom.initializers import Lump
 from mirgecom.inviscid import inviscid_facial_flux_hll, inviscid_facial_flux_rusanov
 from mirgecom.simutil import get_box_mesh
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

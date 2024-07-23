@@ -36,9 +36,10 @@ from meshmode.array_context import (  # noqa
 )
 
 import pyopencl.clmath  # noqa
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.fluid import make_conserved
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

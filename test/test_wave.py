@@ -33,12 +33,13 @@ from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
 
-import mirgecom.symbolic as sym
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
+from pytools.obj_array import flat_obj_array, make_obj_array
+
+import mirgecom.symbolic as sym
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.wave import wave_operator
-from pytools.obj_array import flat_obj_array, make_obj_array
 
 
 logger = logging.getLogger(__name__)

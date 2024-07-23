@@ -34,13 +34,14 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import pyopencl as cl
 import pyopencl.clmath
 import pyopencl.clrandom
-from mirgecom.discretization import create_discretization_collection
-from mirgecom.eos import IdealSingleGas
-from mirgecom.initializers import Lump, MulticomponentLump, SodShock1D, Vortex2D
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
 from pytools.obj_array import make_obj_array
+
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.initializers import Lump, MulticomponentLump, SodShock1D, Vortex2D
 
 
 logger = logging.getLogger(__name__)

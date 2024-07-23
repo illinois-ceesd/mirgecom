@@ -39,8 +39,9 @@ import pyopencl as cl
 import pyopencl.array as cla  # noqa
 import pyopencl.clmath as clmath  # noqa
 import pyopencl.tools as cl_tools
-from mirgecom.discretization import create_discretization_collection
 from pytools.obj_array import make_obj_array, obj_array_vectorize  # noqa
+
+from mirgecom.discretization import create_discretization_collection
 
 
 logger = logging.getLogger(__name__)
@@ -79,9 +80,9 @@ def op_test_data(ctx_factory):
 # Mimics math.isclose for state arrays
 def _isclose(dcoll, x, y, rel_tol=1e-9, abs_tol=0, return_operands=False):
 
-    from mirgecom.simutil import componentwise_norms
-
     from arraycontext import flatten
+
+    from mirgecom.simutil import componentwise_norms
     actx = x.array_context
     lhs = actx.to_numpy(flatten(componentwise_norms(dcoll, x - y, np.inf), actx))
 

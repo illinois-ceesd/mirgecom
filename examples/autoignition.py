@@ -33,6 +33,8 @@ import numpy as np
 from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
@@ -60,7 +62,6 @@ from mirgecom.simutil import (
 )
 from mirgecom.steppers import advance_state
 from mirgecom.utils import force_evaluation
-from pytools.obj_array import make_obj_array
 
 
 class SingleLevelFilter(logging.Filter):

@@ -44,6 +44,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import grudge.op as oper
 import numpy as np
+from arraycontext.container import get_container_context_recursively
 from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 from logpyle import (
@@ -58,8 +59,6 @@ from logpyle import (
 from meshmode.array_context import PyOpenCLArrayContext
 
 import pyopencl as cl
-
-from arraycontext.container import get_container_context_recursively
 
 
 MemPoolType = Union[cl.tools.MemoryPool, cl.tools.SVMPool]

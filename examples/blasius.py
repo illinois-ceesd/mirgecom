@@ -28,6 +28,7 @@ import logging
 import os
 
 import numpy as np
+from arraycontext import get_container_context_recursively
 from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_QUAD
 from grudge.shortcuts import compiled_lsrk45_step, make_visualizer
 from logpyle import IntervalTimer, set_dt
@@ -62,8 +63,6 @@ from mirgecom.simutil import (
 )
 from mirgecom.steppers import advance_state
 from mirgecom.utils import force_evaluation
-
-from arraycontext import get_container_context_recursively
 
 
 logger = logging.getLogger(__name__)

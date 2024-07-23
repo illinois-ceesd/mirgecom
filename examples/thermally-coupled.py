@@ -41,6 +41,8 @@ from logpyle import IntervalTimer, set_dt
 from meshmode.discretization.connection import FACE_RESTR_ALL  # noqa
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+from pytools.obj_array import make_obj_array
+
 from mirgecom.boundary import (
     IsothermalWallBoundary,
 )
@@ -71,7 +73,6 @@ from mirgecom.simutil import (
 )
 from mirgecom.steppers import advance_state
 from mirgecom.transport import SimpleTransport
-from pytools.obj_array import make_obj_array
 
 
 logger = logging.getLogger(__name__)

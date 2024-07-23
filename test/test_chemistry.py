@@ -35,6 +35,8 @@ from meshmode.array_context import (  # noqa
 from meshmode.mesh.generation import generate_regular_rect_mesh
 
 import pyopencl as cl
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import PyrometheusMixture
 from mirgecom.fluid import make_conserved
@@ -43,7 +45,6 @@ from mirgecom.thermochemistry import (
     get_pyrometheus_wrapper_class,
     get_pyrometheus_wrapper_class_from_cantera,
 )
-from pytools.obj_array import make_obj_array
 
 
 @pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),

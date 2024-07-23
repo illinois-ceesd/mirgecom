@@ -170,15 +170,15 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     - trig funcs
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
+    from arraycontext import flatten
     from grudge.array_context import PyOpenCLArrayContext
     from grudge.dt_utils import h_max_from_volume
     from meshmode.mesh.processing import map_mesh, rotate_mesh_around_axis
 
     import pyopencl as cl
+
     from mirgecom.operators import grad_operator
     from mirgecom.simutil import componentwise_norms
-
-    from arraycontext import flatten
 
     def add_wonk(x: np.ndarray) -> np.ndarray:
         wonk_field = np.empty_like(x)
