@@ -24,18 +24,21 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from meshmode.array_context import PyOpenCLArrayContext
-import pyopencl as cl
-from pytools.py_codegen import PythonFunctionGenerator
-import loopy as lp
-import numpy as np
 from dataclasses import dataclass
-import pytools
+from typing import Dict, List, Optional
+
+import numpy as np
 from logpyle import LogManager
+from meshmode.array_context import PyOpenCLArrayContext
+
+import loopy as lp
+import pyopencl as cl
+import pytools
+from pytools.py_codegen import PythonFunctionGenerator
+
 from mirgecom.logging_quantities import KernelProfile
 from mirgecom.utils import StatisticsAccumulator
 
-from typing import List, Dict, Optional
 
 __doc__ = """
 .. autoclass:: PyOpenCLProfilingArrayContext
@@ -293,7 +296,7 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
                 fprint_min, fprint_mean, fprint_max,
                 bytes_per_flop_mean))
 
-        tbl.add_row(("Total", total_calls, f"{total_time:{g}}") + tuple(["--"] * 13))
+        tbl.add_row(("Total", total_calls, f"{total_time:{g}}", *tuple(["--"] * 13)))
 
         return tbl
 
@@ -343,8 +346,8 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             wrapper.generate_integer_arg_finding_from_strides(gen, kernel, idi)
 
             param_names = kernel.all_params()
-            gen("return {%s}" % ", ".join(
-                f"{repr(name)}: {name}" for name in param_names))
+            gen("return {{{}}}".format(", ".join(
+                f"{name!r}: {name}" for name in param_names)))
 
             # Run the wrapper code, save argument values in domain_params
             domain_params = gen.get_picklable_function()(**param_dict)

@@ -24,28 +24,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
-import pytest
 
-from pytools.obj_array import make_obj_array
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import DOFArray
+import numpy as np
+import numpy.linalg as la  # noqa
+import numpy.random
+import pytest
 from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
-from mirgecom.eos import IdealSingleGas
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
 from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.dof_array import DOFArray
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+import pyopencl.clmath  # noqa
+from pytools.obj_array import make_obj_array
+
+from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.inviscid import inviscid_flux
+
 
 logger = logging.getLogger(__name__)
 

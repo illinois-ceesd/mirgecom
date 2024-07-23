@@ -1,20 +1,19 @@
 # !/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 
 def main():
-    from setuptools import setup, find_packages
+    from setuptools import find_packages, setup
 
     version_dict = {}
     init_filename = "mirgecom/version.py"
     exec(
-        compile(open(init_filename, "r").read(), init_filename, "exec"),
+        compile(open(init_filename).read(), init_filename, "exec"),
         version_dict)
 
     setup(name="mirgecom",
           version=version_dict["VERSION_TEXT"],
           description=("TBD"),
-          long_description=open("README.md", "rt").read(),
+          long_description=open("README.md").read(),
           author="CEESD",
           author_email="inform@tiker.net",
           license="MIT",

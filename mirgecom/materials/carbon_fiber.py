@@ -29,12 +29,15 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Optional
 from abc import abstractmethod
+from typing import Optional
+
 import numpy as np
 from meshmode.dof_array import DOFArray
-from mirgecom.wall_model import PorousWallEOS
+
 from pytools.obj_array import make_obj_array
+
+from mirgecom.wall_model import PorousWallEOS
 
 
 class Oxidation:

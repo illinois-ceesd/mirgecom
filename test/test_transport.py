@@ -25,37 +25,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
-import pyopencl as cl
-import pytest
+
 import cantera
-from pytools.obj_array import make_obj_array
-
+import numpy as np
+import pyrometheus
+import pytest
 from grudge import op
-
-from meshmode.array_context import (  # noqa
+from meshmode.array_context import (  # noqa  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext,
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
 from meshmode.mesh.generation import generate_regular_rect_mesh
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
 
+import pyopencl as cl
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
-from mirgecom.transport import MixtureAveragedTransport
-from mirgecom.fluid import make_conserved
-from mirgecom.eos import PyrometheusMixture
-from mirgecom.gas_model import GasModel, make_fluid_state
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import PyrometheusMixture
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import (
+    get_pyrometheus_wrapper_class,
     get_pyrometheus_wrapper_class_from_cantera,
-    get_pyrometheus_wrapper_class
 )
-import pyrometheus
+from mirgecom.transport import MixtureAveragedTransport
+
 
 logger = logging.getLogger(__name__)
 

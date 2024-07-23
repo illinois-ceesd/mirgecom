@@ -22,36 +22,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from abc import ABCMeta, abstractmethod
 import logging
+from abc import ABCMeta, abstractmethod
+
 import numpy as np
 import pymbolic as pmbl
-import mirgecom.math as mm
 import pytest
-from pytools.obj_array import make_obj_array
 from grudge import op
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, BoundaryDomainTag
 from grudge.shortcuts import make_visualizer
-from meshmode.dof_array import DOFArray
 from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-from mirgecom.symbolic import (
-    diff as sym_diff,
-    grad as sym_grad,
-    div as sym_div,
-    evaluate)
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.dof_array import DOFArray
+
+from pytools.obj_array import make_obj_array
+
+import mirgecom.math as mm
 from mirgecom.diffusion import (
+    DirichletDiffusionBoundary,
+    NeumannDiffusionBoundary,
+    PrescribedFluxDiffusionBoundary,
+    RobinDiffusionBoundary,
     diffusion_flux,
     diffusion_operator,
     grad_facial_flux_weighted,
-    PrescribedFluxDiffusionBoundary,
-    DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary,
-    RobinDiffusionBoundary)
+)
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
 from mirgecom.simutil import get_box_mesh
-from mirgecom.discretization import create_discretization_collection
+from mirgecom.symbolic import (
+    diff as sym_diff,
+    div as sym_div,
+    evaluate,
+    grad as sym_grad,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -443,8 +449,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         if visualize:
             vis = make_visualizer(dcoll, order+3)
-            vis.write_vtk_file("diffusion_accuracy_{dim}_{order}_{n}.vtu".format(
-                dim=p.dim, order=order, n=n), [
+            vis.write_vtk_file(f"diffusion_accuracy_{p.dim}_{order}_{n}.vtu", [
                     ("u", u),
                     ("x", nodes[0] if p.dim == 1 else None),
                     ("expected_u", expected_u)
@@ -500,8 +505,8 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     flux = -kappa_lower*kappa_upper/(kappa_lower + kappa_upper)
 
     u_steady = (
-              -flux/kappa_lower * (nodes[0] + 1)  * lower_mask  # noqa: E126, E221
-        + (1 - flux/kappa_upper * (nodes[0] - 1)) * upper_mask)  # noqa: E131
+              -flux/kappa_lower * (nodes[0] + 1)  * lower_mask
+        + (1 - flux/kappa_upper * (nodes[0] - 1)) * upper_mask)
 
     def get_rhs(t, u, return_grad_u=False):
         return diffusion_operator(
@@ -514,8 +519,8 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     if visualize:
         vis = make_visualizer(dcoll, order+3)
-        vis.write_vtk_file("diffusion_discontinuous_kappa_rhs_{order}.vtu"
-            .format(order=order), [
+        vis.write_vtk_file(f"diffusion_discontinuous_kappa_rhs_{order}.vtu"
+            , [
                 ("kappa", kappa),
                 ("u_steady", u_steady),
                 ("grad_u_steady", grad_u_steady),
@@ -535,7 +540,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     from numpy.random import rand
     perturb_np = np.empty((n, order+1), dtype=float)
     for i in range(n):
-        perturb_np[i, :] = 0.1*(rand()-0.5)
+        perturb_np[i, :] = 0.1*(rand()-0.5)  # noqa: NPY002
     perturb = DOFArray(actx, (actx.from_numpy(perturb_np),))
 
     u = u_steady + perturb
@@ -548,8 +553,8 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
         t += dt
 
     if visualize:
-        vis.write_vtk_file("diffusion_disc_kappa_stability_{order}.vtu"
-            .format(order=order), [
+        vis.write_vtk_file(f"diffusion_disc_kappa_stability_{order}.vtu"
+            , [
                 ("kappa", kappa),
                 ("u", u),
                 ("u_steady", u_steady),

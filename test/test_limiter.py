@@ -20,24 +20,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-from meshmode.array_context import (  # noqa
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
-from mirgecom.limiter import bound_preserving_limiter
-from mirgecom.discretization import create_discretization_collection
-
-from mirgecom.initializers import Uniform
-from mirgecom.eos import IdealSingleGas
-from mirgecom.gas_model import (  # noqa
-    GasModel, make_fluid_state, make_operator_fluid_states
-)
-from mirgecom.fluid import make_conserved
-
 import pytest
+from meshmode.array_context import (  # noqa  # noqa
+    PyOpenCLArrayContext,
+    PytatoPyOpenCLArrayContext,
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import (  # noqa
+    GasModel,
+    make_fluid_state,
+    make_operator_fluid_states,
+)
+from mirgecom.initializers import Uniform
+from mirgecom.limiter import bound_preserving_limiter
 
 
 def test_fluid_api(actx_factory):

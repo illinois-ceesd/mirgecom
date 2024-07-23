@@ -2,8 +2,9 @@
 
 
 import json
-from mirgecom.simutil import\
-    compare_files_vtu, compare_files_xdmf, compare_files_hdf5
+
+from mirgecom.simutil import compare_files_hdf5, compare_files_vtu, compare_files_xdmf
+
 
 # run fidelity check
 if __name__ == "__main__":

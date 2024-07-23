@@ -29,6 +29,7 @@ THE SOFTWARE.
 """
 
 import pickle
+
 from meshmode.dof_array import array_context_for_pickling
 
 

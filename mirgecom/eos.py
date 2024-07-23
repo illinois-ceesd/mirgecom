@@ -42,12 +42,14 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-from typing import Union, Optional
-from dataclasses import dataclass
 from abc import ABCMeta, abstractmethod
-from arraycontext import dataclass_array_container
+from dataclasses import dataclass
+from typing import Optional, Union
+
 import numpy as np
+from arraycontext import dataclass_array_container
 from meshmode.dof_array import DOFArray
+
 from mirgecom.fluid import ConservedVars, make_conserved
 
 
@@ -478,8 +480,8 @@ class IdealSingleGas(GasEOS):
             Unused for this EOS.
         """
         return (
-            (((self._gamma - 1.0) / self._gas_const)
-             * self.internal_energy(cv) / cv.mass)
+            ((self._gamma - 1.0) / self._gas_const)
+             * self.internal_energy(cv) / cv.mass
         )
 
     def total_energy(self, cv: ConservedVars, pressure: DOFArray,

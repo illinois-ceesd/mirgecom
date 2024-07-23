@@ -29,6 +29,7 @@ THE SOFTWARE.
 """
 
 from pytools.obj_array import make_obj_array
+
 from mirgecom.fluid import make_conserved
 from mirgecom.wall_model import SolidWallConservedVars
 

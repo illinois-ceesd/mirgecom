@@ -24,64 +24,50 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import logging
 import argparse
-import numpy as np
+import logging
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL
-from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
+import cantera
 import grudge.op as op
-
+import numpy as np
+from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
+from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
-from pytools.obj_array import make_obj_array
-from mirgecom.mpi import mpi_entry_point
-from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import euler_operator
-from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import (
-    get_sim_timestep,
-    distribute_mesh
-)
-from mirgecom.utils import force_evaluation
-from mirgecom.io import make_init_message
+from meshmode.mesh import BTAG_ALL
 
-from mirgecom.integrators import rk4_step, euler_step
-from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    AdiabaticSlipBoundary,
-    IsothermalWallBoundary
-)
-from mirgecom.initializers import (
-    Uniform,
-    AcousticPulse
-)
-from mirgecom.eos import (
-    IdealSingleGas,
-    PyrometheusMixture
-)
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
-from mirgecom.transport import (
-    SimpleTransport,
-    MixtureAveragedTransport,
-    PowerLawTransport,
-    ArtificialViscosityTransportDiv,
-    ArtificialViscosityTransportDiv2,
-    ArtificialViscosityTransportDiv3
-)
-from mirgecom.limiter import bound_preserving_limiter
+from pytools.obj_array import make_obj_array
+
+from mirgecom.boundary import AdiabaticSlipBoundary, IsothermalWallBoundary
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas, PyrometheusMixture
+from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.initializers import AcousticPulse, Uniform
+from mirgecom.integrators import euler_step, rk4_step
+from mirgecom.io import make_init_message
+from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     # logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage
+    logmgr_add_device_memory_usage,
 )
-import cantera
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.navierstokes import ns_operator
+from mirgecom.simutil import distribute_mesh, get_sim_timestep
+from mirgecom.steppers import advance_state
+from mirgecom.transport import (
+    ArtificialViscosityTransportDiv,
+    ArtificialViscosityTransportDiv2,
+    ArtificialViscosityTransportDiv3,
+    MixtureAveragedTransport,
+    PowerLawTransport,
+    SimpleTransport,
+)
+from mirgecom.utils import force_evaluation
+
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +105,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm,
                            use_axis_tag_inference_fallback=use_tpe,
                            use_einsum_inference_fallback=use_tpe)
@@ -282,7 +268,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         # Pull temperature, total density, mass fractions, and pressure
         # from Cantera. We need total density, and mass fractions to initialize
         # the fluid/gas state.
-        can_t, can_rho, can_y = cantera_soln.TDY
+        can_t, _can_rho, can_y = cantera_soln.TDY
         can_p = cantera_soln.P
         # *can_t*, *can_p* should not differ (significantly) from user's
         # initial data, but we want to ensure that we use exactly the same
@@ -295,8 +281,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         # Create a Pyrometheus EOS with the Cantera soln. Pyrometheus uses
         # Cantera and generates a set of methods to calculate chemothermomechanical
         # properties and states for this particular mechanism.
-        from mirgecom.thermochemistry import \
-            get_pyrometheus_wrapper_class_from_cantera
+        from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
         pyro_mechanism = \
             get_pyrometheus_wrapper_class_from_cantera(
                 cantera_soln, temperature_niter=newton_iters)(actx.np)
@@ -366,7 +351,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         if transport_type == 2:
             if not use_mixture:
                 error_message = "Invalid transport_type "\
-                    "{} for single gas.".format(transport_type)
+                    f"{transport_type} for single gas."
                 raise RuntimeError(error_message)
             if rank == 0:
                 print("Pyrometheus transport model:")
@@ -398,7 +383,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                 sigma=transport_sigma, n=transport_n,
                 species_diffusivity=species_diffusivity)
         else:
-            error_message = "Unknown transport_type {}".format(transport_type)
+            error_message = f"Unknown transport_type {transport_type}"
             raise RuntimeError(error_message)
 
     transport = physical_transport_model
@@ -452,7 +437,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                   f"\tav_prantdl {av2_prandtl0}"
                   f"stagnation temperature {static_temp}")
         else:
-            error_message = "Unknown artifical viscosity model {}".format(use_av)
+            error_message = f"Unknown artifical viscosity model {use_av}"
             raise RuntimeError(error_message)
 
     gas_model = GasModel(eos=eos, transport=transport)
@@ -802,6 +787,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from warnings import warn
+
     from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
         if not args.lazy and not args.numpy:

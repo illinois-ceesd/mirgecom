@@ -24,42 +24,42 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
 from functools import partial
+
+import numpy as np
+from grudge.shortcuts import make_visualizer
+from logpyle import IntervalTimer, set_dt
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
 from pytools.obj_array import make_obj_array
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from mirgecom.discretization import create_discretization_collection
-from grudge.shortcuts import make_visualizer
 
-
-from mirgecom.transport import SimpleTransport
-from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import (
-    # get_sim_timestep,
-    generate_and_distribute_mesh,
-    compare_fluid_solutions
-)
-from mirgecom.limiter import bound_preserving_limiter
-from mirgecom.fluid import make_conserved
-from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
-
-from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state
 # from mirgecom.boundary import PrescribedFluidBoundary
 # from mirgecom.initializers import MulticomponentLump
 from mirgecom.eos import IdealSingleGas
-
-from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
+from mirgecom.fluid import make_conserved
+from mirgecom.integrators import rk4_step
+from mirgecom.io import make_init_message
+from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
-    logmgr_add_device_name,
     logmgr_add_device_memory_usage,
-    set_sim_state
+    logmgr_add_device_name,
+    logmgr_add_many_discretization_quantities,
+    set_sim_state,
 )
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.navierstokes import ns_operator
+from mirgecom.simutil import (
+    compare_fluid_solutions,
+    # get_sim_timestep,
+    generate_and_distribute_mesh,
+)
+from mirgecom.steppers import advance_state
+from mirgecom.transport import SimpleTransport
+
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -212,7 +212,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
             ("min_pressure", "------- P (min, max) (Pa) = ({value:1.9e}, "),
-            ("max_pressure",    "{value:1.9e})\n"),
+            ("max_pressure", "{value:1.9e})\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
             ("t_log.max", "log walltime: {value:6g} s")
         ])
@@ -303,7 +303,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         if rank == 0:
             logger.info(
                 "------- errors="
-                + ", ".join("%.3g" % en for en in component_errors))
+                + ", ".join(f"{en:.3g}" for en in component_errors))
 
     def my_write_viz(step, t, cv, dv, exact):
         resid = cv - exact
@@ -470,6 +470,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from warnings import warn
+
     from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
         if not args.lazy and not args.numpy:

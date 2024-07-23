@@ -25,30 +25,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import logging
-import numpy as np
-import pyopencl as cl
-import pytest
+
 import cantera
-from pytools.obj_array import make_obj_array
-
+import numpy as np
+import pytest
 from grudge import op
-
-from meshmode.array_context import (  # noqa
+from meshmode.array_context import (  # noqa  # noqa
     PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
+    PytatoPyOpenCLArrayContext,
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
 from meshmode.mesh.generation import generate_regular_rect_mesh
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
 
-from mirgecom.fluid import make_conserved
-from mirgecom.eos import IdealSingleGas, PyrometheusMixture
-from mirgecom.gas_model import GasModel, make_fluid_state
-from mirgecom.initializers import Vortex2D, Lump, Uniform
+import pyopencl as cl
+from pytools.obj_array import make_obj_array
+
 from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas, PyrometheusMixture
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.initializers import Lump, Uniform, Vortex2D
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +290,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, output_mechanism=True):
             print(code, file=mech_file)
 
         import importlib
+
         from mirgecom.thermochemistry import get_pyrometheus_wrapper_class
         pyromechlib = importlib.import_module(f"{mechname}")
         pyro_mechanism = get_pyrometheus_wrapper_class(
@@ -332,7 +332,7 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, output_mechanism=True):
         pyro_h = pyro_mechanism.get_mixture_enthalpy_mass(pyro_t, yin)
         pyro_c = pyro_mechanism.get_concentrations(pyro_m, yin)
 
-        assert inf_norm((pyro_c - can_c)) < 1e-14
+        assert inf_norm(pyro_c - can_c) < 1e-14
         assert inf_norm((pyro_t - can_t) / can_t) < 1e-14
         assert inf_norm((pyro_m - can_m) / can_m) < 1e-14
         assert inf_norm((pyro_p - can_p) / can_p) < 1e-14
@@ -423,7 +423,7 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
         yin = y0s * ones
 
         # avoid starting too far from the actual temperature
-        tguess = tempin + ones*100.0*np.random.random()
+        tguess = tempin + ones*100.0*np.random.random()  # noqa: NPY002
         assert inf_norm(tguess) > 0.0
 
         pyro_rho = pyro_mechanism.get_density(pin, tin, yin)

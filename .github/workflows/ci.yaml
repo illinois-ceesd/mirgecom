@@ -14,23 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-    flake8:
-        name: Flake8
+    ruff:
+        name: Ruff
         runs-on: ubuntu-latest
         steps:
         - uses: actions/checkout@v4
-        -
-          uses: actions/setup-python@v5
-          with:
-            # matches compat target in setup.py
-            python-version: '3.8'
-        - name: Flake8 test
+        - uses: actions/setup-python@v5
+        - name: Run ruff
           run: |
-            python3 -m venv myenv
-            source myenv/bin/activate
-            python -m pip install wheel
-            python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
-            python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
+            pip install ruff
+            ruff check
 
     mypy:
         name: Mypy

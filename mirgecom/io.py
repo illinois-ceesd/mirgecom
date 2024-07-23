@@ -30,10 +30,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 from functools import partial
-import grudge.op as op
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
+import grudge.op as op
 from grudge.dof_desc import DD_VOLUME_ALL
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 
 def make_init_message(*, dim, order, dt, t_final,

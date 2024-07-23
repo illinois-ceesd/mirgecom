@@ -25,4 +25,6 @@ THE SOFTWARE.
 """
 
 import mirgecom.version
+
+
 __version__ = mirgecom.version.VERSION_TEXT

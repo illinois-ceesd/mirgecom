@@ -40,20 +40,26 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
-from logpyle import (LogQuantity, PostLogQuantity, LogManager,
-    MultiPostLogQuantity, add_run_info,
-    add_general_quantities, add_simulation_quantities)
+from typing import Callable, List, Optional, Tuple, Union
+
+import grudge.op as oper
+import numpy as np
 from arraycontext.container import get_container_context_recursively
-from meshmode.array_context import PyOpenCLArrayContext
 from grudge.discretization import DiscretizationCollection
+from grudge.dof_desc import DD_VOLUME_ALL
+from logpyle import (
+    LogManager,
+    LogQuantity,
+    MultiPostLogQuantity,
+    PostLogQuantity,
+    add_general_quantities,
+    add_run_info,
+    add_simulation_quantities,
+)
+from meshmode.array_context import PyOpenCLArrayContext
+
 import pyopencl as cl
 
-from typing import Optional, Callable, Union, Tuple
-import numpy as np
-
-from grudge.dof_desc import DD_VOLUME_ALL
-import grudge.op as oper
-from typing import List
 
 MemPoolType = Union[cl.tools.MemoryPool, cl.tools.SVMPool]
 
@@ -102,7 +108,7 @@ def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> Non
         logmgr.set_constant("cl_platform_version", dev.platform.version)
 
 
-def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa: D401
+def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):
     """Deprecated. Do not use in new code."""
     from warnings import warn
     warn("logmgr_add_device_name is deprecated and will disappear in Q3 2021. "
@@ -176,6 +182,7 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: Optional[str] = No
     # Find emirge's version.sh in any parent directory
     if path_to_version_sh is None:
         import pathlib
+
         import mirgecom
 
         p = pathlib.Path(mirgecom.__file__).resolve()
@@ -229,7 +236,7 @@ def set_sim_state(mgr: LogManager, dim, state, eos) -> None:
 
 def logmgr_set_time(mgr: LogManager, steps: int, time: float) -> None:
     """Set the (current/initial) time/step count explicitly (e.g., for restart)."""
-    from logpyle import TimestepCounter, SimulationTime
+    from logpyle import SimulationTime, TimestepCounter
 
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
@@ -350,9 +357,10 @@ class KernelProfile(MultiPostLogQuantity):
         assert isinstance(actx, PyOpenCLProfilingArrayContext)
 
         from dataclasses import fields
+
         from mirgecom.profiling import MultiCallKernelProfile
 
-        units_default = {"num_calls": "1",  "time": "s", "flops": "GFlops",
+        units_default = {"num_calls": "1", "time": "s", "flops": "GFlops",
                          "bytes_accessed": "GByte", "footprint_bytes": "GByte"}
 
         names = [f"{kernel_name}_{f.name}" for f in fields(MultiCallKernelProfile)]

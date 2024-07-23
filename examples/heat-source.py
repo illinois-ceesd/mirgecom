@@ -23,24 +23,26 @@ THE SOFTWARE.
 """
 import logging
 
-import numpy as np
-
 import grudge.op as op
-from grudge.shortcuts import make_visualizer
+import numpy as np
 from grudge.dof_desc import BoundaryDomainTag
+from grudge.shortcuts import make_visualizer
+from logpyle import IntervalTimer, set_dt
+
+from mirgecom.diffusion import (
+    DirichletDiffusionBoundary,
+    NeumannDiffusionBoundary,
+    diffusion_operator,
+)
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.integrators import rk4_step
-from mirgecom.diffusion import (
-    diffusion_operator,
-    DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary)
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_cl_device_info,
+    logmgr_add_device_memory_usage,
+)
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.simutil import write_visfile, check_step, check_naninf_local
-from mirgecom.logging_quantities import (initialize_logmgr,
-                                         logmgr_add_cl_device_info,
-                                         logmgr_add_device_memory_usage)
-
-from logpyle import IntervalTimer, set_dt
+from mirgecom.simutil import check_naninf_local, check_step, write_visfile
 
 
 logger = logging.getLogger(__name__)
@@ -64,13 +66,14 @@ def main(actx_class, use_esdg=False,
     num_parts = comm.Get_size()
 
     from functools import partial
+
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(True,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -120,7 +123,7 @@ def main(actx_class, use_esdg=False,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None  # noqa
+        quadrature_tag = None
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
@@ -214,7 +217,7 @@ def main(actx_class, use_esdg=False,
         return state, dt
 
     from mirgecom.steppers import advance_state
-    current_step, current_t, advanced_state = \
+    _current_step, _current_t, advanced_state = \
         advance_state(rhs=my_rhs, timestepper=rk4_step,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=dt, state=u, t=t,

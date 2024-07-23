@@ -1,6 +1,7 @@
 # -- Project information -----------------------------------------------------
 import sys
 
+
 project = "mirgecom"
 copyright = ("2020, University of Illinois Board of Trustees")
 author = "Center for Exascale-Enabled Scramjet Design at the University of Illinois"

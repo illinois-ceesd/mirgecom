@@ -30,9 +30,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from grudge.discretization import DiscretizationCollection
 import grudge.op as op
-
+from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 
 

@@ -29,9 +29,11 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from mirgecom.utils import force_evaluation
-from pytools import memoize_in
 from arraycontext import get_container_context_recursively_opt
+
+from pytools import memoize_in
+
+from mirgecom.utils import force_evaluation
 
 
 def _compile_timestepper(actx, timestepper, rhs):
@@ -61,7 +63,7 @@ def _compile_rhs(actx, rhs):
 
 def _is_unevaluated(actx, ary):
     """Check if an array contains an unevaluated :module:`pytato` expression."""
-    from arraycontext import serialize_container, NotAnArrayContainerError
+    from arraycontext import NotAnArrayContainerError, serialize_container
     try:
         iterable = serialize_container(ary)
         for _, subary in iterable:

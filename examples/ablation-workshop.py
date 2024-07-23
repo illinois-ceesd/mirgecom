@@ -22,65 +22,56 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import logging
 import gc
+import logging
+from typing import Optional, Union
+
+import grudge.geometry as geo
 import numpy as np
 import scipy  # type: ignore[import-untyped]
+from grudge import op
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_BASE, BoundaryDomainTag
+from grudge.shortcuts import make_visualizer
+from grudge.trace_pair import TracePair, interior_trace_pairs, tracepair_with_discr_tag
+from logpyle import IntervalTimer, set_dt
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.dof_array import DOFArray
 from scipy.interpolate import CubicSpline  # type: ignore[import-untyped]
 
-from meshmode.dof_array import DOFArray
-from meshmode.discretization.connection import FACE_RESTR_ALL
+from pytools.obj_array import make_obj_array
 
-from grudge.trace_pair import (
-    TracePair, interior_trace_pairs, tracepair_with_discr_tag
-)
-from grudge import op
-import grudge.geometry as geo
-from grudge.dof_desc import DD_VOLUME_ALL
-from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import (
-    BoundaryDomainTag,
-    DISCR_TAG_BASE
+from mirgecom.diffusion import (
+    DirichletDiffusionBoundary,
+    NeumannDiffusionBoundary,
+    PrescribedFluxDiffusionBoundary,
+    diffusion_operator,
 )
 from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import GasDependentVars, GasEOS, MixtureDependentVars, MixtureEOS
+from mirgecom.fluid import ConservedVars
+from mirgecom.gas_model import PorousFlowFluidState
 from mirgecom.integrators import ssprk43_step
-from mirgecom.diffusion import (
-    diffusion_operator,
-    DirichletDiffusionBoundary,
-    PrescribedFluxDiffusionBoundary,
-    NeumannDiffusionBoundary
-)
-from mirgecom.simutil import (
-    check_naninf_local,
-    generate_and_distribute_mesh,
-    write_visfile,
-    check_step
-)
-from mirgecom.mpi import mpi_entry_point
-from mirgecom.utils import force_evaluation
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage
+    logmgr_add_device_memory_usage,
 )
-from mirgecom.eos import (
-    MixtureDependentVars,
-    MixtureEOS,
-    GasEOS,
-    GasDependentVars
+from mirgecom.materials.tacot import TacotEOS as OriginalTacotEOS
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.simutil import (
+    check_naninf_local,
+    check_step,
+    generate_and_distribute_mesh,
+    write_visfile,
 )
 from mirgecom.transport import TransportModel
-from mirgecom.gas_model import PorousFlowFluidState
+from mirgecom.utils import force_evaluation
 from mirgecom.wall_model import (
-    PorousWallVars,
     PorousFlowModel as BasePorousFlowModel,
-    PorousWallTransport
+    PorousWallTransport,
+    PorousWallVars,
 )
-from mirgecom.fluid import ConservedVars
-from mirgecom.materials.tacot import TacotEOS as OriginalTacotEOS
-from logpyle import IntervalTimer, set_dt
-from typing import Optional, Union
-from pytools.obj_array import make_obj_array
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -270,39 +261,39 @@ class GasTabulatedTransport(TransportModel):
 
         #    T     ,  viscosity
         gas_data = np.array([
-            [200.00,  0.086881],
-            [350.00,  0.144380],
-            [500.00,  0.196150],
-            [650.00,  0.243230],
-            [700.00,  0.258610],
-            [750.00,  0.274430],
-            [800.00,  0.290920],
-            [850.00,  0.307610],
-            [900.00,  0.323490],
-            [975.00,  0.344350],
-            [1025.0,  0.356630],
-            [1100.0,  0.373980],
-            [1150.0,  0.385360],
-            [1175.0,  0.391330],
-            [1200.0,  0.397930],
-            [1275.0,  0.421190],
-            [1400.0,  0.458870],
-            [1525.0,  0.483230],
-            [1575.0,  0.487980],
-            [1625.0,  0.491950],
-            [1700.0,  0.502120],
-            [1775.0,  0.516020],
-            [1925.0,  0.545280],
-            [2000.0,  0.559860],
-            [2150.0,  0.588820],
-            [2300.0,  0.617610],
-            [2450.0,  0.646380],
-            [2600.0,  0.675410],
-            [2750.0,  0.705000],
-            [2900.0,  0.735570],
-            [3050.0,  0.767590],
-            [3200.0,  0.801520],
-            [3350.0,  0.837430],
+            [200.00, 0.086881],
+            [350.00, 0.144380],
+            [500.00, 0.196150],
+            [650.00, 0.243230],
+            [700.00, 0.258610],
+            [750.00, 0.274430],
+            [800.00, 0.290920],
+            [850.00, 0.307610],
+            [900.00, 0.323490],
+            [975.00, 0.344350],
+            [1025.0, 0.356630],
+            [1100.0, 0.373980],
+            [1150.0, 0.385360],
+            [1175.0, 0.391330],
+            [1200.0, 0.397930],
+            [1275.0, 0.421190],
+            [1400.0, 0.458870],
+            [1525.0, 0.483230],
+            [1575.0, 0.487980],
+            [1625.0, 0.491950],
+            [1700.0, 0.502120],
+            [1775.0, 0.516020],
+            [1925.0, 0.545280],
+            [2000.0, 0.559860],
+            [2150.0, 0.588820],
+            [2300.0, 0.617610],
+            [2450.0, 0.646380],
+            [2600.0, 0.675410],
+            [2750.0, 0.705000],
+            [2900.0, 0.735570],
+            [3050.0, 0.767590],
+            [3200.0, 0.801520],
+            [3350.0, 0.837430],
         ])
 
         self._cs_viscosity = CubicSpline(gas_data[:, 0], gas_data[:, 1]*1e-4)
@@ -359,39 +350,39 @@ class TabulatedGasEOS(MixtureEOS):
 
         #    T     , M      ,  Cp    , gamma  ,  enthalpy
         gas_data = np.array([
-            [200.00,  21.996,  1.5119,  1.3334,  -7246.50],
-            [350.00,  21.995,  1.7259,  1.2807,  -7006.30],
-            [500.00,  21.948,  2.2411,  1.2133,  -6715.20],
-            [650.00,  21.418,  4.3012,  1.1440,  -6265.70],
-            [700.00,  20.890,  6.3506,  1.1242,  -6004.60],
-            [750.00,  19.990,  9.7476,  1.1131,  -5607.70],
-            [800.00,  18.644,  14.029,  1.1116,  -5014.40],
-            [850.00,  17.004,  17.437,  1.1171,  -4218.50],
-            [900.00,  15.457,  17.009,  1.1283,  -3335.30],
-            [975.00,  14.119,  8.5576,  1.1620,  -2352.90],
-            [1025.0,  13.854,  4.7840,  1.1992,  -2034.20],
-            [1100.0,  13.763,  3.5092,  1.2240,  -1741.20],
-            [1150.0,  13.737,  3.9008,  1.2087,  -1560.90],
-            [1175.0,  13.706,  4.8067,  1.1899,  -1453.50],
-            [1200.0,  13.639,  6.2353,  1.1737,  -1315.90],
-            [1275.0,  13.256,  8.4790,  1.1633,  -739.700],
-            [1400.0,  12.580,  9.0239,  1.1583,  353.3100],
-            [1525.0,  11.982,  11.516,  1.1377,  1608.400],
-            [1575.0,  11.732,  12.531,  1.1349,  2214.000],
-            [1625.0,  11.495,  11.514,  1.1444,  2826.800],
-            [1700.0,  11.255,  7.3383,  1.1849,  3529.400],
-            [1775.0,  11.139,  5.3118,  1.2195,  3991.000],
-            [1925.0,  11.046,  4.2004,  1.2453,  4681.800],
-            [2000.0,  11.024,  4.0784,  1.2467,  4991.300],
-            [2150.0,  10.995,  4.1688,  1.2382,  5605.400],
-            [2300.0,  10.963,  4.5727,  1.2214,  6257.300],
-            [2450.0,  10.914,  5.3049,  1.2012,  6993.500],
-            [2600.0,  10.832,  6.4546,  1.1815,  7869.600],
-            [2750.0,  10.701,  8.1450,  1.1650,  8956.900],
-            [2900.0,  10.503,  10.524,  1.1528,  10347.00],
-            [3050.0,  10.221,  13.755,  1.1449,  12157.00],
-            [3200.0,  9.8394,  17.957,  1.1408,  14523.00],
-            [3350.0,  9.3574,  22.944,  1.1401,  17584.00],
+            [200.00, 21.996, 1.5119, 1.3334, -7246.50],
+            [350.00, 21.995, 1.7259, 1.2807, -7006.30],
+            [500.00, 21.948, 2.2411, 1.2133, -6715.20],
+            [650.00, 21.418, 4.3012, 1.1440, -6265.70],
+            [700.00, 20.890, 6.3506, 1.1242, -6004.60],
+            [750.00, 19.990, 9.7476, 1.1131, -5607.70],
+            [800.00, 18.644, 14.029, 1.1116, -5014.40],
+            [850.00, 17.004, 17.437, 1.1171, -4218.50],
+            [900.00, 15.457, 17.009, 1.1283, -3335.30],
+            [975.00, 14.119, 8.5576, 1.1620, -2352.90],
+            [1025.0, 13.854, 4.7840, 1.1992, -2034.20],
+            [1100.0, 13.763, 3.5092, 1.2240, -1741.20],
+            [1150.0, 13.737, 3.9008, 1.2087, -1560.90],
+            [1175.0, 13.706, 4.8067, 1.1899, -1453.50],
+            [1200.0, 13.639, 6.2353, 1.1737, -1315.90],
+            [1275.0, 13.256, 8.4790, 1.1633, -739.700],
+            [1400.0, 12.580, 9.0239, 1.1583, 353.3100],
+            [1525.0, 11.982, 11.516, 1.1377, 1608.400],
+            [1575.0, 11.732, 12.531, 1.1349, 2214.000],
+            [1625.0, 11.495, 11.514, 1.1444, 2826.800],
+            [1700.0, 11.255, 7.3383, 1.1849, 3529.400],
+            [1775.0, 11.139, 5.3118, 1.2195, 3991.000],
+            [1925.0, 11.046, 4.2004, 1.2453, 4681.800],
+            [2000.0, 11.024, 4.0784, 1.2467, 4991.300],
+            [2150.0, 10.995, 4.1688, 1.2382, 5605.400],
+            [2300.0, 10.963, 4.5727, 1.2214, 6257.300],
+            [2450.0, 10.914, 5.3049, 1.2012, 6993.500],
+            [2600.0, 10.832, 6.4546, 1.1815, 7869.600],
+            [2750.0, 10.701, 8.1450, 1.1650, 8956.900],
+            [2900.0, 10.503, 10.524, 1.1528, 10347.00],
+            [3050.0, 10.221, 13.755, 1.1449, 12157.00],
+            [3200.0, 9.8394, 17.957, 1.1408, 14523.00],
+            [3350.0, 9.3574, 22.944, 1.1401, 17584.00],
         ])
 
         self._cs_molar_mass = CubicSpline(gas_data[:, 0], gas_data[:, 1])
@@ -597,7 +588,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
     logmgr = initialize_logmgr(use_logmgr,
         filename="ablation.sqlite", mode="wo", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -611,7 +602,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
     order = 3
     dt = 2.0e-8
-    pressure_scaling_factor = 1.0  # noqa N806
+    pressure_scaling_factor = 1.0  # N806
 
     nviz = 200
     ngarbage = 50
@@ -1206,7 +1197,7 @@ if __name__ == "__main__":
         help="use leap timestepper")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
-    parser.add_argument("-r", "--restart_file",  type=ascii,
+    parser.add_argument("-r", "--restart_file", type=ascii,
                         dest="restart_file", nargs="?", action="store",
                         help="simulation restart file")
     parser.add_argument("--casename", help="casename to use for i/o")

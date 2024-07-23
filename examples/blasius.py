@@ -24,45 +24,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import os
 import logging
-import numpy as np
+import os
 
+import numpy as np
+from arraycontext import get_container_context_recursively
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_QUAD
+from grudge.shortcuts import compiled_lsrk45_step, make_visualizer
 from logpyle import IntervalTimer, set_dt
 
-from grudge.shortcuts import make_visualizer, compiled_lsrk45_step
-from grudge.dof_desc import DISCR_TAG_QUAD, DD_VOLUME_ALL
-
-from mirgecom.discretization import create_discretization_collection
-from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import (
-    check_step,
-    get_sim_timestep,
-    write_visfile,
-    check_naninf_local,
-    distribute_mesh,
-    global_reduce
-)
-from mirgecom.restart import write_restart_file
-from mirgecom.io import make_init_message
-from mirgecom.mpi import mpi_entry_point
-from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    PressureOutflowBoundary,
     AdiabaticSlipBoundary,
     IsothermalWallBoundary,
     LinearizedInflowBoundary,
     LinearizedOutflowBoundary,
+    PressureOutflowBoundary,
 )
-from mirgecom.utils import force_evaluation
-from mirgecom.fluid import make_conserved
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.io import make_init_message
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_cl_device_info, logmgr_set_time,
+    logmgr_add_cl_device_info,
+    logmgr_set_time,
 )
-from arraycontext import get_container_context_recursively
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.navierstokes import ns_operator
+from mirgecom.restart import write_restart_file
+from mirgecom.simutil import (
+    check_naninf_local,
+    check_step,
+    distribute_mesh,
+    get_sim_timestep,
+    global_reduce,
+    write_visfile,
+)
+from mirgecom.steppers import advance_state
+from mirgecom.utils import force_evaluation
+
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     logmgr = initialize_logmgr(True, filename=(f"{casename}.sqlite"),
                                mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -502,13 +503,13 @@ if __name__ == "__main__":
 
     import argparse
     parser = argparse.ArgumentParser(description="MIRGE-Com 1D Flame Driver")
-    parser.add_argument("-r", "--restart_file",  type=ascii,
+    parser.add_argument("-r", "--restart_file", type=ascii,
                         dest="restart_file", nargs="?", action="store",
                         help="simulation restart file")
-    parser.add_argument("-i", "--input_file",  type=ascii,
+    parser.add_argument("-i", "--input_file", type=ascii,
                         dest="input_file", nargs="?", action="store",
                         help="simulation config file")
-    parser.add_argument("-c", "--casename",  type=ascii,
+    parser.add_argument("-c", "--casename", type=ascii,
                         dest="casename", nargs="?", action="store",
                         help="simulation case name")
     parser.add_argument("--overintegration", action="store_true",

@@ -24,34 +24,36 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
-import pytest
 
+import grudge.op as op
+import numpy as np
+import numpy.linalg as la
+import numpy.random
+import pytest
+from grudge.dof_desc import as_dofdesc
+from grudge.trace_pair import TracePair
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+import pyopencl.clmath  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import as_dofdesc
-from grudge.trace_pair import TracePair
-from mirgecom.fluid import make_conserved
-from mirgecom.eos import IdealSingleGas
 from mirgecom.discretization import create_discretization_collection
-import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
 from mirgecom.inviscid import (
-    inviscid_flux,
+    inviscid_facial_flux_hll,
     inviscid_facial_flux_rusanov,
-    inviscid_facial_flux_hll
+    inviscid_flux,
 )
+
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +91,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
         from meshmode.dof_array import DOFArray
         return DOFArray(
             actx,
-            tuple(actx.from_numpy(np.random.rand(grp.nelements, grp.nunit_dofs))
+            tuple(actx.from_numpy(np.random.rand(grp.nelements, grp.nunit_dofs))  # noqa: NPY002
                   for grp in dcoll.discr_from_dd("vol").groups)
         )
 
@@ -289,6 +291,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
     p0 = 1.0
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+
     from pytools.convergence import EOCRecorder
 
     eoc_rec0 = EOCRecorder()
@@ -322,10 +325,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         cv_interior_pairs = interior_trace_pairs(dcoll, cv)
         # Check the boundary facial fluxes as called on an interior boundary
         # eos = IdealSingleGas()
-        from mirgecom.gas_model import (
-            GasModel,
-            make_fluid_state
-        )
+        from mirgecom.gas_model import GasModel, make_fluid_state
         gas_model = GasModel(eos=IdealSingleGas())
 
         from mirgecom.gas_model import make_fluid_state_trace_pairs

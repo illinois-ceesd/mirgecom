@@ -20,27 +20,28 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
-from pytools.obj_array import flat_obj_array, make_obj_array
-import pymbolic as pmbl
-import pymbolic.primitives as prim
-import mirgecom.symbolic as sym
-from mirgecom.wave import wave_operator
-from mirgecom.discretization import create_discretization_collection
-import grudge.op as op
-
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-
-import pytest
-
+import logging
 from dataclasses import dataclass
 from typing import Callable
 
-import logging
+import grudge.op as op
+import numpy as np
+import pymbolic as pmbl
+import pymbolic.primitives as prim
+import pytest
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+
+import pyopencl.array as cla  # noqa
+import pyopencl.clmath as clmath  # noqa
+from pytools.obj_array import flat_obj_array, make_obj_array
+
+import mirgecom.symbolic as sym
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.wave import wave_operator
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -191,8 +192,7 @@ def test_wave_accuracy(actx_factory, problem, order, visualize=False):
         if visualize:
             from grudge.shortcuts import make_visualizer
             vis = make_visualizer(dcoll, order)
-            vis.write_vtk_file("wave_accuracy_{order}_{n}.vtu".format(order=order,
-                        n=n), [
+            vis.write_vtk_file(f"wave_accuracy_{order}_{n}.vtu", [
                             ("u", fields[0]),
                             ("v", fields[1:]),
                             ("rhs_u_actual", rhs[0]),
@@ -223,7 +223,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     p = problem
 
-    sym_u, sym_v, sym_f, sym_rhs = sym_wave(p.dim, p.sym_phi)
+    sym_u, sym_v, sym_f, _sym_rhs = sym_wave(p.dim, p.sym_phi)
 
     mesh = p.mesh_factory(8)
 

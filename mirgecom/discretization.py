@@ -31,6 +31,7 @@ THE SOFTWARE.
 """
 import logging
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,12 +54,12 @@ def create_discretization_collection(actx, volume_meshes, order, *,
             "tensor_product_elements argument is not needed and will vanish soon.",
             DeprecationWarning, stacklevel=2)
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DISCR_TAG_MODAL
     from grudge.discretization import make_discretization_collection
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_MODAL, DISCR_TAG_QUAD
     from meshmode.discretization.poly_element import (
         InterpolatoryEdgeClusteredGroupFactory,
+        ModalGroupFactory,
         QuadratureGroupFactory,
-        ModalGroupFactory
     )
 
     if quadrature_order < 0:

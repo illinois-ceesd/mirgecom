@@ -51,7 +51,9 @@ THE SOFTWARE.
 """
 
 import numpy as np
+
 from pytools.obj_array import make_obj_array
+
 from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 

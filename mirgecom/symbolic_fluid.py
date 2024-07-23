@@ -16,13 +16,11 @@ Symbolic fluid operators
 """
 import numpy as np
 import numpy.random
-
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.fluid import make_conserved
 
-from mirgecom.symbolic import (
-    grad as sym_grad,
-    div as sym_div)
+from mirgecom.fluid import make_conserved
+from mirgecom.symbolic import div as sym_div, grad as sym_grad
+
 
 # from mirgecom.eos import IdealSingleGas
 # from mirgecom.transport import SimpleTransport

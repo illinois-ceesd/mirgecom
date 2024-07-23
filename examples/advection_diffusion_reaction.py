@@ -24,35 +24,35 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-
+from grudge import op
+from grudge.dof_desc import DD_VOLUME_ALL, BoundaryDomainTag
+from grudge.geometry import normal as normal_vector
+from grudge.shortcuts import make_visualizer
+from grudge.trace_pair import TracePair, interior_trace_pairs
+from logpyle import set_dt
 from meshmode.mesh import BTAG_ALL
 
-from grudge.geometry import normal as normal_vector
-from grudge.trace_pair import TracePair, interior_trace_pairs
-from grudge.dof_desc import BoundaryDomainTag, DD_VOLUME_ALL
-from grudge.shortcuts import make_visualizer
-from grudge import op
-
-from logpyle import set_dt
-
-from mirgecom.io import make_init_message
+from mirgecom.diffusion import (
+    NeumannDiffusionBoundary,
+    RobinDiffusionBoundary,
+    diffusion_operator,
+)
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
+from mirgecom.io import make_init_message
+from mirgecom.logging_quantities import (
+    initialize_logmgr,
+    logmgr_add_cl_device_info,
+    logmgr_set_time,
+)
+from mirgecom.mpi import mpi_entry_point
 from mirgecom.simutil import (
+    check_naninf_local,
+    check_step,
     generate_and_distribute_mesh,
     write_visfile,
-    check_naninf_local,
-    check_step
 )
 from mirgecom.utils import force_evaluation
-from mirgecom.diffusion import (
-    diffusion_operator,
-    NeumannDiffusionBoundary,
-    RobinDiffusionBoundary)
-from mirgecom.logging_quantities import (
-    initialize_logmgr, logmgr_set_time, logmgr_add_cl_device_info
-)
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +108,7 @@ def linear_advection_operator(dcoll, u, u_bc, *, comm_tag=None):
     el_bnd_flux = (
         _facial_flux(dcoll, u_tpair=TracePair(dd=dd.with_domain_tag(BTAG_ALL),
                                               interior=u_bnd, exterior=u_bc))
-        + sum([_facial_flux(dcoll, u_tpair=tpair) for tpair in itp]))
+        + sum(_facial_flux(dcoll, u_tpair=tpair) for tpair in itp))
 
     # volume term
     vol_flux = op.weak_local_d_dx(dcoll, 0, u)
@@ -127,6 +127,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     rank = comm.Get_rank()
 
     from functools import partial
+
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
@@ -302,7 +303,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
 
     # ~~~ compute BC error
     dd = DD_VOLUME_ALL
-    visc, grad = diffusion_operator(dcoll, kappa=kappa, boundaries=boundaries,
+    _visc, grad = diffusion_operator(dcoll, kappa=kappa, boundaries=boundaries,
                                     u=current_cv, penalty_amount=0.0,
                                     return_grad_u=True)
 

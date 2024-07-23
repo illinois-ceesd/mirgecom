@@ -23,7 +23,9 @@ THE SOFTWARE.
 """
 
 import logging
+
 from mirgecom.mechanisms import get_mechanism_input
+
 
 logger = logging.getLogger(__name__)
 

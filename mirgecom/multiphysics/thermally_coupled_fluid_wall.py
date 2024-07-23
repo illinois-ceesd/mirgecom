@@ -65,51 +65,49 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from dataclasses import dataclass, replace
-import numpy as np
 from abc import abstractmethod
+from dataclasses import dataclass, replace
 from functools import partial
 
+import grudge.op as op
+import numpy as np
 from arraycontext import dataclass_array_container
-from meshmode.dof_array import DOFArray
-from grudge.trace_pair import (
-    TracePair,
-    inter_volume_trace_pairs
-)
 from grudge.dof_desc import (
     DISCR_TAG_BASE,
     as_dofdesc,
 )
-import grudge.op as op
+from grudge.trace_pair import TracePair, inter_volume_trace_pairs
+from meshmode.dof_array import DOFArray
 
-from mirgecom.math import harmonic_mean
 from mirgecom.boundary import (
-    MengaldoBoundaryCondition,
-    _SlipBoundaryComponent,
-    _NoSlipBoundaryComponent,
-    _ImpermeableBoundaryComponent,
     IsothermalSlipWallBoundary,
-    IsothermalWallBoundary)
-from mirgecom.flux import num_flux_central
-from mirgecom.viscous import viscous_facial_flux_harmonic
-from mirgecom.gas_model import (
-    replace_fluid_state,
-    make_operator_fluid_states,
+    IsothermalWallBoundary,
+    MengaldoBoundaryCondition,
+    _ImpermeableBoundaryComponent,
+    _NoSlipBoundaryComponent,
+    _SlipBoundaryComponent,
 )
+from mirgecom.diffusion import (
+    DiffusionBoundary,
+    diffusion_facial_flux_harmonic,
+    diffusion_flux,
+    diffusion_operator,
+    grad_facial_flux_weighted,
+    grad_operator as wall_grad_t_operator,
+)
+from mirgecom.flux import num_flux_central
+from mirgecom.gas_model import (
+    make_operator_fluid_states,
+    replace_fluid_state,
+)
+from mirgecom.math import harmonic_mean
+from mirgecom.multiphysics import make_interface_boundaries
 from mirgecom.navierstokes import (
     grad_t_operator as fluid_grad_t_operator,
     ns_operator,
 )
-from mirgecom.diffusion import (
-    grad_facial_flux_weighted,
-    diffusion_flux,
-    diffusion_facial_flux_harmonic,
-    DiffusionBoundary,
-    grad_operator as wall_grad_t_operator,
-    diffusion_operator,
-)
-from mirgecom.multiphysics import make_interface_boundaries
 from mirgecom.utils import project_from_base
+from mirgecom.viscous import viscous_facial_flux_harmonic
 
 
 class _ThermalDataNoGradInterVolTag:
@@ -372,7 +370,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
         self._impermeable = _ImpermeableBoundaryComponent()
 
     def state_plus(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
@@ -385,7 +383,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
         return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
     def state_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
 
         cv_minus = state_minus.cv
@@ -422,7 +420,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus,
-            normal, **kwargs):  # noqa: D102
+            normal, **kwargs):
         dd_bdry = as_dofdesc(dd_bdry)
         state_bc = self.state_bc(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
@@ -443,16 +441,16 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
             species_mass=grad_species_mass_bc)
 
     def temperature_plus(
-            self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, state_minus, **kwargs):
         return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
 
-    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         kappa_minus = state_minus.tv.thermal_conductivity
         return self._thermally_coupled.temperature_bc(
             dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
     def grad_temperature_bc(
-            self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         return self._thermally_coupled.grad_temperature_bc(
             dcoll, dd_bdry, grad_t_minus)
 
@@ -515,7 +513,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
         self._impermeable = _ImpermeableBoundaryComponent()
 
     def state_plus(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         dd_bdry = as_dofdesc(dd_bdry)
         mom_plus = self._no_slip.momentum_plus(state_minus.momentum_density)
 
@@ -523,7 +521,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
         return replace_fluid_state(state_minus, gas_model, momentum=mom_plus)
 
     def state_bc(
-            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         dd_bdry = as_dofdesc(dd_bdry)
 
         kappa_minus = state_minus.tv.thermal_conductivity
@@ -551,23 +549,23 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
 
     def grad_cv_bc(
             self, dcoll, dd_bdry, gas_model, state_minus, grad_cv_minus, normal,
-            **kwargs):  # noqa: D102
+            **kwargs):
         grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
             state_minus, grad_cv_minus, normal)
 
         return grad_cv_minus.replace(species_mass=grad_species_mass_bc)
 
     def temperature_plus(
-            self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, state_minus, **kwargs):
         return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
 
-    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
+    def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):
         kappa_minus = state_minus.tv.thermal_conductivity
         return self._thermally_coupled.temperature_bc(
             dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
     def grad_temperature_bc(
-            self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):  # noqa: D102
+            self, dcoll, dd_bdry, grad_t_minus, normal, **kwargs):
         return self._thermally_coupled.grad_temperature_bc(
             dcoll, dd_bdry, grad_t_minus)
 
@@ -610,7 +608,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+            numerical_flux_func=grad_facial_flux_weighted):
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
@@ -627,7 +625,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, *, penalty_amount=None,
-            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+            numerical_flux_func=diffusion_facial_flux_harmonic):
         if self.grad_u_plus is None:
             raise TypeError(
                 "Boundary does not have external gradient data.")
@@ -714,7 +712,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
-            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+            numerical_flux_func=grad_facial_flux_weighted):
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
@@ -727,7 +725,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
     def get_diffusion_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
             lengthscales_minus, *, penalty_amount=None,
-            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+            numerical_flux_func=diffusion_facial_flux_harmonic):
         if self.grad_u_plus is None:
             raise TypeError("External temperature gradient is not specified.")
         if self.emissivity is None:

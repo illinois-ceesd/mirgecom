@@ -60,42 +60,30 @@ THE SOFTWARE.
 from functools import partial
 from warnings import warn
 
-from meshmode.discretization.connection import FACE_RESTR_ALL
-
-from grudge.trace_pair import (
-    TracePair,
-    interior_trace_pairs,
-    tracepair_with_discr_tag
-)
+import grudge.op as op
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
-    VolumeDomainTag,
     DISCR_TAG_BASE,
+    VolumeDomainTag,
 )
+from grudge.trace_pair import TracePair, interior_trace_pairs, tracepair_with_discr_tag
+from meshmode.discretization.connection import FACE_RESTR_ALL
 
-import grudge.op as op
-
-from mirgecom.euler import (
-    euler_operator,
-    entropy_stable_euler_operator
-)
+from mirgecom.euler import entropy_stable_euler_operator, euler_operator
+from mirgecom.flux import num_flux_central
+from mirgecom.gas_model import make_operator_fluid_states
 from mirgecom.inviscid import (
-    inviscid_flux,
     inviscid_facial_flux_rusanov,
+    inviscid_flux,
     inviscid_flux_on_element_boundary,
 )
-from mirgecom.viscous import (
-    viscous_flux,
-    viscous_facial_flux_central,
-    viscous_flux_on_element_boundary
-)
-from mirgecom.flux import num_flux_central
-
-from mirgecom.operators import (
-    div_operator, grad_operator
-)
-from mirgecom.gas_model import make_operator_fluid_states
+from mirgecom.operators import div_operator, grad_operator
 from mirgecom.utils import normalize_boundaries
+from mirgecom.viscous import (
+    viscous_facial_flux_central,
+    viscous_flux,
+    viscous_flux_on_element_boundary,
+)
 
 
 class _NSGradCVTag:
@@ -106,11 +94,11 @@ class _NSGradTemperatureTag:
     pass
 
 
-class _ESFluidCVTag():
+class _ESFluidCVTag:
     pass
 
 
-class _ESFluidTemperatureTag():
+class _ESFluidTemperatureTag:
     pass
 
 

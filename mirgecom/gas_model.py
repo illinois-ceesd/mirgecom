@@ -49,34 +49,30 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from functools import partial
 from dataclasses import dataclass
+from functools import partial
 from typing import Optional
-import numpy as np  # noqa
+
+import grudge.op as op
+import numpy as np
 from arraycontext import dataclass_array_container
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
-    VolumeDomainTag,
     DISCR_TAG_BASE,
+    VolumeDomainTag,
 )
-import grudge.op as op
-from grudge.trace_pair import (
-    interior_trace_pairs,
-    tracepair_with_discr_tag
+from grudge.trace_pair import interior_trace_pairs, tracepair_with_discr_tag
+
+from mirgecom.eos import (
+    GasDependentVars,
+    GasEOS,
+    MixtureDependentVars,
+    MixtureEOSNeededError,
 )
 from mirgecom.fluid import ConservedVars
-from mirgecom.eos import (
-    GasEOS,
-    GasDependentVars,
-    MixtureDependentVars,
-    MixtureEOSNeededError
-)
-from mirgecom.transport import (
-    TransportModel,
-    GasTransportVars
-)
+from mirgecom.transport import GasTransportVars, TransportModel
 from mirgecom.utils import normalize_boundaries
-from mirgecom.wall_model import PorousWallVars, PorousFlowModel
+from mirgecom.wall_model import PorousFlowModel, PorousWallVars
 
 
 @dataclass(frozen=True)

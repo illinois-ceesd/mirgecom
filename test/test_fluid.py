@@ -24,21 +24,23 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
-import pytest
 
+import grudge.op as op
+import numpy as np
+import numpy.linalg as la  # noqa
+import numpy.random
+import pytest
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+
+import pyopencl.clmath  # noqa
 from pytools.obj_array import make_obj_array
 
-from mirgecom.fluid import make_conserved
 from mirgecom.discretization import create_discretization_collection
-import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from mirgecom.fluid import make_conserved
+
 
 logger = logging.getLogger(__name__)
 
@@ -222,8 +224,8 @@ def test_species_mass_gradient(actx_factory, dim):
     y = make_obj_array([ones for _ in range(nspecies)])
     for idim in range(dim):
         ispec = 2*idim
-        y[ispec] = ispec*(idim*dim+1)*sum([(iidim+1)*nodes[iidim]
-                                           for iidim in range(dim)])
+        y[ispec] = ispec*(idim*dim+1)*sum((iidim+1)*nodes[iidim]
+                                           for iidim in range(dim))
         y[ispec+1] = -y[ispec]
     species_mass = mass*y
 

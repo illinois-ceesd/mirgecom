@@ -37,7 +37,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np  # noqa
-from meshmode.dof_array import DOFArray  # noqa
+from meshmode.dof_array import DOFArray
 from dataclasses import dataclass, fields, field
 from arraycontext import (
     dataclass_array_container,
@@ -324,7 +324,7 @@ def _join_conserved(dim, mass, energy, momentum, species_mass=None):
     from pytools import single_valued
     aux_shape = single_valued(aux_shapes)
 
-    result = np.empty((2+dim+nspec,) + aux_shape, dtype=object)
+    result = np.empty((2 + dim + nspec, *aux_shape), dtype=object)
     result[0] = mass
     result[1] = energy
     result[2:dim+2] = momentum

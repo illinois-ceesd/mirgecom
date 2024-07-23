@@ -20,22 +20,25 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
+
+import grudge.op as op
 import numpy as np
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
-from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
+import pytest
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
 from meshmode.mesh.generation import generate_regular_rect_mesh
+
+import pyopencl.array as cla  # noqa
+import pyopencl.clmath as clmath  # noqa
+from pytools.obj_array import make_obj_array
+
 import mirgecom.symbolic as sym
 from mirgecom.discretization import create_discretization_collection
-import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
 
-import pytest
 
-import logging
 logger = logging.getLogger(__name__)
 
 

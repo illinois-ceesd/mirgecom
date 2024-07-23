@@ -24,49 +24,40 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-import numpy.random
-import numpy.linalg as la  # noqa
-import pyopencl.clmath  # noqa
 import logging
-import pytest
+from abc import ABCMeta, abstractmethod
 
+import grudge.op as op
+import numpy as np
+import numpy.linalg as la  # noqa
+import numpy.random
+import pymbolic as pmbl
+import pytest
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.dof_array import DOFArray
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
+import pyopencl.clmath  # noqa
 from pytools.obj_array import (
     flat_obj_array,
     make_obj_array,
 )
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from mirgecom.navierstokes import ns_operator
-from mirgecom.fluid import make_conserved
-
+import mirgecom.math as mm
 from mirgecom.boundary import (
     DummyBoundary,
     PrescribedFluidBoundary,
 )
-from mirgecom.eos import IdealSingleGas
-from mirgecom.transport import SimpleTransport
 from mirgecom.discretization import create_discretization_collection
-import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-from abc import ABCMeta, abstractmethod
-from meshmode.dof_array import DOFArray
-import pymbolic as pmbl
-from mirgecom.symbolic import (
-    diff as sym_diff,
-    evaluate)
-import mirgecom.math as mm
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
-from mirgecom.simutil import (
-    compare_fluid_solutions,
-    componentwise_norms,
-    get_box_mesh
-)
+from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.navierstokes import ns_operator
+from mirgecom.simutil import compare_fluid_solutions, componentwise_norms, get_box_mesh
+from mirgecom.symbolic import diff as sym_diff, evaluate
+from mirgecom.transport import SimpleTransport
 
 
 logger = logging.getLogger(__name__)
@@ -588,7 +579,7 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     dcv_dt = sym_diff(sym_t)(sym_cv)
     print(f"{dcv_dt=}")
 
-    from mirgecom.symbolic_fluid import sym_ns, sym_euler
+    from mirgecom.symbolic_fluid import sym_euler, sym_ns
     sym_ns_rhs = sym_ns(sym_cv, sym_prs, sym_tmp, mu)
     sym_euler_rhs = sym_euler(sym_cv, sym_prs)
 
@@ -700,7 +691,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         fluid_state = exact_fluid_state
 
         # Exact solution should have RHS=0, so the RHS itself is the residual
-        ns_rhs, grad_cv, grad_t = ns_operator(dcoll, gas_model=gas_model,
+        ns_rhs, grad_cv, _grad_t = ns_operator(dcoll, gas_model=gas_model,
                                               state=fluid_state,
                                               boundaries=boundaries,
                                               return_gradients=True)
@@ -708,8 +699,7 @@ def test_shear_flow(actx_factory, dim, flow_direction, order):
         if visualize:
             from grudge.shortcuts import make_visualizer
             vis = make_visualizer(dcoll, order)
-            vis.write_vtk_file("shear_flow_test_{order}_{n}.vtu".format(
-                order=order, n=n), [
+            vis.write_vtk_file(f"shear_flow_test_{order}_{n}.vtu", [
                     ("shear_flow", exact_fluid_state.cv),
                     ("rhs", ns_rhs),
                     ("grad(E)", grad_cv.energy),

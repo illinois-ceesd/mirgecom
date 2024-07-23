@@ -32,13 +32,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Type, Dict, Any
-import os
 import logging
+import os
+from typing import Any, Dict, Type
+
+from arraycontext import ArrayContext, PyOpenCLArrayContext, PytatoPyOpenCLArrayContext
 
 import pyopencl as cl
-from arraycontext import (ArrayContext, PyOpenCLArrayContext,
-                          PytatoPyOpenCLArrayContext)
+
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +70,9 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
         from mirgecom.profiling import PyOpenCLProfilingArrayContext
         return PyOpenCLProfilingArrayContext
 
-    from grudge.array_context import \
-        get_reasonable_array_context_class as grudge_get_reasonable_actx_class
+    from grudge.array_context import (
+        get_reasonable_array_context_class as grudge_get_reasonable_actx_class,
+    )
 
     return grudge_get_reasonable_actx_class(lazy=lazy, distributed=distributed)
 
@@ -168,6 +170,7 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
     PCI_DOMAIN_ID_NV extension.
     """
     from mpi4py import MPI
+
     import pyopencl as cl
 
     assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
@@ -225,7 +228,7 @@ def log_disk_cache_config(actx: ArrayContext) -> None:
     rank = MPI.COMM_WORLD.Get_rank()
     res = f"Rank {rank} disk cache config: "
 
-    from pyopencl.characterize import nv_compute_capability, get_pocl_version
+    from pyopencl.characterize import get_pocl_version, nv_compute_capability
     dev = actx.queue.device
 
     # Variables set to a 'True' value => cache is disabled
@@ -270,9 +273,11 @@ def initialize_actx(
         use_axis_tag_inference_fallback: bool = False,
         use_einsum_inference_fallback: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
-    from grudge.array_context import (MPIPyOpenCLArrayContext,
-                                      MPIPytatoArrayContext,
-                                      MPINumpyArrayContext)
+    from grudge.array_context import (
+        MPINumpyArrayContext,
+        MPIPyOpenCLArrayContext,
+        MPIPytatoArrayContext,
+    )
 
     actx_kwargs: Dict[str, Any] = {}
 

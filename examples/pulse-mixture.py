@@ -26,44 +26,40 @@ THE SOFTWARE.
 
 import logging
 from functools import partial
-import numpy as np
+
 import cantera
-
-from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD, DD_VOLUME_ALL
+import numpy as np
 from grudge import op
-
+from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_QUAD, BoundaryDomainTag
+from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
 
-from mirgecom.mpi import mpi_entry_point
-from mirgecom.discretization import create_discretization_collection
-from mirgecom.euler import euler_operator
-from mirgecom.simutil import generate_and_distribute_mesh
-from mirgecom.io import make_init_message
-from mirgecom.utils import force_evaluation
-from mirgecom.integrators import rk4_step
-from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
-    LinearizedOutflowBoundary,
+    AdiabaticSlipBoundary,
     LinearizedInflowBoundary,
+    LinearizedOutflowBoundary,
     # RiemannInflowBoundary,
     PressureOutflowBoundary,
-    AdiabaticSlipBoundary
 )
-from mirgecom.initializers import AcousticPulse, initialize_flow_solution
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import PyrometheusMixture
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
-from mirgecom.euler import extract_vars_for_logging, units_for_logging
+from mirgecom.euler import euler_operator, extract_vars_for_logging, units_for_logging
+from mirgecom.gas_model import GasModel, make_fluid_state
+from mirgecom.initializers import AcousticPulse, initialize_flow_solution
+from mirgecom.integrators import rk4_step
+from mirgecom.io import make_init_message
 from mirgecom.logging_quantities import (
     initialize_logmgr,
-    logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage
+    logmgr_add_device_memory_usage,
+    logmgr_add_many_discretization_quantities,
 )
+from mirgecom.mpi import mpi_entry_point
+from mirgecom.simutil import generate_and_distribute_mesh
+from mirgecom.steppers import advance_state
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+from mirgecom.utils import force_evaluation
+
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +89,7 @@ def main(actx_class, use_esdg=False,
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import actx_class_is_profiling, initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
@@ -424,6 +420,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from warnings import warn
+
     from mirgecom.simutil import ApplicationOptionsError
     if args.esdg:
         if not args.lazy and not args.numpy:

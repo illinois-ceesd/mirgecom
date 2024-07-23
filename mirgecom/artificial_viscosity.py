@@ -125,39 +125,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
-
-from pytools import memoize_in, keyed_memoize_in
 from functools import partial
-from meshmode.dof_array import DOFArray
-from meshmode.discretization.connection import FACE_RESTR_ALL
 
-from mirgecom.flux import num_flux_central
-from mirgecom.operators import div_operator
-
-from grudge.trace_pair import (
-    interior_trace_pairs,
-    tracepair_with_discr_tag
-)
-
+import grudge.op as op
+import numpy as np
+from arraycontext import get_container_context_recursively
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
-    VolumeDomainTag,
     DISCR_TAG_BASE,
     DISCR_TAG_MODAL,
+    VolumeDomainTag,
+    as_dofdesc,
 )
+from grudge.trace_pair import TracePair, interior_trace_pairs, tracepair_with_discr_tag
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.dof_array import DOFArray
 
-from mirgecom.utils import normalize_boundaries
-from arraycontext import get_container_context_recursively
-from grudge.dof_desc import as_dofdesc
-from grudge.trace_pair import TracePair
-import grudge.op as op
+from pytools import keyed_memoize_in, memoize_in
 
 from mirgecom.boundary import (
     AdiabaticNoslipWallBoundary,
+    IsothermalWallBoundary,
     PrescribedFluidBoundary,
-    IsothermalWallBoundary
 )
+from mirgecom.flux import num_flux_central
+from mirgecom.operators import div_operator
+from mirgecom.utils import normalize_boundaries
 
 
 class _AVRTag:
@@ -362,7 +355,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
             dcoll, fluid_state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag)
 
-    vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
+    _vol_state_quad, _inter_elem_bnd_states_quad, _domain_bnd_states_quad = \
         operator_states_quad
 
     # Get smoothness indicator based on mass component
@@ -444,8 +437,11 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
     def indicator_prg():
         """Compute the smoothness indicator for all elements."""
         from arraycontext import make_loopy_program
-        from meshmode.transform_metadata import (ConcurrentElementInameTag,
-                                                 ConcurrentDOFInameTag)
+        from meshmode.transform_metadata import (
+            ConcurrentDOFInameTag,
+            ConcurrentElementInameTag,
+        )
+
         import loopy as lp
         t_unit = make_loopy_program([
             "{[iel]: 0 <= iel < nelements}",

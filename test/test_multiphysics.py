@@ -20,44 +20,43 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import numpy as np
+import logging
 from dataclasses import replace
 from functools import partial
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
-from pytools.obj_array import make_obj_array
+
 import grudge.op as op
-from mirgecom.simutil import (
-    max_component_norm,
-    get_box_mesh
+import numpy as np
+import pytest
+from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DOFDesc, VolumeDomainTag
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
+
+import pyopencl.array as cla  # noqa
+import pyopencl.clmath as clmath  # noqa
+from pytools.obj_array import make_obj_array
+
 import mirgecom.math as mm
-from mirgecom.diffusion import (
-    diffusion_operator,
-    DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary)
-from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
-from mirgecom.discretization import create_discretization_collection
-from mirgecom.eos import IdealSingleGas
-from mirgecom.transport import SimpleTransport
-from mirgecom.fluid import make_conserved
-from mirgecom.gas_model import (
-    GasModel,
-    make_fluid_state
-)
 from mirgecom.boundary import (
     AdiabaticNoslipWallBoundary,
     IsothermalWallBoundary,
 )
+from mirgecom.diffusion import (
+    DirichletDiffusionBoundary,
+    NeumannDiffusionBoundary,
+    diffusion_operator,
+)
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
+from mirgecom.gas_model import GasModel, make_fluid_state
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-import pytest
+from mirgecom.simutil import get_box_mesh, max_component_norm
+from mirgecom.transport import SimpleTransport
 
-import logging
+
 logger = logging.getLogger(__name__)
 
 

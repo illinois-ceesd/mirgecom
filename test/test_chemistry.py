@@ -24,27 +24,26 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
-import numpy as np
-import pyopencl as cl
-import pytest
 import cantera
+import numpy as np
+import pytest
+from grudge import op
+from meshmode.array_context import (  # noqa
+    PyOpenCLArrayContext,
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.mesh.generation import generate_regular_rect_mesh
+
+import pyopencl as cl
 from pytools.obj_array import make_obj_array
 
-from grudge import op
-
-from meshmode.array_context import PyOpenCLArrayContext
-from meshmode.mesh.generation import generate_regular_rect_mesh
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-
-from mirgecom.fluid import make_conserved
-from mirgecom.eos import PyrometheusMixture
 from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import PyrometheusMixture
+from mirgecom.fluid import make_conserved
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import (
+    get_pyrometheus_wrapper_class,
     get_pyrometheus_wrapper_class_from_cantera,
-    get_pyrometheus_wrapper_class
 )
 
 
@@ -211,7 +210,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
         # see CHEMKIN manual for more details
         mmw = pyro_obj.get_mix_molecular_weight(yin)
         _x = pyro_obj.get_mole_fractions(mmw, yin)
-        mole_fracs = actx.np.where(actx.np.less(_x, 1e-15), 1e-15, _x)  # noqa
+        mole_fracs = actx.np.where(actx.np.less(_x, 1e-15), 1e-15, _x)
         delta_s = nu.T@(pyro_obj.get_species_entropies_r(pin, tin)
                         - actx.np.log(mole_fracs))
         # exclude meaningless check on entropy for irreversible reaction
@@ -348,7 +347,7 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
         omega_mc = eos.get_production_rates(cv, temp)
         omega_ct = cantera_soln.net_production_rates
         for i in range(cantera_soln.n_species):
-            assert inf_norm((omega_mc[i] - omega_ct[i])) < rate_tol
+            assert inf_norm(omega_mc[i] - omega_ct[i]) < rate_tol
 
     # check that the reactions progress far enough and are stable
     assert reactor.T > 1800.0

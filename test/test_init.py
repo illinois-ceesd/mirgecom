@@ -23,30 +23,26 @@ THE SOFTWARE.
 """
 
 import logging
+
+import grudge.op as op
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
-import pyopencl.clrandom
-import pyopencl.clmath
-from pytools.obj_array import make_obj_array
 import pytest
-
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
-from mirgecom.initializers import Vortex2D
-from mirgecom.initializers import Lump
-from mirgecom.initializers import MulticomponentLump
-
-from mirgecom.initializers import SodShock1D
-from mirgecom.eos import IdealSingleGas
-
-from mirgecom.discretization import create_discretization_collection
-import grudge.op as op
-
+import pyopencl as cl
+import pyopencl.clmath
+import pyopencl.clrandom
 from pyopencl.tools import (  # noqa
     pytest_generate_tests_for_pyopencl as pytest_generate_tests,
 )
+from pytools.obj_array import make_obj_array
+
+from mirgecom.discretization import create_discretization_collection
+from mirgecom.eos import IdealSingleGas
+from mirgecom.initializers import Lump, MulticomponentLump, SodShock1D, Vortex2D
+
 
 logger = logging.getLogger(__name__)
 

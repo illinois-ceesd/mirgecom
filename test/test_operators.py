@@ -25,14 +25,14 @@ THE SOFTWARE.
 """
 
 import numpy as np  # noqa
-import pytest  # noqa
+import pytest
 import logging
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests
 )
 from pytools.obj_array import make_obj_array
-import pymbolic as pmbl  # noqa
+import pymbolic as pmbl
 import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
 from grudge.dof_desc import as_dofdesc
@@ -170,14 +170,15 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     - trig funcs
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
-    import pyopencl as cl
-    from grudge.array_context import PyOpenCLArrayContext
-    from meshmode.mesh.processing import rotate_mesh_around_axis
-    from grudge.dt_utils import h_max_from_volume
-    from mirgecom.simutil import componentwise_norms
     from arraycontext import flatten
+    from grudge.array_context import PyOpenCLArrayContext
+    from grudge.dt_utils import h_max_from_volume
+    from meshmode.mesh.processing import map_mesh, rotate_mesh_around_axis
+
+    import pyopencl as cl
+
     from mirgecom.operators import grad_operator
-    from meshmode.mesh.processing import map_mesh
+    from mirgecom.simutil import componentwise_norms
 
     def add_wonk(x: np.ndarray) -> np.ndarray:
         wonk_field = np.empty_like(x)

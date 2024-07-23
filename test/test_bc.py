@@ -24,37 +24,35 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import logging
+
+import grudge.op as op
 import numpy as np
 import numpy.linalg as la  # noqa
-import logging
 import pytest
+from grudge.dof_desc import as_dofdesc
+from grudge.trace_pair import TracePair, interior_trace_pair, interior_trace_pairs
+from meshmode.array_context import (  # noqa
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
+)
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+
 from pytools.obj_array import make_obj_array
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.discretization.connection import FACE_RESTR_ALL
-from mirgecom.initializers import Lump
-from mirgecom.eos import IdealSingleGas
-from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
-from grudge.trace_pair import TracePair
-from grudge.dof_desc import as_dofdesc
-from mirgecom.fluid import make_conserved
 from mirgecom.discretization import create_discretization_collection
-from mirgecom.inviscid import (
-    inviscid_facial_flux_rusanov,
-    inviscid_facial_flux_hll
-)
+from mirgecom.eos import IdealSingleGas
+from mirgecom.fluid import make_conserved
 from mirgecom.gas_model import (
     GasModel,
     make_fluid_state,
+    make_fluid_state_trace_pairs,
     project_fluid_state,
-    make_fluid_state_trace_pairs
 )
-import grudge.op as op
+from mirgecom.initializers import Lump
+from mirgecom.inviscid import inviscid_facial_flux_hll, inviscid_facial_flux_rusanov
 from mirgecom.simutil import get_box_mesh
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
 
 logger = logging.getLogger(__name__)
 
@@ -322,8 +320,8 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
 
     eos = IdealSingleGas(gas_const=gas_const)
 
-    from mirgecom.transport import SimpleTransport
     from mirgecom.initializers import Uniform
+    from mirgecom.transport import SimpleTransport
 
     gas_model = GasModel(eos=eos,
                          transport=SimpleTransport(viscosity=sigma,
@@ -437,8 +435,8 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
     sigma = 5.0
     exp_temp_bc_val = wall_temp
 
-    from mirgecom.transport import SimpleTransport
     from mirgecom.boundary import IsothermalWallBoundary
+    from mirgecom.transport import SimpleTransport
 
     gas_model = GasModel(eos=IdealSingleGas(gas_const=1.0),
                          transport=SimpleTransport(viscosity=sigma,
@@ -603,8 +601,8 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
     kappa = 3.0
     sigma = 5.0
 
-    from mirgecom.transport import SimpleTransport
     from mirgecom.boundary import AdiabaticNoslipWallBoundary
+    from mirgecom.transport import SimpleTransport
 
     gas_model = GasModel(eos=IdealSingleGas(gas_const=4.0),
                          transport=SimpleTransport(viscosity=sigma,
@@ -784,8 +782,8 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
     kappa = 3.0
     sigma = 5.0
 
-    from mirgecom.transport import SimpleTransport
     from mirgecom.boundary import AdiabaticSlipBoundary
+    from mirgecom.transport import SimpleTransport
 
     gas_const = 4.0
     gas_model = GasModel(eos=IdealSingleGas(gas_const=gas_const),
@@ -1076,7 +1074,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
-            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))  # noqa
+            return actx.to_numpy(op.norm(dcoll, vec, p=np.inf, dd=BTAG_ALL))
 
         logger.info(f"Number of {dim}d elems: {mesh.nelements}")
         # for velocities in each direction

@@ -24,17 +24,17 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-import pytest
-import numpy as np
 from functools import partial
 
-from mirgecom.discretization import create_discretization_collection
+import numpy as np
+import pytest
 from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-from pytools.obj_array import (
-    make_obj_array
+    pytest_generate_tests_for_pyopencl_array_context as pytest_generate_tests,
 )
+
+from pytools.obj_array import make_obj_array
+
+from mirgecom.discretization import create_discretization_collection
 from mirgecom.filter import make_spectral_filter
 
 
@@ -183,9 +183,12 @@ def test_spectral_filter(actx_factory, element_order, dim):
     nodes = actx.thaw(dcoll.nodes())
     vol_discr = dcoll.discr_from_dd("vol")
 
-    from mirgecom.filter import exponential_mode_response_function as xmrfunc
-    from mirgecom.filter import filter_modally
     from grudge.dof_desc import DD_VOLUME_ALL, DD_VOLUME_ALL_MODAL
+
+    from mirgecom.filter import (
+        exponential_mode_response_function as xmrfunc,
+        filter_modally,
+    )
 
     # make it sharp
     filter_order = 2
