@@ -64,7 +64,7 @@ date
 
 echo "*** Running examples from $examples_dir in ${run_path}..."
 
-if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]]; then
+if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
     source scripts/mirge-testing-env.sh ${examples_dir}/..
 fi
 
@@ -79,11 +79,6 @@ cd ${run_path}
 
 for example in "${example_list[@]}"
 do
-    if [[ -z $numpy_actx_available && $example == *-tpe.py ]]; then
-        echo "Skipping ${example} because TPEs are not available."
-        continue
-    fi
-
     example_name="${example%.py}"
     example_filename="${example_name}.py"
     example_path=${examples_dir}/${example_filename}
