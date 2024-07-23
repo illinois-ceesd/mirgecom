@@ -459,6 +459,11 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     Analytic solution prescribed as initial condition, then the RHS is assessed
     to ensure that it is nearly zero.
     """
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     dim = 2
@@ -559,6 +564,11 @@ def test_orthotropic_flux(
         actx_factory, use_overintegration, use_radiation, use_noslip,
         visualize=False):
     """Check the RHS shape for orthotropic kappa cases."""
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     dim = 2
