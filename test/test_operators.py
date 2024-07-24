@@ -72,6 +72,49 @@ def _coord_test_func(dim, order=1):
     return sym_result
 
 
+def _poly_test_func(x_vec, order=1, a=None):
+    """Make a coordinate-based polynomial test function.
+
+    1d: x^order
+    2d: x^order + y^order
+    3d: x^order + y^order + z^order
+    """
+    dim = len(x_vec)
+    if a is None:
+        a = 1
+    if np.isscalar(a):
+        a = make_obj_array([a for _ in range(dim)])
+    if len(a) != dim:
+        raise ValueError("Coefficients *a* have wrong dimension.")
+
+    result = 0
+    for i in range(dim):
+        result += a[i]*x_vec[i]**order
+
+    return result
+
+
+def _dpoly_test_func(x_vec, order=1, a=None):
+    """Make derivative of a coordinate-based polynomial test function.
+
+    1d: x^order
+    2d: x^order + y^order
+    3d: x^order + y^order + z^order
+    """
+    dim = len(x_vec)
+    if a is None:
+        a = 1
+    if np.isscalar(a):
+        a = make_obj_array([a for _ in range(dim)])
+    if len(a) != dim:
+        raise ValueError("Coefficients *a* have wrong dimension.")
+    if order == 0:
+        return 0*x_vec
+
+    return make_obj_array([order * a[i] * x_vec[i]**(order-1)
+                           for i in range(dim)])
+
+
 def _trig_test_func(dim):
     """Make trig test function.
 
@@ -253,6 +296,8 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
 
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
+        print(f"{test_data=}")
+        print(f"{exact_grad=}")
 
         err_scale = max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
                                 actx))
@@ -288,3 +333,150 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < tol
     )
+
+
+@pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
+                         [
+                             (1, "tet_box1", None, False),
+                             (2, "tet_box2", None, False),
+                             (3, "tet_box3", None, False),
+                             (2, "hex_box2", None, False),
+                             (3, "hex_box3", None, False),
+                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
+                             ])
+@pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
+def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order):
+    """Test overintegration with grad operator.
+
+    Check whether we get the right answers for gradients of polynomial
+    expressions up to quadrature order P', and proper error behavior for
+    expressions of order higher than P'.
+    - P <= P'
+    - P > P'
+    """
+    import pyopencl as cl
+    from grudge.array_context import PyOpenCLArrayContext
+    from meshmode.mesh.processing import rotate_mesh_around_axis
+    from grudge.dt_utils import h_min_from_volume
+    from mirgecom.simutil import componentwise_norms
+    from arraycontext import flatten
+    from mirgecom.operators import grad_operator
+    from meshmode.mesh.processing import map_mesh
+
+    def add_wonk(x: np.ndarray) -> np.ndarray:
+        wonk_field = np.empty_like(x)
+        if len(x) >= 2:
+            wonk_field[0] = (
+                1.5*x[0] + np.cos(x[0])
+                + 0.1*np.sin(10*x[1]))
+            wonk_field[1] = (
+                0.05*np.cos(10*x[0])
+                + 1.3*x[1] + np.sin(x[1]))
+        else:
+            wonk_field[0] = 1.5*x[0] + np.cos(x[0])
+
+        if len(x) >= 3:
+            wonk_field[2] = x[2] + np.sin(x[0] / 2) / 2
+
+        return wonk_field
+
+    p = order
+    p_prime = 2*order + 1
+    print(f"{mesh_name=}")
+    print(f"{p=},{p_prime=}")
+
+    tpe = mesh_name.startswith("hex_")
+    print(f"{tpe=}")
+    rotation_angle = 32.0
+    theta = rotation_angle/180.0 * np.pi
+
+    # This comes from array_context
+    actx = actx_factory()
+
+    if tpe:  # TPE requires *grudge* array context, not array_context
+        ctx = cl.create_some_context()
+        queue = cl.CommandQueue(ctx)
+        actx = PyOpenCLArrayContext(queue)
+
+    tol = 1e-11 if tpe else 5e-12
+
+    for f_order in range(p+1):
+        print(f"{f_order=}")
+        test_func = partial(_poly_test_func, order=f_order)
+        grad_test_func = partial(_dpoly_test_func, order=f_order)
+
+        a = (-1,)*dim
+        b = (1,)*dim
+
+        # Make non-uniform spacings
+        # b = tuple((2 ** n) for n in range(dim))
+
+        mesh = get_box_mesh(dim, a=a, b=b, n=8, tensor_product_elements=tpe)
+        if wonk:
+            mesh = map_mesh(mesh, add_wonk)
+        if rot_axis is not None:
+            mesh = rotate_mesh_around_axis(mesh, theta=theta, axis=rot_axis)
+
+        logger.info(
+            f"Number of {dim}d elements: {mesh.nelements}"
+        )
+
+        dcoll = create_discretization_collection(actx, mesh, order=order)
+
+        # compute max element size
+        h_min = actx.to_numpy(h_min_from_volume(dcoll))[()]
+        test_tol = tol * dim * p / h_min
+
+        print(f"{h_min=}")
+        print(f"{test_tol=}")
+
+        nodes = actx.thaw(dcoll.nodes())
+        print(f"{nodes=}")
+        int_flux = partial(central_flux_interior, actx, dcoll)
+        bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
+
+        test_data = test_func(x_vec=nodes)
+        exact_grad = grad_test_func(x_vec=nodes)
+
+        err_scale = actx.to_numpy(
+            max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
+                                              actx)))[()]
+
+        print(f"{err_scale=}")
+        if err_scale <= test_tol:
+            err_scale = 1
+            print(f"Rescaling: {err_scale=}")
+
+        print(f"{actx.to_numpy(test_data)=}")
+        print(f"{actx.to_numpy(exact_grad)=}")
+
+        test_data_int_tpair = interior_trace_pair(dcoll, test_data)
+        boundaries = [BTAG_ALL]
+        test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
+                                         test_data_int_tpair, boundaries)
+
+        dd_vol = as_dofdesc("vol")
+        dd_allfaces = as_dofdesc("all_faces")
+        local_grad = op.weak_local_grad(dcoll, dd_vol, test_data)
+        print(f"{actx.to_numpy(local_grad)=}")
+        test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
+                                  test_data, test_data_flux_bnd)
+
+        print(f"{actx.to_numpy(test_grad)=}")
+
+        grad_err = \
+            max(flatten(
+                componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
+                actx) / err_scale)
+
+        assert actx.to_numpy(grad_err) < test_tol
+
+    if dim == 3 and p == 3:
+        assert False
