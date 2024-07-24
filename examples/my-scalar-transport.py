@@ -124,7 +124,7 @@ def main(actx_class, use_esdg=False,
     else:
         timestepper = rk4_step
 
-    n_step = 20000
+    n_step = 10000
     current_cfl = 1.0
     current_dt = .005
     t_final = n_step * current_dt
@@ -193,8 +193,8 @@ def main(actx_class, use_esdg=False,
         ])
 
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.05
-    velocity[1] = 0.05
+    velocity[0] = 0.1
+    #velocity[1] = 0.05
 
     alpha = 5.0
 
@@ -204,8 +204,18 @@ def main(actx_class, use_esdg=False,
         r2 = np.dot(xyz_coords, xyz_coords)
         return actx.np.exp(-alpha * r2)
 
-    init_state = gaussian_init(nodes)
+    def initializer(xyz_coords):
+        dim = len(xyz_coords)
+        x = xyz_coords[0]
+        actx = x.array_context
+        A = 1.0
+        #r2 = np.dot(xyz_coords, xyz_coords)
+        #return actx.np.exp(-alpha * r2)
 
+        return A*actx.np.cos(0.25*x)
+
+    init_state = initializer(nodes)
+    exact_state = initializer(nodes)
     # boundaries = {}
 
     if rst_filename:
@@ -239,7 +249,8 @@ def main(actx_class, use_esdg=False,
         grad_state = my_scalar_gradient(dcoll, state, state_ip)
         viz_fields = [("state", state),
                       ("grad_state", grad_state),
-                      ("rank", rank_field)]
+                      ("rank", rank_field),
+                      ("exact", exact_state)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -269,6 +280,14 @@ def main(actx_class, use_esdg=False,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        #attempt at updating the exact state
+        xyz_coords = nodes
+        dim = len(xyz_coords)
+        x = xyz_coords[0]
+        actx = x.array_context
+        d = 1e-3
+        exact_state = A*np.exp(-1*((0.25)**2)*d*t)*actx.np.cos(0.25*(x - 0.1*t))
+        #
 
         try:
 
@@ -307,6 +326,8 @@ def main(actx_class, use_esdg=False,
         return state, dt
 
     def my_post_step(step, t, dt, state):
+        
+        
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
@@ -346,8 +367,10 @@ def main(actx_class, use_esdg=False,
         return div_operator(dcoll, dd_vol, dd_allfaces, volume_flux, surface_flux)
 
     def my_rhs(t, state):
+        
+
         state_trace_pairs = op.interior_trace_pairs(dcoll, state)
-        diffusivity = 1e-4
+        diffusivity = 1e-3
         grad_state = my_scalar_gradient(dcoll, state, state_trace_pairs)
         grad_state_trace_pairs = op.interior_trace_pairs(dcoll, grad_state)
         rhs = advection_rhs(state, state_trace_pairs)
