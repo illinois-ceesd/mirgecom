@@ -53,9 +53,6 @@ from mirgecom.gas_model import (
 from mirgecom.eos import IdealSingleGas
 
 from mirgecom.discretization import create_discretization_collection
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
 from mirgecom.simutil import get_box_mesh
 from pytools.obj_array import make_obj_array
 
