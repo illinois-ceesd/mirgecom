@@ -31,8 +31,6 @@ import importlib
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.integrators import (
     euler_step, lsrk54_step, lsrk144_step,
@@ -40,6 +38,9 @@ from mirgecom.integrators import (
 )
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize(("integrator", "method_order"),

@@ -41,8 +41,6 @@ from mirgecom.discretization import create_discretization_collection
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.fluid import make_conserved
 from mirgecom.transport import (
@@ -56,6 +54,9 @@ from mirgecom.gas_model import (
 )
 from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("transport_model", [0, 1])

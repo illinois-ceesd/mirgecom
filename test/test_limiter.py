@@ -23,8 +23,6 @@ import numpy as np
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.limiter import bound_preserving_limiter
 from mirgecom.discretization import create_discretization_collection
@@ -37,6 +35,9 @@ from mirgecom.gas_model import (  # noqa
 from mirgecom.fluid import make_conserved
 
 import pytest
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def test_fluid_api(actx_factory):

@@ -55,7 +55,7 @@ from mirgecom.simutil import get_box_mesh
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
 pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
+    [PytestPyOpenCLArrayContextFactory])
 
 logger = logging.getLogger(__name__)
 

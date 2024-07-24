@@ -33,8 +33,6 @@ from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
@@ -57,6 +55,9 @@ from mirgecom.simutil import get_box_mesh
 from pytools.obj_array import make_obj_array
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 # NOTE:  Testing of this av_laplacian_operator is currently

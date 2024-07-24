@@ -51,8 +51,6 @@ import grudge.op as op
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from abc import ABCMeta, abstractmethod
 from meshmode.dof_array import DOFArray
@@ -73,6 +71,9 @@ from mirgecom.simutil import (
 
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])

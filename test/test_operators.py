@@ -30,8 +30,6 @@ import logging
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
@@ -49,6 +47,9 @@ from mirgecom.discretization import create_discretization_collection
 from functools import partial
 from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,

@@ -32,13 +32,14 @@ from mirgecom.discretization import create_discretization_collection
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from pytools.obj_array import (
     make_obj_array
 )
 from mirgecom.filter import make_spectral_filter
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])

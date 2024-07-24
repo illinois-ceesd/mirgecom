@@ -57,8 +57,6 @@ from grudge.dof_desc import DISCR_TAG_QUAD
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.simutil import max_component_norm
 
@@ -72,6 +70,9 @@ from mirgecom.inviscid import (
 from mirgecom.integrators import rk4_step
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])

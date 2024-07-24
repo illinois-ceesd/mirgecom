@@ -27,12 +27,13 @@ from pytools.obj_array import make_obj_array
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import get_box_mesh
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def test_tacot_decomposition(actx_factory):

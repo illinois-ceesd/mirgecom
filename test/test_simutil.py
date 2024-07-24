@@ -31,12 +31,13 @@ from arraycontext import flatten
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-        [PytestPyOpenCLArrayContextFactory])
 
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 from mirgecom.discretization import create_discretization_collection
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def test_basic_cfd_healthcheck(actx_factory):
