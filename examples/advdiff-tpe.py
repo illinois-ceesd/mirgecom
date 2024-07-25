@@ -77,13 +77,6 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     if casename is None:
         casename = "mirgecom"
 
-    try:
-        from grudge.discretization import PartID  # noqa: F401
-    except ImportError:
-        from warnings import warn
-        warn("This example requires a coupling-enabled branch of grudge; exiting.")
-        return
-
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -205,7 +198,15 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         return actx.to_numpy(nodal_max(dcoll, "vol", x))[()]
 
     from grudge.dt_utils import characteristic_lengthscales
-    dx = characteristic_lengthscales(actx, dcoll)
+
+    try:
+        dx = characteristic_lengthscales(actx, dcoll)
+    except NotImplementedError:
+        from warnings import warn
+        warn("This example requires https://github.com/inducer/grudge/pull/338 . "
+             "Exiting.")
+        return
+
     dx_min, dx_max = vol_min(dx), vol_max(dx)
 
     print(f"DX: ({dx_min}, {dx_max})")

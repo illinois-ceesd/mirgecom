@@ -77,13 +77,6 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     if casename is None:
         casename = "mirgecom"
 
-    try:
-        from grudge.discretization import PartID  # noqa: F401
-    except ImportError:
-        from warnings import warn
-        warn("This example requires a coupling-enabled branch of grudge; exiting.")
-        return
-
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -433,8 +426,14 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     from mirgecom.simutil import force_evaluation
     current_state = force_evaluation(actx, current_state)
 
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+    try:
+        current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
+    except NotImplementedError:
+        from warnings import warn
+        warn("This example requires https://github.com/inducer/grudge/pull/338 . "
+             "Exiting.")
+        return
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
