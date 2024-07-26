@@ -35,17 +35,28 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
-from grudge.dof_desc import as_dofdesc
+# from grudge.dof_desc import as_dofdesc
+# from grudge.dt_utils import characteristic_lengthscales
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
 import grudge.op as op
-from grudge.trace_pair import interior_trace_pair
+from grudge.trace_pair import interior_trace_pair, bv_trace_pair
 from mirgecom.discretization import create_discretization_collection
 from functools import partial
 from mirgecom.simutil import get_box_mesh
+from grudge import geometry
+from grudge.dof_desc import (
+    DISCR_TAG_BASE,
+    DISCR_TAG_QUAD,
+    DTAG_VOLUME_ALL,
+    FACE_RESTR_ALL,
+    VTAG_ALL,
+    BoundaryDomainTag,
+    as_dofdesc,
+)
 logger = logging.getLogger(__name__)
 
 
@@ -173,7 +184,8 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
     dd_allfaces = bnd_tpair.dd.with_dtag("all_faces")
-    return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
+    flux = op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
+    return flux
 
 
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
@@ -296,8 +308,8 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
 
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
-        print(f"{test_data=}")
-        print(f"{exact_grad=}")
+        # print(f"{test_data=}")
+        # print(f"{exact_grad=}")
 
         err_scale = max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
                                 actx))
@@ -307,8 +319,8 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
             err_scale = 1
             print(f"Rescaling: {err_scale=}")
 
-        print(f"{test_data=}")
-        print(f"{exact_grad=}")
+        # print(f"{test_data=}")
+        # print(f"{exact_grad=}")
 
         test_data_int_tpair = interior_trace_pair(dcoll, test_data)
         boundaries = [BTAG_ALL]
@@ -320,12 +332,12 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
         test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
                                   test_data, test_data_flux_bnd)
 
-        print(f"{test_grad=}")
+        # print(f"{test_grad=}")
         grad_err = \
             max(flatten(
                 componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
                 actx) / err_scale)
-        print(f"{actx.to_numpy(h_max)=}\n{actx.to_numpy(grad_err)=}")
+        # print(f"{actx.to_numpy(h_max)=}\n{actx.to_numpy(grad_err)=}")
 
         eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
 
@@ -333,6 +345,15 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < tol
     )
+
+#                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+#                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+#                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+#                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+#                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+#                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+#                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+#                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
 
 
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
@@ -342,17 +363,11 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
                              (3, "tet_box3", None, False),
                              (2, "hex_box2", None, False),
                              (3, "hex_box3", None, False),
-                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
-                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
-                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
-                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
                              ])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
-def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order):
+@pytest.mark.parametrize("overint", [False, True])
+def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
+                         overint):
     """Test overintegration with grad operator.
 
     Check whether we get the right answers for gradients of polynomial
@@ -388,12 +403,13 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order):
         return wonk_field
 
     p = order
-    p_prime = 2*order + 1
+    p_prime = dim*p + 1
     print(f"{mesh_name=}")
-    print(f"{p=},{p_prime=}")
+    print(f"{dim=}, {p=}, {p_prime=}")
+    # print(f"{p=},{p_prime=}")
 
     tpe = mesh_name.startswith("hex_")
-    print(f"{tpe=}")
+    # print(f"{tpe=}")
     rotation_angle = 32.0
     theta = rotation_angle/180.0 * np.pi
 
@@ -406,9 +422,10 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order):
         actx = PyOpenCLArrayContext(queue)
 
     tol = 1e-11 if tpe else 5e-12
+    test_passed = True
 
-    for f_order in range(p+1):
-        print(f"{f_order=}")
+    for f_order in range(p_prime+1):
+        # print(f"{f_order=}")
         test_func = partial(_poly_test_func, order=f_order)
         grad_test_func = partial(_dpoly_test_func, order=f_order)
 
@@ -428,55 +445,106 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order):
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        dcoll = create_discretization_collection(actx, mesh, order=order)
+        dcoll = create_discretization_collection(
+            actx, mesh, order=p, quadrature_order=p_prime)
 
-        # compute max element size
+        # compute min element size
         h_min = actx.to_numpy(h_min_from_volume(dcoll))[()]
+        # lenscale = actx.to_numpy(min(flatten(
+        #    characteristic_lengthscales(actx, dcoll), actx)))
+
+        if overint:
+            quad_discr_tag = DISCR_TAG_QUAD
+        else:
+            quad_discr_tag = DISCR_TAG_BASE
+
+        allfaces_dd_quad = as_dofdesc(FACE_RESTR_ALL, quad_discr_tag)
+        vol_dd_base = as_dofdesc(DTAG_VOLUME_ALL)
+        vol_dd_quad = vol_dd_base.with_discr_tag(quad_discr_tag)
+        bdry_dd_base = as_dofdesc(BTAG_ALL)
+        bdry_dd_quad = bdry_dd_base.with_discr_tag(quad_discr_tag)
+
+        x_base = actx.thaw(dcoll.nodes(dd=vol_dd_base))
+        bdry_x_base = actx.thaw(dcoll.nodes(bdry_dd_base))
+
+        def get_flux(u_tpair, dcoll=dcoll):
+            dd = u_tpair.dd
+            dd_allfaces = dd.with_domain_tag(
+                BoundaryDomainTag(FACE_RESTR_ALL, VTAG_ALL)
+                )
+            normal = geometry.normal(actx, dcoll, dd)
+            u_avg = u_tpair.avg
+            flux = u_avg * normal
+            return op.project(dcoll, dd, dd_allfaces, flux)
+
         test_tol = tol * dim * p / h_min
 
-        print(f"{h_min=}")
-        print(f"{test_tol=}")
+        # nodes = actx.thaw(dcoll.nodes())
+        # print(f"{nodes=}")
+        # int_flux = partial(central_flux_interior, actx, dcoll)
+        # bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
 
-        nodes = actx.thaw(dcoll.nodes())
-        print(f"{nodes=}")
-        int_flux = partial(central_flux_interior, actx, dcoll)
-        bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
+        u_base = test_func(x_vec=x_base)
+        u_bnd_base = test_func(x_vec=bdry_x_base)
+        u_quad = op.project(dcoll, vol_dd_base, vol_dd_quad, u_base)
 
-        test_data = test_func(x_vec=nodes)
-        exact_grad = grad_test_func(x_vec=nodes)
+        u_bnd_flux_quad = (
+            sum(get_flux(op.project_tracepair(dcoll, allfaces_dd_quad, itpair))
+                for itpair in op.interior_trace_pairs(dcoll, u_base,
+                                                      volume_dd=vol_dd_base))
+            + get_flux(op.project_tracepair(
+                dcoll, bdry_dd_quad,
+                bv_trace_pair(dcoll, bdry_dd_base, u_base, u_bnd_base)))
+        )
 
+        exact_grad = grad_test_func(x_vec=x_base)
         err_scale = actx.to_numpy(
             max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
                                               actx)))[()]
 
-        print(f"{err_scale=}")
+        # print(f"{err_scale=}")
         if err_scale <= test_tol:
             err_scale = 1
             print(f"Rescaling: {err_scale=}")
 
-        print(f"{actx.to_numpy(test_data)=}")
-        print(f"{actx.to_numpy(exact_grad)=}")
+        # print(f"{actx.to_numpy(test_data)=}")
+        # print(f"{actx.to_numpy(exact_grad)=}")
 
-        test_data_int_tpair = interior_trace_pair(dcoll, test_data)
-        boundaries = [BTAG_ALL]
-        test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
-                                         test_data_int_tpair, boundaries)
+        # test_data_int_tpair = op.project_tracepair(
+        #    dcoll, allfaces_dd_quad, interior_trace_pair(dcoll, u_base))
 
-        dd_vol = as_dofdesc("vol")
-        dd_allfaces = as_dofdesc("all_faces")
-        local_grad = op.weak_local_grad(dcoll, dd_vol, test_data)
-        print(f"{actx.to_numpy(local_grad)=}")
-        test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
-                                  test_data, test_data_flux_bnd)
+        # boundaries = [BTAG_ALL]
+        # test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
+        #                                 test_data_int_tpair, boundaries)
+        # ubfq = actx.to_numpy(u_bnd_flux_quad)
+        # tdfb = actx.to_numpy(test_data_flux_bnd)
+        # print(f"{ubfq=}")
+        # print(f"{tdfb=}")
 
-        print(f"{actx.to_numpy(test_grad)=}")
+        # flux_diff = u_bnd_flux_quad - test_data_flux_bnd
+        # flux_diff = actx.to_numpy(flux_diff)
+        # print(f"{flux_diff=}")
+        # assert False
+        # dd_vol = as_dofdesc("vol")
+        # dd_allfaces = as_dofdesc("all_faces")
+        # local_grad = op.weak_local_grad(dcoll, dd_vol, test_data)
+        # print(f"{actx.to_numpy(local_grad)=}")
+        test_grad = grad_operator(dcoll, vol_dd_quad, allfaces_dd_quad,
+                                  u_quad, u_bnd_flux_quad)
+
+        # print(f"{actx.to_numpy(test_grad)=}")
 
         grad_err = \
             max(flatten(
                 componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
                 actx) / err_scale)
+        grad_err = actx.to_numpy(grad_err)
+        print(f"{p=},{h_min=},{f_order=},{grad_err=},{test_tol=}")
+        this_test = grad_err < test_tol
 
-        assert actx.to_numpy(grad_err) < test_tol
+        # ensure it fails with no overintegration for function order > p
+        if f_order > p and not overint:
+            this_test = not this_test
 
-    if dim == 3 and p == 3:
-        assert False
+        test_passed = test_passed and this_test
+    assert test_passed
