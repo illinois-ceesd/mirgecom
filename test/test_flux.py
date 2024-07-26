@@ -42,12 +42,16 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from mirgecom.inviscid import inviscid_flux
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("nspecies", [0, 1, 10])

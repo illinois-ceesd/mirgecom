@@ -29,11 +29,11 @@ import logging
 import numpy as np
 import pyopencl as cl
 import pytest
-from meshmode.array_context import (  # noqa
-    PyOpenCLArrayContext,
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests
-)
+from meshmode.array_context import PyOpenCLArrayContext
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
 import grudge.op as op
@@ -51,13 +51,13 @@ from mirgecom.gas_model import (
 from mirgecom.eos import IdealSingleGas
 
 from mirgecom.discretization import create_discretization_collection
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
 from mirgecom.simutil import get_box_mesh
 from pytools.obj_array import make_obj_array
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 # NOTE:  Testing of this av_laplacian_operator is currently
