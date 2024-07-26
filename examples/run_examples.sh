@@ -16,6 +16,11 @@ function endgroup {
 
 # }}}
 
+python -c "from grudge.array_context import MPINumpyArrayConext" && numpy_actx_available=numpy || numpy_actx_available=
+
+echo "Numpy array context available: $numpy_actx_available"
+
+
 run_path=$(pwd)
 examples_dir=${1:-"./"}
 shift
@@ -23,7 +28,7 @@ shift
 if [[ ! -d "${examples_dir}" ]]; then
     echo "Usage: run_examples.sh <examples directory> [list of examples]"
     printf "\nThis script runs examples on 2 MPI ranks (where appropriate) and\n"
-    printf "compares the results it gets from running with eager, lazy, and numpy\n"
+    printf "compares the results it gets from running with eager, lazy, and numpy (if available)\n"
     printf "array contexts. Users may optionally provide a list of which examples\n"
     printf "to run.\n\nArguments:\n"
     printf "\n<examples directory>: defaults to the current working directory.\n"
@@ -93,14 +98,6 @@ do
     TOL_LAZY=1e-9
     TOL_NUMPY=1e-9
 
-    # FIXME: Have to ignore "rhs", and "gradients" to make
-    # this example pass.
-    # if [[ $example == "thermally-coupled.py" ]]; then
-    #    echo "Setting tolerance=1 for $example"
-    #    TOL_LAZY=1
-    #    TOL_NUMPY=1
-    # fi
-
     date
     printf "***\n***\n"
 
@@ -110,7 +107,7 @@ do
     test_results=()
 
     # Run example with Eager, Lazy, and Numpy arraycontexts
-    for actx in eager lazy numpy; do
+    for actx in eager lazy $numpy_actx_available; do
         test_name="${example_name}_$actx"
         startgroup "**** Running $test_name"
         set -x
