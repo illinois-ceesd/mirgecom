@@ -48,9 +48,10 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from abc import ABCMeta, abstractmethod
 from meshmode.dof_array import DOFArray
 import pymbolic as pmbl
@@ -70,6 +71,9 @@ from mirgecom.simutil import (
 
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])

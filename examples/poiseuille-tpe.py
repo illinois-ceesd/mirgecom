@@ -426,8 +426,14 @@ def main(actx_class, use_esdg=False, use_overintegration=False,
     from mirgecom.simutil import force_evaluation
     current_state = force_evaluation(actx, current_state)
 
-    current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+    try:
+        current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
+    except NotImplementedError:
+        from warnings import warn
+        warn("This example requires https://github.com/inducer/grudge/pull/338 . "
+             "Exiting.")
+        return
 
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,

@@ -33,18 +33,13 @@ from pytools.obj_array import make_obj_array
 
 from grudge import op
 
-from meshmode.array_context import (  # noqa
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
-from meshmode.mesh.generation import generate_regular_rect_mesh
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PyOpenCLArrayContext
 
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
+from meshmode.mesh.generation import generate_regular_rect_mesh
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from mirgecom.transport import MixtureAveragedTransport
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import PyrometheusMixture
@@ -58,6 +53,9 @@ from mirgecom.thermochemistry import (
 import pyrometheus
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("mechname", ["uiuc_7sp"])

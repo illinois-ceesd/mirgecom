@@ -39,9 +39,8 @@ import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.fluid import make_conserved
 from mirgecom.transport import (
@@ -55,6 +54,9 @@ from mirgecom.gas_model import (
 )
 from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("transport_model", [0, 1])
