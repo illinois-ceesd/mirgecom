@@ -28,9 +28,9 @@ import numpy as np
 import logging
 import pytest
 import importlib
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.integrators import (
     euler_step, lsrk54_step, lsrk144_step,
@@ -38,6 +38,9 @@ from mirgecom.integrators import (
 )
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize(("integrator", "method_order"),

@@ -59,10 +59,12 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
         warn("The NumpyArrayContext is still under development")
 
         if distributed:
-            from grudge.array_context import MPINumpyArrayContext
+            from grudge.array_context import MPINumpyArrayContext  \
+                # pylint: disable=no-name-in-module
             return MPINumpyArrayContext
         else:
-            from grudge.array_context import NumpyArrayContext
+            from grudge.array_context import NumpyArrayContext  \
+                # pylint: disable=no-name-in-module
             return NumpyArrayContext
 
     if profiling:
@@ -106,6 +108,13 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
             return False
     except ImportError:
         return False
+
+
+def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* has fallback arguments."""
+    import inspect
+    spec = inspect.getfullargspec(actx_class.__init__)
+    return "use_axis_tag_inference_fallback" in spec.args
 
 
 def _check_cache_dirs_node() -> None:
@@ -271,8 +280,8 @@ def initialize_actx(
         use_einsum_inference_fallback: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from grudge.array_context import (MPIPyOpenCLArrayContext,
-                                      MPIPytatoArrayContext,
-                                      MPINumpyArrayContext)
+                                      MPIPytatoArrayContext
+                                      )
 
     actx_kwargs: Dict[str, Any] = {}
 
@@ -280,6 +289,8 @@ def initialize_actx(
         actx_kwargs["mpi_communicator"] = comm
 
     if actx_class_is_numpy(actx_class):
+        from grudge.array_context import MPINumpyArrayContext  \
+            # pylint: disable=no-name-in-module
         if comm:
             assert issubclass(actx_class, MPINumpyArrayContext)
         else:
@@ -299,10 +310,12 @@ def initialize_actx(
 
         if actx_class_is_lazy(actx_class):
             assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
-            actx_kwargs["use_axis_tag_inference_fallback"] = \
-                use_axis_tag_inference_fallback
-            actx_kwargs["use_einsum_inference_fallback"] = \
-                use_einsum_inference_fallback
+
+            if actx_class_has_fallback_args(actx_class):
+                actx_kwargs["use_axis_tag_inference_fallback"] = \
+                    use_axis_tag_inference_fallback
+                actx_kwargs["use_einsum_inference_fallback"] = \
+                    use_einsum_inference_fallback
             if comm:
                 assert issubclass(actx_class, MPIPytatoArrayContext)
                 actx_kwargs["mpi_base_tag"] = 12000
