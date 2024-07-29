@@ -33,14 +33,12 @@ from pytools.obj_array import make_obj_array
 
 from grudge import op
 
-from meshmode.array_context import (  # noqa
-    PyOpenCLArrayContext,
-    PytatoPyOpenCLArrayContext
-)
+from meshmode.array_context import PyOpenCLArrayContext
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from meshmode.mesh.generation import generate_regular_rect_mesh
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
 
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas, PyrometheusMixture
@@ -51,6 +49,9 @@ from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("mechname", ["air_3sp", "uiuc_7sp", "sandiego",

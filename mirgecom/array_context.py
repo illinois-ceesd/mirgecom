@@ -59,10 +59,12 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
         warn("The NumpyArrayContext is still under development")
 
         if distributed:
-            from grudge.array_context import MPINumpyArrayContext
+            from grudge.array_context import MPINumpyArrayContext  \
+                # pylint: disable=no-name-in-module
             return MPINumpyArrayContext
         else:
-            from grudge.array_context import NumpyArrayContext
+            from grudge.array_context import NumpyArrayContext  \
+                # pylint: disable=no-name-in-module
             return NumpyArrayContext
 
     if profiling:
@@ -106,6 +108,65 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
             return False
     except ImportError:
         return False
+
+
+def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* has fallback arguments."""
+    import inspect
+    spec = inspect.getfullargspec(actx_class.__init__)
+    return "use_axis_tag_inference_fallback" in spec.args
+
+
+def _check_cache_dirs_node() -> None:
+    """Check whether multiple ranks share cache directories on the same node."""
+    from mpi4py import MPI
+
+    size = MPI.COMM_WORLD.Get_size()
+
+    if size <= 1:
+        return
+
+    from mirgecom.mpi import shared_split_comm_world
+
+    with shared_split_comm_world() as node_comm:
+        node_rank = node_comm.Get_rank()
+
+        def _check_var(var: str) -> None:
+            from warnings import warn
+
+            try:
+                my_path = os.environ[var]
+            except KeyError:
+                warn(f"Please set the '{var}' variable in your job script to "
+                    "avoid file system overheads when running on large numbers of "
+                    "ranks. See https://mirgecom.readthedocs.io/en/latest/running/large-systems.html "  # noqa: E501
+                    "for more information.")
+                # Create a fake path so there will not be a second warning below.
+                my_path = f"no/such/path/rank{node_rank}"
+
+            all_paths = node_comm.gather(my_path, root=0)
+
+            if node_rank == 0:
+                assert all_paths
+                if len(all_paths) != len(set(all_paths)):
+                    hostname = MPI.Get_processor_name()
+                    dup = [path for path in set(all_paths)
+                                if all_paths.count(path) > 1]
+
+                    from warnings import warn
+                    warn(f"Multiple ranks are sharing '{var}' on node '{hostname}'. "
+                        f"Duplicate '{var}'s: {dup}.")
+
+        _check_var("XDG_CACHE_HOME")
+
+        if os.environ.get("XDG_CACHE_HOME") is None:
+            # When XDG_CACHE_HOME is set but POCL_CACHE_DIR is not, pocl
+            # will use XDG_CACHE_HOME as the cache directory.
+            _check_var("POCL_CACHE_DIR")
+
+        # We haven't observed an issue yet that 'CUDA_CACHE_PATH' fixes,
+        # so disable this check for now.
+        # _check_var("CUDA_CACHE_PATH")
 
 
 def _check_gpu_oversubscription(actx: ArrayContext) -> None:
@@ -219,8 +280,8 @@ def initialize_actx(
         use_einsum_inference_fallback: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from grudge.array_context import (MPIPyOpenCLArrayContext,
-                                      MPIPytatoArrayContext,
-                                      MPINumpyArrayContext)
+                                      MPIPytatoArrayContext
+                                      )
 
     actx_kwargs: Dict[str, Any] = {}
 
@@ -228,6 +289,8 @@ def initialize_actx(
         actx_kwargs["mpi_communicator"] = comm
 
     if actx_class_is_numpy(actx_class):
+        from grudge.array_context import MPINumpyArrayContext  \
+            # pylint: disable=no-name-in-module
         if comm:
             assert issubclass(actx_class, MPINumpyArrayContext)
         else:
@@ -247,10 +310,12 @@ def initialize_actx(
 
         if actx_class_is_lazy(actx_class):
             assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
-            actx_kwargs["use_axis_tag_inference_fallback"] = \
-                use_axis_tag_inference_fallback
-            actx_kwargs["use_einsum_inference_fallback"] = \
-                use_einsum_inference_fallback
+
+            if actx_class_has_fallback_args(actx_class):
+                actx_kwargs["use_axis_tag_inference_fallback"] = \
+                    use_axis_tag_inference_fallback
+                actx_kwargs["use_einsum_inference_fallback"] = \
+                    use_einsum_inference_fallback
             if comm:
                 assert issubclass(actx_class, MPIPytatoArrayContext)
                 actx_kwargs["mpi_base_tag"] = 12000

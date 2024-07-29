@@ -93,8 +93,6 @@ from grudge.trace_pair import (
     interior_trace_pairs,
     tracepair_with_discr_tag
 )
-from grudge.projection import volume_quadrature_project
-from grudge.flux_differencing import volume_flux_differencing
 
 import grudge.op as op
 
@@ -174,6 +172,9 @@ def entropy_stable_euler_operator(
     gamma_quad = gas_model.eos.gamma(state_quad.cv, state_quad.temperature)
 
     # Compute the projected (nodal) entropy variables
+    from grudge.projection import volume_quadrature_project  \
+        # pylint: disable=no-name-in-module
+
     entropy_vars = volume_quadrature_project(
         dcoll, dd_vol_quad,
         # Map to entropy variables
@@ -207,6 +208,9 @@ def entropy_stable_euler_operator(
         _reshape((-1, 1), modified_conserved_fluid_state))
 
     # Compute volume derivatives using flux differencing
+    from grudge.flux_differencing import volume_flux_differencing  \
+        # pylint: disable=no-name-in-module,import-error
+
     inviscid_vol_term = \
         -volume_flux_differencing(dcoll, dd_vol_quad, dd_allfaces_quad,
                                   flux_matrices)
