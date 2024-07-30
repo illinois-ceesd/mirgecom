@@ -197,6 +197,10 @@ def main(actx_class, use_esdg=False,
     #velocity[1] = 0.05
 
     alpha = 5.0
+    diffusivity = 1e-3
+    A = 1.0
+    k = 0.25
+
 
     def gaussian_init(xyz_coords):
         x = xyz_coords[0]
@@ -208,14 +212,12 @@ def main(actx_class, use_esdg=False,
         dim = len(xyz_coords)
         x = xyz_coords[0]
         actx = x.array_context
-        A = 1.0
         #r2 = np.dot(xyz_coords, xyz_coords)
         #return actx.np.exp(-alpha * r2)
 
-        return A*actx.np.cos(0.25*x)
+        return A*actx.np.cos(k*x)
 
     init_state = initializer(nodes)
-    exact_state = initializer(nodes)
     # boundaries = {}
 
     if rst_filename:
@@ -244,7 +246,17 @@ def main(actx_class, use_esdg=False,
     if rank == 0:
         logger.info(init_message)
 
+    def ExactSolution(t):
+        xyz_coords = nodes
+        dim = len(xyz_coords)
+        x = xyz_coords[0]
+        actx = x.array_context
+        return A*np.exp(-1*((k)**2)*diffusivity*t)*actx.np.cos(k*(x - velocity[0]*t))
+
+
     def my_write_viz(step, t, state):
+        exact_state = ExactSolution(t)
+
         state_ip = op.interior_trace_pairs(dcoll, state)
         grad_state = my_scalar_gradient(dcoll, state, state_ip)
         viz_fields = [("state", state),
@@ -281,12 +293,12 @@ def main(actx_class, use_esdg=False,
 
     def my_pre_step(step, t, dt, state):
         #attempt at updating the exact state
-        xyz_coords = nodes
+        """xyz_coords = nodes
         dim = len(xyz_coords)
         x = xyz_coords[0]
         actx = x.array_context
         d = 1e-3
-        exact_state = A*np.exp(-1*((0.25)**2)*d*t)*actx.np.cos(0.25*(x - 0.1*t))
+        exact_state = A*np.exp(-1*((0.25)**2)*d*t)*actx.np.cos(0.25*(x - 0.1*t))"""
         #
 
         try:
