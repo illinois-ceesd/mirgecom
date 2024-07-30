@@ -199,20 +199,27 @@ def main(actx_class, use_esdg=False,
     alpha = 5.0
     diffusivity = 1e-4
 
-    def exact(xyz_coords, t):
+    k = np.zeros(shape = (dim))
+    k[0] = 1 #k vector is just in the x-direction
+    k[1] = 1
+    # k = k/np.linalg.norm(k)
+
+    def exact(xyz_coords, t, k):
         # , velocity, D = diffusivity):
         D = diffusivity
-        dimension = len(xyz_coords)
         x = xyz_coords[0]
         actx = x.array_context
-        k = np.zeros(shape = (dimension))
-        k[0] = 1 #k vector is just in the x-direction
 
         k2 = np.dot(k, k)
         k_dot_x = np.dot(k,xyz_coords)
         k_dot_v = np.dot(k,velocity)
 
-        return actx.np.exp(-D*k2*t)*actx.np.cos(k_dot_x - k_dot_v*t)
+        length = box_ur- box_ll
+        len_vec = length*np.array([1,0])
+        num_waves = 2
+        a = num_waves* 2*np.pi/(np.dot(k,len_vec)) #Forces solution to contain at least a full wavelength
+
+        return actx.np.exp(-D*k2*t)*actx.np.cos(a*(k_dot_x - k_dot_v*t))
     
     def gaussian_init(xyz_coords):
         x = xyz_coords[0]
@@ -231,7 +238,7 @@ def main(actx_class, use_esdg=False,
 
 
     # init_state = plane_init(nodes)
-    init_state = exact(nodes, 0)
+    init_state = exact(nodes, 0, k)
 
     # boundaries = {}
 
@@ -262,7 +269,7 @@ def main(actx_class, use_esdg=False,
         logger.info(init_message)
 
     def my_write_viz(step, t, state):
-        exact_state = exact(nodes, t)
+        exact_state = exact(nodes, t, k)
         residual_field = exact_state - state
         state_ip = op.interior_trace_pairs(dcoll, state)
         grad_state = my_scalar_gradient(dcoll, state, state_ip)
