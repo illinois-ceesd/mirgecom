@@ -50,13 +50,17 @@ from mirgecom.boundary import (
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 import pytest
 
 import logging
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -151,6 +155,11 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 def test_thermally_coupled_fluid_wall_fluxes(
         actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     from pytools.convergence import EOCRecorder
@@ -440,6 +449,11 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     Analytic solution prescribed as initial condition, then the RHS is assessed
     to ensure that it is nearly zero.
     """
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     dim = 2
@@ -538,6 +552,11 @@ def test_orthotropic_flux(
         actx_factory, use_overintegration, use_radiation, use_noslip,
         visualize=False):
     """Check the RHS shape for orthotropic kappa cases."""
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     dim = 2

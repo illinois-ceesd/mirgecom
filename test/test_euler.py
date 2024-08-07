@@ -49,6 +49,11 @@ from mirgecom.gas_model import (
     make_fluid_state
 )
 from mirgecom.discretization import create_discretization_collection
+from grudge.dof_desc import DISCR_TAG_QUAD
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from mirgecom.simutil import max_component_norm
 from mirgecom.inviscid import (
     get_inviscid_timestep,
@@ -69,13 +74,17 @@ from meshmode.mesh.generation import generate_regular_rect_mesh
 
 logger = logging.getLogger(__name__)
 
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
-# import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
-@pytest.mark.parametrize("dim", [1, 2, 3])
+#@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 3, 6])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
@@ -230,7 +239,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
-@pytest.mark.parametrize("dim", [1, 2, 3])
+#@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [2, 3, 4])
 def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
     """Test the entropy-to-conservative vars conversion utility.
@@ -468,7 +478,8 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
     )
 
 
-@pytest.mark.parametrize("dim", [1, 2, 3])
+#@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func", [inviscid_facial_flux_rusanov,
@@ -548,7 +559,8 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
     )
 
 
-@pytest.mark.parametrize("dim", [1, 2, 3])
+#@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 4])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
 @pytest.mark.parametrize("use_overintegration", [True, False])

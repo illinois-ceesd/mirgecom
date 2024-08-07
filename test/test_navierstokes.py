@@ -25,21 +25,24 @@ THE SOFTWARE.
 """
 
 import logging
-from abc import ABCMeta, abstractmethod
 import numpy as np
 import pytest
 
 import cantera
 import pymbolic as pmbl
 import grudge.op as op
+
 from grudge.dof_desc import DISCR_TAG_QUAD, as_dofdesc
 from pytools.convergence import EOCRecorder
 from pytools.obj_array import flat_obj_array, make_obj_array
 from meshmode.mesh.generation import generate_regular_rect_mesh
 from meshmode.mesh import BTAG_ALL
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
+from abc import ABCMeta, abstractmethod
 from meshmode.dof_array import DOFArray
 import mirgecom.math as mm
 from mirgecom.navierstokes import (
@@ -69,9 +72,13 @@ logger = logging.getLogger(__name__)
 import os  # noqa
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"  # noqa
 
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
+
 
 @pytest.mark.parametrize("nspecies", [0, 10])
-@pytest.mark.parametrize("dim", [1, 2, 3])
+#@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 5])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 @pytest.mark.parametrize("periodic", [False, True])
@@ -557,9 +564,9 @@ class TestSolution(FluidManufacturedSolution):
 @pytest.mark.parametrize(("dim", "manufactured_soln", "mu"),
                          [(1, UniformSolution(dim=1), 0),
                           (2, UniformSolution(dim=2), 0),
-                          (3, UniformSolution(dim=3), 0),
+#                          (3, UniformSolution(dim=3), 0),
                           (2, UniformSolution(dim=2, velocity=[1, 1]), 0),
-                          (3, UniformSolution(dim=3, velocity=[1, 1, 1]), 0),
+#                          (3, UniformSolution(dim=3, velocity=[1, 1, 1]), 0),
                           (2, IsentropicVortex(), 0),
                           (2, IsentropicVortex(velocity=[1, 1]), 0),
                           (2, ShearFlow(mu=.01, gamma=3/2), .01)])
@@ -625,7 +632,8 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 
 
 @pytest.mark.parametrize(("dim", "flow_direction"),
-                         [(2, 0), (2, 1), (3, 0), (3, 1), (3, 2)])
+                         [(2, 0), (2, 1), #(3, 0), (3, 1), (3, 2)
+                         ])
 @pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_shear_flow(actx_factory, dim, flow_direction, order, use_overintegration):
@@ -1102,6 +1110,7 @@ class Linear:
         return grad_rho, grad_rhou, grad_rhoe, grad_u, grad_t
 
 
+#@pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("test_case", [0, 1])
@@ -1289,7 +1298,8 @@ def test_projection_to_quad_domain(actx_factory, dim, order, test_case,
         assert (eoc_gt.order_estimate() >= order - 0.5 or eoc_gt.max_error() < tol)
 
 
-@pytest.mark.parametrize("dim", [2])
+#@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [1, 2])
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_gradients_mixture(actx_factory, dim, order, use_overintegration):

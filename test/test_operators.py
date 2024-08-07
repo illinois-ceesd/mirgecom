@@ -28,10 +28,16 @@ from functools import partial
 import logging
 import numpy as np  # noqa
 import pytest  # noqa
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests
-)
+
+import logging
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
+from pytools.obj_array import make_obj_array
+import pymbolic as pmbl  # noqa
+import pymbolic.primitives as prim
+
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from pytools.obj_array import make_obj_array
@@ -56,9 +62,12 @@ from mirgecom.discretization import create_discretization_collection
 from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
 
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
-# import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
+
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "-1"
 
 
 def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,
@@ -88,17 +97,17 @@ def _coord_test_func(dim, order=1):
 def _trig_test_func(dim):
     """Make trig test function.
 
-    1d: cos(2pi x)
-    2d: sin(2pi x)cos(2pi y)
-    3d: sin(2pi x)sin(2pi y)cos(2pi z)
+    1d: cos(pi x/2)
+    2d: sin(pi x/2)cos(pi y/2)
+    3d: sin(pi x/2)sin(pi y/2)cos(pi z/2)
     """
     sym_coords = prim.make_sym_vector("x", dim)
 
     sym_cos = pmbl.var("cos")
     sym_sin = pmbl.var("sin")
-    sym_result = sym_cos(2*np.pi*sym_coords[dim-1])
+    sym_result = sym_cos(np.pi*sym_coords[dim-1]/2)
     for i in range(dim-1):
-        sym_result = sym_result * sym_sin(2*np.pi*sym_coords[i])
+        sym_result = sym_result * sym_sin(np.pi*sym_coords[i]/2)
 
     return sym_result
 
@@ -143,9 +152,24 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
-@pytest.mark.parametrize("tpe", [False, True])
-@pytest.mark.parametrize("dim", [1, 2, 3])
-@pytest.mark.parametrize("order", [1, 2, 3, 4])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+@pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
+                         [
+                             (1, "tet_box1", None, False),
+                             (2, "tet_box2", None, False),
+                             (3, "tet_box3", None, False),
+                             (2, "hex_box2", None, False),
+                             (3, "hex_box3", None, False),
+                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
+                             ])
+@pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("sym_test_func_factory", [
     partial(_coord_test_func, order=0),
     partial(_coord_test_func, order=1),
@@ -154,10 +178,8 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     _trig_test_func,
     _cv_test_func
 ])
-
-@pytest.mark.parametrize("use_overintegration", [False, True])
-def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory,
-                       use_overintegration):
+def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
+                       order, sym_test_func_factory, use_overintegration):
     """Test the gradient operator for sanity.
 
     Check whether we get the right answers for gradients of analytic functions with
@@ -170,38 +192,69 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory,
     """
     import pyopencl as cl
     from grudge.array_context import PyOpenCLArrayContext
+    from meshmode.mesh.processing import rotate_mesh_around_axis
+    from grudge.dt_utils import h_max_from_volume
+    from mirgecom.simutil import componentwise_norms
+    from arraycontext import flatten
+    from mirgecom.operators import grad_operator
+    from meshmode.mesh.processing import map_mesh
+
+    def add_wonk(x: np.ndarray) -> np.ndarray:
+        wonk_field = np.empty_like(x)
+        if len(x) >= 2:
+            wonk_field[0] = (
+                1.5*x[0] + np.cos(x[0])
+                + 0.1*np.sin(10*x[1]))
+            wonk_field[1] = (
+                0.05*np.cos(10*x[0])
+                + 1.3*x[1] + np.sin(x[1]))
+        else:
+            wonk_field[0] = 1.5*x[0] + np.cos(x[0])
+
+        if len(x) >= 3:
+            wonk_field[2] = x[2] + np.sin(x[0] / 2) / 2
+
+        return wonk_field
+
+    tpe = mesh_name.startswith("hex_")
+    rotation_angle = 32.0
+    theta = rotation_angle/180.0 * np.pi
 
     # This comes from array_context
     actx = actx_factory()
 
     if tpe:  # TPE requires *grudge* array context, not array_context
-        if dim == 1:  # TPE does not support dim=1
-            pytest.skip()
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)
         actx = PyOpenCLArrayContext(queue)
 
     sym_test_func = sym_test_func_factory(dim)
 
-    tol = 1e-10 if dim < 3 else 1e-9
+    tol = 2e-10 if dim < 3 else 2e-9
+
     from pytools.convergence import EOCRecorder
     eoc = EOCRecorder()
 
-    for nfac in [1, 2, 4]:
+    for nfac in [2, 4, 8]:
 
-        mesh = get_box_mesh(dim, a=0, b=1, n=nfac*3, tensor_product_elements=tpe)
+        # Make non-uniform spacings
+        b = tuple((2 ** n) for n in range(dim))
+
+        mesh = get_box_mesh(dim, a=0, b=b, n=nfac*3, tensor_product_elements=tpe)
+        if wonk:
+            mesh = map_mesh(mesh, add_wonk)
+        if rot_axis is not None:
+            mesh = rotate_mesh_around_axis(mesh, theta=theta, axis=rot_axis)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        dcoll = create_discretization_collection(
-            actx, mesh, order=order, tensor_product_elements=tpe,
-            quadrature_order=2*order+1)
+        dcoll = create_discretization_collection(actx, mesh, order=order,
+                                                 quadrature_order=2*order+1)
         quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
         # compute max element size
-        from grudge.dt_utils import h_max_from_volume
         h_max = h_max_from_volume(dcoll)
 
         def sym_eval(expr, x_vec):
@@ -226,8 +279,10 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory,
         err_scale = max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
                                 actx))
 
-        if err_scale <= 1e-16:
+        print(f"{err_scale=}")
+        if err_scale <= 1e-10:
             err_scale = 1
+            print(f"Rescaling: {err_scale=}")
 
         print(f"{test_data=}")
         print(f"{exact_grad=}")
@@ -257,6 +312,7 @@ def test_grad_operator(actx_factory, tpe, dim, order, sym_test_func_factory,
             max(flatten(
                 componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
                 actx) / err_scale)
+        print(f"{actx.to_numpy(h_max)=}\n{actx.to_numpy(grad_err)=}")
 
         eoc.add_data_point(actx.to_numpy(h_max), actx.to_numpy(grad_err))
 

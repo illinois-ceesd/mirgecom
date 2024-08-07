@@ -84,7 +84,7 @@ from meshmode.transform_metadata import (
     DiscretizationDOFAxisTag
 )
 from arraycontext import flatten, map_array_container
-from grudge.discretization import DiscretizationCollection, PartID
+from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
 
@@ -981,6 +981,9 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
                     for rank in range(num_ranks)]
 
             else:
+                from grudge.discretization import \
+                    PartID  # pylint: disable=no-name-in-module
+
                 tag_to_volume = {
                     tag: vol
                     for vol, tags in volume_to_tags.items()
