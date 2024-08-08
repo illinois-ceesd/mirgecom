@@ -24,8 +24,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from functools import partial
-import logging
 import numpy as np  # noqa
 import pytest  # noqa
 
@@ -38,28 +36,29 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 
-from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
+from meshmode.mesh import BTAG_ALL
+from grudge.dof_desc import as_dofdesc
+from grudge.dof_desc import DISCR_TAG_QUAD
 from pytools.obj_array import make_obj_array
 import mirgecom.symbolic as sym
 import grudge.op as op
-import pymbolic as pmbl  # noqa
-import pymbolic.primitives as prim
-from arraycontext import flatten, outer
-from grudge.trace_pair import TracePair
-from grudge.geometry import normal
-from grudge.dof_desc import as_dofdesc
-from grudge.dof_desc import DISCR_TAG_QUAD
 from grudge.trace_pair import (
     local_interior_trace_pair,
     tracepair_with_discr_tag
 )
+from arraycontext import flatten, outer
+from grudge.trace_pair import TracePair
+from grudge.geometry import normal
+
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import make_conserved
 from mirgecom.simutil import componentwise_norms
 from mirgecom.operators import grad_operator
 from mirgecom.discretization import create_discretization_collection
+from functools import partial
 from mirgecom.simutil import get_box_mesh
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts(

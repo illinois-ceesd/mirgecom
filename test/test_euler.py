@@ -24,11 +24,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import numpy as np
 import logging
+import pytest
 import math
 from functools import partial
-import pytest
-import numpy as np
 
 from pytools.convergence import EOCRecorder
 from pytools.obj_array import (
@@ -36,6 +36,7 @@ from pytools.obj_array import (
     make_obj_array,
 )
 
+from meshmode.mesh import BTAG_ALL
 from mirgecom.euler import euler_operator
 from mirgecom.fluid import make_conserved
 from mirgecom.initializers import Vortex2D, Lump, MulticomponentLump
@@ -48,6 +49,7 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
+import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from grudge.dof_desc import DISCR_TAG_QUAD
 
@@ -55,21 +57,19 @@ from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.simutil import max_component_norm
+
+from grudge.shortcuts import make_visualizer
 from mirgecom.inviscid import (
     get_inviscid_timestep,
     inviscid_facial_flux_rusanov,
     inviscid_facial_flux_hll
 )
-from mirgecom.integrators import rk4_step
 
-import grudge.op as op
-from grudge.dof_desc import DISCR_TAG_QUAD
-from grudge.shortcuts import make_visualizer
+from mirgecom.integrators import rk4_step
 
 from meshmode.array_context import (  # noqa
     pytest_generate_tests_for_pyopencl_array_context
     as pytest_generate_tests)
-from meshmode.mesh import BTAG_ALL
 from meshmode.mesh.generation import generate_regular_rect_mesh
 
 logger = logging.getLogger(__name__)

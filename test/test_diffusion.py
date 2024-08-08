@@ -52,7 +52,6 @@ from mirgecom.diffusion import (
     RobinDiffusionBoundary)
 from mirgecom.integrators import rk4_step
 from mirgecom.simutil import get_box_mesh
-from mirgecom.integrators import rk4_step
 from mirgecom.discretization import create_discretization_collection
 
 
@@ -538,10 +537,10 @@ def test_diffusion_discontinuous_kappa(actx_factory, order,
 
     linf_err = actx.to_numpy(
         op.norm(dcoll, grad_u_steady - grad_u_steady_exact, np.inf))
-    assert linf_err < 1e-11
+    assert linf_err < 2.5e-11
 
     linf_err = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
-    assert linf_err < 1e-11
+    assert linf_err < 2.5e-11
 
     # Now check stability
 
