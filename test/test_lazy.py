@@ -35,6 +35,7 @@ from meshmode.array_context import (  # noqa
 )
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.discretization import create_discretization_collection
+import grudge.geometry as geo
 import grudge.op as op
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
@@ -141,9 +142,8 @@ def test_lazy_op_divergence(op_test_data, order):
     def get_flux(u_tpair):
         dd = u_tpair.dd
         dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
-        normal = dcoll.normal(dd)
         actx = u_tpair.int[0].array_context
-        normal = actx.thaw(normal)
+        normal = geo.normal(actx, dcoll, dd)
         flux = u_tpair.avg @ normal
         return op.project(dcoll, dd, dd_allfaces, flux)
 

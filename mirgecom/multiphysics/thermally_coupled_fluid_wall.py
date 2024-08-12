@@ -79,6 +79,7 @@ from grudge.dof_desc import (
     DISCR_TAG_BASE,
     as_dofdesc,
 )
+import grudge.geometry as geo
 import grudge.op as op
 
 from mirgecom.math import harmonic_mean
@@ -236,7 +237,7 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         if isinstance(state_bc.thermal_conductivity, np.ndarray):
             # orthotropic materials
             actx = state_minus.array_context
-            normal = actx.thaw(dcoll.normal(dd_bdry))
+            normal = geo.normal(actx, dcoll, dd_bdry)
             kappa_bc = np.dot(normal, state_bc.thermal_conductivity*normal)
         else:
             kappa_bc = state_bc.thermal_conductivity
@@ -266,7 +267,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         if isinstance(self._kappa_plus, np.ndarray):
             # orthotropic materials
             actx = self._t_plus.array_context
-            normal = actx.thaw(dcoll.normal(dd_bdry))
+            normal = geo.normal(actx, dcoll, dd_bdry)
             kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
             return np.dot(normal, kappa_plus*normal)
         return project_from_base(dcoll, dd_bdry, self._kappa_plus)
@@ -276,7 +277,7 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         if isinstance(kappa, np.ndarray):
             # orthotropic materials
             actx = self._t_plus.array_context
-            normal = actx.thaw(dcoll.normal(dd_bdry))
+            normal = geo.normal(actx, dcoll, dd_bdry)
             return np.dot(normal, kappa*normal)
         return kappa
 
@@ -375,7 +376,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # Reflect the normal momentum
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, nhat)
@@ -392,7 +393,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
         kappa_minus = state_minus.tv.thermal_conductivity
 
         # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # set the normal momentum to 0
         mom_bc = self._slip.momentum_bc(state_minus.momentum_density, nhat)
@@ -611,7 +612,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
             numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
 
@@ -632,7 +633,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
                 "Boundary does not have external gradient data.")
 
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
 
@@ -715,7 +716,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
             numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_minus)
@@ -737,7 +738,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             raise TypeError("Ambient temperature is not specified.")
 
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
         grad_u_plus = project_from_base(dcoll, dd_bdry, self.grad_u_plus)

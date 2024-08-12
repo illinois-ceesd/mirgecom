@@ -36,6 +36,7 @@ from arraycontext import pytest_generate_tests_for_array_contexts
 
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
+import grudge.geometry as geo
 import grudge.op as op
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
@@ -214,14 +215,14 @@ def test_artificial_viscosity(ctx_factory, dim, order):
             bnd_pair = TracePair(dd_bdry,
                                  interior=cv_int,
                                  exterior=cv_int)
-            nhat = actx.thaw(dcoll.normal(dd_bdry))
+            nhat = geo.normal(actx, dcoll, dd_bdry)
             from mirgecom.flux import num_flux_central
             from arraycontext import outer
             # Do not project to "all_faces" as now we use built-in grad_cv_operator
             return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 
         def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
-            nhat = actx.thaw(dcoll.normal(dd_bdry))
+            nhat = geo.normal(actx, dcoll, dd_bdry)
             diffusion_minus = op.project(dcoll, "vol", dd_bdry, diffusion)
             diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
@@ -410,7 +411,7 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     cv = prescribed_soln(r=nodes, eos=gas_model.eos)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    boundary_nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    boundary_nhat = geo.normal(actx, dcoll, BTAG_ALL)
 
     prescribed_boundary = \
         PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state_func)

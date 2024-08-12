@@ -35,6 +35,7 @@ from pytools.obj_array import make_obj_array
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
 from grudge.dof_desc import as_dofdesc
+import grudge.geometry as geo
 import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
@@ -161,7 +162,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     from mirgecom.flux import num_flux_central
 
     def cv_flux_interior(int_tpair):
-        normal = actx.thaw(dcoll.normal(int_tpair.dd))
+        normal = geo.normal(actx, dcoll, int_tpair.dd)
         from arraycontext import outer
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         dd_allfaces = int_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
@@ -171,7 +172,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         boundary_discr = dcoll.discr_from_dd(dd_bdry)
         bnd_nodes = actx.thaw(boundary_discr.nodes())
         cv_bnd = initializer(x_vec=bnd_nodes, eos=eos)
-        bnd_nhat = actx.thaw(dcoll.normal(dd_bdry))
+        bnd_nhat = geo.normal(actx, dcoll, dd_bdry)
         from grudge.trace_pair import TracePair
         bnd_tpair = TracePair(dd_bdry, interior=cv_bnd, exterior=cv_bnd)
         from arraycontext import outer

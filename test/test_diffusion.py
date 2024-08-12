@@ -29,6 +29,7 @@ import pymbolic as pmbl
 import mirgecom.math as mm
 import pytest
 from pytools.obj_array import make_obj_array
+import grudge.geometry as geo
 from grudge import op
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
@@ -220,7 +221,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
             lower_bdtag = BoundaryDomainTag("-"+str(i+1))
             upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             upper_grad_u = op.project(dcoll, "vol", upper_bdtag, exact_grad_u)
-            normal = actx.thaw(dcoll.normal(upper_bdtag))
+            normal = geo.normal(actx, dcoll, upper_bdtag)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)

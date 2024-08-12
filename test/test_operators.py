@@ -41,6 +41,7 @@ from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
+import grudge.geometry as geo
 import grudge.op as op
 from grudge.trace_pair import interior_trace_pair
 from mirgecom.discretization import create_discretization_collection
@@ -115,7 +116,7 @@ def _cv_test_func(dim):
 
 def central_flux_interior(actx, dcoll, int_tpair):
     """Compute a central flux for interior faces."""
-    normal = actx.thaw(dcoll.normal(int_tpair.dd))
+    normal = geo.normal(actx, dcoll, int_tpair.dd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
     dd_allfaces = int_tpair.dd.with_dtag("all_faces")
@@ -127,7 +128,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     boundary_discr = dcoll.discr_from_dd(dd_bdry)
     bnd_nodes = actx.thaw(boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = actx.thaw(dcoll.normal(dd_bdry))
+    bnd_nhat = geo.normal(actx, dcoll, dd_bdry)
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer

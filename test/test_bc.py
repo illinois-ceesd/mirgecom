@@ -49,6 +49,7 @@ from mirgecom.gas_model import (
     project_fluid_state,
     make_fluid_state_trace_pairs
 )
+import grudge.geometry as geo
 import grudge.op as op
 from mirgecom.simutil import get_box_mesh
 
@@ -169,7 +170,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-    nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    nhat = geo.normal(actx, dcoll, BTAG_ALL)
     print(f"{nhat=}")
 
     ff_cv = ff_init(nodes, eos=gas_model.eos)
@@ -179,7 +180,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 
     def gradient_flux_interior(int_tpair):
         from arraycontext import outer
-        normal = actx.thaw(dcoll.normal(int_tpair.dd))
+        normal = geo.normal(actx, dcoll, int_tpair.dd)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         return op.project(dcoll, int_tpair.dd, "all_faces", flux_weak)
@@ -257,7 +258,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                                                        gas_model=gas_model,
                                                        state_minus=state_minus)
 
-            nhat = actx.thaw(dcoll.normal(state_pair.dd))
+            nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
@@ -338,7 +339,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-    nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    nhat = geo.normal(actx, dcoll, BTAG_ALL)
     print(f"{nhat=}")
 
     # utility to compare stuff on the boundary only
@@ -378,7 +379,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             print(f"{flowbnd_bndry_temperature=}")
             print(f"{flowbnd_bndry_pressure=}")
 
-            nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+            nhat = geo.normal(actx, dcoll, BTAG_ALL)
 
             bnd_dens = 1.0*ones
             bnd_mom = bnd_dens*vel
@@ -414,7 +415,7 @@ def test_outflow_boundary(actx_factory, dim, flux_func):
             flowbnd_bndry_temperature = flowbnd_bndry_state.temperature
             print(f"{flowbnd_bndry_temperature=}")
 
-            nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+            nhat = geo.normal(actx, dcoll, BTAG_ALL)
 
             bnd_dens = 1.0*ones
             bnd_mom = bnd_dens*vel
@@ -454,14 +455,14 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-    nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    nhat = geo.normal(actx, dcoll, BTAG_ALL)
     print(f"{nhat=}")
 
     from mirgecom.flux import num_flux_central
 
     def gradient_flux_interior(int_tpair):
         from arraycontext import outer
-        normal = actx.thaw(dcoll.normal(int_tpair.dd))
+        normal = geo.normal(actx, dcoll, int_tpair.dd)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         return op.project(dcoll, int_tpair.dd, "all_faces", flux_weak)
@@ -551,7 +552,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
-            nhat = actx.thaw(dcoll.normal(state_pair.dd))
+            nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
@@ -621,14 +622,14 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-    nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    nhat = geo.normal(actx, dcoll, BTAG_ALL)
     print(f"{nhat=}")
 
     from mirgecom.flux import num_flux_central
 
     def gradient_flux_interior(int_tpair):
         from arraycontext import outer
-        normal = actx.thaw(dcoll.normal(int_tpair.dd))
+        normal = geo.normal(actx, dcoll, int_tpair.dd)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         return op.project(dcoll, int_tpair.dd, "all_faces", flux_weak)
@@ -728,7 +729,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
-            nhat = actx.thaw(dcoll.normal(state_pair.dd))
+            nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
@@ -803,14 +804,14 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-    nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    nhat = geo.normal(actx, dcoll, BTAG_ALL)
     print(f"{nhat=}")
 
     from mirgecom.flux import num_flux_central
 
     def gradient_flux_interior(int_tpair):
         from arraycontext import outer
-        normal = actx.thaw(dcoll.normal(int_tpair.dd))
+        normal = geo.normal(actx, dcoll, int_tpair.dd)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         return op.project(dcoll, int_tpair.dd, "all_faces", flux_weak)
@@ -837,7 +838,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
                                               uniform_state, gas_model)
 
             print(f"{state_minus.temperature=}")
-            bnd_normal = actx.thaw(dcoll.normal(BTAG_ALL))
+            bnd_normal = geo.normal(actx, dcoll, BTAG_ALL)
             print(f"{bnd_normal=}")
             expected_temp_boundary = exp_temp + 0*state_minus.temperature
 
@@ -920,7 +921,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
                                                       gas_model=gas_model,
                                                       state_minus=state_minus)
 
-            nhat = actx.thaw(dcoll.normal(state_pair.dd))
+            nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_dtag("all_faces")
@@ -994,7 +995,7 @@ def test_slipwall_identity(actx_factory, dim):
     nodes = actx.thaw(dcoll.nodes())
     eos = IdealSingleGas()
     orig = np.zeros(shape=(dim,))
-    nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    nhat = geo.normal(actx, dcoll, BTAG_ALL)
     gas_model = GasModel(eos=eos)
 
     logger.info(f"Number of {dim}d elems: {mesh.nelements}")
@@ -1073,7 +1074,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
 
         dcoll = create_discretization_collection(actx, mesh, order=order)
         nodes = actx.thaw(dcoll.nodes())
-        nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+        nhat = geo.normal(actx, dcoll, BTAG_ALL)
         h = 1.0 / nel_1d
 
         def bnd_norm(vec):
@@ -1115,7 +1116,7 @@ def test_slipwall_flux(actx_factory, dim, order, flux_func):
                 avg_state = 0.5*(bnd_pair.int + bnd_pair.ext)
                 err_max = max(err_max, bnd_norm(np.dot(avg_state.momentum, nhat)))
 
-                normal = actx.thaw(dcoll.normal(BTAG_ALL))
+                normal = geo.normal(actx, dcoll, BTAG_ALL)
                 bnd_flux = flux_func(state_pair, gas_model, normal)
 
                 err_max = max(err_max, bnd_norm(bnd_flux.mass),
@@ -1231,14 +1232,14 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
     boundary_nodes = actx.thaw(boundary_discr.nodes())
     expected_boundary_solution = prescribed_soln(r=boundary_nodes, eos=gas_model.eos)
 
-    nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    nhat = geo.normal(actx, dcoll, BTAG_ALL)
     print(f"{nhat=}")
 
     from mirgecom.flux import num_flux_central
 
     def scalar_flux_interior(int_tpair):
         from arraycontext import outer
-        normal = actx.thaw(dcoll.normal(int_tpair.dd))
+        normal = geo.normal(actx, dcoll, int_tpair.dd)
         # Hard-coding central per [Bassi_1997]_ eqn 13
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext),
                           normal)
@@ -1298,7 +1299,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             state_pairs = make_fluid_state_trace_pairs(cv_int_pairs, gas_model)
             state_pair = state_pairs[0]
 
-            nhat = actx.thaw(dcoll.normal(state_pair.dd))
+            nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
             dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
