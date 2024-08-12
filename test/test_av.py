@@ -86,7 +86,7 @@ def test_tag_cells(ctx_factory, dim, order):
     queue = cl.CommandQueue(cl_ctx)
     actx = PyOpenCLArrayContext(queue)
 
-    nel_1d = 2
+    nel_1d = 1
     tolerance = 1.e-16
 
     def norm_indicator(expected, dcoll, soln, **kwargs):
@@ -96,7 +96,7 @@ def test_tag_cells(ctx_factory, dim, order):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-1.0, )*dim,  b=(1.0, )*dim,  n=(nel_1d, ) * dim
+        a=(-1.0, )*dim,  b=(1.0, )*dim,  nelements_per_axis=(nel_1d, ) * dim
     )
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
