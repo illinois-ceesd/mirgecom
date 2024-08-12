@@ -31,6 +31,7 @@ import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair, interior_trace_pairs
 import grudge.geometry as geo
 import grudge.op as op
@@ -97,7 +98,7 @@ def wave_operator(dcoll, c, w, *, comm_tag=None):
             +  # noqa: W504
             op.face_mass(dcoll,
                 _flux(dcoll, c=c,
-                      w_tpair=TracePair(BTAG_ALL, interior=dir_bval,
+                      w_tpair=TracePair(as_dofdesc(BTAG_ALL), interior=dir_bval,
                                         exterior=dir_bc))
                 + sum(
                     _flux(dcoll, c=c, w_tpair=tpair)

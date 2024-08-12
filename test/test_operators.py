@@ -35,6 +35,7 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import as_dofdesc
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
@@ -119,7 +120,7 @@ def central_flux_interior(actx, dcoll, int_tpair):
     normal = geo.normal(actx, dcoll, int_tpair.dd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
-    dd_allfaces = int_tpair.dd.with_dtag("all_faces")
+    dd_allfaces = int_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
     return op.project(dcoll, int_tpair.dd, dd_allfaces, flux_weak)
 
 
@@ -133,7 +134,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
-    dd_allfaces = bnd_tpair.dd.with_dtag("all_faces")
+    dd_allfaces = bnd_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 

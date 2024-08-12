@@ -231,7 +231,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
 
             cv_grad_flux_allfaces = \
                 op.project(dcoll, as_dofdesc(BTAG_ALL),
-                           as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                           as_dofdesc("all_faces"),
                            cv_grad_flux_bndry)
 
             print(f"{cv_grad_flux_bndry=}")
@@ -249,8 +249,8 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                                                         state_minus=state_minus)
 
             t_flux_bc = op.project(dcoll, as_dofdesc(BTAG_ALL),
-                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
-                                    t_flux_bc)
+                                   as_dofdesc("all_faces"),
+                                   t_flux_bc)
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
@@ -261,7 +261,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
             nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
             bc_dd = as_dofdesc(BTAG_ALL)
             i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
@@ -525,7 +525,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
 
             cv_grad_flux_allfaces = \
                 op.project(dcoll, as_dofdesc(BTAG_ALL),
-                           as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                           as_dofdesc("all_faces"),
                            cv_grad_flux_wall)
 
             print(f"{cv_grad_flux_wall=}")
@@ -543,8 +543,8 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
                                                        state_minus=state_minus)
 
             t_flux_bc = op.project(dcoll, as_dofdesc(BTAG_ALL),
-                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
-                                    t_flux_bc)
+                                   as_dofdesc("all_faces"),
+                                   t_flux_bc)
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
@@ -555,7 +555,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
             nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
             bc_dd = as_dofdesc(BTAG_ALL)
             i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
@@ -702,7 +702,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
             cv_grad_flux_allfaces = \
                 op.project(dcoll, as_dofdesc(BTAG_ALL),
-                           as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                           as_dofdesc("all_faces"),
                            cv_grad_flux_wall)
 
             print(f"{cv_grad_flux_wall=}")
@@ -720,8 +720,8 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
                                                        state_minus=state_minus)
 
             t_flux_bc = op.project(dcoll, as_dofdesc(BTAG_ALL),
-                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
-                                    t_flux_bc)
+                                   as_dofdesc("all_faces"),
+                                   t_flux_bc)
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
@@ -732,7 +732,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
             nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
             bc_dd = as_dofdesc(BTAG_ALL)
             i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
@@ -898,7 +898,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
             cv_grad_flux_allfaces = \
                 op.project(dcoll, as_dofdesc(BTAG_ALL),
-                           as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                           as_dofdesc("all_faces"),
                            cv_grad_flux_wall)
 
             print(f"{cv_grad_flux_wall=}")
@@ -912,8 +912,8 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
                                                        state_minus=state_minus)
 
             t_flux_bc = op.project(dcoll, as_dofdesc(BTAG_ALL),
-                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
-                                    t_flux_bc)
+                                   as_dofdesc("all_faces"),
+                                   t_flux_bc)
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
@@ -924,7 +924,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
             nhat = geo.normal(actx, dcoll, state_pair.dd)
             bnd_flux = flux_func(state_pair, gas_model, nhat)
             dd = state_pair.dd
-            dd_allfaces = dd.with_dtag("all_faces")
+            dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
             i_flux_int = op.project(dcoll, dd, dd_allfaces, bnd_flux)
             bc_dd = as_dofdesc(BTAG_ALL)
             i_flux_bc = op.project(dcoll, bc_dd, dd_allfaces, i_flux_bc)
@@ -1272,7 +1272,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
                                                state_minus=state_minus)
 
             cv_flux_bc = op.project(dcoll, as_dofdesc(BTAG_ALL),
-                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
+                                    as_dofdesc("all_faces"),
                                     cv_flux_bc)
 
             cv_flux_bnd = cv_flux_bc + cv_flux_int
@@ -1285,8 +1285,8 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
                                                           state_minus=state_minus)
 
             t_flux_bc = op.project(dcoll, as_dofdesc(BTAG_ALL),
-                                    as_dofdesc(BTAG_ALL).with_dtag("all_faces"),
-                                    t_flux_bc)
+                                   as_dofdesc("all_faces"),
+                                   t_flux_bc)
 
             t_flux_bnd = t_flux_bc + t_flux_int
 
@@ -1331,8 +1331,9 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
                     grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
             bc_soln = \
-                domain_boundary._boundary_state_pair(dcoll, BTAG_ALL, gas_model,
-                                                     state_minus=state_minus).ext.cv
+                domain_boundary._boundary_state_pair(
+                    dcoll, as_dofdesc(BTAG_ALL), gas_model,
+                    state_minus=state_minus).ext.cv
             assert actx.np.equal(bc_soln, expected_boundary_solution)
 
 
