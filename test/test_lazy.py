@@ -156,7 +156,7 @@ def test_lazy_op_divergence(op_test_data, order):
     def get_inputs(actx):
         nodes = actx.thaw(dcoll.nodes())
         u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
-        return u,
+        return actx.freeze_thaw(make_obj_array([u]))
 
     tol = 1e-12
     isclose = partial(
@@ -197,7 +197,7 @@ def test_lazy_op_diffusion(op_test_data, order):
         nodes = actx.thaw(dcoll.nodes())
         kappa = dcoll.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
-        return kappa, u
+        return actx.freeze_thaw(make_obj_array([kappa, u]))
 
     tol = 1e-11
     isclose = partial(
@@ -285,7 +285,7 @@ def test_lazy_op_euler(op_test_data, problem, order):
     def get_inputs(actx):
         nodes = actx.thaw(dcoll.nodes())
         state = init(nodes)
-        return state,
+        return actx.freeze_thaw(make_obj_array([state]))
 
     isclose = partial(
         _isclose, dcoll, rel_tol=tol, abs_tol=tol, return_operands=True)
