@@ -477,7 +477,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     d_alpha_input = np.array([.1, .2, .3])
     if array_valued:
         f = 1 + 0.1*actx.np.sin(nodes[0])
-        d_alpha_input *= f
+        d_alpha_input = d_alpha_input * f
 
     tv_model = SimpleTransport(species_diffusivity=d_alpha_input)
     eos = IdealSingleGas()
@@ -489,7 +489,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     from mirgecom.viscous import get_local_max_species_diffusivity
     expected = .3*ones
     if array_valued:
-        expected *= f
+        expected = expected * f
     calculated = get_local_max_species_diffusivity(actx, d_alpha)
 
     assert actx.to_numpy(op.norm(dcoll, calculated-expected, np.inf)) == 0

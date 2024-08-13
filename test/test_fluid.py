@@ -72,7 +72,7 @@ def test_velocity_gradient_sanity(actx_factory, dim, mass_exp, vel_fac):
 
     mass = 1*ones
     for i in range(mass_exp):
-        mass *= (mass + i)
+        mass = mass * (mass + i)
 
     energy = zeros + 2.5
     velocity = vel_fac * nodes
