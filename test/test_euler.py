@@ -53,7 +53,7 @@ from mirgecom.gas_model import (
 )
 import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
@@ -112,7 +112,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
-            quadrature_tag = None
+            quadrature_tag = DISCR_TAG_BASE
 
         zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
@@ -432,7 +432,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
-            quadrature_tag = None
+            quadrature_tag = DISCR_TAG_BASE
 
         nodes = actx.thaw(dcoll.nodes())
 
@@ -510,7 +510,7 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
-            quadrature_tag = None
+            quadrature_tag = DISCR_TAG_BASE
 
         nodes = actx.thaw(dcoll.nodes())
 
@@ -597,7 +597,7 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
-            quadrature_tag = None
+            quadrature_tag = DISCR_TAG_BASE
 
         nodes = actx.thaw(dcoll.nodes())
 
@@ -690,7 +690,7 @@ def _euler_flow_stepper(actx, parameters):
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     nodes = actx.thaw(dcoll.nodes())
 

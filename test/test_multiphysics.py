@@ -189,7 +189,7 @@ def test_thermally_coupled_fluid_wall(
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
-            quadrature_tag = None
+            quadrature_tag = DISCR_TAG_BASE
 
         dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
         dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -491,7 +491,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
@@ -594,7 +594,7 @@ def test_orthotropic_flux(
     dcoll = create_discretization_collection(
         actx, volume_meshes, order=order, quadrature_order=2*order+1)
 
-    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
