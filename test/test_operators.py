@@ -176,6 +176,7 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
     import pyopencl as cl
+    import pyopencl.tools as cl_tools
     from grudge.array_context import PyOpenCLArrayContext
     from meshmode.mesh.processing import rotate_mesh_around_axis
     from grudge.dt_utils import h_max_from_volume
@@ -211,7 +212,9 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     if tpe:  # TPE requires *grudge* array context, not array_context
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)
-        actx = PyOpenCLArrayContext(queue)
+        actx = PyOpenCLArrayContext(
+            queue=queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     sym_test_func = sym_test_func_factory(dim)
 
