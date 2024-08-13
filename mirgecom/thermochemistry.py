@@ -86,7 +86,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
         # with the actual fluid state.
         def get_concentrations(self, rho, mass_fractions):
             # concs = self.inv_molecular_weights * rho * mass_fractions
-            concs = self.iwts * rho * mass_fractions
+            concs = self.inv_molecular_weights * rho * mass_fractions
             # ensure non-negative concentrations
             zero = self._pyro_zeros_like(concs[0])
             for i in range(self.num_species):
