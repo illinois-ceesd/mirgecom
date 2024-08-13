@@ -273,12 +273,15 @@ def test_lazy_op_euler(op_test_data, problem, order):
     gas_model, init, boundaries, tol = problem
 
     from mirgecom.euler import euler_operator
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
     from mirgecom.gas_model import make_fluid_state
 
     def euler_op(state):
         fluid_state = make_fluid_state(state, gas_model)
-        return euler_operator(dcoll, gas_model=gas_model,
-                              boundaries=boundaries, state=fluid_state)
+        return euler_operator(
+            dcoll, gas_model=gas_model,
+            boundaries=boundaries, state=fluid_state,
+            inviscid_numerical_flux_func=inviscid_facial_flux_rusanov)
 
     lazy_op = lazy_actx.compile(euler_op)
 
