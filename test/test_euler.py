@@ -711,7 +711,7 @@ def _euler_flow_stepper(actx, parameters):
         f"EOS:             {eosname}"
     )
 
-    vis = make_visualizer(dcoll, order)
+    vis = make_visualizer(dcoll)
 
     def write_soln(state, write_status=True):
         dv = eos.dependent_vars(cv=state)
