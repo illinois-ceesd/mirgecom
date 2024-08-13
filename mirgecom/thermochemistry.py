@@ -202,8 +202,8 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
     zero_level: float
         Squash concentrations below this level to 0. (default=0.)
     """
-    import pyrometheus as pyro
-    pyro_class = pyro.get_thermochem_class(cantera_soln)
+    from pyrometheus.codegen.python import get_thermochem_class
+    pyro_class = get_thermochem_class(cantera_soln)
     return get_pyrometheus_wrapper_class(pyro_class,
                                          temperature_niter=temperature_niter,
                                          zero_level=zero_level)
