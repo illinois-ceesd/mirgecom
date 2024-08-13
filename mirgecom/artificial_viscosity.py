@@ -472,7 +472,7 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
         return actx.from_numpy(
             np.asarray([1 if sum(mode_id) == grp.order
                         else 0
-                        for mode_id in grp.mode_ids()])
+                        for mode_id in grp.basis_obj().mode_ids])
         )
 
     # Convert to modal solution representation

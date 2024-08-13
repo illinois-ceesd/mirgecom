@@ -111,9 +111,9 @@ def test_tag_cells(ctx_factory, dim, order):
 
     # get meshmode polynomials
     group = dcoll.discr_from_dd("vol").groups[0]
-    basis = group.basis()  # only one group
+    basis = group.basis_obj().functions  # only one group
     unit_nodes = group.unit_nodes
-    modes = group.mode_ids()
+    modes = group.basis_obj().mode_ids
     order = group.order
 
     # loop over modes and check smoothness

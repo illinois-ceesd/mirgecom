@@ -128,7 +128,7 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     print(f"{vol_discr.groups=}")
 
     for group in vol_discr.groups:
-        mode_ids = group.mode_ids()
+        mode_ids = group.basis_obj().mode_ids
         print(f"{mode_ids=}")
         filter_coeff = actx.thaw(
             make_spectral_filter(
