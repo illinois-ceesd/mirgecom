@@ -117,8 +117,8 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     # number of {nodes, modes} see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
     # DOI: 10.1007/978-0-387-72067-8
-    nnodes = int(np.math.factorial(dim+order)
-                 / (np.math.factorial(dim) * np.math.factorial(order)))
+    from math import factorial
+    nnodes = int(factorial(dim+order) / (factorial(dim) * factorial(order)))
     if include_faces:
         nnodes = nnodes + (dim+1)*get_number_of_tetrahedron_nodes(dim-1, order)
     return nnodes
