@@ -34,7 +34,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.initializers import Lump
 from mirgecom.eos import IdealSingleGas
-from grudge.trace_pair import interior_trace_pair, interior_trace_pairs
+from grudge.trace_pair import interior_trace_pairs
 from grudge.trace_pair import TracePair
 from grudge.dof_desc import as_dofdesc
 from mirgecom.fluid import make_conserved
@@ -242,7 +242,7 @@ def test_farfield_boundary(actx_factory, dim, flux_func):
                 dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
             print(f"{temperature_bc=}")
 
-            t_int_tpair = interior_trace_pair(dcoll, temper)
+            t_int_tpair = interior_trace_pairs(dcoll, temper)[0]
             t_flux_int = gradient_flux_interior(t_int_tpair)
             t_flux_bc = bndry.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                         gas_model=gas_model,
@@ -536,7 +536,7 @@ def test_isothermal_wall_boundary(actx_factory, dim, flux_func):
                 dcoll, dd_bdry=BTAG_ALL, state_minus=state_minus)
             print(f"{temperature_bc=}")
 
-            t_int_tpair = interior_trace_pair(dcoll, temper)
+            t_int_tpair = interior_trace_pairs(dcoll, temper)[0]
             t_flux_int = gradient_flux_interior(t_int_tpair)
             t_flux_bc = wall.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
@@ -713,7 +713,7 @@ def test_adiabatic_noslip_wall_boundary(actx_factory, dim, flux_func):
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
 
-            t_int_tpair = interior_trace_pair(dcoll, temper)
+            t_int_tpair = interior_trace_pairs(dcoll, temper)[0]
             t_flux_int = gradient_flux_interior(t_int_tpair)
             t_flux_bc = wall.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
@@ -905,7 +905,7 @@ def test_symmetry_wall_boundary(actx_factory, dim, flux_func):
 
             cv_flux_bnd = cv_grad_flux_allfaces + cv_flux_int
 
-            t_int_tpair = interior_trace_pair(dcoll, temper)
+            t_int_tpair = interior_trace_pairs(dcoll, temper)[0]
             t_flux_int = gradient_flux_interior(t_int_tpair)
             t_flux_bc = wall.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                        gas_model=gas_model,
@@ -1265,7 +1265,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
             temper = state.temperature
             print(f"{temper=}")
 
-            cv_int_tpair = interior_trace_pair(dcoll, cv)
+            cv_int_tpair = interior_trace_pairs(dcoll, cv)[0]
             cv_flux_int = scalar_flux_interior(cv_int_tpair)
             cv_flux_bc = domain_boundary.cv_gradient_flux(dcoll, dd_bdry=BTAG_ALL,
                                                gas_model=gas_model,
@@ -1277,7 +1277,7 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
 
             cv_flux_bnd = cv_flux_bc + cv_flux_int
 
-            t_int_tpair = interior_trace_pair(dcoll, temper)
+            t_int_tpair = interior_trace_pairs(dcoll, temper)[0]
             t_flux_int = scalar_flux_interior(t_int_tpair)
             t_flux_bc = \
                 domain_boundary.temperature_gradient_flux(dcoll, dd_bdry=BTAG_ALL,

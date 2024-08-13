@@ -132,7 +132,7 @@ def test_lazy_op_divergence(op_test_data, order):
     eager_actx, lazy_actx, get_dcoll = op_test_data
     dcoll = get_dcoll(order)
 
-    from grudge.trace_pair import interior_trace_pair
+    from grudge.trace_pair import interior_trace_pairs
     from grudge.dof_desc import as_dofdesc
     from mirgecom.operators import div_operator
 
@@ -149,7 +149,7 @@ def test_lazy_op_divergence(op_test_data, order):
 
     def div_op(u):
         return div_operator(dcoll, dd_vol, dd_allfaces,
-                            u, get_flux(interior_trace_pair(dcoll, u)))
+                            u, get_flux(interior_trace_pairs(dcoll, u)[0]))
 
     lazy_op = lazy_actx.compile(div_op)
 

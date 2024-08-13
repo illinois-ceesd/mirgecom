@@ -44,7 +44,7 @@ from mirgecom.fluid import (
 import mirgecom.symbolic as sym
 import grudge.geometry as geo
 import grudge.op as op
-from grudge.trace_pair import interior_trace_pair
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 from functools import partial
 from mirgecom.simutil import get_box_mesh
@@ -270,7 +270,7 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
         print(f"{test_data=}")
         print(f"{exact_grad=}")
 
-        test_data_int_tpair = interior_trace_pair(dcoll, test_data)
+        test_data_int_tpair = interior_trace_pairs(dcoll, test_data)[0]
         boundaries = [BTAG_ALL]
         test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
                                          test_data_int_tpair, boundaries)
