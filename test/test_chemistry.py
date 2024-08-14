@@ -50,6 +50,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),
                          [("uiuc_7sp", "C2H4", 1e-11),
                           ("sandiego", "H2", 1e-9)])
