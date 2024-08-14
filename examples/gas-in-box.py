@@ -184,12 +184,20 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             scale_fac = pow(float(nscale), 1.0/dim)
             nel_1d = int(scale_fac*24/dim)
             from mirgecom.simutil import get_box_mesh
+            from meshmode.mesh import TensorProductElementGroup
+            from meshmode.mesh.generation import generate_annular_cylinder_slice_mesh
+            group_cls = TensorProductElementGroup if use_tpe else None
             box_ll = -1
             box_ur = 1
+            center = make_obj_array([0, 0, 0])
+            # generate_mesh = partial(
+            #    get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
+            #    n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
+            #    tensor_product_elements=use_tpe)
             generate_mesh = partial(
-                get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
-                n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
-                tensor_product_elements=use_tpe)
+                generate_annular_cylinder_slice_mesh, inner_radius=.333, outer_radius=1,
+                nelements_per_axis=(10, 36, 5), periodic=True, n=12,
+                group_cls=group_cls, center=center)
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
@@ -531,14 +539,17 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             return gas_state.cv
 
     boundaries = {}
-    if not periodic_mesh:
+    axis_names = ["r", "theta", "z"]
+    if periodic_mesh:
         if multiple_boundaries:
             for idir in range(dim):
-                boundaries[BoundaryDomainTag(f"+{idir+1}")] = wall_bc
-                boundaries[BoundaryDomainTag(f"-{idir+1}")] = wall_bc
+                if idir == 0:
+                    boundaries[BoundaryDomainTag(f"+{axis_names[idir]}")] = wall_bc
+                    boundaries[BoundaryDomainTag(f"-{axis_names[idir]}")] = wall_bc
         else:
             boundaries = {BTAG_ALL: wall_bc}
 
+    print(f"{boundaries=}")
     def mfs(cv, tseed):
         return make_fluid_state(cv, gas_model, limiter_func=limiter_func,
                                 temperature_seed=tseed)
