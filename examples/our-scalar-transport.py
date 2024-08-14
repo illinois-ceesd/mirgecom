@@ -48,7 +48,7 @@ from mirgecom.operators import (
     div_operator
 )
 from mirgecom.utils import force_evaluation
-from mirgecom.integrators import rk4_step
+from mirgecom.integrators import rk4_step, euler_step
 from mirgecom.steppers import advance_state
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -142,7 +142,7 @@ def main(actx_class, use_esdg=False,
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
-        timestepper = rk4_step
+        timestepper = euler_step
 
     nsteps = 20000
     current_cfl = 1.0
