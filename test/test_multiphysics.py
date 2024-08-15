@@ -267,7 +267,11 @@ def test_thermally_coupled_fluid_wall(
         # This perturbation function is nonzero at the interface, so the two alphas
         # need to be the same (otherwise the perturbations will decay at different
         # rates and a discontinuity will form)
-        assert abs(fluid_alpha - np.max(actx.to_numpy(wall_alpha))) < 1e-12
+        if np.isscalar(wall_alpha):
+            max_wall_alpha = wall_alpha
+        else:
+            max_wall_alpha = actx.to_numpy(actx.np.max(wall_alpha))
+        assert abs(fluid_alpha - max_wall_alpha) < 1e-12
 
         fluid_perturb_func = partial(perturb_func, fluid_alpha)
         wall_perturb_func = partial(perturb_func, wall_alpha)
