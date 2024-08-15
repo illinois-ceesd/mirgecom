@@ -50,7 +50,7 @@ def _flux(dcoll, c, w_tpair):
         )
 
     # upwind
-    flux_weak += flat_obj_array(
+    flux_weak = flux_weak + flat_obj_array(
         0.5*(u.ext-u.int),
         0.5*normal*np.dot(normal, v.ext-v.int),
         )
