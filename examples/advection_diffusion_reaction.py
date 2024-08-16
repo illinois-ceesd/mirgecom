@@ -192,7 +192,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
     kappa = 0.01
 
     from grudge.dt_utils import characteristic_lengthscales
-    dx = np.min(actx.to_numpy(characteristic_lengthscales(actx, dcoll)))
+    dx = actx.to_numpy(actx.np.min(characteristic_lengthscales(actx, dcoll)))
     inv_dt = dx / wave_speed
     visc_dt = dx**2 / kappa
 

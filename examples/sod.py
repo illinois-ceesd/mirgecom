@@ -143,11 +143,11 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     current_dt = actx.to_numpy(
         current_cfl * op.nodal_min(dcoll, "vol", nodal_h))[()]
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 

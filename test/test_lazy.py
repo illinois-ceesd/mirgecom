@@ -35,6 +35,7 @@ from meshmode.array_context import (  # noqa
 )
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.discretization import create_discretization_collection
+import grudge.geometry as geo
 import grudge.op as op
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
@@ -131,7 +132,7 @@ def test_lazy_op_divergence(op_test_data, order):
     eager_actx, lazy_actx, get_dcoll = op_test_data
     dcoll = get_dcoll(order)
 
-    from grudge.trace_pair import interior_trace_pair
+    from grudge.trace_pair import interior_trace_pairs
     from grudge.dof_desc import as_dofdesc
     from mirgecom.operators import div_operator
 
@@ -141,22 +142,21 @@ def test_lazy_op_divergence(op_test_data, order):
     def get_flux(u_tpair):
         dd = u_tpair.dd
         dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
-        normal = dcoll.normal(dd)
         actx = u_tpair.int[0].array_context
-        normal = actx.thaw(normal)
+        normal = geo.normal(actx, dcoll, dd)
         flux = u_tpair.avg @ normal
         return op.project(dcoll, dd, dd_allfaces, flux)
 
     def div_op(u):
         return div_operator(dcoll, dd_vol, dd_allfaces,
-                            u, get_flux(interior_trace_pair(dcoll, u)))
+                            u, get_flux(interior_trace_pairs(dcoll, u)[0]))
 
     lazy_op = lazy_actx.compile(div_op)
 
     def get_inputs(actx):
         nodes = actx.thaw(dcoll.nodes())
         u = make_obj_array([actx.np.sin(np.pi*nodes[i]) for i in range(2)])
-        return u,
+        return actx.freeze_thaw(make_obj_array([u]))
 
     tol = 1e-12
     isclose = partial(
@@ -197,7 +197,7 @@ def test_lazy_op_diffusion(op_test_data, order):
         nodes = actx.thaw(dcoll.nodes())
         kappa = dcoll.zeros(actx) + 1
         u = actx.np.cos(np.pi*nodes[0])
-        return kappa, u
+        return actx.freeze_thaw(make_obj_array([kappa, u]))
 
     tol = 1e-11
     isclose = partial(
@@ -273,19 +273,22 @@ def test_lazy_op_euler(op_test_data, problem, order):
     gas_model, init, boundaries, tol = problem
 
     from mirgecom.euler import euler_operator
+    from mirgecom.inviscid import inviscid_facial_flux_rusanov
     from mirgecom.gas_model import make_fluid_state
 
     def euler_op(state):
         fluid_state = make_fluid_state(state, gas_model)
-        return euler_operator(dcoll, gas_model=gas_model,
-                              boundaries=boundaries, state=fluid_state)
+        return euler_operator(
+            dcoll, gas_model=gas_model,
+            boundaries=boundaries, state=fluid_state,
+            inviscid_numerical_flux_func=inviscid_facial_flux_rusanov)
 
     lazy_op = lazy_actx.compile(euler_op)
 
     def get_inputs(actx):
         nodes = actx.thaw(dcoll.nodes())
         state = init(nodes)
-        return state,
+        return actx.freeze_thaw(make_obj_array([state]))
 
     isclose = partial(
         _isclose, dcoll, rel_tol=tol, abs_tol=tol, return_operands=True)
