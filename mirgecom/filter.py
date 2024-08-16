@@ -96,7 +96,7 @@ def get_element_spectrum_from_modal_representation(actx, vol_discr, modal_fields
     emodes_to_pmodes = np.array([0 for _ in range(nummodes)], dtype=np.uint32)
 
     for group in vol_discr.groups:
-        mode_ids = group.mode_ids()
+        mode_ids = group.basis_obj().mode_ids
         for modi, mode in enumerate(mode_ids):
             emodes_to_pmodes[modi] = sum(mode)
 
@@ -151,7 +151,7 @@ def make_spectral_filter(actx, group, cutoff, mode_response_function):
         lambda grp: grp.discretization_key()
     )
     def _spectral_filter_scaling(group):
-        mode_ids = group.mode_ids()
+        mode_ids = group.basis_obj().mode_ids
         order = group.order
 
         nmodes = len(mode_ids)

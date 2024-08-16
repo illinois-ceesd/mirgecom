@@ -144,11 +144,11 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     def _limit_fluid_cv(cv, temperature_seed=None, gas_model=None, dd=None):
         actx = cv.array_context

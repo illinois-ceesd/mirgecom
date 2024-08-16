@@ -1,4 +1,5 @@
 islpy
+mpi4py
 numpy
 pytest
 pytest-cov
@@ -9,8 +10,6 @@ pyyaml
 meson-python
 ninja
 git+https://github.com/pythological/kanren.git#egg=miniKanren
-
-git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
