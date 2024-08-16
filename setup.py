@@ -41,7 +41,7 @@ def main():
           python_requires="~=3.8",
 
           install_requires=[
-              "mpi4py>=3",
+              "mpi4py>=4",
               "pymetis",
               "pytest>=2.3",
               "pytools>=2018.5.2",

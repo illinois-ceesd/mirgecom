@@ -521,39 +521,6 @@ class TrigSolution1(FluidManufacturedSolution):
         return super().get_boundaries()
 
 
-class TestSolution(FluidManufacturedSolution):
-    """Trivial manufactured solution."""
-
-    def __init__(self, dim=2, density=1, pressure=1, velocity=None):
-        """Init the man soln."""
-        super().__init__(dim)
-        if velocity is None:
-            velocity = make_obj_array([0 for _ in range(dim)])
-        assert len(velocity) == dim
-        self._vel = velocity
-        self._rho = density
-        self._pressure = pressure
-
-    def get_mesh(self, n):
-        """Get the mesh."""
-        return super().get_mesh(n)
-
-    def get_boundaries(self, dcoll, actx, t):
-        """Get the boundaries."""
-        return super().get_boundaries(dcoll, actx, t)
-
-    def get_solution(self, x, t):
-        """Return sym soln."""
-        density = 1*x[0]
-        energy = 2*x[1]**2
-        mom = make_obj_array([i*x[0]*x[1] for i in range(self._dim)])
-        pressure = x[0]*x[0]*x[0]
-        temperature = x[1]*x[1]*x[1]
-
-        return make_conserved(dim=self._dim, mass=density, momentum=mom,
-                              energy=energy), pressure, temperature
-
-
 # @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize(("dim", "manufactured_soln", "mu"),

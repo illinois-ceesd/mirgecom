@@ -42,7 +42,7 @@ from dataclasses import dataclass, fields, field
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
-    get_container_context_recursively
+    get_container_context_recursively_opt
 )
 
 
@@ -226,7 +226,7 @@ class ConservedVars:
     @property
     def array_context(self):
         """Return an array context for the :class:`ConservedVars` object."""
-        return get_container_context_recursively(self.mass)
+        return get_container_context_recursively_opt(self.mass)
 
     @property
     def dim(self):
