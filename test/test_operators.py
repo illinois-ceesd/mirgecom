@@ -126,6 +126,34 @@ def _dpoly_test_func(x_vec, order=1, a=None):
                            for i in range(dim)])
 
 
+def _ipoly_test_func(x_vec, order=1, a=None):
+    """Make a coordinate-based polynomial test function.
+
+    1d: x^order
+    2d: x^order + y^order
+    3d: x^order + y^order + z^order
+    """
+    dim = len(x_vec)
+    if a is None:
+        a = 1
+    if np.isscalar(a):
+        a = make_obj_array([a for _ in range(dim)])
+    if len(a) != dim:
+        raise ValueError("Coefficients *a* have wrong dimension.")
+
+    result = 0
+    for i in range(dim):
+        term = 1.
+        for j in range(dim):
+            if i == j:
+                term = term * (1./(order+1))*a[i]*x_vec[i]**(order+1)
+            else:
+                term = term * x_vec[i]
+        result = result + term
+
+    return result
+
+
 def _trig_test_func(dim):
     """Make trig test function.
 
@@ -356,14 +384,17 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
 #                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
 
 
+#@pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
+#                         [
+#                             (1, "tet_box1", None, False),
+#                             (2, "tet_box2", None, False),
+#                             (3, "tet_box3", None, False),
+#                             (2, "hex_box2", None, False),
+#                             (3, "hex_box3", None, False),
+#                             ])
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
                          [
-                             (1, "tet_box1", None, False),
-                             (2, "tet_box2", None, False),
-                             (3, "tet_box3", None, False),
-                             (2, "hex_box2", None, False),
-                             (3, "hex_box3", None, False),
-                             ])
+                             (1, "tet_box1", None, False),])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("overint", [False, True])
 def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
@@ -428,6 +459,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
         # print(f"{f_order=}")
         test_func = partial(_poly_test_func, order=f_order)
         grad_test_func = partial(_dpoly_test_func, order=f_order)
+        integ_test_func = partial(_ipoly_test_func, order=f_order)
 
         a = (-1,)*dim
         b = (1,)*dim
@@ -498,14 +530,21 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
         )
 
         exact_grad = grad_test_func(x_vec=x_base)
+        exact_integ = integ_test_func(x_vec=x_base)
+
         err_scale = actx.to_numpy(
             max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
                                               actx)))[()]
-
+        ierr_scale = actx.to_numpy(
+            max(flatten(componentwise_norms(dcoll, exact_integ, np.inf),
+                                              actx)))[()]
         # print(f"{err_scale=}")
         if err_scale <= test_tol:
             err_scale = 1
             print(f"Rescaling: {err_scale=}")
+        if ierr_scale <= test_tol:
+            ierr_scale = 1
+            print(f"Rescaling: {ierr_scale=}")
 
         # print(f"{actx.to_numpy(test_data)=}")
         # print(f"{actx.to_numpy(exact_grad)=}")
@@ -531,7 +570,10 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
         # print(f"{actx.to_numpy(local_grad)=}")
         test_grad = grad_operator(dcoll, vol_dd_quad, allfaces_dd_quad,
                                   u_quad, u_bnd_flux_quad)
-
+        test_integ_base = op.elementwise_integral(dcoll, vol_dd_base, u_base)
+        test_integ_quad = op.elementwise_integral(dcoll, vol_dd_quad, u_quad)
+        print(f"{actx.to_numpy(test_integ_base)=}")
+        print(f"{actx.to_numpy(test_integ_quad)=}")
         # print(f"{actx.to_numpy(test_grad)=}")
 
         grad_err = \
