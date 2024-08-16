@@ -43,6 +43,7 @@ from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 from mirgecom.discretization import create_discretization_collection
+import grudge.geometry as geo
 import grudge.op as op
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
@@ -336,7 +337,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         state_tpairs = make_fluid_state_trace_pairs(cv_interior_pairs, gas_model)
         interior_state_pair = state_tpairs[0]
 
-        nhat = actx.thaw(dcoll.normal(interior_state_pair.dd))
+        nhat = geo.normal(actx, dcoll, interior_state_pair.dd)
         bnd_flux = num_flux(interior_state_pair, gas_model, nhat)
         dd = interior_state_pair.dd
         dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
@@ -363,7 +364,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         # (Explanation courtesy of Mike Campbell,
         # https://github.com/illinois-ceesd/mirgecom/pull/44#discussion_r463304292)
 
-        nhat = actx.thaw(dcoll.normal("int_faces"))
+        nhat = geo.normal(actx, dcoll, "int_faces")
         mom_flux_exact = op.project(dcoll, "int_faces", "all_faces", p0*nhat)
         print(f"{mom_flux_exact=}")
         print(f"{interior_face_flux.momentum=}")
@@ -385,7 +386,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
                                 interior=make_fluid_state(dir_bval, gas_model),
                                 exterior=make_fluid_state(dir_bc, gas_model))
 
-        nhat = actx.thaw(dcoll.normal(state_tpair.dd))
+        nhat = geo.normal(actx, dcoll, state_tpair.dd)
         bnd_flux = num_flux(state_tpair, gas_model, nhat)
         dd = state_tpair.dd
         dd_allfaces = dd.with_boundary_tag(FACE_RESTR_ALL)
@@ -395,7 +396,7 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
         assert inf_norm(boundary_flux.energy) < tolerance
         assert inf_norm(boundary_flux.species_mass) < tolerance
 
-        nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+        nhat = geo.normal(actx, dcoll, BTAG_ALL)
         mom_flux_exact = op.project(dcoll, BTAG_ALL, "all_faces", p0*nhat)
         momerr = inf_norm(boundary_flux.momentum - mom_flux_exact)
         assert momerr < tolerance

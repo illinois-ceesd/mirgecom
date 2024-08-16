@@ -288,7 +288,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
         current_t = restart_data["t"]
         current_step = restart_step
         if np.isscalar(current_t) is False:
-            current_t = np.min(actx.to_numpy(current_t))
+            current_t = actx.to_numpy(actx.np.min(current_t))
 
         current_cv = restart_data["state"]
 
@@ -441,7 +441,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
                            quadrature_tag=quadrature_tag)
 
     def my_post_step(step, t, dt, state):
-        min_dt = np.min(actx.to_numpy(dt)) if local_dt else dt
+        min_dt = actx.to_numpy(actx.np.min(dt)) if local_dt else dt
         if logmgr:
             set_dt(logmgr, min_dt)
             logmgr.tick_after()

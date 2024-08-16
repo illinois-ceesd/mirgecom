@@ -238,7 +238,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     def get_rhs(t, w):
         result = wave_operator(dcoll, c=p.c, w=w)
-        result[0] += sym_eval(sym_f, t)
+        result[0] = result[0] + sym_eval(sym_f, t)
         return result
 
     t = 0.

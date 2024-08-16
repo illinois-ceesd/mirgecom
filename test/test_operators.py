@@ -35,14 +35,16 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
+from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import as_dofdesc
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
+import grudge.geometry as geo
 import grudge.op as op
-from grudge.trace_pair import interior_trace_pair
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 from functools import partial
 from mirgecom.simutil import get_box_mesh
@@ -115,10 +117,10 @@ def _cv_test_func(dim):
 
 def central_flux_interior(actx, dcoll, int_tpair):
     """Compute a central flux for interior faces."""
-    normal = actx.thaw(dcoll.normal(int_tpair.dd))
+    normal = geo.normal(actx, dcoll, int_tpair.dd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
-    dd_allfaces = int_tpair.dd.with_dtag("all_faces")
+    dd_allfaces = int_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
     return op.project(dcoll, int_tpair.dd, dd_allfaces, flux_weak)
 
 
@@ -127,12 +129,12 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     boundary_discr = dcoll.discr_from_dd(dd_bdry)
     bnd_nodes = actx.thaw(boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = actx.thaw(dcoll.normal(dd_bdry))
+    bnd_nhat = geo.normal(actx, dcoll, dd_bdry)
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
-    dd_allfaces = bnd_tpair.dd.with_dtag("all_faces")
+    dd_allfaces = bnd_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
@@ -174,6 +176,7 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
     import pyopencl as cl
+    import pyopencl.tools as cl_tools
     from grudge.array_context import PyOpenCLArrayContext
     from meshmode.mesh.processing import rotate_mesh_around_axis
     from grudge.dt_utils import h_max_from_volume
@@ -209,7 +212,9 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     if tpe:  # TPE requires *grudge* array context, not array_context
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)
-        actx = PyOpenCLArrayContext(queue)
+        actx = PyOpenCLArrayContext(
+            queue=queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     sym_test_func = sym_test_func_factory(dim)
 
@@ -268,7 +273,7 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
         print(f"{test_data=}")
         print(f"{exact_grad=}")
 
-        test_data_int_tpair = interior_trace_pair(dcoll, test_data)
+        test_data_int_tpair = interior_trace_pairs(dcoll, test_data)[0]
         boundaries = [BTAG_ALL]
         test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
                                          test_data_int_tpair, boundaries)

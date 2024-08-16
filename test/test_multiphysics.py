@@ -189,7 +189,7 @@ def test_thermally_coupled_fluid_wall(
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
-            quadrature_tag = None
+            quadrature_tag = DISCR_TAG_BASE
 
         dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
         dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -267,7 +267,11 @@ def test_thermally_coupled_fluid_wall(
         # This perturbation function is nonzero at the interface, so the two alphas
         # need to be the same (otherwise the perturbations will decay at different
         # rates and a discontinuity will form)
-        assert abs(fluid_alpha - np.max(actx.to_numpy(wall_alpha))) < 1e-12
+        if np.isscalar(wall_alpha):
+            max_wall_alpha = wall_alpha
+        else:
+            max_wall_alpha = actx.to_numpy(actx.np.max(wall_alpha))
+        assert abs(fluid_alpha - max_wall_alpha) < 1e-12
 
         fluid_perturb_func = partial(perturb_func, fluid_alpha)
         wall_perturb_func = partial(perturb_func, wall_alpha)
@@ -491,7 +495,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
@@ -594,7 +598,7 @@ def test_orthotropic_flux(
     dcoll = create_discretization_collection(
         actx, volume_meshes, order=order, quadrature_order=2*order+1)
 
-    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)

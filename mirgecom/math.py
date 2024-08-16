@@ -56,7 +56,6 @@ from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
 from pymbolic.primitives import Expression
 from arraycontext import (
-    get_container_context_recursively,
     get_container_context_recursively_opt,
 )
 
@@ -118,7 +117,7 @@ def __getattr__(name):
         if any(isinstance(arg, Expression) for arg in args):
             math_func = pmbl.var(name)
         else:
-            actx = get_container_context_recursively(make_obj_array(args))
+            actx = get_container_context_recursively_opt(make_obj_array(args))
             if actx is not None:
                 np_like = actx.np
             else:
