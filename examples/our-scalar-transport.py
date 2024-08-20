@@ -118,7 +118,7 @@ def main(actx_class, use_esdg=False,
     if casename is None:
         casename = "mirgecom"
     if init_type is None:
-        init_type = "gaussian"
+        init_type = "wave"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -144,32 +144,36 @@ def main(actx_class, use_esdg=False,
     else:
         timestepper = euler_step
 
-    nsteps = 20000
+    nsteps = 400
     current_cfl = 1.0
     current_dt = 1e-2
-    t_final = nsteps * current_dt
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 5
-    nviz = 100
-    nhealth = 1
+    nstatus = -1
+    nrestart = -1
+    nviz = -1
+    nhealth = -1
 
     # Bunch of problem setup stuff
     dim = 3
     nel_1d = 8
     order = 3
 
+    # Scale the number of elements by *nscale*
+    nscale = 8.
+    nscale_fac = np.float_power(nscale, 1./dim)
+
     advect = True
-    diffuse = True
+    diffuse = False
     geom_scale = 1e-3
-    # wavelength = 2 * np.pi * geom_scale
     wavelength = geom_scale
     wavenumber = 2 * np.pi / wavelength
     wavenumber2 = wavenumber * wavenumber
     current_dt = wavelength / 5
+    t_final = nsteps * current_dt
+
     wave_hat = np.ones(shape=(dim,))
     # wave_hat[0] = 0.3
     k2 = np.dot(wave_hat, wave_hat)
@@ -189,9 +193,11 @@ def main(actx_class, use_esdg=False,
     box_ll = (-wavelength,)*dim
     box_ur = (wavelength,)*dim
     nel_axes = (nel_1d,)*dim
+
     boxl = list(box_ll)
     boxr = list(box_ur)
     nelax = list(nel_axes)
+
     for d in range(dim):
         axis = np.zeros(shape=(dim,))
         axis[d] = 1
@@ -207,10 +213,18 @@ def main(actx_class, use_esdg=False,
         boxr[d] = scal_fac[d]*boxr[d]
         nelax[d] = int(scal_fac[d]*nelax[d])
 
+    # Scale it up to increase the number of elements by *nscale*
+    # without changing the physical characteristics of the problem
+    print(f"Scaling box from: {boxl=},{boxr=},{nelax=}")
+    boxl = [nscale_fac*boxl[d] for d in range(dim)]
+    boxr = [nscale_fac*boxr[d] for d in range(dim)]
+    snel_axes = [int(nscale_fac*nelax[d]+0.5) for d in range(dim)]
+
     box_ll = tuple(boxl)
     box_ur = tuple(boxr)
-    nel_axes = tuple(nelax)
-    print(f"{box_ll=}, {box_ur=}, {nel_axes=}")
+    nel_axes = tuple(snel_axes)
+
+    print(f"{nscale=}, {nscale_fac=}, {box_ll=}, {box_ur=}, {nel_axes=}")
 
     # renormalize wave_vector after it potentially changed
     k2 = np.dot(wave_hat, wave_hat)
