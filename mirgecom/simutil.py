@@ -1900,6 +1900,19 @@ def configurate(config_key, config_object=None, default_value=None):
     return default_value
 
 
+def get_memory_usage_objects() -> Dict[str, int]:
+    """Return the memory usage of all Python objects, in bytes, sorted by descending size."""
+    import sys
+    v = globals().copy() | locals().copy()
+    d = {}
+    for k, v in v.items():
+        d[k] = sys.getsizeof(v)
+    res = {}
+    for k, v in sorted(d.items(), key=lambda item: item[1], reverse=True):
+        res[k] = v
+    return res
+
+
 def compare_files_vtu(
         first_file: str,
         second_file: str,
