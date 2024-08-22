@@ -27,9 +27,9 @@ import logging
 import numpy as np
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
@@ -46,7 +46,7 @@ from mirgecom.boundary import (
     PrescribedFluidBoundary,
     AdiabaticSlipBoundary
 )
-from mirgecom.initializers import MixtureInitializer
+from mirgecom.initializers import Uniform
 from mirgecom.eos import PyrometheusMixture
 
 import cantera
@@ -145,7 +145,7 @@ def main(actx_class, use_esdg=False,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 
@@ -195,8 +195,8 @@ def main(actx_class, use_esdg=False,
 
     # Mixture defaults to STP (p, T) = (1atm, 300K)
     velocity = np.zeros(shape=(dim,)) + 1.0
-    initializer = MixtureInitializer(dim=dim, nspecies=nspecies,
-                                     massfractions=y0s, velocity=velocity)
+    initializer = Uniform(dim=dim, species_mass_fractions=y0s, velocity=velocity,
+                          pressure=101325.0, temperature=300.0)
 
     def boundary_solution(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         actx = state_minus.array_context
@@ -437,7 +437,7 @@ if __name__ == "__main__":
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
     parser.add_argument("--overintegration", action="store_true",
-        help="use overintegration in the RHS computations"),
+        help="use overintegration in the RHS computations")
     parser.add_argument("--esdg", action="store_true",
         help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--leap", action="store_true",

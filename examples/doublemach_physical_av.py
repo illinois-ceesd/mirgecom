@@ -209,11 +209,11 @@ def main(actx_class, use_esdg=False,
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None  # noqa
+        quadrature_tag = DISCR_TAG_BASE
 
     dim = 2
     if logmgr:
@@ -292,8 +292,8 @@ def main(actx_class, use_esdg=False,
 
         # kappa_h = 1.5
         kappa_h = 5
-        gamma = gas_model.eos.gamma(cv)
-        r = gas_model.eos.gas_const(cv)
+        gamma = gas_model.eos.gamma()
+        r = gas_model.eos.gas_const()
         static_temp = 0.015
         c_star = actx.np.sqrt(gamma*r*(2/(gamma+1)*static_temp))
         indicator = -kappa_h*length_scales*div_v/c_star
@@ -538,31 +538,31 @@ def main(actx_class, use_esdg=False,
                             cv=state, dv=new_dv, eos=gas_model.eos)
                         fluid_state = replace(fluid_state, tv=new_tv)
 
-                dv = fluid_state.dv
                 # if the time integrator didn't force_eval, do so now
                 if not force_eval:
                     fluid_state = force_evaluation(actx, fluid_state)
                 dv = fluid_state.dv
 
+                if do_viz:
+                    my_write_viz(step=step, t=t, fluid_state=fluid_state)
+
                 ts_field, cfl, dt = my_get_timestep(t, dt, fluid_state)
 
-            if do_health:
-                health_errors = \
-                    global_reduce(my_health_check(state, dv), op="lor")
+                if do_health:
+                    health_errors = \
+                        global_reduce(my_health_check(state, dv), op="lor")
 
-                if health_errors:
-                    if rank == 0:
-                        logger.info("Fluid solution failed health check.")
-                    raise MyRuntimeError("Failed simulation health check.")
+                    if health_errors:
+                        if rank == 0:
+                            logger.info("Fluid solution failed health check.")
+                            raise MyRuntimeError(
+                                "Failed simulation health check.")
 
-            if do_status:
-                my_write_status(dt=dt, cfl=cfl, dv=dv, cv=state)
+                if do_status:
+                    my_write_status(dt=dt, cfl=cfl, dv=dv, cv=state)
 
-            if do_restart:
-                my_write_restart(step=step, t=t, state=state)
-
-            if do_viz:
-                my_write_viz(step=step, t=t, fluid_state=fluid_state)
+                if do_restart:
+                    my_write_restart(step=step, t=t, state=state)
 
             if constant_cfl:
                 dt = get_sim_timestep(dcoll, fluid_state, t, dt,

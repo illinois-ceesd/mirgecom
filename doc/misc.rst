@@ -93,3 +93,6 @@ References
    `(DOI) <https://doi.org/10.4208/cicp.170712.010313a>`__
 .. [Renac_2021] Florent Renac, Entropy stable, robust and high-order DGSEM for the compressible multicomponent \
    Euler equations, Journal of Computational Physics, 445 `(DOI) <https://doi.org/10.1016/j.jcp.2021.110584>`__
+.. [Ern_2008] Daniele A. Di Pietro, Alexandre Ern, Jean-Luc Guermond, Discontinuous Galerkin Methods for \
+   Anisotropic Semidefinite Diffusion with Advection, SIAM Journal on Numerical Analysis 46 2 \
+   `(DOI) <https://www.jstor.org/stable/40233233?seq=12>`__

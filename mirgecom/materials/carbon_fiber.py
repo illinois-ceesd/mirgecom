@@ -1,6 +1,7 @@
 r""":mod:`mirgecom.materials.carbon_fiber` evaluate carbon fiber data.
 
 .. autoclass:: Oxidation
+.. autoclass:: Y2_Oxidation_Model
 .. autoclass:: FiberEOS
 """
 
@@ -33,6 +34,7 @@ from abc import abstractmethod
 import numpy as np
 from meshmode.dof_array import DOFArray
 from mirgecom.wall_model import PorousWallEOS
+from pytools.obj_array import make_obj_array
 
 
 class Oxidation:
@@ -50,6 +52,7 @@ class Oxidation:
 
 # TODO per MTC review, can we generalize the oxidation model?
 # should we keep this in the driver?
+# https://github.com/illinois-ceesd/mirgecom/pull/875#discussion_r1261414281
 class Y2_Oxidation_Model(Oxidation):  # noqa N801
     """Evaluate the source terms for the Y2 model of carbon fiber oxidation.
 
@@ -57,37 +60,27 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
     .. automethod:: get_source_terms
     """
 
-    def puma_effective_surface_area(self, progress) -> DOFArray:
-        """Polynomial fit based on PUMA data.
-
-        Parameters
-        ----------
-        progress: meshmode.dof_array.DOFArray
-            the rate of decomposition of the fibers
-        """
+    def puma_effective_surface_area(self, tau: DOFArray) -> DOFArray:
+        """Polynomial fit based on PUMA data."""
         # Original fit function: -1.1012e5*x**2 - 0.0646e5*x + 1.1794e5
         # Rescale by x==0 value and rearrange
+        progress = 1.0-tau
         return 1.1794e5*(1.0 - 0.0547736137*progress - 0.9336950992*progress**2)
 
-    def _get_wall_effective_surface_area_fiber(self, progress) -> DOFArray:
-        """Evaluate the effective surface of the fibers.
+    def _get_wall_effective_surface_area_fiber(self, tau: DOFArray) -> DOFArray:
+        """Evaluate the effective surface of the fibers."""
+        return self.puma_effective_surface_area(tau)
+
+    def get_source_terms(self, temperature: DOFArray, tau: DOFArray,
+                         rhoY_o2: DOFArray) -> DOFArray:  # noqa N803
+        """Return the effective source terms for fiber oxidation.
 
         Parameters
         ----------
-        progress: meshmode.dof_array.DOFArray
-            the rate of decomposition of the fibers
-        """
-        return self.puma_effective_surface_area(progress)
-
-    def get_source_terms(self, temperature, tau, rhoY_o2) -> DOFArray:  # noqa N803
-        """Return the effective source terms for the oxidation.
-
-        Parameters
-        ----------
-        temperature: meshmode.dof_array.DOFArray
-        tau: meshmode.dof_array.DOFArray
-            the progress ratio of the oxidation
-        ox_mass: meshmode.dof_array.DOFArray
+        temperature:
+        tau:
+            the progress ratio of the oxidation: 1 for virgin, 0 for fully oxidized
+        rhoY_o2:
             the mass fraction of oxygen
         """
         actx = temperature.array_context
@@ -97,7 +90,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         mw_co = 28.010
         univ_gas_const = 8314.46261815324
 
-        eff_surf_area = self._get_wall_effective_surface_area_fiber(1.0-tau)
+        eff_surf_area = self._get_wall_effective_surface_area_fiber(tau)
         alpha = (
             (0.00143+0.01*actx.np.exp(-1450.0/temperature))
             / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
@@ -107,8 +100,17 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
 
 
 class FiberEOS(PorousWallEOS):
-    """Evaluate the properties of the solid state containing only fibers.
+    r"""Evaluate the properties of the solid state containing only fibers.
 
+    The properties are obtained as a function of oxidation progress. It can
+    be computed based on the mass $m$, which is related to the void fraction
+    $\epsilon$ and radius $r$ as:
+
+    .. math::
+        \tau = \frac{m}{m_0} = \frac{\rho_i \epsilon}{\rho_i \epsilon_0}
+             = \frac{r^2}{r_0^2}
+
+    .. automethod:: __init__
     .. automethod:: void_fraction
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
@@ -120,10 +122,28 @@ class FiberEOS(PorousWallEOS):
     .. automethod:: decomposition_progress
     """
 
-    def __init__(self, char_mass, virgin_mass):
-        """Bulk density considering the porosity and intrinsic density."""
+    def __init__(self, dim, anisotropic_direction, char_mass, virgin_mass):
+        """Bulk density considering the porosity and intrinsic density.
+
+        Parameters
+        ----------
+        dim: int
+            geometrical dimension of the problem.
+        anisotropic_direction: int
+            For orthotropic materials, this indicates the normal direction
+            where the properties are different than in-plane.
+        char_mass: float
+            final mass when the decomposition is complete.
+        virgin_mass: float
+            initial mass of the material.
+        """
         self._char_mass = char_mass
         self._virgin_mass = virgin_mass
+        self._dim = dim
+        self._anisotropic_dir = anisotropic_direction
+
+        if anisotropic_direction >= dim:
+            raise ValueError("Anisotropic axis must be less than dim.")
 
     def void_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Return the volumetric fraction $\epsilon$ filled with gas.
@@ -134,77 +154,81 @@ class FiberEOS(PorousWallEOS):
         """
         return 1.0 - self.volume_fraction(tau)
 
-    def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
+    def enthalpy(self, temperature: DOFArray,
+                 tau: Optional[DOFArray] = None) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
         return (
-            - 1.279887694729e-11*temperature**5 + 1.491175465285e-07*temperature**4
-            - 6.994595296860e-04*temperature**3 + 1.691564018108e+00*temperature**2
-            - 3.441837408320e+01*temperature - 1.235438104496e+05)
+            - 3.37112113e-11*temperature**5 + 3.13156695e-07*temperature**4
+            - 1.17026962e-03*temperature**3 + 2.29194901e+00*temperature**2
+            - 3.62422269e+02*temperature**1 - 5.96993843e+04)
 
     def heat_capacity(self, temperature: DOFArray,
-                      tau: Optional[DOFArray]) -> DOFArray:
-        r"""Evaluate the heat capacity $C_{p_s}$ of the fibers."""
+                      tau: Optional[DOFArray] = None) -> DOFArray:
+        r"""Evaluate the heat capacity $C_{p_s}$ of the fibers.
+
+        The coefficients are obtained with the analytical derivative of the
+        enthalpy fit.
+        """
         return (
-            + 1.461303669323e-14*temperature**5 - 1.862489701581e-10*temperature**4
-            + 9.685398830530e-07*temperature**3 - 2.599755262540e-03*temperature**2
-            + 3.667295510844e+00*temperature - 7.816218435655e+01)
+            - 1.68556056e-10*temperature**4 + 1.25262678e-06*temperature**3
+            - 3.51080885e-03*temperature**2 + 4.58389802e+00*temperature**1
+            - 3.62422269e+02)
 
     # ~~~~~~~~ fiber conductivity
-    def _experimental_kappa(self, temperature: DOFArray) -> DOFArray:
-        """Experimental data of thermal conductivity."""
-        return (
-            1.766e-10 * temperature**3
-            - 4.828e-7 * temperature**2
-            + 6.252e-4 * temperature
-            + 6.707e-3)
-
-    def _puma_kappa(self, progress: DOFArray) -> DOFArray:
-        """Numerical data of thermal conductivity evaluated by PUMA."""
-        # FIXME the fully decomposed conductivity is given by the air, which
-        # is already accounted for in our model.
-        return 0.0988*progress**2 - 0.2751*progress + 0.201
-
-    def thermal_conductivity(self, temperature: DOFArray,
-                                   tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature, tau) -> np.ndarray:
         r"""Evaluate the thermal conductivity $\kappa$ of the fibers.
 
-        It employs a rescaling of the experimental data based on the fiber
-        shrinkage during the oxidation.
+        It accounts for anisotropy and oxidation progress.
         """
-        progress = 1.0-tau
-        return (
-            self._experimental_kappa(temperature)
-            * self._puma_kappa(progress) / self._puma_kappa(progress=0.0)
-        )
+        kappa_ij = (
+            + 2.86518890e-24*temperature**5 - 2.13976832e-20*temperature**4
+            + 3.36320767e-10*temperature**3 - 6.14199551e-07*temperature**2
+            + 7.92469194e-04*temperature**1 + 1.18270446e-01)
+
+        kappa_k = (
+            - 1.89693642e-24*temperature**5 + 1.43737973e-20*temperature**4
+            + 1.93072961e-10*temperature**3 - 3.52595953e-07*temperature**2
+            + 4.54935976e-04*temperature**1 + 5.08960039e-02)
+
+        # initialize with the in-plane value
+        kappa = make_obj_array([kappa_ij for _ in range(self._dim)])
+        # modify only the normal direction
+        kappa[self._anisotropic_dir] = kappa_k
+
+        # account for fiber shrinkage via "tau"
+        return kappa*tau
 
     # ~~~~~~~~ other properties
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Fraction $\phi$ occupied by the solid."""
-        # FIXME Should this be a quadratic function?
-        return 0.10*tau
+        return 0.12*tau
 
-    def permeability(self, tau: DOFArray) -> DOFArray:
+    def permeability(self, tau: DOFArray) -> np.ndarray:
         r"""Permeability $K$ of the porous material."""
         # FIXME find a relation to make it change as a function of "tau"
+        # TODO: the relation depends on the coupling model. Postpone it for now.
         actx = tau.array_context
-        return 6.0e-11 + actx.np.zeros_like(tau)
+        permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
+                                       for _ in range(0, self._dim)])
+        permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
+        return permeability
 
-    def emissivity(self, tau: DOFArray) -> DOFArray:
+    def emissivity(self, temperature: DOFArray,  # type: ignore[override]
+                   tau: Optional[DOFArray] = None) -> DOFArray:
         """Emissivity for energy radiation."""
-        actx = tau.array_context
-        return 0.9 + actx.np.zeros_like(tau)
+        return (
+            + 2.26413679e-18*temperature**5 - 2.03008004e-14*temperature**4
+            + 7.05300324e-11*temperature**3 - 1.22131715e-07*temperature**2
+            + 1.21137817e-04*temperature**1 + 8.66656964e-01)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
-        r"""Tortuosity $\eta$ affects the species diffusivity."""
-        # FIXME find a relation to make it change as a function of "tau"
-        actx = tau.array_context
-        return 1.1 + actx.np.zeros_like(tau)
+        r"""Tortuosity $\eta$ affects the species diffusivity.
+
+        .. math:
+            D_{eff} = \frac{D_i^(m)}{\eta}
+        """
+        return 1.1*tau + 1.0*(1.0 - tau)
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation.
-
-        Where $\tau=1$, the material is locally virgin. On the other hand, if
-        $\tau=0$, then the oxidation is locally complete and the fibers were
-        all consumed.
-        """
-        return 1.0 - (self._virgin_mass - mass)/self._virgin_mass
+        r"""Evaluate the mass loss progress ratio $\tau$ of the oxidation."""
+        return mass/self._virgin_mass

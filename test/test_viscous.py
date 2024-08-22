@@ -35,13 +35,13 @@ from pytools.obj_array import make_obj_array
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from meshmode.mesh import BTAG_ALL
 from grudge.dof_desc import as_dofdesc
+import grudge.geometry as geo
 import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.fluid import make_conserved
 from mirgecom.transport import (
@@ -55,6 +55,9 @@ from mirgecom.gas_model import (
 )
 from mirgecom.simutil import get_box_mesh
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("transport_model", [0, 1])
@@ -159,7 +162,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
     from mirgecom.flux import num_flux_central
 
     def cv_flux_interior(int_tpair):
-        normal = actx.thaw(dcoll.normal(int_tpair.dd))
+        normal = geo.normal(actx, dcoll, int_tpair.dd)
         from arraycontext import outer
         flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
         dd_allfaces = int_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
@@ -169,7 +172,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         boundary_discr = dcoll.discr_from_dd(dd_bdry)
         bnd_nodes = actx.thaw(boundary_discr.nodes())
         cv_bnd = initializer(x_vec=bnd_nodes, eos=eos)
-        bnd_nhat = actx.thaw(dcoll.normal(dd_bdry))
+        bnd_nhat = geo.normal(actx, dcoll, dd_bdry)
         from grudge.trace_pair import TracePair
         bnd_tpair = TracePair(dd_bdry, interior=cv_bnd, exterior=cv_bnd)
         from arraycontext import outer
@@ -192,7 +195,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         nodes = actx.thaw(dcoll.nodes())
 
         def inf_norm(x):
-            return actx.to_numpy(op.norm(dcoll, x, np.inf))
+            return actx.to_numpy(op.norm(dcoll, x, np.inf))  # noqa
 
         # compute max element size
         from grudge.dt_utils import h_max_from_volume
@@ -365,6 +368,8 @@ def test_diffusive_heat_flux(actx_factory):
 
     order = 1
 
+    eos = IdealSingleGas()
+
     dcoll = create_discretization_collection(actx, mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
     zeros = dcoll.zeros(actx)
@@ -385,19 +390,26 @@ def test_diffusive_heat_flux(actx_factory):
                                                for iidim in range(dim)])
         y[ispec+1] = -y[ispec]
 
+    # create a gradient of temperature
+    temperature = nodes[0] + 2*nodes[1] + 3*nodes[2]
+
     massval = 2
     mass = massval*ones
-    energy = zeros + 2.5
+    energy = eos.get_internal_energy(temperature) \
+             + 0.5*massval*np.dot(velocity, velocity)
     mom = mass * velocity
     species_mass = mass*y
 
     cv = make_conserved(dim, mass=mass, energy=energy, momentum=mom,
                         species_mass=species_mass)
     grad_cv = op.local_grad(dcoll, cv)
+    grad_t = op.local_grad(dcoll, temperature)
 
     mu_b = 1.0
     mu = 0.5
-    kappa = 5.0
+    # create orthotropic heat conduction
+    zeros = nodes[0]*0.0
+    kappa = make_obj_array([0.1 + zeros, 0.2 + zeros, 0.3 + zeros])
     # assemble d_alpha so that every species has a unique j
     d_alpha = np.array([(ispec+1) for ispec in range(nspecies)])
 
@@ -405,17 +417,21 @@ def test_diffusive_heat_flux(actx_factory):
                                thermal_conductivity=kappa,
                                species_diffusivity=d_alpha)
 
-    eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=tv_model)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    from mirgecom.viscous import diffusive_flux
+    from mirgecom.viscous import diffusive_flux, conductive_heat_flux
+    q = conductive_heat_flux(fluid_state, grad_t)
     j = diffusive_flux(fluid_state, grad_cv)
 
     def inf_norm(x):
         return actx.to_numpy(op.norm(dcoll, x, np.inf))
 
     tol = 1e-10
+    for idim in range(dim):
+        exact_q = -kappa[idim]*grad_t[idim]
+        assert inf_norm(q[idim] - exact_q) < tol
+
     for idim in range(dim):
         ispec = 2*idim
         exact_dy = np.array([((ispec+1)*(idim*dim+1))*(iidim+1)
@@ -462,7 +478,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     d_alpha_input = np.array([.1, .2, .3])
     if array_valued:
         f = 1 + 0.1*actx.np.sin(nodes[0])
-        d_alpha_input *= f
+        d_alpha_input = d_alpha_input * f
 
     tv_model = SimpleTransport(species_diffusivity=d_alpha_input)
     eos = IdealSingleGas()
@@ -474,7 +490,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     from mirgecom.viscous import get_local_max_species_diffusivity
     expected = .3*ones
     if array_valued:
-        expected *= f
+        expected = expected * f
     calculated = get_local_max_species_diffusivity(actx, d_alpha)
 
     assert actx.to_numpy(op.norm(dcoll, calculated-expected, np.inf)) == 0

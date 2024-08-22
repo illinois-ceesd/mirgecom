@@ -373,13 +373,22 @@ def make_fluid_state(cv, gas_model,
                         is None else smoothness_d)
 
     if isinstance(gas_model, GasModel):
-        temperature = gas_model.eos.temperature(cv=cv,
-                                                temperature_seed=temperature_seed)
-        pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
+        pressure = None
+        temperature = None
 
         if limiter_func:
-            cv = limiter_func(cv=cv, pressure=pressure, temperature=temperature,
-                              dd=limiter_dd)
+            rv = limiter_func(cv=cv, temperature_seed=temperature_seed,
+                              gas_model=gas_model, dd=limiter_dd)
+            if isinstance(rv, np.ndarray):
+                cv, pressure, temperature = rv
+            else:
+                cv = rv
+
+        if temperature is None:
+            temperature = gas_model.eos.temperature(
+                cv=cv, temperature_seed=temperature_seed)
+        if pressure is None:
+            pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
 
         dv = GasDependentVars(
             temperature=temperature,
@@ -423,10 +432,9 @@ def make_fluid_state(cv, gas_model,
             material_densities=material_densities,
             tau=tau,
             density=gas_model.solid_density(material_densities),
-            void_fraction=gas_model.wall_eos.void_fraction(tau),
-            emissivity=gas_model.wall_eos.emissivity(tau),
-            permeability=gas_model.wall_eos.permeability(tau),
-            tortuosity=gas_model.wall_eos.tortuosity(tau)
+            void_fraction=gas_model.wall_eos.void_fraction(tau=tau),
+            permeability=gas_model.wall_eos.permeability(tau=tau),
+            tortuosity=gas_model.wall_eos.tortuosity(tau=tau)
         )
 
         temperature = gas_model.get_temperature(cv=cv, wv=wv,
@@ -780,7 +788,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_mu, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessMuTag, comm_tag))]
+                comm_tag=(_FluidSmoothnessMuTag, comm_tag))]
 
     smoothness_kappa_interior_pairs = None
     if volume_state.smoothness_kappa is not None:
@@ -788,7 +796,15 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_kappa, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessKappaTag, comm_tag))]
+                comm_tag=(_FluidSmoothnessKappaTag, comm_tag))]
+
+    smoothness_d_interior_pairs = None
+    if volume_state.smoothness_d is not None:
+        smoothness_d_interior_pairs = [
+            interp_to_surf_quad(tpair=tpair)
+            for tpair in interior_trace_pairs(
+                dcoll, volume_state.smoothness_d, volume_dd=dd_vol,
+                comm_tag=(_FluidSmoothnessDiffTag, comm_tag))]
 
     smoothness_d_interior_pairs = None
     if volume_state.smoothness_d is not None:
@@ -804,7 +820,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.smoothness_beta, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessBetaTag, comm_tag))]
+                comm_tag=(_FluidSmoothnessBetaTag, comm_tag))]
 
     material_densities_interior_pairs = None
     if isinstance(gas_model, PorousFlowModel):
@@ -812,7 +828,7 @@ def make_operator_fluid_states(
             interp_to_surf_quad(tpair=tpair)
             for tpair in interior_trace_pairs(
                 dcoll, volume_state.wv.material_densities, volume_dd=dd_vol,
-                tag=(_WallDensityTag, comm_tag))]
+                comm_tag=(_WallDensityTag, comm_tag))]
 
     interior_boundary_states_quad = make_fluid_state_trace_pairs(
         cv_pairs=cv_interior_pairs,
@@ -925,7 +941,8 @@ def replace_fluid_state(
 def make_entropy_projected_fluid_state(
         discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model):
     """Projects the entropy vars to target manifold, computes the CV from that."""
-    from grudge.interpolation import volume_and_surface_quadrature_interpolation
+    from grudge.interpolation import volume_and_surface_quadrature_interpolation  \
+        # pylint: disable=no-name-in-module
 
     # Interpolate to the volume and surface (concatenated) quadrature
     # discretizations: v = [v_vol, v_surf]

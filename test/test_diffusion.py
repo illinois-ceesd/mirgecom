@@ -1,3 +1,5 @@
+"""Test diffusion operator and related functions."""
+
 __copyright__ = """Copyright (C) 2020 University of Illinois Board of Trustees"""
 
 __license__ = """
@@ -21,32 +23,82 @@ THE SOFTWARE.
 """
 
 from abc import ABCMeta, abstractmethod
+import logging
 import numpy as np
-import pyopencl.array as cla  # noqa
-import pyopencl.clmath as clmath # noqa
-from pytools.obj_array import make_obj_array
 import pymbolic as pmbl
-import grudge.op as op
+import mirgecom.math as mm
+import pytest
+from pytools.obj_array import make_obj_array
+import grudge.geometry as geo
+from grudge import op
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
+from grudge.shortcuts import make_visualizer
+from meshmode.dof_array import DOFArray
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
     div as sym_div,
     evaluate)
-import mirgecom.math as mm
 from mirgecom.diffusion import (
+    diffusion_flux,
     diffusion_operator,
+    grad_facial_flux_weighted,
+    PrescribedFluxDiffusionBoundary,
     DirichletDiffusionBoundary,
-    NeumannDiffusionBoundary)
-from meshmode.dof_array import DOFArray
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
-from mirgecom.discretization import create_discretization_collection
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
-import pytest
+    NeumannDiffusionBoundary,
+    RobinDiffusionBoundary)
+from mirgecom.integrators import rk4_step
 from mirgecom.simutil import get_box_mesh
-import logging
+from mirgecom.discretization import create_discretization_collection
+
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
+
+
+def test_diffusion_boundary_conditions(actx_factory):
+    """Checks the boundary conditions for diffusion operator."""
+    actx = actx_factory()
+    dim = 2
+    n = 4
+    order = 4
+
+    mesh = get_box_mesh(dim, -1, 1, n)
+    dcoll = create_discretization_collection(actx, mesh, order)
+    nodes = actx.thaw(dcoll.nodes())
+
+    u_ref = -1.5
+    alpha = 0.5
+    kappa = 2
+    u = 0.5*nodes[0] + 1.0
+
+    def make_dirichlet_bc(btag):
+        bdry_u = op.project(dcoll, "vol", BoundaryDomainTag(btag), u)
+        return DirichletDiffusionBoundary(bdry_u)
+
+    boundaries = {
+        BoundaryDomainTag("-1"): RobinDiffusionBoundary(u_ref, alpha),
+        BoundaryDomainTag("+1"): NeumannDiffusionBoundary(0.5),
+        BoundaryDomainTag("-2"): make_dirichlet_bc("-2"),
+        BoundaryDomainTag("+2"): PrescribedFluxDiffusionBoundary(0.0),
+    }
+
+    rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
+            boundaries=boundaries, return_grad_u=True,
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
+
+    err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 0.5, np.inf))
+    err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 0.0, np.inf))
+    assert err_grad_x < 1.e-9
+    assert err_grad_y < 1.e-9
+
+    err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
+    assert err_rhs < 1.e-8
 
 
 class HeatProblem(metaclass=ABCMeta):
@@ -169,7 +221,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
             lower_bdtag = BoundaryDomainTag("-"+str(i+1))
             upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             upper_grad_u = op.project(dcoll, "vol", upper_bdtag, exact_grad_u)
-            normal = actx.thaw(dcoll.normal(upper_bdtag))
+            normal = geo.normal(actx, dcoll, upper_bdtag)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
@@ -264,6 +316,53 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
         return boundaries
 
 
+# 1D: u(x,t) = u_ref + exp(-w**2*kappa*t)*cos(w*x)
+# 2D: u(x,y,t) = u_ref + exp(-(1+w**2)*kappa*t)*sin(x)*cos(w*y)
+# 3D: u(x,y,z,t) = u_ref + exp(-(2+w**2)*kappa*t)*sin(x)*sin(y)*cos(w*z)
+# on ([-pi/2, pi/2],)^{#dims-1} + ([-L, L/2],)
+# where w == alpha/kappa and L = pi/(2*w)
+class DecayingTrigRobinBoundary(HeatProblem):
+    def __init__(self, dim, u_ref, kappa, alpha):
+        super().__init__(dim)
+        self._u_ref = u_ref
+        self._kappa = kappa
+        self._alpha = alpha
+        self._w = alpha/kappa
+
+    def get_mesh(self, n):
+        return get_box_mesh(
+            self.dim,
+            a=(-np.pi/2,)*(self.dim-1) + (-np.pi/(2*self._w),),
+            b=(np.pi/2,)*(self.dim-1) + (np.pi/(4*self._w),),
+            n=n)
+
+    def get_solution(self, x, t):
+        u = mm.exp(-(self.dim-1 + self._w**2)*self._kappa*t)
+        for i in range(self.dim-1):
+            u = u * mm.sin(x[i])
+        u = u * mm.cos(self._w * x[self.dim-1])
+        u = u + self._u_ref
+        return u
+
+    def get_kappa(self, x, t, u):
+        return self._kappa
+
+    def get_boundaries(self, dcoll, actx, t):
+        boundaries = {}
+
+        for i in range(self.dim-1):
+            lower_bdtag = BoundaryDomainTag("-"+str(i+1))
+            upper_bdtag = BoundaryDomainTag("+"+str(i+1))
+            boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
+            boundaries[upper_bdtag] = NeumannDiffusionBoundary(0.)
+        lower_bdtag = BoundaryDomainTag("-"+str(self.dim))
+        upper_bdtag = BoundaryDomainTag("+"+str(self.dim))
+        boundaries[lower_bdtag] = DirichletDiffusionBoundary(self._u_ref)
+        boundaries[upper_bdtag] = RobinDiffusionBoundary(self._u_ref, self._alpha)
+
+        return boundaries
+
+
 def sym_diffusion(dim, sym_kappa, sym_u):
     """Return a symbolic expression for the diffusion operator applied to a function.
     """
@@ -285,6 +384,8 @@ def sym_diffusion(dim, sym_kappa, sym_u):
         (OscillatingTrigVarDiff(2), 50, 5.e-5, [12, 14, 16]),
         (OscillatingTrigNonlinearDiff(1), 50, 5.e-5, [8, 16, 24]),
         (OscillatingTrigNonlinearDiff(2), 50, 5.e-5, [12, 14, 16]),
+        (DecayingTrigRobinBoundary(1, 1., 2., 4.), 50, 1.e-5, [8, 16, 24]),
+        (DecayingTrigRobinBoundary(2, 1., 2., 4.), 50, 1.e-5, [12, 14, 16]),
     ])
 def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             visualize=False):
@@ -333,8 +434,6 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
         u = p.get_solution(nodes, t)
 
-        from mirgecom.integrators import rk4_step
-
         for _ in range(nsteps):
             u = rk4_step(u, t, dt, get_rhs)
             t += dt
@@ -344,16 +443,17 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
         rel_linf_err = actx.to_numpy(
             op.norm(dcoll, u - expected_u, np.inf)
             / op.norm(dcoll, expected_u, np.inf))
+
         eoc_rec.add_data_point(1./n, rel_linf_err)
 
         if visualize:
-            from grudge.shortcuts import make_visualizer
             vis = make_visualizer(dcoll, order+3)
-            vis.write_vtk_file("diffusion_accuracy_{order}_{n}.vtu".format(
-                order=order, n=n), [
+            vis.write_vtk_file("diffusion_accuracy_{dim}_{order}_{n}.vtu".format(
+                dim=p.dim, order=order, n=n), [
                     ("u", u),
-                    ("expected_u", expected_u),
-                    ])
+                    ("x", nodes[0] if p.dim == 1 else None),
+                    ("expected_u", expected_u)
+                    ], overwrite=True)
 
     print("L^inf error:")
     print(eoc_rec)
@@ -418,7 +518,6 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     grad_u_steady_exact = -flux/kappa
 
     if visualize:
-        from grudge.shortcuts import make_visualizer
         vis = make_visualizer(dcoll, order+3)
         vis.write_vtk_file("diffusion_discontinuous_kappa_rhs_{order}.vtu"
             .format(order=order), [
@@ -448,8 +547,6 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
 
     dt = 1e-3 / order**2
     t = 0
-
-    from mirgecom.integrators import rk4_step
 
     for _ in range(50):
         u = rk4_step(u, t, dt, get_rhs)
@@ -548,6 +645,7 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
     arrays for `u`.
     """
     actx = actx_factory()
+    dim = 1
 
     if vector_kappa:
         kappa1 = 2
@@ -556,10 +654,10 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
         kappa1 = 2
         kappa2 = kappa1
 
-    p1 = DecayingTrig(1, kappa1)
-    p2 = DecayingTrig(1, kappa2)
+    p1 = DecayingTrig(dim, kappa1)
+    p2 = DecayingTrig(dim, kappa2)
 
-    sym_x = pmbl.make_sym_vector("x", 1)
+    sym_x = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
 
     def get_u1(x, t):
@@ -571,8 +669,8 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
     sym_u1 = get_u1(sym_x, sym_t)
     sym_u2 = get_u2(sym_x, sym_t)
 
-    sym_diffusion_u1 = sym_diffusion(1, kappa1, sym_u1)
-    sym_diffusion_u2 = sym_diffusion(1, kappa2, sym_u2)
+    sym_diffusion_u1 = sym_diffusion(dim, kappa1, sym_u1)
+    sym_diffusion_u2 = sym_diffusion(dim, kappa2, sym_u2)
 
     n = 128
 
@@ -622,6 +720,84 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
         op.norm(dcoll, diffusion_u_vector - expected_diffusion_u_vector, np.inf)
         / op.norm(dcoll, expected_diffusion_u_vector, np.inf))
     assert rel_linf_err < 1.e-5
+
+
+def test_orthotropic_diffusion(actx_factory):
+    """Checks that the diffusion operator can handle arrays for diffusivity."""
+    actx = actx_factory()
+    dim = 2
+    n = 4
+    order = 4
+
+    kappa0 = 2
+    kappa1 = 3
+
+    mesh = get_box_mesh(dim, -1, 1, n)
+    dcoll = create_discretization_collection(actx, mesh, order)
+    nodes = actx.thaw(dcoll.nodes())
+
+    kappa = make_obj_array([kappa0, kappa1])
+    u = 30.0*nodes[0] + 60.0*nodes[1]
+
+    # exercise Neumann BC
+    boundaries = {
+        BoundaryDomainTag("-1"): NeumannDiffusionBoundary(-30.0),  # grad \cdot n
+        BoundaryDomainTag("+1"): NeumannDiffusionBoundary(+30.0),  # grad \cdot n
+        BoundaryDomainTag("-2"): NeumannDiffusionBoundary(-60.0),  # grad \cdot n
+        BoundaryDomainTag("+2"): NeumannDiffusionBoundary(+60.0),  # grad \cdot n
+    }
+
+    rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
+            boundaries=boundaries, return_grad_u=True,
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
+
+    err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 30.0, np.inf))
+    err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 60.0, np.inf))
+    assert err_grad_x < 1.e-9
+    assert err_grad_y < 1.e-9
+
+    diff_flux = diffusion_flux(kappa, grad_u)
+    flux_x = -kappa0*grad_u[0]
+    flux_y = -kappa1*grad_u[1]
+    err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
+    err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
+    assert err_flux_x < 1.e-9
+    assert err_flux_y < 1.e-9
+
+    err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
+    assert err_rhs < 1.e-8
+
+    # exercise Dirichlet BC
+    def make_dirichlet_bc(btag):
+        bdry_u = op.project(dcoll, "vol", BoundaryDomainTag(btag), u)
+        return DirichletDiffusionBoundary(bdry_u)
+
+    boundaries = {
+        BoundaryDomainTag("-1"): make_dirichlet_bc("-1"),
+        BoundaryDomainTag("+1"): make_dirichlet_bc("+1"),
+        BoundaryDomainTag("-2"): make_dirichlet_bc("-2"),
+        BoundaryDomainTag("+2"): make_dirichlet_bc("+2"),
+    }
+
+    rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
+            boundaries=boundaries, return_grad_u=True,
+            gradient_numerical_flux_func=grad_facial_flux_weighted)
+
+    err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 30.0, np.inf))
+    err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 60.0, np.inf))
+    assert err_grad_x < 1.e-9
+    assert err_grad_y < 1.e-9
+
+    diff_flux = diffusion_flux(kappa, grad_u)
+    flux_x = -kappa0*grad_u[0]
+    flux_y = -kappa1*grad_u[1]
+    err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
+    err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
+    assert err_flux_x < 1.e-9
+    assert err_flux_y < 1.e-9
+
+    err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
+    assert err_rhs < 1.e-8
 
 
 if __name__ == "__main__":

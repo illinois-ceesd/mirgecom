@@ -8,13 +8,13 @@ Solution Initializers
 .. autoclass:: DoubleMachReflection
 .. autoclass:: Lump
 .. autoclass:: MulticomponentLump
-.. autoclass:: Uniform
+.. autoclass:: MulticomponentTrig
 .. autoclass:: AcousticPulse
+.. autoclass:: Uniform
 .. autoclass:: MixtureInitializer
+.. autoclass:: PlanarDiscontinuity
 .. autoclass:: PlanarPoiseuille
 .. autoclass:: ShearFlow
-.. autoclass:: PlanarDiscontinuity
-.. autoclass:: MulticomponentTrig
 .. autoclass:: InviscidTaylorGreenVortex
 
 State Initializers
@@ -56,58 +56,46 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.fluid import make_conserved
 
 
-def initialize_flow_solution(actx, dcoll, gas_model, dd_bdry=None, pressure=None,
-                             temperature=None, density=None, velocity=None,
-                             mass_fractions=None, make_fluid_state=False):
-    """Create a fluid CV/state from a set of minimal input data."""
-    if gas_model is None:
-        raise ValueError("Gas model is required to create a FluidState.")
-
+def initialize_flow_solution(actx, coords, gas_model=None, eos=None,
+        pressure=None, temperature=None, density=None, velocity=None,
+        species_mass_fractions=None):
+    """Create a fluid CV from a set of minimal input data."""
     state_spec = [pressure is None, temperature is None, density is None]
     if sum(state_spec) != 1:
         raise ValueError("Must provide 2 of (pressure, temperature, density).")
 
-    dim = dcoll.dim
+    dim = coords.shape[0]
 
-    if dd_bdry is None:
-        nodes = actx.thaw(dcoll.nodes())
-    else:
-        data_discr = dcoll.discr_from_dd(dd_bdry)
-        nodes = actx.thaw(data_discr.nodes())
-    zeros = nodes[0]*0.0
+    zeros = coords[0]*0.0
 
     if velocity is None:
-        velocity = np.zeros(dim)
+        velocity = np.zeros(dim,)
 
     if pressure is None:
-        pressure = gas_model.eos.get_pressure(density, temperature, mass_fractions)
+        pressure = eos.get_pressure(density, temperature, species_mass_fractions)
 
     if temperature is None:
-        temperature = gas_model.eos.get_temperature(density, pressure,
-                                                    mass_fractions)
+        gas_const = eos.gas_const(species_mass_fractions=species_mass_fractions)
+        temperature = pressure/(density*gas_const)
 
     if density is None:
-        density = gas_model.eos.get_density(pressure, temperature, mass_fractions)
+        density = eos.get_density(pressure, temperature, species_mass_fractions)
 
-    internal_energy = gas_model.eos.get_internal_energy(temperature, mass_fractions)
-
-    species_mass = None if mass_fractions is None \
-        else (density + zeros)*mass_fractions
-
-    total_energy = density*internal_energy + density*np.dot(velocity, velocity)/2
     momentum = density*velocity
+    energy = density*(eos.get_internal_energy(temperature, species_mass_fractions)
+                      + 0.5*np.dot(velocity, velocity))
 
-    cv = make_conserved(dim=dim, mass=density + zeros,
-                        energy=total_energy + zeros,
-                        momentum=momentum + zeros,
-                        species_mass=species_mass)
-
-    if make_fluid_state:
-        from mirgecom.gas_model import make_fluid_state
-        return make_fluid_state(cv=cv, gas_model=gas_model,
-            temperature_seed=temperature)
+    if species_mass_fractions is None:
+        species_mass = None
     else:
-        return cv
+        nspecies = len(species_mass_fractions)
+        species_mass = make_obj_array([density*species_mass_fractions[i] + zeros
+                                       for i in range(nspecies)])
+
+    return make_conserved(dim=dim, mass=density + zeros,
+                          energy=energy + zeros,
+                          momentum=momentum + zeros,
+                          species_mass=species_mass)
 
 
 def make_pulse(amp, r0, w, r):
@@ -178,9 +166,7 @@ class Vortex2D:
     .. automethod:: __call__
     """
 
-    def __init__(
-        self, *, beta=5, center=(0, 0), velocity=(0, 0),
-    ):
+    def __init__(self, *, beta=5, center=(0, 0), velocity=(0, 0)):
         """Initialize vortex parameters.
 
         Parameters
@@ -261,10 +247,8 @@ class SodShock1D:
     .. automethod:: __call__
     """
 
-    def __init__(
-            self, *, dim=1, xdir=0, x0=0.5, rhol=1.0,
-            rhor=0.125, pleft=1.0, pright=0.1,
-    ):
+    def __init__(self, *, dim=1, xdir=0, x0=0.5, rhol=1.0,
+                 rhor=0.125, pleft=1.0, pright=0.1):
         """Initialize shock parameters.
 
         Parameters
@@ -293,8 +277,7 @@ class SodShock1D:
             self._xdir = self._dim - 1
 
     def __call__(self, x_vec, *, eos=None, **kwargs):
-        """
-        Create the 1D Sod's shock solution at locations *x_vec*.
+        """Create the 1D Sod's shock solution at locations *x_vec*.
 
         Parameters
         ----------
@@ -367,9 +350,7 @@ class DoubleMachReflection:
     .. automethod:: __call__
     """
 
-    def __init__(
-            self, shock_location=1.0/6.0, shock_speed=4.0, shock_sigma=0.05
-    ):
+    def __init__(self, shock_location=1.0/6.0, shock_speed=4.0, shock_sigma=0.05):
         """Initialize double shock reflection parameters.
 
         Parameters
@@ -386,8 +367,7 @@ class DoubleMachReflection:
         self._shock_sigma = shock_sigma
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
-        r"""
-        Create double mach reflection solution at locations *x_vec*.
+        r"""Create double mach reflection solution at locations *x_vec*.
 
         At times $t > 0$, calls to this routine create an advanced solution
         under the assumption of constant normal shock speed *shock_speed*.
@@ -476,11 +456,8 @@ class Lump:
     .. automethod:: exact_rhs
     """
 
-    def __init__(
-            self, *, dim=1,
-            rho0=1.0, rhoamp=1.0, p0=1.0,
-            center=None, velocity=None,
-    ):
+    def __init__(self, *, dim=1, rho0=1.0, rhoamp=1.0, p0=1.0,
+                 center=None, velocity=None):
         r"""Initialize Lump parameters.
 
         Parameters
@@ -517,8 +494,7 @@ class Lump:
         self._rhoamp = rhoamp
 
     def __call__(self, x_vec, *, eos=None, time=0, **kwargs):
-        """
-        Create the lump-of-mass solution at time *t* and locations *x_vec*.
+        """Create the lump-of-mass solution at time *t* and locations *x_vec*.
 
         The solution at time *t* is created by advecting the mass lump under the
         assumption of constant, uniform velocity (``Lump._velocity``).
@@ -567,9 +543,8 @@ class Lump:
 
         Parameters
         ----------
-        q
-            State array which expects at least the canonical conserved quantities
-            (mass, energy, momentum) for the fluid at each point.
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Array with the conserved quantities
         time: float
             Time at which RHS is desired
         """
@@ -635,12 +610,8 @@ class MulticomponentLump:
     """
 
     def __init__(
-            self, *, dim=1, nspecies=0,
-            rho0=1.0, p0=1.0,
-            center=None, velocity=None,
-            spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None, sigma=1.0
-    ):
+            self, *, dim=1, nspecies=0, rho0=1.0, p0=1.0, center=None, velocity=None,
+            spec_y0s=None, spec_amplitudes=None, spec_centers=None, sigma=1.0):
         r"""Initialize MulticomponentLump parameters.
 
         Parameters
@@ -749,9 +720,8 @@ class MulticomponentLump:
 
         Parameters
         ----------
-        q
-            State array which expects at least the canonical conserved quantities
-            (mass, energy, momentum) for the fluid at each point.
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Array with the conserved quantities
         time: float
             Time at which RHS is desired
         """
@@ -810,17 +780,11 @@ class MulticomponentTrig:
     .. automethod:: __call__
     """
 
-    def __init__(
-            self, *, dim=1, nspecies=0,
-            rho0=1.0, p0=1.0, gamma=1.4,
-            center=None, velocity=None,
-            spec_y0s=None, spec_amplitudes=None,
-            spec_centers=None,
-            spec_omegas=None,
-            spec_diffusivities=None,
-            wave_vector=None,
-            trig_function=None
-    ):
+    def __init__(self, *, dim=1, nspecies=0,
+                 rho0=1.0, p0=1.0, gamma=1.4, center=None, velocity=None,
+                 spec_y0s=None, spec_amplitudes=None, spec_centers=None,
+                 spec_omegas=None, spec_diffusivities=None,
+                 wave_vector=None, trig_function=None):
         r"""Initialize MulticomponentLump parameters.
 
         Parameters
@@ -955,10 +919,8 @@ class AcousticPulse:
     .. automethod:: __call__
     """
 
-    def __init__(self, *, dim=1, amplitude=1,
-                 center=None, width=1):
-        r"""
-        Initialize acoustic pulse parameters.
+    def __init__(self, dim, *, amplitude=1, width=1, center=None):
+        r"""Initialize acoustic pulse parameters.
 
         Parameters
         ----------
@@ -985,9 +947,8 @@ class AcousticPulse:
         self._width = width
         self._dim = dim
 
-    def __call__(self, x_vec, cv, eos=None, **kwargs):
-        """
-        Create the acoustic pulse at locations *x_vec*.
+    def __call__(self, x_vec, cv, eos=None, tseed=None, **kwargs):
+        """Create the acoustic pulse at locations *x_vec*.
 
         Parameters
         ----------
@@ -1001,36 +962,42 @@ class AcousticPulse:
         if x_vec.shape != (self._dim,):
             raise ValueError(f"Expected {self._dim}-dimensional inputs.")
 
-        gamma = eos.gamma()
+        temperature = eos.temperature(cv, tseed)
+        gamma = eos.gamma(cv, temperature)
 
-        int_energy = cv.energy - 0.5*cv.mass*np.dot(cv.velocity, cv.velocity)
-        ref_pressure = int_energy*(gamma-1.0)
+        y = cv.species_mass_fractions
+
+        ref_pressure = eos.pressure(cv, temperature)
         pressure = ref_pressure + \
             make_pulse(amp=self._amp, w=self._width, r0=self._center, r=x_vec)
 
         # isentropic relations
         mass = cv.mass*(pressure/ref_pressure)**(1.0/gamma)
+        temperature = temperature*(pressure/ref_pressure)**(1.0 - 1.0/gamma)
 
-        energy = pressure/(gamma-1.0) + 0.5*mass*np.dot(cv.velocity, cv.velocity)
+        energy = mass*(
+            eos.get_internal_energy(temperature, y)
+            + 0.5*np.dot(cv.velocity, cv.velocity))
 
-        return cv.replace(mass=mass, energy=energy)
+        return make_conserved(dim=self._dim,
+                              mass=mass,
+                              energy=energy,
+                              momentum=cv.velocity*mass,
+                              species_mass=y*mass)
 
 
 class Uniform:
     r"""Solution initializer for a uniform flow.
 
-    A uniform flow is the same everywhere and should have
-    a zero RHS.
+    A uniform flow is the same everywhere and should have a zero RHS.
 
     .. automethod:: __init__
     .. automethod:: __call__
     .. automethod:: exact_rhs
     """
 
-    def __init__(
-            self, *, dim=1, nspecies=0, rho=1.0, p=1.0, e=2.5,
-            velocity=None, mass_fracs=None
-    ):
+    def __init__(self, *, dim=1, nspecies=0, rho=None, pressure=None, energy=None,
+                 velocity=None, temperature=None, species_mass_fractions=None):
         r"""Initialize uniform flow parameters.
 
         Parameters
@@ -1061,9 +1028,9 @@ class Uniform:
         else:
             self._velocity = np.zeros(shape=(dim,))
 
-        if mass_fracs is not None:
-            self._nspecies = len(mass_fracs)
-            self._mass_fracs = mass_fracs
+        if species_mass_fractions is not None:
+            self._nspecies = len(species_mass_fractions)
+            self._mass_fracs = species_mass_fractions
         else:
             self._nspecies = nspecies
             self._mass_fracs = np.zeros(shape=(nspecies,))
@@ -1071,14 +1038,14 @@ class Uniform:
         if self._velocity.shape != (dim,):
             raise ValueError(f"Expected {dim}-dimensional inputs.")
 
-        self._p = p
+        self._temp = temperature
+        self._p = pressure
         self._rho = rho
-        self._e = e
+        self._e = energy  # XXX Unused. Deprecate this?
         self._dim = dim
 
-    def __call__(self, x_vec, *, eos=None, **kwargs):
-        """
-        Create a uniform flow solution at locations *x_vec*.
+    def __call__(self, x_vec, eos, **kwargs):
+        """Create a uniform flow solution at locations *x_vec*.
 
         Parameters
         ----------
@@ -1086,22 +1053,20 @@ class Uniform:
             Nodal coordinates
         eos: :class:`mirgecom.eos.IdealSingleGas`
             Equation of state class with method to supply gas *gamma*.
+
+        Returns
+        -------
+        cv: :class:`~mirgecom.fluid.ConservedVars`
+            Fluid solution
         """
-        if eos is None:
-            eos = IdealSingleGas()
-
-        gamma = eos.gamma()
-        mass = 0.0 * x_vec[0] + self._rho
-        mom = self._velocity * mass
-        energy = (self._p / (gamma - 1.0)) + np.dot(mom, mom) / (2.0 * mass)
-        species_mass = self._mass_fracs * mass
-
-        return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, species_mass=species_mass)
+        actx = x_vec[0].array_context
+        return initialize_flow_solution(
+            actx, coords=x_vec, eos=eos, pressure=self._p, density=self._rho,
+            velocity=self._velocity, temperature=self._temp,
+            species_mass_fractions=self._mass_fracs)
 
     def exact_rhs(self, dcoll, cv, time=0.0):
-        """
-        Create the RHS for the uniform solution. (Hint - it should be all zero).
+        """Create the RHS for the uniform solution. (Hint - it should be all zero).
 
         Parameters
         ----------
@@ -1134,43 +1099,37 @@ class MixtureInitializer:
     .. automethod:: __call__
     """
 
-    def __init__(
-            self, *, dim=3, nspecies=0,
-            pressure=101325.0, temperature=300.0,
-            massfractions=None, velocity=None,
-    ):
+    def __init__(self, dim, *, pressure=101325.0, temperature=300.0,
+                 species_mass_fractions=None, velocity=None):
         r"""Initialize mixture parameters.
 
         Parameters
         ----------
         dim: int
             specifies the number of dimensions for the solution
-        nspeces: int
-            specifies the number of mixture species
         pressure: float
             specifies the value of :math:`p_0`
         temperature: float
             specifies the  value of :math:`T_0`
-        massfractions: numpy.ndarray
+        species_mass_fractions: numpy.ndarray
             specifies the mass fraction for each species
         velocity: numpy.ndarray
             fixed uniform flow velocity used for kinetic energy
         """
         if velocity is None:
             velocity = np.zeros(shape=(dim,))
-        if massfractions is None:
-            if nspecies > 0:
-                massfractions = np.zeros(shape=(nspecies,))
-        self._nspecies = nspecies
         self._dim = dim
         self._velocity = velocity
         self._pressure = pressure
         self._temperature = temperature
-        self._massfracs = massfractions
+        self._massfracs = species_mass_fractions
+
+        from warnings import warn
+        warn("MixtureInitializer is deprecated and will disappear in Q4 2023.",
+             DeprecationWarning, stacklevel=2)
 
     def __call__(self, x_vec, eos, **kwargs):
-        """
-        Create the mixture state at locations *x_vec* (t is ignored).
+        """Create the mixture state at locations *x_vec* (t is ignored).
 
         Parameters
         ----------
@@ -1186,23 +1145,11 @@ class MixtureInitializer:
             raise ValueError(f"Position vector has unexpected dimensionality,"
                              f" expected {self._dim}.")
 
-        ones = (1.0 + x_vec[0]) - x_vec[0]
-        pressure = self._pressure * ones
-        temperature = self._temperature * ones
-        velocity = make_obj_array([self._velocity[i] * ones
-                                   for i in range(self._dim)])
-        y = make_obj_array([self._massfracs[i] * ones
-                            for i in range(self._nspecies)])
-        mass = eos.get_density(pressure, temperature, y)
-        specmass = mass * y
-        mom = mass * velocity
-        internal_energy = eos.get_internal_energy(temperature=temperature,
-                                                  species_mass_fractions=y)
-        kinetic_energy = 0.5 * np.dot(velocity, velocity)
-        energy = mass * (internal_energy + kinetic_energy)
-
-        return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mom, species_mass=specmass)
+        actx = x_vec[0].array_context
+        return initialize_flow_solution(
+            actx, coords=x_vec, eos=eos, pressure=self._pressure,
+            temperature=self._temperature, velocity=self._velocity,
+            species_mass_fractions=self._massfracs)
 
 
 class PlanarDiscontinuity:
@@ -1219,15 +1166,13 @@ class PlanarDiscontinuity:
     .. automethod:: __call__
     """
 
-    def __init__(
-            self, *, dim=3,
-            temperature_left, temperature_right,
-            pressure_left, pressure_right,
-            normal_dir=None, disc_location=None, nspecies=0,
-            velocity_left=None, velocity_right=None,
-            species_mass_left=None, species_mass_right=None,
-            convective_velocity=None, sigma=0.5
-    ):
+    def __init__(self, *, dim=3,
+                 temperature_left, temperature_right,
+                 pressure_left, pressure_right,
+                 normal_dir=None, disc_location=None, nspecies=0,
+                 velocity_left=None, velocity_right=None,
+                 species_mass_left=None, species_mass_right=None,
+                 convective_velocity=None, sigma=0.5):
         r"""Initialize mixture parameters.
 
         Parameters
@@ -1331,7 +1276,7 @@ class PlanarDiscontinuity:
             mass = eos.get_density(pressure, temperature,
                                    species_mass_fractions=y)
         else:
-            mass = pressure/temperature/eos.gas_const()
+            mass = pressure/(temperature*eos.gas_const())
 
         specmass = mass * y
         mom = mass * velocity
@@ -1427,15 +1372,19 @@ class PlanarPoiseuille:
 
         x = x_vec[0]
         y = x_vec[1]
+
+        actx = x.array_context
+        zeros = actx.np.zeros_like(x)
+
         p_x = self.p_hi + self.dpdx*x
 
         if cv is not None:
             mass = cv.mass
             velocity = cv.velocity
         else:
-            mass = self.rho*x/x
+            mass = self.rho + zeros
             u_x = -self.dpdx*y*(self.height - y)/(2*self.mu)
-            velocity = make_obj_array([u_x, 0*x])
+            velocity = make_obj_array([u_x, zeros])
 
         ke = .5*np.dot(velocity, velocity)*mass
         rho_e = p_x/(eos.gamma(cv)-1) + ke
@@ -1444,21 +1393,24 @@ class PlanarPoiseuille:
 
     def exact_grad(self, x_vec, eos, cv_exact):
         """Return the exact gradient of the Poiseuille state."""
-        y = x_vec[1]
         x = x_vec[0]
+        y = x_vec[1]
+
+        actx = x.array_context
 
         # FIXME: Symbolic infrastructure could perhaps do this better
-        ones = x / x
+        zeros = actx.np.zeros_like(x)
+        ones = zeros + 1
         mass = cv_exact.mass
         velocity = cv_exact.velocity
         dvxdy = -self.dpdx*(self.height-2*y)/(2*self.mu)
-        dvdy = make_obj_array([dvxdy, 0*x])
+        dvdy = make_obj_array([dvxdy, zeros])
         dedx = self.dpdx/(eos.gamma(cv_exact)-1)*ones
         dedy = mass*np.dot(velocity, dvdy)
-        dmass = make_obj_array([0*x, 0*x])
+        dmass = make_obj_array([zeros, zeros])
         denergy = make_obj_array([dedx, dedy])
-        dvx = make_obj_array([0*x, dvxdy])
-        dvy = make_obj_array([0*x, 0*x])
+        dvx = make_obj_array([zeros, dvxdy])
+        dvy = make_obj_array([zeros, zeros])
         dv = np.stack((dvx, dvy))
         dmom = mass*dv
         species_mass = velocity*cv_exact.species_mass.reshape(-1, 1)
@@ -1526,12 +1478,12 @@ class ShearFlow:
         self._flowdir = flow_dir
         self._transdir = trans_dir
 
-    def __call__(self, x, **kwargs):
-        """Return shear flow solution at points *x*.
+    def __call__(self, x_vec, **kwargs):
+        """Return shear flow solution at points *x_vec*.
 
         Parameters
         ----------
-        x: numpy.ndarray
+        x_vec: numpy.ndarray
             Point coordinates at which the shear flow solution is desired.
 
         Returns
@@ -1539,26 +1491,29 @@ class ShearFlow:
         :class:`~mirgecom.fluid.ConservedVars`
             A CV object with the shear flow solution
         """
-        vel = 0.*x
+        actx = x_vec[0].array_context
+        zeros = actx.np.zeros_like(x_vec[0])
+
+        vel = make_obj_array([zeros for i in range(self._dim)])
+
         flow_dir = self._flowdir
         trans_dir = self._transdir
 
-        zeros = 0.*x[0]
         ones = zeros + 1.
 
         for idim in range(self._dim):
             if idim == flow_dir:
-                vel[idim] = x[trans_dir]**2
+                vel[idim] = x_vec[trans_dir]**2
             else:
                 vel[idim] = 1.*zeros
 
         density = self._rho * ones
         mom = self._rho * vel
 
-        pressure = 2*self._mu*x[flow_dir] + 10
+        pressure = 2*self._mu*x_vec[flow_dir] + 10
 
         ie = pressure/(self._gamma - 1.)
-        ke = self._rho * (x[trans_dir]**4.)/2.
+        ke = self._rho * (x_vec[trans_dir]**4.)/2.
         total_energy = ie + ke
 
         return make_conserved(dim=self._dim, mass=density, momentum=mom,

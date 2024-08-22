@@ -24,9 +24,7 @@ THE SOFTWARE.
 import logging
 
 import numpy as np
-import numpy.linalg as la  # noqa
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import BoundaryDomainTag
@@ -37,13 +35,22 @@ from mirgecom.diffusion import (
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
 from mirgecom.mpi import mpi_entry_point
-from mirgecom.utils import force_evaluation
-
+from mirgecom.simutil import write_visfile, check_step, check_naninf_local
 from mirgecom.logging_quantities import (initialize_logmgr,
                                          logmgr_add_cl_device_info,
                                          logmgr_add_device_memory_usage)
 
 from logpyle import IntervalTimer, set_dt
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+
+class MyRuntimeError(RuntimeError):
+    """Simple exception to kill the simulation."""
+
+    pass
 
 
 @mpi_entry_point
@@ -53,7 +60,12 @@ def main(actx_class, use_esdg=False,
     """Run the example."""
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
     num_parts = comm.Get_size()
+
+    from functools import partial
+    from mirgecom.simutil import global_reduce as _global_reduce
+    global_reduce = partial(_global_reduce, comm=comm)
 
     logmgr = initialize_logmgr(True,
         filename="heat-source.sqlite", mode="wu", mpi_comm=comm)
@@ -72,6 +84,10 @@ def main(actx_class, use_esdg=False,
     t = 0
     t_final = 0.0002
     istep = 0
+
+    nviz = 10
+    viz_path = "viz_data/"
+    vizname = viz_path+casename
 
     if mesh_dist.is_mananger_rank():
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -100,11 +116,11 @@ def main(actx_class, use_esdg=False,
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None  # noqa
+        quadrature_tag = DISCR_TAG_BASE
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
@@ -140,40 +156,71 @@ def main(actx_class, use_esdg=False,
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
 
-    vis = make_visualizer(dcoll)
+    visualizer = make_visualizer(dcoll)
 
-    def rhs(t, u):
-        return (
-            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=u,
-                               quadrature_tag=quadrature_tag)
-            + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
+    def my_write_viz(step, t, state):
+        viz_fields = [("u", state)]
+        write_visfile(dcoll, viz_fields, visualizer, vizname=vizname,
+                      step=step, t=t, overwrite=True, comm=comm)
 
-    compiled_rhs = actx.compile(rhs)
+    def my_health_check(u):
+        health_error = False
+        if check_naninf_local(dcoll, "vol", u):
+            health_error = True
+            logger.info(f"{rank=}: Invalid field data found.")
 
-    rank = comm.Get_rank()
+        return health_error
 
-    while t < t_final:
+    from mirgecom.simutil import componentwise_norms
+
+    def my_pre_step(step, t, dt, state):
         if logmgr:
             logmgr.tick_before()
 
-        if istep % 10 == 0:
-            print(istep, t, actx.to_numpy(actx.np.linalg.norm(u[0])))
-            vis.write_vtk_file("fld-heat-source-mpi-%03d-%04d.vtu" % (rank, istep),
-                    [
-                        ("u", u)
-                        ], overwrite=True)
+        try:
 
-        u = rk4_step(u, t, dt, compiled_rhs)
-        u = force_evaluation(actx, u)
+            if istep % 10 == 0:
+                norm = actx.to_numpy(componentwise_norms(dcoll, state))
+                print(istep, t, norm)
 
-        t += dt
-        istep += 1
+            health_errors = global_reduce(my_health_check(state), op="lor")
+            if health_errors:
+                if rank == 0:
+                    logger.info("Solution failed health check.")
+                raise MyRuntimeError("Failed simulation health check.")
 
+            do_viz = check_step(step=step, interval=nviz)
+            if do_viz:
+                my_write_viz(step=step, t=t, state=state)
+
+        except MyRuntimeError:
+            if rank == 0:
+                logger.info("Errors detected; attempting graceful exit.")
+            my_write_viz(step=step, t=t, state=state)
+            raise
+
+        return state, dt
+
+    def my_rhs(t, state):
+        return (
+            diffusion_operator(dcoll, kappa=1, boundaries=boundaries, u=state,
+                               quadrature_tag=quadrature_tag)
+            + actx.np.exp(-np.dot(nodes, nodes)/source_width**2))
+
+    def my_post_step(step, t, dt, state):
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+        return state, dt
 
-    final_answer = actx.to_numpy(op.norm(dcoll, u, np.inf))
+    from mirgecom.steppers import advance_state
+    current_step, current_t, advanced_state = \
+        advance_state(rhs=my_rhs, timestepper=rk4_step,
+                      pre_step_callback=my_pre_step,
+                      post_step_callback=my_post_step, dt=dt, state=u, t=t,
+                      t_final=t_final, istep=istep, force_eval=True)
+
+    final_answer = actx.to_numpy(op.norm(dcoll, advanced_state, np.inf))
     resid = abs(final_answer - 0.0002062062188374177)
     if resid > 1e-15:
         raise ValueError(f"Run did not produce the expected result {resid=}")

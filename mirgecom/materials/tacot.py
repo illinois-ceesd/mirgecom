@@ -38,9 +38,8 @@ from pytools.obj_array import make_obj_array
 from mirgecom.wall_model import PorousWallEOS
 
 
-# TODO generalize? define only abstract class and keep this in the driver?
 class Pyrolysis:
-    r"""Evaluate the source terms for the pyrolysis decomposition.
+    r"""Evaluate the source terms for the pyrolysis decomposition of TACOT.
 
     The source terms follow as Arrhenius-like equation given by
 
@@ -55,12 +54,37 @@ class Pyrolysis:
     a minimum temperature, are considered based on the resin constituents.
     The third reaction is the fiber oxidation, which is not handled here for now.
 
+    .. automethod:: __init__
+    .. automethod:: get_decomposition_parameters
     .. automethod:: get_source_terms
     """
 
-    def __init__(self):
-        """Temperature in which each reaction starts."""
-        self._Tcrit = np.array([333.3, 555.6])
+    def __init__(self, *,
+                 virgin_mass=120.0, char_mass=60.0, fiber_mass=160.0,
+                 pre_exponential=(12000.0, 4.48e9),
+                 decomposition_temperature=(333.3, 555.6)):
+        """Initialize TACOT parameters."""
+        self._virgin_mass = virgin_mass
+        self._char_mass = char_mass
+        self._fiber_mass = fiber_mass
+
+        if len(decomposition_temperature) != 2:
+            raise ValueError("TACOT model requires 2 starting temperatures.")
+        self._Tcrit = np.array(decomposition_temperature)
+
+        if len(pre_exponential) != 2:
+            raise ValueError("TACOT model requires 2 pre-exponentials.")
+        self._pre_exp = np.array(pre_exponential)
+
+    def get_decomposition_parameters(self):
+        """Return the parameters of TACOT decomposition for inspection."""
+        return {"virgin_mass": self._virgin_mass,
+                "char_mass": self._char_mass,
+                "fiber_mass": self._fiber_mass,
+                "reaction_weights": np.array([self._virgin_mass*0.25,
+                                              self._virgin_mass*0.75]),
+                "pre_exponential": self._pre_exp,
+                "temperature": self._Tcrit}
 
     def get_source_terms(self, temperature, chi):
         r"""Return the source terms of pyrolysis decomposition for TACOT.
@@ -82,20 +106,21 @@ class Pyrolysis:
         """
         actx = temperature.array_context
 
-        # The density parameters are hard-coded for TACOT. They depend on the
-        # virgin and char volume fraction.
+        # The density parameters are hard-coded for TACOT, depending on
+        # virgin and char volume fractions.
+        w1 = self._virgin_mass*0.25*(chi[0]/(self._virgin_mass*0.25))**3
+        w2 = self._virgin_mass*0.75*(chi[1]/(self._virgin_mass*0.75) - 2./3.)**3
+
         return make_obj_array([
             # reaction 1
             actx.np.where(actx.np.less(temperature, self._Tcrit[0]),
-                0.0, (
-                    -(30.*((chi[0] - 0.00)/30.)**3)*12000.
-                    * actx.np.exp(-8556.000/temperature))),
-            actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
+                0.0, (-w1 * self._pre_exp[0] * actx.np.exp(-8556.000/temperature))
+                ),
             # reaction 2
-                0.0, (
-                    -(90.*((chi[1] - 60.0)/90.)**3)*4.48e9
-                    * actx.np.exp(-20444.44/temperature))),
-            # fiber oxidation: include in the RHS but dont do anything with it.
+            actx.np.where(actx.np.less(temperature, self._Tcrit[1]),
+                0.0, (-w2 * self._pre_exp[1] * actx.np.exp(-20444.44/temperature))
+                ),
+            # fiber oxidation: include in the RHS but don't do anything with it.
             actx.np.zeros_like(temperature)])
 
 
@@ -106,6 +131,7 @@ class TacotEOS(PorousWallEOS):
     yield the material properties. Polynomials were generated offline to avoid
     interpolation and they are not valid for temperatures above 3200K.
 
+    .. automethod:: __init__
     .. automethod:: void_fraction
     .. automethod:: enthalpy
     .. automethod:: heat_capacity
@@ -120,7 +146,13 @@ class TacotEOS(PorousWallEOS):
     def __init__(self, char_mass, virgin_mass):
         """Bulk density considering the porosity and intrinsic density.
 
-        The fiber and all resin components must be considered.
+        Parameters
+        ----------
+        virgin_mass: float
+            initial mass of the material. The fiber and all resin components
+            must be considered.
+        char_mass: float
+            final mass when the resin decomposition is complete.
         """
         self._char_mass = char_mass
         self._virgin_mass = virgin_mass
@@ -148,8 +180,7 @@ class TacotEOS(PorousWallEOS):
 
         return virgin*tau + char*(1.0 - tau)
 
-    def heat_capacity(self, temperature: DOFArray,
-                      tau: DOFArray) -> DOFArray:
+    def heat_capacity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
 
@@ -166,8 +197,7 @@ class TacotEOS(PorousWallEOS):
 
         return virgin*tau + char*(1.0 - tau)
 
-    def thermal_conductivity(self, temperature: DOFArray,
-                             tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
         """Solid thermal conductivity as a function of pyrolysis progress."""
         virgin = (
             + 2.31290019732353e-17*temperature**5 - 2.167785032562e-13*temperature**4
@@ -194,7 +224,7 @@ class TacotEOS(PorousWallEOS):
         char = 2.0e-11
         return virgin*tau + char*(1.0 - tau)
 
-    def emissivity(self, tau: DOFArray) -> DOFArray:
+    def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
         virgin = 0.8
         char = 0.9

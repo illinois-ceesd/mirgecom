@@ -88,8 +88,13 @@ from logpyle import IntervalTimer
 import grudge.op as op
 import numpy as np
 import pyopencl as cl
+from arraycontext import tag_axes
+from meshmode.transform_metadata import (
+    DiscretizationElementAxisTag,
+    DiscretizationDOFAxisTag
+)
 from arraycontext import flatten, map_array_container
-from grudge.discretization import DiscretizationCollection, PartID
+from grudge.discretization import DiscretizationCollection
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
 from collections import defaultdict
@@ -98,10 +103,6 @@ from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
 
 logger = logging.getLogger(__name__)
-
-if TYPE_CHECKING or getattr(sys, "_BUILDING_SPHINX_DOCS", False):
-    # pylint: disable=no-name-in-module
-    from mpi4py.MPI import Comm
 
 
 class SimulationConfigurationError(RuntimeError):
@@ -127,14 +128,15 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     # number of {nodes, modes} see e.g.:
     # JSH/TW Nodal DG Methods, Section 10.1
     # DOI: 10.1007/978-0-387-72067-8
-    nnodes = int(np.math.factorial(dim+order)
-                 / (np.math.factorial(dim) * np.math.factorial(order)))
+    from math import factorial
+    nnodes = int(factorial(dim+order) / (factorial(dim) * factorial(order)))
     if include_faces:
         nnodes = nnodes + (dim+1)*get_number_of_tetrahedron_nodes(dim-1, order)
     return nnodes
 
 
-def get_box_mesh(dim, a, b, n, t=None, periodic=None):
+def get_box_mesh(dim, a, b, n, t=None, periodic=None,
+                 tensor_product_elements=False, **kwargs):
     """
     Create a rectangular "box" like mesh with tagged boundary faces.
 
@@ -184,10 +186,13 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None):
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
 
+    from meshmode.mesh import TensorProductElementGroup
+    group_cls = TensorProductElementGroup if tensor_product_elements else None
     from meshmode.mesh.generation import generate_regular_rect_mesh as gen
     return gen(a=a, b=b, nelements_per_axis=n,
                boundary_tag_to_face=bttf,
-               mesh_type=t, periodic=periodic)
+               mesh_type=t, periodic=periodic, group_cls=group_cls,
+               **kwargs)
 
 
 def check_step(step, interval):
@@ -277,18 +282,13 @@ def get_sim_timestep(
     float or :class:`~meshmode.dof_array.DOFArray`
         The global maximum stable DT based on a viscous fluid.
     """
+    actx = state.array_context
+
     if local_dt:
-        actx = state.array_context
-        data_shape = (state.cv.mass[0]).shape
-        if actx.supports_nonscalar_broadcasting:
-            return cfl * actx.np.broadcast_to(
-                op.elementwise_min(
-                    dcoll, fluid_dd,
-                    get_viscous_timestep(dcoll, state, dd=fluid_dd)),
-                data_shape)
-        else:
-            return cfl * op.elementwise_min(
-                dcoll, fluid_dd, get_viscous_timestep(dcoll, state, dd=fluid_dd))
+        ones = actx.np.zeros_like(state.cv.mass) + 1.0
+        vdt = get_viscous_timestep(dcoll, state, dd=fluid_dd)
+        emin = op.elementwise_min(dcoll, fluid_dd, vdt)
+        return cfl * ones * emin
 
     my_dt = dt
     t_remaining = max(0, t_final - t)
@@ -303,7 +303,7 @@ def get_sim_timestep(
 
 def write_visfile(dcoll, io_fields, visualizer, vizname,
                   step=0, t=0, overwrite=False, vis_timer=None,
-                  comm: Optional["Comm"] = None):
+                  comm=None):
     """Write parallel VTK output for the fields specified in *io_fields*.
 
     This routine writes a parallel-compatible unstructured VTK visualization
@@ -503,10 +503,22 @@ def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
     .. note::
         This is a collective routine and must be called by all MPI ranks.
     """
+    # added tag_axes calls to eliminate fallback warnings at compile time
     actx = red_state.array_context
-    resid = red_state - blue_state
+    resid = tag_axes(actx,
+                     {
+                         0: DiscretizationElementAxisTag(),
+                         1: DiscretizationDOFAxisTag()
+                     }, red_state - blue_state)
     resid_errs = actx.to_numpy(
-        flatten(componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx))
+        tag_axes(actx,
+                 {
+                     0: DiscretizationElementAxisTag()
+                 },
+                 flatten(
+                     componentwise_norms(dcoll, resid, order=np.inf, dd=dd), actx)
+                 )
+    )
 
     return resid_errs.tolist()
 
@@ -638,11 +650,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
 
         for r in range(num_ranks-1):
 
-            # find the element reservoir (next part with elements in it)
-            # adv_part = r + 1
-            # while nelem_part[adv_part] == 0:
-            #    adv_part = adv_part + 1
-
             num_elem_needed = aver_part_nelem - nelem_part[r]
             part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
@@ -657,8 +664,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
             moved_elements = set()
 
             adv_part = r + 1
-            # while ((part_imbalance > imbalance_tolerance)
-            #       and (adv_part < num_ranks)):
             while part_imbalance > imbalance_tolerance:
                 # This partition needs to keep changing in size until it meets the
                 # specified imbalance tolerance, or gives up trying
@@ -896,7 +901,7 @@ def generate_and_distribute_mesh(comm, generate_mesh, **kwargs):
     warn(
         "generate_and_distribute_mesh is deprecated and will go away Q4 2022. "
         "Use distribute_mesh instead.", DeprecationWarning, stacklevel=2)
-    return distribute_mesh(comm, generate_mesh)
+    return distribute_mesh(comm, generate_mesh, **kwargs)
 
 
 def invert_decomp(decomp_map):

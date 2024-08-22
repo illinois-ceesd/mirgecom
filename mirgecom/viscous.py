@@ -55,6 +55,7 @@ from grudge.dof_desc import (
     DISCR_TAG_BASE,
 )
 
+import grudge.geometry as geo
 import grudge.op as op
 
 from mirgecom.fluid import (
@@ -338,7 +339,7 @@ def viscous_facial_flux_central(dcoll, state_pair, grad_cv_pair, grad_t_pair,
     """
     from mirgecom.flux import num_flux_central
     actx = state_pair.int.array_context
-    normal = actx.thaw(dcoll.normal(state_pair.dd))
+    normal = geo.normal(actx, dcoll, state_pair.dd)
 
     f_int = viscous_flux(state_pair.int, grad_cv_pair.int,
                          grad_t_pair.int)
@@ -401,7 +402,7 @@ def viscous_facial_flux_harmonic(dcoll, state_pair, grad_cv_pair, grad_t_pair,
     """
     from mirgecom.flux import num_flux_central
     actx = state_pair.int.array_context
-    normal = actx.thaw(dcoll.normal(state_pair.dd))
+    normal = geo.normal(actx, dcoll, state_pair.dd)
 
     # TODO: Do this for other coefficients too?
     def replace_coefs(state, *, kappa):

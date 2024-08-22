@@ -136,15 +136,18 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     nodes = actx.thaw(dcoll.nodes())
 
     # TODO: Fix this wonky dt estimate
-    from grudge.dt_utils import h_min_from_volume
     cn = 0.5*(order + 1)**2
-    current_dt = current_cfl * actx.to_numpy(h_min_from_volume(dcoll)) / cn
+    import grudge.op as op
+    from grudge.dt_utils import characteristic_lengthscales
+    nodal_h = characteristic_lengthscales(actx, dcoll) / cn
+    current_dt = actx.to_numpy(
+        current_cfl * op.nodal_min(dcoll, "vol", nodal_h))[()]
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 
@@ -381,7 +384,7 @@ if __name__ == "__main__":
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--overintegration", action="store_true",
-        help="use overintegration in the RHS computations"),
+        help="use overintegration in the RHS computations")
     parser.add_argument("--esdg", action="store_true",
         help="use flux-differencing/entropy stable DG for inviscid computations.")
     parser.add_argument("--numpy", action="store_true",

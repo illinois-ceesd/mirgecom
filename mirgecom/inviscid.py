@@ -50,6 +50,7 @@ from grudge.dof_desc import (
     VolumeDomainTag,
     DISCR_TAG_BASE,
 )
+import grudge.geometry as geo
 import grudge.op as op
 from mirgecom.fluid import (
     make_conserved,
@@ -300,7 +301,7 @@ def inviscid_flux_on_element_boundary(
             state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(
                 state_pair, gas_model,
-                state_pair.int.array_context.thaw(dcoll.normal(state_pair.dd))))
+                geo.normal(state_pair.int.array_context, dcoll, state_pair.dd)))
 
     def _boundary_flux(bdtag, boundary, state_minus_quad):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)

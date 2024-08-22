@@ -25,29 +25,27 @@ THE SOFTWARE.
 """
 
 import logging
-from mirgecom.mpi import mpi_entry_point
 import numpy as np
 from functools import partial
 
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_QUAD
 
+from logpyle import IntervalTimer, set_dt
+
+from mirgecom.mpi import mpi_entry_point
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
 from mirgecom.simutil import (
     get_sim_timestep,
-    generate_and_distribute_mesh
+    distribute_mesh
 )
 from mirgecom.io import make_init_message
 
 from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
-from mirgecom.boundary import (
-    LinearizedOutflowBoundary,
-    RiemannInflowBoundary,
-    PressureOutflowBoundary
-)
+from mirgecom.boundary import AdiabaticSlipBoundary
 from mirgecom.initializers import (
     Uniform,
     AcousticPulse
@@ -57,7 +55,6 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from logpyle import IntervalTimer, set_dt
 from mirgecom.euler import extract_vars_for_logging, units_for_logging
 from mirgecom.logging_quantities import (
     initialize_logmgr,
@@ -107,7 +104,7 @@ def main(actx_class, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.1
+    t_final = 1.0
     current_cfl = 1.0
     current_dt = .005
     current_t = 0
@@ -140,22 +137,16 @@ def main(actx_class, use_esdg=False,
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
-            boundary_tag_to_face={
-                "outlet_L": ["+y"],
-                "outlet_R": ["-y", "+x"],
-                "inlet": ["-x"]})
-        local_mesh, global_nelements = generate_and_distribute_mesh(comm,
-                                                                    generate_mesh)
+            # periodic=(True,)*dim
+        )
+
+        local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
     order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
-
-    if use_overintegration:
-        quadrature_tag = DISCR_TAG_QUAD
-    else:
-        quadrature_tag = None
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     vis_timer = None
 
@@ -180,40 +171,13 @@ def main(actx_class, use_esdg=False,
     eos = IdealSingleGas(gamma=1.4, gas_const=1.0)
     gas_model = GasModel(eos=eos)
     velocity = np.zeros(shape=(dim,))
-    velocity[0] = 0.1
+    velocity[0] = 0.0
     orig = np.zeros(shape=(dim,))
-    initializer = Uniform(dim=dim, velocity=velocity)
+    initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
-    # Riemann inflow
-    from mirgecom.initializers import initialize_flow_solution
-    from mirgecom.utils import force_evaluation
-
-    free_stream_cv = initialize_flow_solution(
-        actx, dcoll, gas_model, dd_bdry=BoundaryDomainTag("inlet"),
-        pressure=1.0, temperature=1.0, velocity=velocity)
-
-    inflow_freestream_state = make_fluid_state(cv=free_stream_cv,
-                                               gas_model=gas_model)
-    inflow_freestream_state = force_evaluation(actx, inflow_freestream_state)
-
-    def _inflow_bnd_state_func(dcoll, btag, gas_model, state_minus, **kwargs):
-        return inflow_freestream_state
-
-    riemann_inflow_bnd = RiemannInflowBoundary(
-        free_stream_state_func=_inflow_bnd_state_func)
-
-    # Linearized outflow
-    linear_outflow_bnd = LinearizedOutflowBoundary(free_stream_density=1.0,
-        free_stream_velocity=velocity, free_stream_pressure=1.0)
-
-    # Pressure prescribed outflow boundary
-    pressure_outflow_bnd = PressureOutflowBoundary(boundary_pressure=1.0)
-
-    # boundaries
-    boundaries = {BoundaryDomainTag("inlet"): riemann_inflow_bnd,
-                  BoundaryDomainTag("outlet_L"): linear_outflow_bnd,
-                  BoundaryDomainTag("outlet_R"): pressure_outflow_bnd}
+    boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
+    # boundaries = {}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
@@ -221,14 +185,15 @@ def main(actx_class, use_esdg=False,
         current_t = restart_data["t"]
         current_step = restart_data["step"]
         current_cv = restart_data["cv"]
-        if logmgr:
-            from mirgecom.logging_quantities import logmgr_set_time
-            logmgr_set_time(logmgr, current_step, current_t)
     else:
         # Set the current state from time 0
         current_cv = acoustic_pulse(x_vec=nodes, cv=uniform_state, eos=eos)
 
     current_state = make_fluid_state(current_cv, gas_model)
+
+    if logmgr:
+        from mirgecom.logging_quantities import logmgr_set_time
+        logmgr_set_time(logmgr, current_step, current_t)
 
     visualizer = make_visualizer(dcoll)
 
