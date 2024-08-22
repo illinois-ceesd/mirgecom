@@ -94,7 +94,10 @@ from meshmode.transform_metadata import (
     DiscretizationDOFAxisTag
 )
 from arraycontext import flatten, map_array_container
-from grudge.discretization import DiscretizationCollection
+from grudge.discretization import (
+    DiscretizationCollection,
+    PartID
+)
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
 from collections import defaultdict

@@ -195,7 +195,8 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
     def my_partitioner(mesh, tag_to_elements, num_ranks):
         from mirgecom.simutil import geometric_mesh_partitioner
         return geometric_mesh_partitioner(
-            mesh, num_ranks, auto_balance=True, debug=False)
+            mesh, num_ranks, auto_balance=True, debug=True,
+            imbalance_tolerance=.2)
 
     part_func = my_partitioner if use_1d_part else None
 
