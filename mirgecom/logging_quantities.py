@@ -40,6 +40,8 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
+import logging
+
 from logpyle import (LogQuantity, PostLogQuantity, LogManager,
     MultiPostLogQuantity, add_run_info,
     add_general_quantities, add_simulation_quantities)
@@ -54,6 +56,9 @@ import numpy as np
 from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as oper
 from typing import List
+
+
+logger = logging.getLogger(__name__)
 
 MemPoolType = Union[cl.tools.MemoryPool, cl.tools.SVMPool]
 
@@ -114,7 +119,8 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa:
 def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue) \
         -> None:
     """Add the OpenCL device memory usage to the log."""
-    if not queue or not (queue.device.type & cl.device_type.GPU):
+    from pyopencl.characterize import nv_compute_capability
+    if not queue or nv_compute_capability(queue.device) is None:
         return
     logmgr.add_quantity(DeviceMemoryUsage())
 
@@ -192,8 +198,10 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: Optional[str] = No
         warn("Could not find emirge's version.sh.")
 
     else:
+        from pytools import ProcessLogger
         try:
-            output = subprocess.check_output(path_to_version_sh)
+            with ProcessLogger(logger, "emirge's version.sh"):
+                output = subprocess.check_output(path_to_version_sh)
         except OSError as e:
             warn("Could not record emirge's package versions: " + str(e))
 
