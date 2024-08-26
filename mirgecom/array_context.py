@@ -187,6 +187,10 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
     dev = actx.queue.device
 
+    # Only check GPU devices
+    if not (dev.type & cl.device_type.GPU):
+        return
+
     from pyopencl.characterize import nv_compute_capability
     if nv_compute_capability(dev) is not None:
         try:
