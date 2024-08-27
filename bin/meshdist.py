@@ -70,7 +70,8 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, mesh_source=None, ndist=None, dim=None,
          output_path=None, log_path=None,
-         casename=None, use_1d_part=None, use_wall=False):
+         casename=None, use_1d_part=None, use_wall=False,
+         imba_tol=0.01):
     """The main function."""
     if mesh_source is None:
         raise ApplicationOptionsError("Missing mesh source file.")
@@ -196,7 +197,7 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
         from mirgecom.simutil import geometric_mesh_partitioner
         return geometric_mesh_partitioner(
             mesh, num_ranks, auto_balance=True, debug=True,
-            imbalance_tolerance=.2)
+            imbalance_tolerance=imba_tol)
 
     part_func = my_partitioner if use_1d_part else None
 
@@ -257,6 +258,8 @@ if __name__ == "__main__":
                         action="store", help="Root name of distributed mesh pkl files.")
     parser.add_argument("-g", "--logpath", type=str, dest="log_path", nargs="?",
                         action="store", help="simulation case name")
+    parser.add_argument("-z", "--imbatol", type=float, dest="imbalance_tolerance", nargs="?",
+                        action="store", help="1d partioner imabalance tolerance")
 
     args = parser.parse_args()
 
@@ -267,4 +270,5 @@ if __name__ == "__main__":
     main(actx_class, mesh_source=args.source, dim=args.dim,
          output_path=args.output_path, ndist=args.ndist,
          log_path=args.log_path, casename=args.casename,
-         use_1d_part=args.one_d_part, use_wall=args.use_wall)
+         use_1d_part=args.one_d_part, use_wall=args.use_wall,
+         imba_tol=imbalance_tolerance)
