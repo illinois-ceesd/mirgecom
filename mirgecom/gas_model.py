@@ -806,14 +806,6 @@ def make_operator_fluid_states(
                 dcoll, volume_state.smoothness_d, volume_dd=dd_vol,
                 comm_tag=(_FluidSmoothnessDiffTag, comm_tag))]
 
-    smoothness_d_interior_pairs = None
-    if volume_state.smoothness_d is not None:
-        smoothness_d_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.smoothness_d, volume_dd=dd_vol,
-                tag=(_FluidSmoothnessDiffTag, comm_tag))]
-
     smoothness_beta_interior_pairs = None
     if volume_state.smoothness_beta is not None:
         smoothness_beta_interior_pairs = [
