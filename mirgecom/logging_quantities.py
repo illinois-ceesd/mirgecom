@@ -119,10 +119,13 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa:
 def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue) \
         -> None:
     """Add the OpenCL device memory usage to the log."""
-    from pyopencl.characterize import nv_compute_capability
-    if not queue or nv_compute_capability(queue.device) is None:
+    if not queue:
         return
-    logmgr.add_quantity(DeviceMemoryUsage())
+
+    if queue.device.vendor.lower().startswith("nvidia"):
+        logmgr.add_quantity(DeviceMemoryUsageCUDA())
+    elif queue.device.vendor.lower().startswith("advanced micro devices"):
+        logmgr.add_quantity(DeviceMemoryUsageAMD(queue.device))
 
 
 def logmgr_add_mempool_usage(logmgr: LogManager, pool: MemPoolType) -> None:
@@ -405,8 +408,8 @@ class PythonMemoryUsage(PostLogQuantity):
         return self.process.memory_info()[0] / 1024 / 1024
 
 
-class DeviceMemoryUsage(PostLogQuantity):
-    """Logging support for GPU memory usage (Nvidia only currently)."""
+class DeviceMemoryUsageCUDA(PostLogQuantity):
+    """Logging support for Nvidia CUDA GPU memory usage."""
 
     def __init__(self, name: Optional[str] = None) -> None:
 
@@ -448,6 +451,30 @@ class DeviceMemoryUsage(PostLogQuantity):
                     f"{total.value // 1024 // 1024} MByte total. "
                     "This may lead to slowdowns or crashes.")
             return (total.value - free.value) / 1024 / 1024
+
+
+class DeviceMemoryUsageAMD(PostLogQuantity):
+    """Logging support for AMD GPU memory usage."""
+
+    def __init__(self, dev: "cl.Device", name: Optional[str] = None) -> None:
+
+        if name is None:
+            name = "memory_usage_gpu"
+
+        super().__init__(name, "MByte", description="Memory usage (GPU)")
+
+        self.dev = dev
+        self.global_mem_size_mbyte = dev.global_mem_size / 1024 / 1024
+
+    def __call__(self) -> Optional[float]:
+        """Return the memory usage in MByte."""
+
+        # NB: dev.global_mem_size is in Bytes,
+        #     dev.global_free_memory_amd is in KByte,
+        #     the actual granularity of the returned values appears to be MByte
+        #     (like in CUDA)
+
+        return self.global_mem_size_mbyte - self.dev.global_free_memory_amd[0] / 1024
 
 
 class MempoolMemoryUsage(MultiPostLogQuantity):
