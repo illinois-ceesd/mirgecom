@@ -16,7 +16,7 @@ function endgroup {
 
 # }}}
 
-python -c "from grudge.array_context import MPINumpyArrayConext" && numpy_actx_available=numpy || numpy_actx_available=
+python -c "from grudge.array_context import MPINumpyArrayContext" && numpy_actx_available=numpy || numpy_actx_available=
 
 echo "Numpy array context available: $numpy_actx_available"
 
@@ -68,7 +68,7 @@ if [[ -z "${MIRGE_PARALLEL_SPAWNER:-}" ]];then
     source scripts/mirge-testing-env.sh ${examples_dir}/..
 fi
 
-mpi_exec="${MIRGE_MPI_EXEC}"
+mpi_exec="${MIRGE_MPI_EXEC} -N 1"
 mpi_launcher="${MIRGE_PARALLEL_SPAWNER}"
 
 export OMPI_ALLOW_RUN_AS_ROOT=1
