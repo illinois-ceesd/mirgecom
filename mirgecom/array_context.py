@@ -119,6 +119,10 @@ def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
 
 def _check_cache_dirs_node() -> None:
     """Check whether multiple ranks share cache directories on the same node."""
+    import sys
+    if "mpi4py" not in sys.modules:
+        return
+
     from mpi4py import MPI
 
     size = MPI.COMM_WORLD.Get_size()
@@ -176,6 +180,10 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
     Only works with CUDA devices currently due to the use of the
     PCI_DOMAIN_ID_NV extension.
     """
+    import sys
+    if "mpi4py" not in sys.modules:
+        return
+
     from mpi4py import MPI
     import pyopencl as cl
 
@@ -227,11 +235,16 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
 def log_disk_cache_config(actx: ArrayContext) -> None:
     """Log the disk cache configuration."""
-    from mpi4py import MPI
+    import sys
 
     assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
 
-    rank = MPI.COMM_WORLD.Get_rank()
+    if "mpi4py" in sys.modules:
+        from mpi4py import MPI
+        rank = MPI.COMM_WORLD.Get_rank()
+    else:
+        rank = 0
+
     res = f"Rank {rank} disk cache config: "
 
     from pyopencl.characterize import nv_compute_capability, get_pocl_version
