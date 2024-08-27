@@ -434,7 +434,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
         return wonk_field
 
     p = order
-    p_prime = dim*p + 1
+    p_prime = 2*p + 1
     print(f"{mesh_name=}")
     print(f"{dim=}, {p=}, {p_prime=}")
     # print(f"{p=},{p_prime=}")
@@ -572,6 +572,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
                                   u_quad, u_bnd_flux_quad)
         test_integ_base = op.elementwise_integral(dcoll, vol_dd_base, u_base)
         test_integ_quad = op.elementwise_integral(dcoll, vol_dd_quad, u_quad)
+
         print(f"{actx.to_numpy(test_integ_base)=}")
         print(f"{actx.to_numpy(test_integ_quad)=}")
         # print(f"{actx.to_numpy(test_grad)=}")
@@ -584,6 +585,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
         print(f"{p=},{h_min=},{f_order=},{grad_err=},{test_tol=}")
         this_test = grad_err < test_tol
 
+        print(f"{test_passed=}, {overint=}")
         # ensure it fails with no overintegration for function order > p
         if f_order > p and not overint:
             this_test = not this_test

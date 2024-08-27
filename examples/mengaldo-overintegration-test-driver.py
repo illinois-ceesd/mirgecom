@@ -192,12 +192,15 @@ def main(actx_class, use_esdg=False,
     # velocity[0] = .1
     # velocity[1] = .1
     velocity = velocity * geom_scale
-    p_adv = 1.
+    p_adv = 2.
     period = 100*current_dt
 
     def g(t):
         return np.cos(np.pi*t/period)
 
+    # Note that *r* here is used only to get the array_context
+    # The actual velocity is returned at points on the discretization
+    # that comes from the DD.
     def get_velocity(r, t=0, dd=None):
         if dd is None:
             dd = DD_VOLUME_ALL
@@ -259,16 +262,19 @@ def main(actx_class, use_esdg=False,
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
         from meshmode.mesh.generation import generate_regular_rect_mesh
-        generate_mesh = partial(generate_regular_rect_mesh,
+        generate_mesh = partial(
+            generate_regular_rect_mesh,
             a=box_ll, b=box_ur, nelements_per_axis=nel_axes,
-            periodic=(True,)*dim
+            periodic=(True,)*dim, mesh_type="X"
         )
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
-    nodes = actx.thaw(dcoll.nodes())
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=3*order+1)
+
+    nodes_base = actx.thaw(dcoll.nodes())
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
 
     # transfer trace pairs to quad grid, update pair dd
@@ -310,14 +316,14 @@ def main(actx_class, use_esdg=False,
 
     # Mengaldo test case
     alpha = 41.
-    xc = 0
+    xc = -.3
     yc = 0
 
     def poly_vel_initializer(xyz_vec, t=0):
         x = xyz_vec[0]
         y = xyz_vec[1]
         actx = x.array_context
-        return actx.np.exp(-alpha*((x+xc)**2 + (y+yc)**2))
+        return actx.np.exp(-alpha*((x-xc)**2 + (y-yc)**2))
 
     # These solution/gradient computers assume unit wave_hat
     def wave_initializer(xyz_vec, t=0):
@@ -375,7 +381,7 @@ def main(actx_class, use_esdg=False,
     else:
         raise ValueError(f"Unexpected {init_type=}")
 
-    init_state = exact_state_func(nodes)
+    init_state_base = exact_state_func(nodes_base)
 
     if rst_filename:
         current_t = restart_data["t"]
@@ -383,7 +389,7 @@ def main(actx_class, use_esdg=False,
         current_state = restart_data["state"]
     else:
         # Set the current state from time 0
-        current_state = init_state
+        current_state = init_state_base
 
     if logmgr:
         from mirgecom.logging_quantities import logmgr_set_time
@@ -405,11 +411,13 @@ def main(actx_class, use_esdg=False,
 
     dd_vol = DD_VOLUME_ALL
     dd_allfaces = dd_vol.trace(FACE_RESTR_ALL)
+    dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+    dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
     def my_write_viz(step, t, state, grad_state=None):
         if grad_state is None:
             grad_state = force_evaluation(actx, my_scalar_gradient(state))
-        exact_state = exact_state_func(nodes, t)
+        exact_state = exact_state_func(nodes_base, t)
         state_resid = state - exact_state
         expterm = np.exp(-diffusivity*wavenumber2*t)
         exact_amplitude = amplitude*expterm
@@ -420,7 +428,7 @@ def main(actx_class, use_esdg=False,
                       ("state_relerr", state_err),
                       ("dstate", grad_state)]
         if exact_gradient_func is not None:
-            exact_grad = exact_gradient_func(nodes, t)
+            exact_grad = exact_gradient_func(nodes_base, t)
             grad_resid = grad_state - exact_grad
             exact_grad_amplitude = wavenumber*exact_amplitude
             grad_err = grad_resid / exact_grad_amplitude
@@ -429,7 +437,7 @@ def main(actx_class, use_esdg=False,
                                ("grad_relerr", grad_err)]
             viz_fields.extend(grad_viz_fields)
         if velocity_func is not None:
-            vel = velocity_func(nodes, t=t)
+            vel = velocity_func(nodes_base, t=t)
             viz_fields.append(("velocity", vel))
 
         from mirgecom.simutil import write_visfile
@@ -532,8 +540,8 @@ def main(actx_class, use_esdg=False,
 
         def flux(grad_tpair, state_tpair):
             return op.project(
-                dcoll, grad_tpair.dd, "all_faces", get_interior_flux(grad_tpair,
-                                                                     state_tpair))
+                dcoll, grad_tpair.dd, dd_allfaces_quad,
+                get_interior_flux(grad_tpair, state_tpair))
 
         surf_flux = sum(flux(grad_tpair, state_tpair)
                         for grad_tpair, state_tpair in all_trace_pairs)
@@ -556,14 +564,15 @@ def main(actx_class, use_esdg=False,
             # why project to all_faces? to "size" the array correctly
             # for all faces rather than just the selected "tpair.dd"
             return op.project(
-                dcoll, tpair.dd, "all_faces",
-                _advection_flux_interior(dcoll, tpair,
-                                         get_velocity(r=nodes, t=t, dd=tpair.dd)))
+                dcoll, tpair.dd, dd_allfaces_quad,
+                _advection_flux_interior(
+                    dcoll, tpair, get_velocity(r=nodes_base, t=t, dd=tpair.dd)))
 
-        vol_flux = state * get_velocity(r=nodes, t=t)
+        vol_flux = state * get_velocity(r=nodes_base, t=t, dd=dd_vol_quad)
 
         # sums up the fluxes for each element boundary
-        surf_flux = sum(flux(tpair) for tpair in state_interior_trace_pairs)
+        surf_flux = sum(flux(tpair)
+                        for tpair in state_interior_trace_pairs)
 
         if flux_only:
             return vol_flux, surf_flux
@@ -574,12 +583,16 @@ def main(actx_class, use_esdg=False,
         state_interior_trace_pairs = None
         vol_fluxes = 0
         surf_fluxes = 0
-
+        state_quad = op.project(dcoll, dd_vol, dd_vol_quad, state)
         if advect:
             if state_interior_trace_pairs is None:
-                state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
+                state_interior_trace_pairs = [
+                    interp_to_surf_quad(tpair=tpair)
+                    for tpair in op.interior_trace_pairs(dcoll, state)
+                ]
             vol_fluxes, surf_fluxes = my_advection_rhs(
-                t, state, state_interior_trace_pairs, flux_only=True)
+                t, state_quad, state_interior_trace_pairs, flux_only=True)
+
             vol_fluxes = -1.0*vol_fluxes
             surf_fluxes = -1.0*surf_fluxes
 
@@ -598,7 +611,8 @@ def main(actx_class, use_esdg=False,
             surf_fluxes = diff_surf_fluxes + surf_fluxes
 
         if diffuse or advect:
-            return div_operator(dcoll, dd_vol, dd_allfaces, vol_fluxes, surf_fluxes)
+            return div_operator(dcoll, dd_vol_quad, dd_allfaces_quad,
+                                vol_fluxes, surf_fluxes)
 
         return 0*state
 
@@ -632,7 +646,7 @@ def main(actx_class, use_esdg=False,
 
 if __name__ == "__main__":
     import argparse
-    casename = "scalar-transport"
+    casename = "mengaldo"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
