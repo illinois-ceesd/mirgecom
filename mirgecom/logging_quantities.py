@@ -457,7 +457,7 @@ class DeviceMemoryUsageCUDA(PostLogQuantity):
 class DeviceMemoryUsageAMD(PostLogQuantity):
     """Logging support for AMD GPU memory usage."""
 
-    def __init__(self, dev: "cl.Device", name: Optional[str] = None) -> None:
+    def __init__(self, dev: cl.Device, name: Optional[str] = None) -> None:
 
         if name is None:
             name = "memory_usage_gpu"
