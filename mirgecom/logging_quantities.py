@@ -29,7 +29,8 @@ __doc__ = """
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: KernelProfile
 .. autoclass:: PythonMemoryUsage
-.. autoclass:: DeviceMemoryUsage
+.. autoclass:: DeviceMemoryUsageCUDA
+.. autoclass:: DeviceMemoryUsageAMD
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_cl_device_info
 .. autofunction:: logmgr_add_device_memory_usage
@@ -468,7 +469,6 @@ class DeviceMemoryUsageAMD(PostLogQuantity):
 
     def __call__(self) -> Optional[float]:
         """Return the memory usage in MByte."""
-
         # NB: dev.global_mem_size is in Bytes,
         #     dev.global_free_memory_amd is in KByte,
         #     the actual granularity of the returned values appears to be MByte
