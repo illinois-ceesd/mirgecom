@@ -66,10 +66,12 @@ class MyRuntimeError(RuntimeError):
 def main(actx_class, mesh_source=None, ndist=None, dim=None,
          output_path=None, log_path=None,
          casename=None, use_1d_part=None, use_wall=False,
-         imba_tol=0.01):
+         imba_tol=None):
     """The main function."""
     if mesh_source is None:
         raise ApplicationOptionsError("Missing mesh source file.")
+    if imba_tol is None:
+        imba_tol = .01
 
     mesh_source.strip("'")
 
