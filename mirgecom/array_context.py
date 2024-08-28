@@ -243,6 +243,8 @@ def log_disk_cache_config(actx: ArrayContext) -> None:
     assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
 
     if actx_class_is_distributed(type(actx)):
+        from grudge.array_context import MPIBasedArrayContext
+        assert isinstance(actx, MPIBasedArrayContext)
         rank = actx.mpi_communicator.Get_rank()
     else:
         rank = 0
