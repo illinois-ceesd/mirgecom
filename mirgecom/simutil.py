@@ -1626,18 +1626,23 @@ def interdecomposition_overlap(target_decomp_map, source_decomp_map,
     target-part-specific local indexes to the source-part-specific local
     index of for the corresponding element.
 
-    { targ_part_1 : { src_part_1 : { local_el_index : remote_el_index, ... },
-                      src_part_2 : { local_el_index : remote_el_index, ... },
-                      ...
-                    },
-      targ_part_2 : { ... },
-      ...
-    }
+    Example dictionary structure:
+
+    .. code-block:: python
+
+       {
+         targ_part_1 : {
+           src_part_1 : { local_el_index : remote_el_index, ... },
+           src_part_2 : { local_el_index : remote_el_index, ... },
+           ...
+         },
+         targ_part_2 : { ... },
+         ...
+       }
 
     This data structure is useful for mapping the solution data from
     the old decomp pkl restart files to the new decomp solution arrays.
     """
-
     src_part_to_els = invert_decomp(source_decomp_map)
     trg_part_to_els = invert_decomp(target_decomp_map)
     ipmap = interdecomposition_mapping(target_decomp_map, source_decomp_map)
@@ -1665,31 +1670,37 @@ def multivolume_interdecomposition_overlap(src_decomp_map, trg_decomp_map,
                               src_multivol_decomp_map, trg_multivol_decomp_map,
                               return_ranks=None):
     """
-    Construct local-to-local index mapping for overlapping decomps.
+    Construct local-to-local index mapping for overlapping decompositions.
 
     Parameters
     ----------
     src_decomp_map: dict
-        Source decomposition map {rank: [elements]}
+        Source decomposition map {rank: [elements]}.
+
     trg_decomp_map: dict
-        Target decomposition map {rank: [elements]}
+        Target decomposition map {rank: [elements]}.
+
     src_multivol_decomp_map: dict
-        Source multivolume decomposition map {PartID: np.array(elements)}
+        Source multivolume decomposition map {PartID: np.array(elements)}.
+
     trg_multivol_decomp_map: dict
-        Target multivolume decomposition map {PartID: np.array(elements)}
+        Target multivolume decomposition map {PartID: np.array(elements)}.
 
     Returns
     -------
-    A dictionary with structure:
-        {
-            trg_partid: {
-                src_partid: {
-                    trg_local_el_index: src_local_el_index
+    dict
+        A dictionary with the following structure
+
+        .. code-block:: python
+
+            {
+                trg_partid: {
+                    src_partid: {
+                        trg_local_el_index: src_local_el_index
+                    }
                 }
             }
-        }
     """
-
     # If no specific ranks are provided, consider all ranks in the target decomp
     if return_ranks is None:
         return_ranks = list(trg_decomp_map.keys())
