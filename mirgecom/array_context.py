@@ -5,6 +5,7 @@
 .. autofunction:: actx_class_is_eager
 .. autofunction:: actx_class_is_profiling
 .. autofunction:: actx_class_is_numpy
+.. autofunction:: actx_class_is_distributed
 .. autofunction:: initialize_actx
 """
 
@@ -110,6 +111,12 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
         return False
 
 
+def actx_class_is_distributed(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is distributed."""
+    from grudge.array_context import MPIBasedArrayContext
+    return issubclass(actx_class, MPIBasedArrayContext)
+
+
 def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* has fallback arguments."""
     import inspect
@@ -117,8 +124,11 @@ def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     return "use_axis_tag_inference_fallback" in spec.args
 
 
-def _check_cache_dirs_node() -> None:
+def _check_cache_dirs_node(actx: ArrayContext) -> None:
     """Check whether multiple ranks share cache directories on the same node."""
+    if not actx_class_is_distributed(type(actx)):
+        return
+
     from mpi4py import MPI
 
     size = MPI.COMM_WORLD.Get_size()
@@ -176,6 +186,9 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
     Only works with CUDA devices currently due to the use of the
     PCI_DOMAIN_ID_NV extension.
     """
+    if not actx_class_is_distributed(type(actx)):
+        return
+
     from mpi4py import MPI
     import pyopencl as cl
 
@@ -227,11 +240,15 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
 def log_disk_cache_config(actx: ArrayContext) -> None:
     """Log the disk cache configuration."""
-    from mpi4py import MPI
-
     assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
 
-    rank = MPI.COMM_WORLD.Get_rank()
+    if actx_class_is_distributed(type(actx)):
+        from grudge.array_context import MPIBasedArrayContext
+        assert isinstance(actx, MPIBasedArrayContext)
+        rank = actx.mpi_communicator.Get_rank()
+    else:
+        rank = 0
+
     res = f"Rank {rank} disk cache config: "
 
     from pyopencl.characterize import nv_compute_capability, get_pocl_version
@@ -336,7 +353,7 @@ def initialize_actx(
     # or pocl, and therefore we don't need to examine their caching).
     if actx_class_is_pyopencl(actx_class):
         _check_gpu_oversubscription(actx)
-        _check_cache_dirs_node()
+        _check_cache_dirs_node(actx)
         log_disk_cache_config(actx)
 
     return actx

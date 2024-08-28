@@ -16,7 +16,7 @@ function endgroup {
 
 # }}}
 
-python -c "from grudge.array_context import MPINumpyArrayConext" && numpy_actx_available=numpy || numpy_actx_available=
+python -c "from grudge.array_context import MPINumpyArrayContext" && numpy_actx_available=numpy || numpy_actx_available=
 
 echo "Numpy array context available: $numpy_actx_available"
 
