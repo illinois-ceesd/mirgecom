@@ -29,7 +29,8 @@ __doc__ = """
 .. autoclass:: DiscretizationBasedQuantity
 .. autoclass:: KernelProfile
 .. autoclass:: PythonMemoryUsage
-.. autoclass:: DeviceMemoryUsage
+.. autoclass:: DeviceMemoryUsageCUDA
+.. autoclass:: DeviceMemoryUsageAMD
 .. autofunction:: initialize_logmgr
 .. autofunction:: logmgr_add_cl_device_info
 .. autofunction:: logmgr_add_device_memory_usage
@@ -39,6 +40,8 @@ __doc__ = """
 .. autofunction:: set_sim_state
 .. autofunction:: logmgr_set_time
 """
+
+import logging
 
 from logpyle import (LogQuantity, PostLogQuantity, LogManager,
     MultiPostLogQuantity, add_run_info,
@@ -54,6 +57,9 @@ import numpy as np
 from grudge.dof_desc import DD_VOLUME_ALL
 import grudge.op as oper
 from typing import List
+
+
+logger = logging.getLogger(__name__)
 
 MemPoolType = Union[cl.tools.MemoryPool, cl.tools.SVMPool]
 
@@ -114,9 +120,13 @@ def logmgr_add_device_name(logmgr: LogManager, queue: cl.CommandQueue):  # noqa:
 def logmgr_add_device_memory_usage(logmgr: LogManager, queue: cl.CommandQueue) \
         -> None:
     """Add the OpenCL device memory usage to the log."""
-    if not queue or not (queue.device.type & cl.device_type.GPU):
+    if not queue:
         return
-    logmgr.add_quantity(DeviceMemoryUsage())
+
+    if queue.device.vendor.lower().startswith("nvidia"):
+        logmgr.add_quantity(DeviceMemoryUsageCUDA())
+    elif queue.device.vendor.lower().startswith("advanced micro devices"):
+        logmgr.add_quantity(DeviceMemoryUsageAMD(queue.device))
 
 
 def logmgr_add_mempool_usage(logmgr: LogManager, pool: MemPoolType) -> None:
@@ -192,8 +202,10 @@ def add_package_versions(mgr: LogManager, path_to_version_sh: Optional[str] = No
         warn("Could not find emirge's version.sh.")
 
     else:
+        from pytools import ProcessLogger
         try:
-            output = subprocess.check_output(path_to_version_sh)
+            with ProcessLogger(logger, "emirge's version.sh"):
+                output = subprocess.check_output(path_to_version_sh)
         except OSError as e:
             warn("Could not record emirge's package versions: " + str(e))
 
@@ -397,8 +409,8 @@ class PythonMemoryUsage(PostLogQuantity):
         return self.process.memory_info()[0] / 1024 / 1024
 
 
-class DeviceMemoryUsage(PostLogQuantity):
-    """Logging support for GPU memory usage (Nvidia only currently)."""
+class DeviceMemoryUsageCUDA(PostLogQuantity):
+    """Logging support for Nvidia CUDA GPU memory usage."""
 
     def __init__(self, name: Optional[str] = None) -> None:
 
@@ -440,6 +452,29 @@ class DeviceMemoryUsage(PostLogQuantity):
                     f"{total.value // 1024 // 1024} MByte total. "
                     "This may lead to slowdowns or crashes.")
             return (total.value - free.value) / 1024 / 1024
+
+
+class DeviceMemoryUsageAMD(PostLogQuantity):
+    """Logging support for AMD GPU memory usage."""
+
+    def __init__(self, dev: cl.Device, name: Optional[str] = None) -> None:
+
+        if name is None:
+            name = "memory_usage_gpu"
+
+        super().__init__(name, "MByte", description="Memory usage (GPU)")
+
+        self.dev = dev
+        self.global_mem_size_mbyte = dev.global_mem_size / 1024 / 1024
+
+    def __call__(self) -> Optional[float]:
+        """Return the memory usage in MByte."""
+        # NB: dev.global_mem_size is in Bytes,
+        #     dev.global_free_memory_amd is in KByte,
+        #     the actual granularity of the returned values appears to be MByte
+        #     (like in CUDA)
+
+        return self.global_mem_size_mbyte - self.dev.global_free_memory_amd[0] / 1024
 
 
 class MempoolMemoryUsage(MultiPostLogQuantity):
