@@ -109,7 +109,7 @@ def logmgr_add_cl_device_info(logmgr: LogManager, queue: cl.CommandQueue) -> Non
         logmgr.set_constant("cl_platform_version", dev.platform.version)
 
 
-def logmgr_add_simulation_info(logmgr: LogManager, sim_info) -> None:
+def logmgr_add_simulation_info(logmgr: LogManager, sim_info: Dict[str, Any) -> None:
     """Add some user-defined information to the logpyle output."""
     for field_name in sim_info:
         logmgr.set_constant(field_name, sim_info[field_name])
