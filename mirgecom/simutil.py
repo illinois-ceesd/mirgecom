@@ -1637,6 +1637,7 @@ def interdecomposition_overlap(target_decomp_map, source_decomp_map,
     This data structure is useful for mapping the solution data from
     the old decomp pkl restart files to the new decomp solution arrays.
     """
+
     src_part_to_els = invert_decomp(source_decomp_map)
     trg_part_to_els = invert_decomp(target_decomp_map)
     ipmap = interdecomposition_mapping(target_decomp_map, source_decomp_map)
@@ -1664,22 +1665,22 @@ def multivolume_interdecomposition_overlap(src_decomp_map, trg_decomp_map,
                               src_multivol_decomp_map, trg_multivol_decomp_map,
                               return_ranks=None):
     """
-    Construct local-to-local index mapping for overlapping deconmps.
+    Construct local-to-local index mapping for overlapping decomps.
 
     Parameters
     ----------
-        src_decomp_map: dict
-            Source decomposition map {rank: [elements]}
-        trg_decomp_map: dict
-            Target decomposition map {rank: [elements]}
-        src_multivol_decomp_map: dict
-            Source multivolume decomposition map {PartID: np.array(elements)}
-        trg_multivol_decomp_map: dict
-            Target multivolume decomposition map {PartID: np.array(elements)}
+    src_decomp_map: dict
+        Source decomposition map {rank: [elements]}
+    trg_decomp_map: dict
+        Target decomposition map {rank: [elements]}
+    src_multivol_decomp_map: dict
+        Source multivolume decomposition map {PartID: np.array(elements)}
+    trg_multivol_decomp_map: dict
+        Target multivolume decomposition map {PartID: np.array(elements)}
 
     Returns
     -------
-        A dictionary with structure:
+    A dictionary with structure:
         {
             trg_partid: {
                 src_partid: {
@@ -1688,6 +1689,7 @@ def multivolume_interdecomposition_overlap(src_decomp_map, trg_decomp_map,
             }
         }
     """
+
     # If no specific ranks are provided, consider all ranks in the target decomp
     if return_ranks is None:
         return_ranks = list(trg_decomp_map.keys())
