@@ -33,7 +33,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Type, Dict, Any
+from typing import Type, Dict, Any, Tuple
 import os
 import logging
 
@@ -211,13 +211,13 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
         except (cl._cl.LogicError, AttributeError):
             from warnings import warn
             warn("Cannot detect whether multiple ranks are running on the"
-                " same GPU because it requires Nvidia GPUs running with"
-                " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
+                 " same GPU because it requires Nvidia GPUs running with"
+                 " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
             raise
 
         bus_id = hex(dev.pci_bus_id_nv)
         slot_id = hex(dev.pci_slot_id_nv)
-        dev_id = (domain_id, bus_id, slot_id)
+        dev_id: Tuple[Any, ...] = (domain_id, bus_id, slot_id)
 
     elif dev.platform.vendor.startswith("Advanced Micro"):
         dev_id = (dev.topology_amd.bus,)
