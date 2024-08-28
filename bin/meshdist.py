@@ -28,22 +28,17 @@ import argparse
 import sys
 import os
 
-from pytools.obj_array import make_obj_array
-from functools import partial
-
-from logpyle import IntervalTimer, set_dt
+from logpyle import set_dt
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info,
     logmgr_set_time,
-    logmgr_add_simulation_info,
     logmgr_add_device_memory_usage,
     logmgr_add_mempool_usage,
 )
 
 from mirgecom.simutil import (
     ApplicationOptionsError,
-    distribute_mesh,
     distribute_mesh_pkl
 )
 from mirgecom.mpi import mpi_entry_point
@@ -141,14 +136,12 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
     logmgr = initialize_logmgr(True,
         filename=logname, mode="wu", mpi_comm=comm)
 
-    from mirgecom.array_context import initialize_actx, actx_class_is_profiling
+    from mirgecom.array_context import initialize_actx
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
-    use_profiling = actx_class_is_profiling(actx_class)
     alloc = getattr(actx, "allocator", None)
 
     monitor_memory = True
-    monitor_performance = 2
 
     logmgr_add_cl_device_info(logmgr, queue)
 
@@ -255,11 +248,13 @@ if __name__ == "__main__":
                         nargs="?", action="store",
                         help="Output path for distributed mesh pkl files")
     parser.add_argument("-c", "--casename", type=str, dest="casename", nargs="?",
-                        action="store", help="Root name of distributed mesh pkl files.")
+                        action="store",
+                        help="Root name of distributed mesh pkl files.")
     parser.add_argument("-g", "--logpath", type=str, dest="log_path", nargs="?",
                         action="store", help="simulation case name")
-    parser.add_argument("-z", "--imbatol", type=float, dest="imbalance_tolerance", nargs="?",
-                        action="store", help="1d partioner imabalance tolerance")
+    parser.add_argument("-z", "--imbatol", type=float, dest="imbalance_tolerance",
+                        nargs="?", action="store",
+                        help="1d partioner imabalance tolerance")
 
     args = parser.parse_args()
 
@@ -271,4 +266,4 @@ if __name__ == "__main__":
          output_path=args.output_path, ndist=args.ndist,
          log_path=args.log_path, casename=args.casename,
          use_1d_part=args.one_d_part, use_wall=args.use_wall,
-         imba_tol=imbalance_tolerance)
+         imba_tol=args.imbalance_tolerance)

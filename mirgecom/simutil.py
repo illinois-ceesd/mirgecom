@@ -1097,6 +1097,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
             print(f"Read(rank, batch): Dist({my_reader_rank}, "
                   f"{read_batch}) on {hostname}.")
 
+            global_data = None
             if logmgr:
                 logmgr.add_quantity(t_mesh_data)
                 with t_mesh_data.get_sub_timer():

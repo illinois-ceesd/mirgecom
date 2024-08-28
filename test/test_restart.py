@@ -279,25 +279,24 @@ def test_multivolume_interdecomp_overlap_basic():
     for trg_partid, src_partid_mappings in mv_idx.items():
         mapped_trg_elems = set()
         # validate ranks in trg mapping
-        assert 0 <= trg_partid.rank < trg_np,\
-            f"Invalid target rank: {trg_partid.rank}"
+        assert 0 <= trg_partid.rank < trg_np, f"Bad target rank: {trg_partid.rank}"
         for src_partid, element_mapping in src_partid_mappings.items():
             # check for consistent volume_tags
             assert trg_partid.volume_tag == src_partid.volume_tag, \
                 f"Volume tag mismatch: {trg_partid.volume_tag} "\
                 f"vs {src_partid.volume_tag}"
             # validate ranks in src mapping
-            assert 0 <= src_partid.rank < src_np,\
-                f"Invalid source rank: {src_partid.rank}"
+            assert 0 <= src_partid.rank < src_np, \
+                f"Bad source rank:{src_partid.rank}"
             for trg_local_idx, src_local_idx in element_mapping.items():
                 # check that each trg el is mapped only once
-                assert trg_local_idx not in mapped_trg_elems,\
+                assert trg_local_idx not in mapped_trg_elems, \
                     f"Duplicate mapping for target element {trg_local_idx}"
                 mapped_trg_elems.add(trg_local_idx)
                 # check for valid src and trg indices
-                assert 0 <= src_local_idx < len(src_vol_decomp[src_partid]),\
+                assert 0 <= src_local_idx < len(src_vol_decomp[src_partid]), \
                     f"Invalid source index {src_local_idx} for {src_partid}"
-                assert 0 <= trg_local_idx < len(trg_vol_decomp[trg_partid]),\
+                assert 0 <= trg_local_idx < len(trg_vol_decomp[trg_partid]), \
                     f"Invalid target index {trg_local_idx} for {trg_partid}"
 
     # Check that the mapping is 1-to-1, that each src element is covered and maps
@@ -403,7 +402,7 @@ def test_multivolume_interdecomp_overlap(decomp_pattern, vol_pattern, src_trg_ra
     for trg_partid, src_partid_mappings in mv_idx.items():
         mapped_trg_elems = set()
         # validate ranks in trg mapping
-        assert 0 <= trg_partid.rank < trg_np,\
+        assert 0 <= trg_partid.rank < trg_np, \
             f"Invalid target rank: {trg_partid.rank}"
         for src_partid, element_mapping in src_partid_mappings.items():
             # check for consistent volume_tags
@@ -411,17 +410,17 @@ def test_multivolume_interdecomp_overlap(decomp_pattern, vol_pattern, src_trg_ra
                 f"Volume tag mismatch: {trg_partid.volume_tag} "\
                 f"vs {src_partid.volume_tag}"
             # validate ranks in src mapping
-            assert 0 <= src_partid.rank < src_np,\
+            assert 0 <= src_partid.rank < src_np, \
                 f"Invalid source rank: {src_partid.rank}"
             for trg_local_idx, src_local_idx in element_mapping.items():
                 # check that each trg el is mapped only once
-                assert trg_local_idx not in mapped_trg_elems,\
+                assert trg_local_idx not in mapped_trg_elems, \
                     f"Duplicate mapping for target element {trg_local_idx}"
                 mapped_trg_elems.add(trg_local_idx)
                 # check for valid src and trg indices
-                assert 0 <= src_local_idx < len(src_vol_decomp[src_partid]),\
+                assert 0 <= src_local_idx < len(src_vol_decomp[src_partid]), \
                     f"Invalid source index {src_local_idx} for {src_partid}"
-                assert 0 <= trg_local_idx < len(trg_vol_decomp[trg_partid]),\
+                assert 0 <= trg_local_idx < len(trg_vol_decomp[trg_partid]), \
                     f"Invalid target index {trg_local_idx} for {trg_partid}"
 
     # Check that the mapping is 1-to-1, that each src element is covered and maps

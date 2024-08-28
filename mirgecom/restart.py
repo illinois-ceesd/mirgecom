@@ -708,7 +708,7 @@ def redistribute_multivolume_restart_data(
             with array_context_for_pickling(actx):
                 with open(output_filename, "wb") as f:
                     pickle.dump(out_rst_data, f)
-            
+
         if writer_rank == 0 and writer_nprocs > 1:
             print(f"{datetime.now()}: Waiting on other ranks to finish ...")
         writer_comm_wrapper.Barrier()
