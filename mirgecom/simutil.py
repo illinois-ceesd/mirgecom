@@ -478,8 +478,10 @@ def check_range_local(dcoll: DiscretizationCollection, dd: str, field: DOFArray,
                       min_value: float, max_value: float) -> List[float]:
     """Return the values that are outside the range [min_value, max_value]."""
     actx = field.array_context
-    local_min = actx.to_numpy(op.nodal_min_loc(dcoll, dd, field)).item()
-    local_max = actx.to_numpy(op.nodal_max_loc(dcoll, dd, field)).item()
+    local_min = actx.to_numpy(
+        op.nodal_min_loc(dcoll, dd, field)).item()  # type: ignore[attr-defined]
+    local_max = actx.to_numpy(
+        op.nodal_max_loc(dcoll, dd, field)).item()  # type: ignore[attr-defined]
 
     failing_values = []
 
@@ -496,7 +498,7 @@ def check_naninf_local(dcoll: DiscretizationCollection, dd: str,
     """Return True if there are any NaNs or Infs in the field."""
     actx = field.array_context
     s = actx.to_numpy(op.nodal_sum_loc(dcoll, dd, field))
-    return not np.isfinite(s)
+    return not np.isfinite(s)  # type: ignore[call-overload]
 
 
 def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
