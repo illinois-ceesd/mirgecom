@@ -316,7 +316,8 @@ class GasTabulatedTransport(TransportModel):
     def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$."""
-        return (self.bulk_viscosity(cv, dv, eos) - 2./3.)*self.viscosity(cv, dv, eos)
+        return (self.bulk_viscosity(cv, dv, eos)  # type: ignore
+                - 2./3.)*self.viscosity(cv, dv, eos)  # type: ignore
 
     def viscosity(self, cv: ConservedVars,  # type: ignore[override]
             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
@@ -342,7 +343,7 @@ class GasTabulatedTransport(TransportModel):
     def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         """Return the (empty) species mass diffusivities."""
-        return cv.species_mass  # empty array
+        return cv.species_mass  # type: ignore
 
 
 class TabulatedGasEOS(MixtureEOS):
@@ -414,7 +415,7 @@ class TabulatedGasEOS(MixtureEOS):
             e(T) = h(T) - \frac{R}{M} T
         """
         gas_const = self.gas_const(cv=None, temperature=temperature)
-        return self.enthalpy(temperature) - gas_const*temperature
+        return self.enthalpy(temperature) - gas_const*temperature  # type: ignore
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the gas heat capacity at constant pressure $C_{p_g}$.
@@ -429,7 +430,8 @@ class TabulatedGasEOS(MixtureEOS):
 
     def heat_capacity_cv(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Return the gas heat capacity at constant volume $C_{v_g}$."""
-        return self.heat_capacity_cp(cv, temperature)/self.gamma(cv, temperature)
+        mcp = self.heat_capacity_cp(cv, temperature)
+        return mcp/self.gamma(cv, temperature)  # type: ignore
 
     def gamma(self, cv: Optional[ConservedVars] = None,
               temperature: Optional[DOFArray] = None) -> DOFArray:
@@ -445,7 +447,7 @@ class TabulatedGasEOS(MixtureEOS):
             P = \frac{\epsilon_g \rho_g}{\epsilon_g} \frac{R}{M} T
         """
         gas_const = self.gas_const(cv, temperature)
-        return cv.mass*gas_const*temperature
+        return cv.mass*gas_const*temperature  # type: ignore
 
     def gas_const(self, cv: Optional[ConservedVars] = None,
                   temperature: Optional[DOFArray] = None,
@@ -454,7 +456,7 @@ class TabulatedGasEOS(MixtureEOS):
         coeffs = self._cs_molar_mass.c
         bnds = self._cs_molar_mass.x
         molar_mass = eval_spline(temperature, bnds, coeffs)
-        return 8314.46261815324/molar_mass
+        return 8314.46261815324/molar_mass  # type: ignore
 
     def temperature(self, cv: ConservedVars, temperature_seed=None):
         raise NotImplementedError
@@ -565,7 +567,7 @@ class PorousFlowModel(BasePorousFlowModel):
         where $\mu$ is the gas viscosity, $\epsilon_g$ is the void fraction
         and $\mathbf{K}$ is the permeability matrix.
         """
-        return cv.mass*wv.permeability/(viscosity*wv.void_fraction)
+        return cv.mass*wv.permeability/(viscosity*wv.void_fraction)  # type: ignore
 
 
 class TacotEOS(OriginalTacotEOS):
@@ -575,7 +577,7 @@ class TacotEOS(OriginalTacotEOS):
         r"""Permeability $K$ of the composite material."""
         virgin = 1.6e-11
         char = 2.0e-11
-        return virgin*tau + char*(1.0 - tau)
+        return virgin*tau + char*(1.0 - tau)  # type: ignore
 
 
 def binary_sum(ary):
