@@ -5,6 +5,7 @@
 .. autofunction:: actx_class_is_eager
 .. autofunction:: actx_class_is_profiling
 .. autofunction:: actx_class_is_numpy
+.. autofunction:: actx_class_is_distributed
 .. autofunction:: initialize_actx
 """
 
@@ -32,7 +33,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
-from typing import Type, Dict, Any
+from typing import Type, Dict, Any, Tuple
 import os
 import logging
 
@@ -110,6 +111,12 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
         return False
 
 
+def actx_class_is_distributed(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is distributed."""
+    from grudge.array_context import MPIBasedArrayContext
+    return issubclass(actx_class, MPIBasedArrayContext)
+
+
 def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* has fallback arguments."""
     import inspect
@@ -117,8 +124,11 @@ def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     return "use_axis_tag_inference_fallback" in spec.args
 
 
-def _check_cache_dirs_node() -> None:
+def _check_cache_dirs_node(actx: ArrayContext) -> None:
     """Check whether multiple ranks share cache directories on the same node."""
+    if not actx_class_is_distributed(type(actx)):
+        return
+
     from mpi4py import MPI
 
     size = MPI.COMM_WORLD.Get_size()
@@ -173,9 +183,11 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
     """
     Check whether multiple ranks are running on the same GPU on each node.
 
-    Only works with CUDA devices currently due to the use of the
-    PCI_DOMAIN_ID_NV extension.
+    Only works with CUDA or AMD devices currently.
     """
+    if not actx_class_is_distributed(type(actx)):
+        return
+
     from mpi4py import MPI
     import pyopencl as cl
 
@@ -188,14 +200,12 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
     dev = actx.queue.device
 
-    # This check only works with Nvidia GPUs
-    from pyopencl.characterize import nv_compute_capability
-    if nv_compute_capability(dev) is None:
+    # Only check GPU devices
+    if not (dev.type & cl.device_type.GPU):
         return
 
-    from mirgecom.mpi import shared_split_comm_world
-
-    with shared_split_comm_world() as node_comm:
+    from pyopencl.characterize import nv_compute_capability
+    if nv_compute_capability(dev) is not None:
         try:
             domain_id = hex(dev.pci_domain_id_nv)
         except (cl._cl.LogicError, AttributeError):
@@ -203,14 +213,24 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
             warn("Cannot detect whether multiple ranks are running on the"
                  " same GPU because it requires Nvidia GPUs running with"
                  " pyopencl>2021.1.1 and (Nvidia CL or pocl>1.6).")
-            return
-
-        node_rank = node_comm.Get_rank()
+            raise
 
         bus_id = hex(dev.pci_bus_id_nv)
         slot_id = hex(dev.pci_slot_id_nv)
+        dev_id: Tuple[Any, ...] = (domain_id, bus_id, slot_id)
 
-        dev_id = (domain_id, bus_id, slot_id)
+    elif dev.platform.vendor.startswith("Advanced Micro"):
+        dev_id = (dev.topology_amd.bus,)
+    else:
+        from warnings import warn
+        warn("Cannot detect whether multiple ranks are running on the"
+             " same GPU.")
+        return
+
+    from mirgecom.mpi import shared_split_comm_world
+
+    with shared_split_comm_world() as node_comm:
+        node_rank = node_comm.Get_rank()
 
         dev_ids = node_comm.gather(dev_id, root=0)
 
@@ -227,11 +247,15 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
 def log_disk_cache_config(actx: ArrayContext) -> None:
     """Log the disk cache configuration."""
-    from mpi4py import MPI
-
     assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
 
-    rank = MPI.COMM_WORLD.Get_rank()
+    if actx_class_is_distributed(type(actx)):
+        from grudge.array_context import MPIBasedArrayContext
+        assert isinstance(actx, MPIBasedArrayContext)
+        rank = actx.mpi_communicator.Get_rank()
+    else:
+        rank = 0
+
     res = f"Rank {rank} disk cache config: "
 
     from pyopencl.characterize import nv_compute_capability, get_pocl_version
@@ -336,7 +360,7 @@ def initialize_actx(
     # or pocl, and therefore we don't need to examine their caching).
     if actx_class_is_pyopencl(actx_class):
         _check_gpu_oversubscription(actx)
-        _check_cache_dirs_node()
+        _check_cache_dirs_node(actx)
         log_disk_cache_config(actx)
 
     return actx
