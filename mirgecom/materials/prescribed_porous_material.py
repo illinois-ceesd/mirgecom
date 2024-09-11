@@ -68,18 +68,19 @@ class PrescribedMaterialEOS(PorousWallEOS):
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the oxidation
         progress ratio $\tau$.
         """
-        return 1.0 - self.volume_fraction(tau)
+        return 1.0 - self.volume_fraction(tau)  # type: ignore
 
     def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$."""
         return self._enthalpy_func(temperature)
 
     def heat_capacity(self, temperature: DOFArray,
-                      tau: Optional[DOFArray]) -> DOFArray:
+                      tau: Optional[DOFArray] = None) -> DOFArray:
         r"""Evaluate the heat capacity $C_{p_s}$."""
         return self._heat_capacity_func(temperature)
 
-    def thermal_conductivity(self, temperature: DOFArray, tau: DOFArray) -> DOFArray:
+    def thermal_conductivity(self, temperature: DOFArray,
+                             tau: Optional[DOFArray] = None) -> DOFArray:
         r"""Evaluate the thermal conductivity $\kappa$"""
         return self._thermal_conductivity_func(temperature)
 
