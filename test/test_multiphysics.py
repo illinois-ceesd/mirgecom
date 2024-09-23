@@ -594,9 +594,6 @@ def test_wall_wall_heat_coupling(actx_factory, order, use_overintegration,
     from meshmode.mesh.processing import partition_mesh
     volume_to_local_mesh = partition_mesh(global_mesh, volume_to_elements)
 
-    local_wall_1_mesh = volume_to_local_mesh["Wall_1"]
-    local_wall_2_mesh = volume_to_local_mesh["Wall_2"]
-
     dcoll = create_discretization_collection(
         actx, volume_to_local_mesh, order=order,
         quadrature_order=2*order+1)

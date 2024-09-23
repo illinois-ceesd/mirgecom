@@ -62,19 +62,19 @@ class _ThermalDataInterVolTag:
     pass
 
 
-class _SolidGradTempTag_1:
+class _SolidGradTempTag1:
     pass
 
 
-class _SolidGradTempTag_2:
+class _SolidGradTempTag2:
     pass
 
 
-class _SolidOperatorTag_1:
+class _SolidOperatorTag1:
     pass
 
 
-class _SolidOperatorTag_2:
+class _SolidOperatorTag2:
     pass
 
 
@@ -465,12 +465,12 @@ def coupled_heat_operator(
     wall_1_grad_temperature = wall_grad_t_operator(
         dcoll, wall_1_kappa, wall_1_all_boundaries_no_grad, wall_1_temperature,
         quadrature_tag=quadrature_tag, dd=wall_1_dd,
-        comm_tag=_SolidGradTempTag_1)
+        comm_tag=_SolidGradTempTag1)
 
     wall_2_grad_temperature = wall_grad_t_operator(
         dcoll, wall_2_kappa, wall_2_all_boundaries_no_grad, wall_2_temperature,
         quadrature_tag=quadrature_tag, dd=wall_2_dd,
-        comm_tag=_SolidGradTempTag_2)
+        comm_tag=_SolidGradTempTag2)
 
     wall_1_all_boundaries, wall_2_all_boundaries = \
         add_interface_boundaries(
@@ -490,7 +490,7 @@ def coupled_heat_operator(
         quadrature_tag=quadrature_tag,
         dd=wall_1_dd,
         grad_u=wall_1_grad_temperature,
-        comm_tag=_SolidOperatorTag_1)
+        comm_tag=_SolidOperatorTag1)
 
     wall_2_rhs = diffusion_operator(
         dcoll, wall_2_kappa, wall_2_all_boundaries,
@@ -499,7 +499,7 @@ def coupled_heat_operator(
         quadrature_tag=quadrature_tag,
         dd=wall_2_dd,
         grad_u=wall_2_grad_temperature,
-        comm_tag=_SolidOperatorTag_2)
+        comm_tag=_SolidOperatorTag2)
 
     if return_gradients:
         return make_obj_array([wall_1_rhs, wall_2_rhs,
