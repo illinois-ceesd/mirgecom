@@ -110,7 +110,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
     cantera_soln.set_equivalence_ratio(phi=1.0, fuel=fuel+":1",
                                        oxidizer="O2:1.0,N2:3.76")
     cantera_soln.TP = tempin, pressin
-
+    reactor = None
     # constant density, variable pressure
     if reactor_type == "IdealGasReactor":
         reactor = cantera.IdealGasReactor(cantera_soln,  # pylint: disable=no-member
