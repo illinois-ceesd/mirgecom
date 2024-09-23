@@ -32,11 +32,12 @@ from mirgecom.simutil import (
     get_box_mesh
 )
 import mirgecom.math as mm
+from grudge.shortcuts import make_visualizer
+from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from mirgecom.diffusion import (
     diffusion_operator,
     DirichletDiffusionBoundary,
     NeumannDiffusionBoundary)
-from grudge.dof_desc import DOFDesc, VolumeDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
@@ -51,6 +52,9 @@ from mirgecom.boundary import (
 )
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
+)
+from mirgecom.multiphysics.thermally_coupled_walls import(
+    coupled_heat_operator
 )
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
@@ -131,7 +135,6 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     rhs = get_rhs(0, u)
 
     if visualize:
-        from grudge.shortcuts import make_visualizer
         viz1 = make_visualizer(dcoll, order+3, volume_dd=dd_vol1)
         viz2 = make_visualizer(dcoll, order+3, volume_dd=dd_vol2)
         viz1.write_vtk_file(
@@ -195,7 +198,6 @@ def test_thermally_coupled_fluid_wall(
         dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
 
         if visualize:
-            from grudge.shortcuts import make_visualizer
             viz_fluid = make_visualizer(dcoll, order+3, volume_dd=dd_vol_fluid)
             viz_wall = make_visualizer(dcoll, order+3, volume_dd=dd_vol_wall)
             if use_overintegration:
@@ -563,6 +565,155 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     # FIXME check convergence instead?
     assert actx.to_numpy(op.norm(dcoll, fluid_rhs, np.inf)) < 1e-4
     assert actx.to_numpy(op.norm(dcoll, solid_rhs, np.inf)) < 1e-4
+
+
+@pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("use_overintegration", [False, True])
+def test_wall_wall_heat_coupling(actx_factory, order, use_overintegration,
+                                 visualize=False):
+    """Check the wall-wlal coupling for heat equation-only."""
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
+    actx = actx_factory()
+
+    dim = 2
+    nelems = 48
+
+    global_mesh = get_box_mesh(dim, -1, 1, nelems)
+
+    mgrp, = global_mesh.groups
+    y = global_mesh.vertices[1, mgrp.vertex_indices]
+    y_elem_avg = np.sum(y, axis=1)/y.shape[0]
+    volume_to_elements = {
+        "Wall_1": np.where(y_elem_avg > 0)[0],
+        "Wall_2": np.where(y_elem_avg <= 0)[0]}
+
+    from meshmode.mesh.processing import partition_mesh
+    volume_to_local_mesh = partition_mesh(global_mesh, volume_to_elements)
+
+    local_wall_1_mesh = volume_to_local_mesh["Wall_1"]
+    local_wall_2_mesh = volume_to_local_mesh["Wall_2"]
+
+    dcoll = create_discretization_collection(
+        actx, volume_to_local_mesh, order=order,
+        quadrature_order=2*order+1)
+
+    dd_vol_wall_1 = DOFDesc(VolumeDomainTag("Wall_1"), DISCR_TAG_BASE)
+    dd_vol_wall_2 = DOFDesc(VolumeDomainTag("Wall_2"), DISCR_TAG_BASE)
+
+    wall_1_nodes = actx.thaw(dcoll.nodes(dd_vol_wall_1))
+    wall_2_nodes = actx.thaw(dcoll.nodes(dd_vol_wall_2))
+
+    wall_1_ones = 0*wall_1_nodes[0] + 1
+    wall_2_ones = 0*wall_2_nodes[0] + 1
+
+    wall_1_kappa = wall_1_ones*1.0
+    wall_2_kappa = wall_2_ones*1.0
+
+    if use_overintegration:
+        quadrature_tag = DISCR_TAG_QUAD
+    else:
+        quadrature_tag = DISCR_TAG_BASE
+
+    t = 0.0
+    step = 0
+    isothermal_wall_temp = 300
+
+    presc_grad = 150.0
+    current_wall_1_temp = 450.0 + presc_grad*wall_1_nodes[1]
+    current_wall_2_temp = 450.0 + presc_grad*wall_2_nodes[1]
+
+    current_state = make_obj_array([current_wall_1_temp, current_wall_2_temp])
+
+    wall_1_boundaries = {
+        dd_vol_wall_1.trace("+2").domain_tag:  # pylint: disable=no-member
+        DirichletDiffusionBoundary(2.0*isothermal_wall_temp),
+        dd_vol_wall_1.trace("-1").domain_tag:  # pylint: disable=no-member
+        NeumannDiffusionBoundary(0.0),
+        dd_vol_wall_1.trace("+1").domain_tag:  # pylint: disable=no-member
+        NeumannDiffusionBoundary(0.0)
+    }
+    wall_2_boundaries = {
+        dd_vol_wall_2.trace("-2").domain_tag:  # pylint: disable=no-member
+        DirichletDiffusionBoundary(1.0*isothermal_wall_temp),
+        dd_vol_wall_2.trace("-1").domain_tag:  # pylint: disable=no-member
+        NeumannDiffusionBoundary(0.0),
+        dd_vol_wall_2.trace("+1").domain_tag:  # pylint: disable=no-member
+        NeumannDiffusionBoundary(0.0)
+    }
+
+    wall_1_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_wall_1)
+    wall_2_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_wall_2)
+
+    def my_write_viz(step, t, state):
+        wall_1_temperature = state[0]
+        wall_2_temperature = state[1]
+
+        wall_1_rhs, wall_2_rhs, wall_1_grad_temp, wall_2_grad_temp = \
+            my_rhs_and_gradients(t, state)
+
+        if use_overintegration:
+            viz_suffix = f"over_{order}_{nelems}"
+        else:
+            viz_suffix = f"{order}_{nelems}"
+
+        wall_1_viz_fields = [
+            ("temperature", wall_1_temperature),
+            ("grad_t", wall_1_grad_temp),
+            ("rhs", wall_1_rhs),
+            ("kappa", wall_1_kappa)]
+        wall_2_viz_fields = [
+            ("temperature", wall_2_temperature),
+            ("grad_t", wall_2_grad_temp),
+            ("rhs", wall_2_rhs),
+            ("kappa", wall_2_kappa)]
+
+        wall_1_visualizer.write_vtk_file(
+            f"thermally_coupled_walls_1_{viz_suffix}.vtu", wall_1_viz_fields,
+            overwrite=True)
+
+        wall_2_visualizer.write_vtk_file(
+            f"thermally_coupled_walls_2_{viz_suffix}.vtu", wall_2_viz_fields,
+            overwrite=True)
+
+    def my_rhs(t, state, return_gradients=False):
+
+        wall_1_temperature = state[0]
+        wall_2_temperature = state[1]
+
+        return coupled_heat_operator(
+            dcoll, dd_vol_wall_1, dd_vol_wall_2,
+            wall_1_boundaries, wall_2_boundaries,
+            wall_1_temperature, wall_2_temperature,
+            wall_1_kappa, wall_2_kappa, time=0.0,
+            quadrature_tag=quadrature_tag, interface_resistance=None,
+            return_gradients=return_gradients)
+
+    def my_rhs_and_gradients(t, state):
+        return my_rhs(t, state, return_gradients=True)
+
+    if visualize:
+        my_write_viz(step, t, current_state)
+
+    wall_1_rhs, wall_2_rhs, wall_1_grad_t, wall_2_grad_t = \
+            my_rhs_and_gradients(t, current_state)
+
+    assert actx.to_numpy(
+        op.norm(dcoll, wall_1_rhs/current_state[0]/order, np.inf)) < 1e-8
+    assert actx.to_numpy(
+        op.norm(dcoll, wall_1_grad_t[0]/presc_grad, np.inf)) < 1e-9
+    assert actx.to_numpy(
+        op.norm(dcoll, wall_1_grad_t[1]/presc_grad - 1, np.inf)) < 1e-9
+
+    assert actx.to_numpy(
+        op.norm(dcoll, wall_2_rhs/current_state[1]/order, np.inf)) < 1e-8
+    assert actx.to_numpy(
+        op.norm(dcoll, wall_2_grad_t[0]/presc_grad, np.inf)) < 1e-9
+    assert actx.to_numpy(
+        op.norm(dcoll, wall_2_grad_t[1]/presc_grad - 1, np.inf)) < 1e-9
 
 
 @pytest.mark.parametrize("use_overintegration", [False, True])

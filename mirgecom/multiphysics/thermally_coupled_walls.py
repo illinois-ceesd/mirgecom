@@ -39,6 +39,7 @@ THE SOFTWARE.
 from dataclasses import dataclass
 import numpy as np
 
+from pytools.obj_array import make_obj_array
 from arraycontext import dataclass_array_container
 from meshmode.dof_array import DOFArray
 from grudge.trace_pair import TracePair, inter_volume_trace_pairs
@@ -46,6 +47,8 @@ from mirgecom.diffusion import (
     grad_facial_flux_weighted,
     diffusion_facial_flux_harmonic,
     DiffusionBoundary,
+    diffusion_operator,
+    grad_operator as wall_grad_t_operator
 )
 from mirgecom.multiphysics import make_interface_boundaries
 from mirgecom.utils import project_from_base
@@ -59,11 +62,19 @@ class _ThermalDataInterVolTag:
     pass
 
 
-class _WallGradTag:
+class _SolidGradTempTag_1:
     pass
 
 
-class _WallOperatorTag:
+class _SolidGradTempTag_2:
+    pass
+
+
+class _SolidOperatorTag_1:
+    pass
+
+
+class _SolidOperatorTag_2:
     pass
 
 
@@ -428,3 +439,69 @@ def add_interface_boundaries(
     wall_2_all_boundaries.update(wall_2_interface_boundaries)
 
     return wall_1_all_boundaries, wall_2_all_boundaries
+
+
+def coupled_heat_operator(
+        dcoll,
+        wall_1_dd, wall_2_dd,
+        wall_1_boundaries, wall_2_boundaries,
+        wall_1_temperature, wall_2_temperature,
+        wall_1_kappa, wall_2_kappa,
+        time=0.0, quadrature_tag=None, wall_penalty_amount=None,
+        interface_resistance=False, return_gradients=False):
+
+    if wall_penalty_amount is None:
+        wall_penalty_amount = 1.0
+
+    wall_1_all_boundaries_no_grad, wall_2_all_boundaries_no_grad = \
+        add_interface_boundaries_no_grad(
+            dcoll,
+            wall_1_dd, wall_2_dd,
+            wall_1_kappa, wall_2_kappa,
+            wall_1_temperature, wall_2_temperature,
+            wall_1_boundaries, wall_2_boundaries,
+            interface_resistance=interface_resistance)
+
+    wall_1_grad_temperature = wall_grad_t_operator(
+        dcoll, wall_1_kappa, wall_1_all_boundaries_no_grad, wall_1_temperature,
+        quadrature_tag=quadrature_tag, dd=wall_1_dd,
+        comm_tag=_SolidGradTempTag_1)
+
+    wall_2_grad_temperature = wall_grad_t_operator(
+        dcoll, wall_2_kappa, wall_2_all_boundaries_no_grad, wall_2_temperature,
+        quadrature_tag=quadrature_tag, dd=wall_2_dd,
+        comm_tag=_SolidGradTempTag_2)
+
+    wall_1_all_boundaries, wall_2_all_boundaries = \
+        add_interface_boundaries(
+            dcoll,
+            wall_1_dd, wall_2_dd,
+            wall_1_kappa, wall_2_kappa,
+            wall_1_temperature, wall_2_temperature,
+            wall_1_grad_temperature, wall_2_grad_temperature,
+            wall_1_all_boundaries_no_grad, wall_2_all_boundaries_no_grad,
+            wall_penalty_amount=wall_penalty_amount,
+            interface_resistance=interface_resistance)
+
+    wall_1_rhs = diffusion_operator(
+        dcoll, wall_1_kappa, wall_1_all_boundaries,
+        wall_1_temperature,
+        penalty_amount=wall_penalty_amount,
+        quadrature_tag=quadrature_tag,
+        dd=wall_1_dd,
+        grad_u=wall_1_grad_temperature,
+        comm_tag=_SolidOperatorTag_1)
+
+    wall_2_rhs = diffusion_operator(
+        dcoll, wall_2_kappa, wall_2_all_boundaries,
+        wall_2_temperature,
+        penalty_amount=wall_penalty_amount,
+        quadrature_tag=quadrature_tag,
+        dd=wall_2_dd,
+        grad_u=wall_2_grad_temperature,
+        comm_tag=_SolidOperatorTag_2)
+
+    if return_gradients:
+        return make_obj_array([wall_1_rhs, wall_2_rhs,
+                               wall_1_grad_temperature, wall_2_grad_temperature])
+    return make_obj_array([wall_1_rhs, wall_2_rhs])
