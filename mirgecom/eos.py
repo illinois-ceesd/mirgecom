@@ -424,7 +424,7 @@ class IdealSingleGas(GasEOS):
 
             e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
         """
-        return (cv.energy - self.kinetic_energy(cv))
+        return (cv.energy - self.kinetic_energy(cv))  # type: ignore
 
     def pressure(self, cv: ConservedVars,
             temperature: Optional[DOFArray] = None) -> DOFArray:
@@ -520,7 +520,7 @@ class IdealSingleGas(GasEOS):
                 + self.kinetic_energy(cv))
 
     def get_internal_energy(self, temperature: DOFArray,
-            species_mass_fractions: Optional[DOFArray] = None) -> DOFArray:
+            species_mass_fractions: Optional[np.ndarray] = None) -> DOFArray:
         r"""Get the gas thermal energy from temperature.
 
         The gas internal energy $e$ is calculated from:
@@ -601,7 +601,7 @@ class PyrometheusMixture(MixtureEOS):
         self._tguess = temperature_guess
 
     def get_temperature_seed(self, ary: Optional[DOFArray] = None,
-            temperature_seed: Optional[DOFArray] = None) -> DOFArray:
+            temperature_seed: Optional[Union[float, DOFArray]] = None) -> DOFArray:
         """Get a *cv*-shaped array with which to seed temperature calcuation.
 
         Parameters
@@ -626,7 +626,7 @@ class PyrometheusMixture(MixtureEOS):
         else:
             if ary is None:
                 raise ValueError("Requires *ary* for shaping temperature seed.")
-        return tseed * (0*ary + 1.0)
+        return tseed * (0. * ary + 1.0)  # type: ignore
 
     def heat_capacity_cp(self, cv: ConservedVars, temperature: DOFArray) -> DOFArray:
         r"""Get mixture-averaged specific heat capacity at constant pressure."""
@@ -692,7 +692,7 @@ class PyrometheusMixture(MixtureEOS):
 
             e = \rho{E} - \frac{1}{2\rho}(\rho\vec{V} \cdot \rho\vec{V})
         """
-        return (cv.energy - self.kinetic_energy(cv))
+        return (cv.energy - self.kinetic_energy(cv))  # type: ignore
 
     def get_density(self, pressure: DOFArray,  # type: ignore[override]
             temperature: DOFArray, species_mass_fractions: np.ndarray) -> DOFArray:
@@ -728,13 +728,14 @@ class PyrometheusMixture(MixtureEOS):
 
     def get_species_molecular_weights(self):
         """Get the species molecular weights."""
-        return self._pyrometheus_mech.wts
-        # return self._pyrometheus_mech.molecular_weights
+        return self._pyrometheus_mech.molecular_weights
 
     def species_enthalpies(self, cv: ConservedVars,
             temperature: DOFArray) -> DOFArray:
         """Get the species specific enthalpies."""
-        spec_r = self._pyrometheus_mech.gas_constant/self._pyrometheus_mech.wts
+        spec_r = (
+            self._pyrometheus_mech.gas_constant
+            / self._pyrometheus_mech.molecular_weights)
         # spec_r = (self._pyrometheus_mech.gas_constant
         #           / self._pyrometheus_mech.molecular_weights)
         return (spec_r * temperature
@@ -769,7 +770,7 @@ class PyrometheusMixture(MixtureEOS):
             c = \sqrt{\frac{\gamma_{\mathtt{mix}}{p}}{\rho}}
         """
         actx = cv.array_context
-        return actx.np.sqrt((self.gamma(cv, temperature)
+        return actx.np.sqrt((self.gamma(cv, temperature)  # type: ignore
                              * self.pressure(cv, temperature))
                             / cv.mass)
 
@@ -798,7 +799,7 @@ class PyrometheusMixture(MixtureEOS):
         tseed = self.get_temperature_seed(cv.mass, temperature_seed)
 
         y = cv.species_mass_fractions
-        e = self.internal_energy(cv) / cv.mass
+        e = self.internal_energy(cv) / cv.mass  # type: ignore
         return self._pyrometheus_mech.get_temperature(e, tseed, y)
 
     def temperature_from_enthalpy(self, enthalpy: DOFArray,
@@ -851,7 +852,7 @@ class PyrometheusMixture(MixtureEOS):
             inversion interfaces.
         """
         y = cv.species_mass_fractions
-        return (cv.mass * self.get_internal_energy(temperature, y)
+        return (cv.mass * self.get_internal_energy(temperature, y)  # type: ignore
                 + self.kinetic_energy(cv))
 
     def get_species_source_terms(self, cv: ConservedVars, temperature: DOFArray):
@@ -866,9 +867,9 @@ class PyrometheusMixture(MixtureEOS):
         w = self.get_species_molecular_weights()
         dim = cv.dim
         species_sources = w * omega
-        rho_source = 0 * cv.mass
+        rho_source = 0 * cv.mass  # type: ignore
         mom_source = 0 * cv.momentum
-        energy_source = 0 * cv.energy
+        energy_source = 0 * cv.energy  # type: ignore
 
         return make_conserved(dim, rho_source, energy_source, mom_source,
                               species_sources)

@@ -27,15 +27,17 @@ THE SOFTWARE.
 import numpy as np
 import pytest  # noqa
 
-from arraycontext import (  # noqa
-    flatten,
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests
-)
+from arraycontext import flatten
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import IdealSingleGas
 from mirgecom.discretization import create_discretization_collection
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def test_basic_cfd_healthcheck(actx_factory):

@@ -151,6 +151,7 @@ from mirgecom.utils import normalize_boundaries
 from arraycontext import get_container_context_recursively
 from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
+import grudge.geometry as geo
 import grudge.op as op
 
 from mirgecom.boundary import (
@@ -193,7 +194,7 @@ class AdiabaticNoSlipWallAV(AdiabaticNoslipWallBoundary):
         dd_bdry = as_dofdesc(dd_bdry)
         grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
         actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
         grad_av_plus = grad_av_minus
         bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
                                   exterior=grad_av_plus)
@@ -226,7 +227,7 @@ class IsothermalWallAV(IsothermalWallBoundary):
         dd_bdry = as_dofdesc(dd_bdry)
         grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
         actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
         grad_av_plus = grad_av_minus
         bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
                                   exterior=grad_av_plus)
@@ -258,7 +259,7 @@ class PrescribedFluidBoundaryAV(PrescribedFluidBoundary):
         dd_bdry = as_dofdesc(dd_bdry)
         grad_av_minus = op.project(dcoll, dd_bdry.untrace(), dd_bdry, diffusion)
         actx = get_container_context_recursively(grad_av_minus)
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
         grad_av_plus = self._bnd_grad_av_func(
             dcoll=dcoll, dd_bdry=dd_bdry, grad_av_minus=grad_av_minus, **kwargs)
         bnd_grad_pair = TracePair(dd_bdry, interior=grad_av_minus,
@@ -384,7 +385,7 @@ def av_laplacian_operator(dcoll, boundaries, fluid_state, alpha, gas_model=None,
     def central_flux_div(utpair_quad):
         dd_trace_quad = utpair_quad.dd
         dd_allfaces_quad = dd_trace_quad.with_boundary_tag(FACE_RESTR_ALL)
-        normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
+        normal_quad = geo.normal(actx, dcoll, dd_trace_quad)
         return op.project(dcoll, dd_trace_quad, dd_allfaces_quad,
                           # This uses a central vector flux along nhat:
                           # flux = 1/2 * (grad(Q)- + grad(Q)+) .dot. nhat
@@ -472,7 +473,7 @@ def smoothness_indicator(dcoll, u, kappa=1.0, s0=-6.0, dd=DD_VOLUME_ALL):
         return actx.from_numpy(
             np.asarray([1 if sum(mode_id) == grp.order
                         else 0
-                        for mode_id in grp.mode_ids()])
+                        for mode_id in grp.basis_obj().mode_ids])
         )
 
     # Convert to modal solution representation
