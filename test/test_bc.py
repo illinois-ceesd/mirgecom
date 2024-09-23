@@ -1028,19 +1028,24 @@ def test_slipwall_identity(actx_factory, dim):
                 exterior=state_plus.cv)
 
             # check that mass and energy are preserved
-            mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass  # pylint: ignore=no-member
+            mass_resid = bnd_pair.int.mass - bnd_pair.ext.mass \
+                # pylint: ignore=no-member
             mass_err = bnd_norm(mass_resid)
             assert mass_err == 0.0
 
-            energy_resid = bnd_pair.int.energy - bnd_pair.ext.energy  # pylint: ignore=no-member
+            energy_resid = bnd_pair.int.energy - bnd_pair.ext.energy \
+                # pylint: ignore=no-member
             energy_err = bnd_norm(energy_resid)
             assert energy_err == 0.0
 
             # check that exterior momentum term is mom_interior - 2 * mom_normal
-            mom_norm_comp = np.dot(bnd_pair.int.momentum, nhat)  # pylint: ignore=no-member
+            mom_norm_comp = np.dot(bnd_pair.int.momentum, nhat) \
+                # pylint: ignore=no-member
             mom_norm = nhat * mom_norm_comp
-            expected_mom_ext = bnd_pair.int.momentum - 2.0 * mom_norm  # pylint: ignore=no-member
-            mom_resid = bnd_pair.ext.momentum - expected_mom_ext  # pylint: ignore=no-member
+            expected_mom_ext = bnd_pair.int.momentum - 2.0 * mom_norm \
+                # pylint: ignore=no-member
+            mom_resid = bnd_pair.ext.momentum - expected_mom_ext \
+                # pylint: ignore=no-member
             mom_err = bnd_norm(mom_resid)
 
             assert mom_err == 0.0
@@ -1385,10 +1390,10 @@ def test_dummy_boundary(actx_factory, order, flux_func):
         grad_v_y = 2.5 + nodes[0]*0.0
         grad_t_x = 500. + nodes[0]*0.0
         grad_t_y = 250. + nodes[0]*0.0
-        grad_rho_x = \
-            -cv.mass/fluid_state.temperature*grad_t_x  # pylint: ignore=invalid-unary-operand-type
-        grad_rho_y = \
-            -cv.mass/fluid_state.temperature*grad_t_y  # pylint: ignore=invalid-unary-operand-type
+        grad_rho_x = -cv.mass/fluid_state.temperature*grad_t_x \
+            # pylint: ignore=invalid-unary-operand-type
+        grad_rho_y = -cv.mass/fluid_state.temperature*grad_t_y \
+            # pylint: ignore=invalid-unary-operand-type
 
         from mirgecom.boundary import DummyBoundary
         boundaries = {BTAG_ALL: DummyBoundary()}
