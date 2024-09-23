@@ -1336,9 +1336,9 @@ def test_prescribed(actx_factory, prescribed_soln, flux_func):
                     grad_t_minus=grad_t_minus)
             print(f"{v_flux_bc=}")
             bc_soln = \
-                domain_boundary._boundary_state_pair(
+                domain_boundary._boundary_state_pair(  # pylint: disable=no-member
                     dcoll, as_dofdesc(BTAG_ALL), gas_model,
-                    state_minus=state_minus).ext.cv  # pylint: disable=no-member
+                    state_minus=state_minus).ext.cv
             assert actx.np.equal(bc_soln, expected_boundary_solution)
 
 
