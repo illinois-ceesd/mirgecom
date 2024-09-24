@@ -53,7 +53,7 @@ from mirgecom.boundary import (
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
-from mirgecom.multiphysics.thermally_coupled_walls import(
+from mirgecom.multiphysics.thermally_coupled_walls import (
     coupled_heat_operator
 )
 
