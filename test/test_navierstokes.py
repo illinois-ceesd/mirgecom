@@ -116,14 +116,18 @@ def test_uniform_rhs(actx_factory, nspecies, dim, tpe, order, quad):
         zeros = dcoll.zeros(actx)
         ones = zeros + 1.0
 
-        mass_input = dcoll.zeros(actx) + 1
+        mass_num = 1.0
+        mass_input = dcoll.zeros(actx) + mass_num
         energy0 = dcoll.zeros(actx) + 2.5
+        mom_num = make_obj_array([float(i) for i in range(dim)])
+        mom_mag = np.sqrt(np.dot(mom_num, mom_num))/mass_num
 
-        mom_input = make_obj_array(
+        mom_input = mass_num*make_obj_array(
             [float(i)*ones for i in range(dim)]
         )
+
         emag = 4.0
-        energy_input = energy0 + .5*np.dot(mom_input, mom_input)
+        energy_input = energy0 + .5*np.dot(mom_input, mom_input)/mass_num
 
         mass_frac_input = flat_obj_array(
             [ones / ((i + 1) * 10) for i in range(nspecies)]
@@ -157,7 +161,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, tpe, order, quad):
         rhs_resid = ns_rhs - expected_rhs
         rho_resid = rhs_resid.mass
         rhoe_resid = rhs_resid.energy/emag
-        mom_resid = rhs_resid.momentum/np.sqrt(3)
+        mom_resid = rhs_resid.momentum/mom_mag
         rhoy_resid = rhs_resid.species_mass
 
         rho_rhs = ns_rhs.mass
@@ -185,7 +189,9 @@ def test_uniform_rhs(actx_factory, nspecies, dim, tpe, order, quad):
         # set a non-zero, but uniform velocity component
         for i in range(len(mom_input)):
             mom_input[i] = dcoll.zeros(actx) + (-1.0) ** i
-        energy_input = energy0 + .5*np.dot(mom_input, mom_input)
+        mom_input = mass_num * mom_input
+        energy_input = energy0 + .5*np.dot(mom_input, mom_input) / mass_num
+        mom_mag = np.sqrt(dim) / mass_num
 
         cv = make_conserved(
             dim, mass=mass_input, energy=energy_input, momentum=mom_input,
@@ -200,7 +206,7 @@ def test_uniform_rhs(actx_factory, nspecies, dim, tpe, order, quad):
 
         rho_resid = rhs_resid.mass
         rhoe_resid = rhs_resid.energy/emag
-        mom_resid = rhs_resid.momentum/np.sqrt(3)
+        mom_resid = rhs_resid.momentum/mom_mag
         rhoy_resid = rhs_resid.species_mass
 
         assert actx.to_numpy(op.norm(dcoll, rho_resid, np.inf)) < tolerance
