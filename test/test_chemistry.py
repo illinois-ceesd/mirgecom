@@ -34,9 +34,8 @@ from grudge import op
 
 from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.mesh.generation import generate_regular_rect_mesh
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.fluid import make_conserved
 from mirgecom.eos import PyrometheusMixture
@@ -46,6 +45,9 @@ from mirgecom.thermochemistry import (
     get_pyrometheus_wrapper_class_from_cantera,
     get_pyrometheus_wrapper_class
 )
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize(("mechname", "fuel", "rate_tol"),
@@ -108,7 +110,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
     cantera_soln.set_equivalence_ratio(phi=1.0, fuel=fuel+":1",
                                        oxidizer="O2:1.0,N2:3.76")
     cantera_soln.TP = tempin, pressin
-
+    reactor = None
     # constant density, variable pressure
     if reactor_type == "IdealGasReactor":
         reactor = cantera.IdealGasReactor(cantera_soln,  # pylint: disable=no-member
@@ -314,7 +316,7 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
     cantera_soln.TP = tempin, pressure
 
     eos = PyrometheusMixture(pyro_obj, temperature_guess=tempin)
-
+    reactor = None
     # constant density, variable pressure
     if reactor_type == "IdealGasReactor":
         reactor = cantera.IdealGasReactor(  # pylint: disable=no-member

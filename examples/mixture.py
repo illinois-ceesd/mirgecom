@@ -29,7 +29,7 @@ from functools import partial
 
 from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
@@ -145,7 +145,7 @@ def main(actx_class, use_esdg=False,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 

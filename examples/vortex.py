@@ -143,11 +143,11 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
                                              quadrature_order=oorder)
     nodes = actx.thaw(dcoll.nodes())
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 

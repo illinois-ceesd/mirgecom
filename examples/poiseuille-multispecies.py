@@ -36,8 +36,10 @@ from grudge.dof_desc import BoundaryDomainTag
 
 from mirgecom.fluid import make_conserved
 from mirgecom.navierstokes import ns_operator
-from mirgecom.simutil import get_sim_timestep
-
+from mirgecom.simutil import (
+    get_sim_timestep,
+    get_box_mesh
+)
 from mirgecom.io import make_init_message
 from mirgecom.mpi import mpi_entry_point
 from mirgecom.integrators import rk4_step
@@ -67,17 +69,6 @@ class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
 
     pass
-
-
-# Box grid generator widget lifted from @majosm and slightly bent
-def _get_box_mesh(dim, a, b, n, t=None):
-    dim_names = ["x", "y", "z"]
-    bttf = {}
-    for i in range(dim):
-        bttf["-"+str(i+1)] = ["-"+dim_names[i]]
-        bttf["+"+str(i+1)] = ["+"+dim_names[i]]
-    from meshmode.mesh.generation import generate_regular_rect_mesh as gen
-    return gen(a=a, b=b, n=n, boundary_tag_to_face=bttf, mesh_type=t)
 
 
 @mpi_entry_point
@@ -130,8 +121,8 @@ def main(actx_class, use_overintegration=False, use_leap=False, casename=None,
     xlen = right_boundary_location - left_boundary_location
     ylen = ytop - ybottom
     n_refine = 1
-    npts_x = n_refine*int(xlen / x_ch)
-    npts_y = n_refine*int(ylen / x_ch)
+    nels_x = n_refine*int(xlen / x_ch)
+    nels_y = n_refine*int(ylen / x_ch)
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -147,10 +138,10 @@ def main(actx_class, use_overintegration=False, use_leap=False, casename=None,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["nparts"] == nparts
     else:  # generate the grid from scratch
-        npts_axis = (npts_x, npts_y)
+        nels_axis = (nels_x, nels_y)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        generate_mesh = partial(_get_box_mesh, 2, a=box_ll, b=box_ur, n=npts_axis)
+        generate_mesh = partial(get_box_mesh, 2, a=box_ll, b=box_ur, n=nels_axis)
         from mirgecom.simutil import generate_and_distribute_mesh
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
@@ -160,11 +151,11 @@ def main(actx_class, use_overintegration=False, use_leap=False, casename=None,
     dcoll = create_discretization_collection(actx, local_mesh, order)
     nodes = actx.thaw(dcoll.nodes())
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     if logmgr:
         logmgr_add_device_name(logmgr, queue)

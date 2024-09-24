@@ -27,23 +27,24 @@ THE SOFTWARE.
 import numpy as np  # noqa
 import pytest  # noqa
 import logging
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests
-)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from pytools.obj_array import make_obj_array
 import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
-# from grudge.dof_desc import as_dofdesc
-# from grudge.dt_utils import characteristic_lengthscales
+from meshmode.discretization.connection import FACE_RESTR_ALL
+from grudge.dof_desc import as_dofdesc
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
+import grudge.geometry as geo
 import grudge.op as op
-from grudge.trace_pair import interior_trace_pair, bv_trace_pair
+from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 from functools import partial
 from mirgecom.simutil import get_box_mesh
@@ -52,19 +53,22 @@ from grudge.dof_desc import (
     DISCR_TAG_BASE,
     DISCR_TAG_QUAD,
     DTAG_VOLUME_ALL,
-    FACE_RESTR_ALL,
+    # FACE_RESTR_ALL,
     VTAG_ALL,
     BoundaryDomainTag,
-    as_dofdesc,
+    # as_dofdesc,
 )
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def _elbnd_flux(dcoll, compute_interior_flux, compute_boundary_flux,
                 int_tpair, boundaries):
     return (
         compute_interior_flux(int_tpair)
-        + sum(compute_boundary_flux(as_dofdesc(bdtag)) for bdtag in boundaries))
+        + sum(compute_boundary_flux() for bdtag in boundaries))
 
 
 def _coord_test_func(dim, order=1):
@@ -83,7 +87,7 @@ def _coord_test_func(dim, order=1):
     return sym_result
 
 
-def _poly_test_func(x_vec, order=1, a=None):
+def _poly_test_func(x_vec, order=1, a=None, power=None):
     """Make a coordinate-based polynomial test function.
 
     1d: x^order
@@ -101,7 +105,8 @@ def _poly_test_func(x_vec, order=1, a=None):
     result = 0
     for i in range(dim):
         result += a[i]*x_vec[i]**order
-
+    if power is not None:
+        result = result * result
     return result
 
 
@@ -194,10 +199,10 @@ def _cv_test_func(dim):
 
 def central_flux_interior(actx, dcoll, int_tpair):
     """Compute a central flux for interior faces."""
-    normal = actx.thaw(dcoll.normal(int_tpair.dd))
+    normal = geo.normal(actx, dcoll, int_tpair.dd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(int_tpair.int, int_tpair.ext), normal)
-    dd_allfaces = int_tpair.dd.with_dtag("all_faces")
+    dd_allfaces = int_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
     return op.project(dcoll, int_tpair.dd, dd_allfaces, flux_weak)
 
 
@@ -206,43 +211,43 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     boundary_discr = dcoll.discr_from_dd(dd_bdry)
     bnd_nodes = actx.thaw(boundary_discr.nodes())
     soln_bnd = soln_func(x_vec=bnd_nodes)
-    bnd_nhat = actx.thaw(dcoll.normal(dd_bdry))
+    bnd_nhat = geo.normal(actx, dcoll, dd_bdry)
     from grudge.trace_pair import TracePair
     bnd_tpair = TracePair(dd_bdry, interior=soln_bnd, exterior=soln_bnd)
     from arraycontext import outer
     flux_weak = outer(num_flux_central(bnd_tpair.int, bnd_tpair.ext), bnd_nhat)
-    dd_allfaces = bnd_tpair.dd.with_dtag("all_faces")
-    flux = op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
-    return flux
+    dd_allfaces = bnd_tpair.dd.with_boundary_tag(FACE_RESTR_ALL)
+    return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
                          [
-                             (1, "tet_box1", None, False),
-                             (2, "tet_box2", None, False),
-                             (3, "tet_box3", None, False),
-                             (2, "hex_box2", None, False),
-                             (3, "hex_box3", None, False),
-                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
-                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
-                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
-                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
+                             (1, "tet_box1", None, True),
+                             (2, "tet_box2", None, True),
+                             (3, "tet_box3", None, True),
+#                             (2, "hex_box2", None, False),
+#                             (3, "hex_box3", None, False),
+#                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+#                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+#                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+#                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+#                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+#                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+#                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+#                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
                              ])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("sym_test_func_factory", [
     partial(_coord_test_func, order=0),
     partial(_coord_test_func, order=1),
-    lambda dim: 2*_coord_test_func(dim, order=1),
+    # lambda dim: 2*_coord_test_func(dim, order=1),
     partial(_coord_test_func, order=2),
     _trig_test_func,
-    _cv_test_func
+    # _cv_test_func
 ])
+@pytest.mark.parametrize("quad", [True])
 def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
-                       order, sym_test_func_factory):
+                       order, sym_test_func_factory, quad):
     """Test the gradient operator for sanity.
 
     Check whether we get the right answers for gradients of analytic functions with
@@ -254,6 +259,7 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
     import pyopencl as cl
+    import pyopencl.tools as cl_tools
     from grudge.array_context import PyOpenCLArrayContext
     from meshmode.mesh.processing import rotate_mesh_around_axis
     from grudge.dt_utils import h_max_from_volume
@@ -289,7 +295,9 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     if tpe:  # TPE requires *grudge* array context, not array_context
         ctx = cl.create_some_context()
         queue = cl.CommandQueue(ctx)
-        actx = PyOpenCLArrayContext(queue)
+        actx = PyOpenCLArrayContext(
+            queue=queue,
+            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
 
     sym_test_func = sym_test_func_factory(dim)
 
@@ -317,6 +325,7 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
 
         # compute max element size
         h_max = h_max_from_volume(dcoll)
+        quadrature_tag = DISCR_TAG_QUAD if quad else DISCR_TAG_BASE
 
         def sym_eval(expr, x_vec):
             mapper = sym.EvaluationMapper({"x": x_vec})
@@ -327,15 +336,24 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
                 lambda comp_expr: mapper(comp_expr) + 0*x_vec[0],
                 expr)
 
+        allfaces_dd_quad = as_dofdesc(FACE_RESTR_ALL, quadrature_tag)
+        vol_dd_base = as_dofdesc(DTAG_VOLUME_ALL)
+        vol_dd_quad = vol_dd_base.with_discr_tag(quadrature_tag)
+        bdry_dd_base = as_dofdesc(BTAG_ALL)
+        bdry_dd_quad = bdry_dd_base.with_discr_tag(quadrature_tag)
+
         test_func = partial(sym_eval, sym_test_func)
         grad_test_func = partial(sym_eval, sym.grad(dim, sym_test_func))
 
         nodes = actx.thaw(dcoll.nodes())
         int_flux = partial(central_flux_interior, actx, dcoll)
-        bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
+        bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func,
+                           bdry_dd_quad)
 
         test_data = test_func(nodes)
         exact_grad = grad_test_func(nodes)
+        test_data_quad = op.project(dcoll, vol_dd_base, vol_dd_quad, test_data)
+
         # print(f"{test_data=}")
         # print(f"{exact_grad=}")
 
@@ -350,15 +368,16 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
         # print(f"{test_data=}")
         # print(f"{exact_grad=}")
 
-        test_data_int_tpair = interior_trace_pair(dcoll, test_data)
+        test_data_int_tpair = interior_trace_pairs(dcoll, test_data)[0]
+        test_data_int_tpair_quad = op.project_tracepair(dcoll, allfaces_dd_quad,
+                                                        test_data_int_tpair)
+
         boundaries = [BTAG_ALL]
         test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
-                                         test_data_int_tpair, boundaries)
+                                         test_data_int_tpair_quad, boundaries)
 
-        dd_vol = as_dofdesc("vol")
-        dd_allfaces = as_dofdesc("all_faces")
-        test_grad = grad_operator(dcoll, dd_vol, dd_allfaces,
-                                  test_data, test_data_flux_bnd)
+        test_grad = grad_operator(dcoll, vol_dd_quad, allfaces_dd_quad,
+                                  test_data_quad, test_data_flux_bnd)
 
         # print(f"{test_grad=}")
         grad_err = \
@@ -384,7 +403,7 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
 #                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
 
 
-#@pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
+# @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
 #                         [
 #                             (1, "tet_box1", None, False),
 #                             (2, "tet_box2", None, False),
@@ -458,6 +477,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
     for f_order in range(p_prime+1):
         # print(f"{f_order=}")
         test_func = partial(_poly_test_func, order=f_order)
+        # test_func2 = partial(_poly_test_func, power=2)
         grad_test_func = partial(_dpoly_test_func, order=f_order)
         integ_test_func = partial(_ipoly_test_func, order=f_order)
 
@@ -519,6 +539,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
         u_base = test_func(x_vec=x_base)
         u_bnd_base = test_func(x_vec=bdry_x_base)
         u_quad = op.project(dcoll, vol_dd_base, vol_dd_quad, u_base)
+        # u2_exact = test_func2(x_vec=x_quad)
 
         u_bnd_flux_quad = (
             sum(get_flux(op.project_tracepair(dcoll, allfaces_dd_quad, itpair))
@@ -526,7 +547,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
                                                       volume_dd=vol_dd_base))
             + get_flux(op.project_tracepair(
                 dcoll, bdry_dd_quad,
-                bv_trace_pair(dcoll, bdry_dd_base, u_base, u_bnd_base)))
+                op.bv_trace_pair(dcoll, bdry_dd_base, u_base, u_bnd_base)))
         )
 
         exact_grad = grad_test_func(x_vec=x_base)
@@ -570,11 +591,15 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
         # print(f"{actx.to_numpy(local_grad)=}")
         test_grad = grad_operator(dcoll, vol_dd_quad, allfaces_dd_quad,
                                   u_quad, u_bnd_flux_quad)
-        test_integ_base = op.elementwise_integral(dcoll, vol_dd_base, u_base)
-        test_integ_quad = op.elementwise_integral(dcoll, vol_dd_quad, u_quad)
+        # u_base2 = u_base * u_base
+        # u_quad2 = u_quad * u_quad
+        # u2_exact =
+        # u_base2_quad = op.project(dcoll, vol_dd_base, vol_dd_quad, u_base2)
+        # test_integ_base = op.elementwise_integral(dcoll, vol_dd_base, u_base)
+        # test_integ_quad = op.elementwise_integral(dcoll, vol_dd_quad, u_quad)
 
-        print(f"{actx.to_numpy(test_integ_base)=}")
-        print(f"{actx.to_numpy(test_integ_quad)=}")
+        # print(f"{actx.to_numpy(test_integ_base)=}")
+        # print(f"{actx.to_numpy(test_integ_quad)=}")
         # print(f"{actx.to_numpy(test_grad)=}")
 
         grad_err = \

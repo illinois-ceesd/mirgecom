@@ -33,7 +33,7 @@ import pytest
 
 from pytools.obj_array import make_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
-from meshmode.dof_array import DOFArray
+from meshmode.dof_array import DOFArray, flat_norm
 from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair
 from mirgecom.fluid import make_conserved
@@ -42,12 +42,16 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from mirgecom.inviscid import inviscid_flux
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("nspecies", [0, 1, 10])
@@ -194,7 +198,7 @@ def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
     flux_resid = flux_bnd - flux_bnd_exact
     print(f"{flux_resid=}")
 
-    assert np.abs(actx.np.linalg.norm(flux_resid)) < tolerance
+    assert np.abs(flat_norm(flux_resid)) < tolerance
 
 
 # velocities are tuned to exercise different wave configurations:
@@ -400,4 +404,4 @@ def test_hll_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
     flux_resid = flux_bnd - flux_bnd_exact
     print(f"{flux_resid=}")
 
-    assert np.abs(actx.np.linalg.norm(flux_resid)) < tolerance
+    assert np.abs(flat_norm(flux_resid)) < tolerance
