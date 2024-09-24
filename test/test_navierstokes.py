@@ -248,7 +248,7 @@ class FluidCase(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Return :class:`dict` mapping boundary tags to bc at time *t*."""
         pass
 
@@ -280,7 +280,7 @@ class FluidManufacturedSolution(FluidCase):
         """Return the symbolically-compatible solution."""
         pass
 
-    def get_boundaries(self):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundary condition dictionary: prescribed exact by default."""
         from mirgecom.gas_model import make_fluid_state
 
@@ -315,7 +315,7 @@ class UniformSolution(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries(dcoll, actx, t)
 
@@ -377,7 +377,7 @@ class ShearFlow(FluidManufacturedSolution):
         periodic = (False,)*self._dim
         return get_box_mesh(self._dim, 0, 1, n, periodic=periodic)
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries()
 
@@ -391,6 +391,7 @@ class ShearFlow(FluidManufacturedSolution):
 
         v_x = y_c**2
         v_y = 1.*zeros
+        v_z = 0
         if self._dim > 2:
             v_z = 1.*zeros
 
@@ -442,7 +443,7 @@ class IsentropicVortex(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries(dcoll, actx, t)
 
@@ -516,7 +517,7 @@ class TrigSolution1(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(x, t)
 
-    def get_boundaries(self):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries()
 
@@ -739,6 +740,8 @@ class RoySolution(FluidManufacturedSolution):
         funcs = [mm.sin, mm.cos, mm.cos]
         u = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
                        for i in range(self._dim))*tone
+        v = 0
+        w = 0
 
         if self._dim > 1:
             c = self._q_coeff[3]
@@ -753,7 +756,7 @@ class RoySolution(FluidManufacturedSolution):
             funcs = [mm.sin, mm.sin, mm.cos]
             w = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
                            for i in range(self._dim))*tone
-
+        velocity = 0
         if self._dim == 1:
             velocity = make_obj_array([u])
         if self._dim == 2:
