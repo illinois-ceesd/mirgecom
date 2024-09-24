@@ -36,6 +36,7 @@ from mirgecom.integrators import (
     euler_step, lsrk54_step, lsrk144_step,
     rk4_step, ssprk43_step
 )
+from mirgecom.steppers import advance_state
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +152,6 @@ if found:
         SSPRK22MethodBuilder, SSPRK33MethodBuilder,
         )
     from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
-    from mirgecom.steppers import advance_state
 
     @pytest.mark.parametrize(("method", "method_order"), [
         (ODE23MethodBuilder("y", use_high_order=False), 2),
