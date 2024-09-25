@@ -144,16 +144,15 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
-    def _limit_fluid_cv(cv, pressure, temperature, dd=None):
-        # if True:
-        #    return cv
+    def _limit_fluid_cv(cv, temperature_seed=None, gas_model=None, dd=None):
         actx = cv.array_context
+
         # limit species
         spec_lim = make_obj_array([
             bound_preserving_limiter(dcoll, cv.species_mass_fractions[i], mmin=0.0,
@@ -369,25 +368,28 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
                 dv = fluid_state.dv
                 exact = initializer(x_vec=nodes, eos=eos, time=t)
 
-            if do_health or do_status:
-                component_errors = compare_fluid_solutions(dcoll, cv, exact)
+                if do_health or do_status:
+                    component_errors = \
+                        compare_fluid_solutions(dcoll, cv, exact)
 
-            if do_health:
-                health_errors = global_reduce(
-                    my_health_check(dv.pressure, component_errors), op="lor")
-                if health_errors:
-                    if rank == 0:
-                        logger.info("Fluid solution failed health check.")
-                    raise MyRuntimeError("Failed simulation health check.")
+                    if do_health:
+                        health_errors = global_reduce(
+                            my_health_check(dv.pressure, component_errors),
+                            op="lor")
+                        if health_errors:
+                            if rank == 0:
+                                logger.info("Fluid solution failed health check.")
+                                raise MyRuntimeError(
+                                    "Failed simulation health check.")
+
+                    if do_status:
+                        my_write_status(component_errors=component_errors)
+
+                if do_viz:
+                    my_write_viz(step=step, t=t, cv=cv, dv=dv, exact=exact)
 
             if do_restart:
                 my_write_restart(step=step, t=t, cv=cv)
-
-            if do_viz:
-                my_write_viz(step=step, t=t, cv=cv, dv=dv, exact=exact)
-
-            if do_status:
-                my_write_status(component_errors=component_errors)
 
         except MyRuntimeError:
             if rank == 0:

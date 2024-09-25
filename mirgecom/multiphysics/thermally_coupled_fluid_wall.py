@@ -4,7 +4,7 @@ fluid and wall.
 Couples a fluid subdomain governed by the compressible Navier-Stokes equations
 (:mod:`mirgecom.navierstokes`) with a wall subdomain governed by the heat
 equation (:mod:`mirgecom.diffusion`) through temperature and heat flux. This
-radiation can optionally include a sink term representing emitted radiation.
+coupling can optionally include a sink term representing emitted radiation.
 In the non-radiating case, coupling enforces continuity of temperature and heat flux
 
 .. math::
@@ -74,12 +74,12 @@ from arraycontext import dataclass_array_container
 from meshmode.dof_array import DOFArray
 from grudge.trace_pair import (
     TracePair,
-    inter_volume_trace_pairs
 )
 from grudge.dof_desc import (
     DISCR_TAG_BASE,
     as_dofdesc,
 )
+import grudge.geometry as geo
 import grudge.op as op
 
 from mirgecom.math import harmonic_mean
@@ -234,9 +234,15 @@ class InterfaceFluidBoundary(MengaldoBoundaryCondition):
         lengthscales_minus = project_from_base(
             dcoll, dd_bdry, self._lengthscales_minus)
 
-        tau = (
-            self._penalty_amount * state_bc.thermal_conductivity
-            / lengthscales_minus)
+        if isinstance(state_bc.thermal_conductivity, np.ndarray):
+            # orthotropic materials
+            actx = state_minus.array_context
+            normal = geo.normal(actx, dcoll, dd_bdry)
+            kappa_bc = np.dot(normal, state_bc.thermal_conductivity*normal)
+        else:
+            kappa_bc = state_bc.thermal_conductivity
+
+        tau = self._penalty_amount * kappa_bc / lengthscales_minus
 
         t_minus = state_minus.temperature
         t_plus = self.temperature_plus(
@@ -256,12 +262,28 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
         self._t_plus = t_plus
         self._grad_t_plus = grad_t_plus
 
-    def kappa_plus(self, dcoll, dd_bdry):
+    def _normal_kappa_plus(self, dcoll, dd_bdry):
+        # project kappa plus in case of overintegration
+        if isinstance(self._kappa_plus, np.ndarray):
+            # orthotropic materials
+            actx = self._t_plus.array_context
+            normal = geo.normal(actx, dcoll, dd_bdry)
+            kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
+            return np.dot(normal, kappa_plus*normal)
         return project_from_base(dcoll, dd_bdry, self._kappa_plus)
 
+    def _normal_kappa_minus(self, dcoll, dd_bdry, kappa):
+        # state minus is already in the quadrature domain
+        if isinstance(kappa, np.ndarray):
+            # orthotropic materials
+            actx = self._t_plus.array_context
+            normal = geo.normal(actx, dcoll, dd_bdry)
+            return np.dot(normal, kappa*normal)
+        return kappa
+
     def kappa_bc(self, dcoll, dd_bdry, kappa_minus):
-        kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
-        return harmonic_mean(kappa_minus, kappa_plus)
+        return harmonic_mean(kappa_minus,
+                             project_from_base(dcoll, dd_bdry, self._kappa_plus))
 
     def temperature_plus(self, dcoll, dd_bdry):
         return project_from_base(dcoll, dd_bdry, self._t_plus)
@@ -269,7 +291,9 @@ class _ThermallyCoupledHarmonicMeanBoundaryComponent:
     def temperature_bc(self, dcoll, dd_bdry, kappa_minus, t_minus):
         t_plus = project_from_base(dcoll, dd_bdry, self._t_plus)
         actx = t_minus.array_context
-        kappa_plus = project_from_base(dcoll, dd_bdry, self._kappa_plus)
+        kappa_plus = self._normal_kappa_plus(dcoll, dd_bdry)
+        kappa_minus = self._normal_kappa_minus(dcoll, dd_bdry,
+                                               kappa_minus + t_minus*0.0)
         kappa_sum = actx.np.where(
             actx.np.greater(kappa_minus + kappa_plus, 0*kappa_minus),
             kappa_minus + kappa_plus,
@@ -352,7 +376,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # Reflect the normal momentum
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, nhat)
@@ -366,12 +390,10 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
 
         cv_minus = state_minus.cv
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        kappa_minus = state_minus.tv.thermal_conductivity
 
         # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # set the normal momentum to 0
         mom_bc = self._slip.momentum_bc(state_minus.momentum_density, nhat)
@@ -425,9 +447,7 @@ class InterfaceFluidSlipBoundary(InterfaceFluidBoundary):
         return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        kappa_minus = state_minus.tv.thermal_conductivity
         return self._thermally_coupled.temperature_bc(
             dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
@@ -506,9 +526,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
             self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):  # noqa: D102
         dd_bdry = as_dofdesc(dd_bdry)
 
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        kappa_minus = state_minus.tv.thermal_conductivity
 
         mom_bc = self._no_slip.momentum_bc(state_minus.momentum_density)
 
@@ -544,9 +562,7 @@ class InterfaceFluidNoslipBoundary(InterfaceFluidBoundary):
         return self._thermally_coupled.temperature_plus(dcoll, dd_bdry)
 
     def temperature_bc(self, dcoll, dd_bdry, state_minus, **kwargs):  # noqa: D102
-        kappa_minus = (
-            # Make sure it has an array context
-            state_minus.tv.thermal_conductivity + 0*state_minus.mass_density)
+        kappa_minus = state_minus.tv.thermal_conductivity
         return self._thermally_coupled.temperature_bc(
             dcoll, dd_bdry, kappa_minus, state_minus.temperature)
 
@@ -596,9 +612,10 @@ class InterfaceWallBoundary(DiffusionBoundary):
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
             numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
+
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
 
@@ -616,9 +633,10 @@ class InterfaceWallBoundary(DiffusionBoundary):
                 "Boundary does not have external gradient data.")
 
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
+
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_plus)
 
@@ -698,7 +716,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
             numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_tpair = TracePair(
             dd_bdry, interior=kappa_minus, exterior=kappa_minus)
@@ -720,7 +738,7 @@ class InterfaceWallRadiationBoundary(DiffusionBoundary):
             raise TypeError("Ambient temperature is not specified.")
 
         actx = u_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
         grad_u_plus = project_from_base(dcoll, dd_bdry, self.grad_u_plus)
@@ -769,6 +787,10 @@ def _get_interface_trace_pairs_no_grad(
         (fluid_dd, wall_dd): (
             _make_thermal_data(fluid_kappa, fluid_temperature),
             _make_thermal_data(wall_kappa, wall_temperature))}
+
+    from grudge.trace_pair import inter_volume_trace_pairs  \
+        # pylint: disable=no-name-in-module
+
     return inter_volume_trace_pairs(
         dcoll, pairwise_thermal_data,
         comm_tag=(_ThermalDataNoGradInterVolTag, comm_tag))
@@ -792,6 +814,9 @@ def _get_interface_trace_pairs(
                 wall_kappa,
                 wall_temperature,
                 wall_grad_temperature))}
+
+    from grudge.trace_pair import inter_volume_trace_pairs  \
+        # pylint: disable=no-name-in-module
 
     return inter_volume_trace_pairs(
         dcoll, pairwise_thermal_data,
@@ -1596,7 +1621,8 @@ def basic_coupled_ns_heat_operator(
         quadrature_tag=DISCR_TAG_BASE,
         limiter_func=None,
         return_gradients=False,
-        use_esdg=False):
+        use_esdg=False,
+        inviscid_terms_on=True):
     r"""
     Simple implementation of a thermally-coupled fluid/wall operator.
 
@@ -1776,7 +1802,7 @@ def basic_coupled_ns_heat_operator(
 
     my_ns_operator = partial(ns_operator,
         viscous_numerical_flux_func=viscous_facial_flux_harmonic,
-        use_esdg=use_esdg)
+        use_esdg=use_esdg, inviscid_terms_on=inviscid_terms_on)
     ns_result = my_ns_operator(
         dcoll, gas_model, fluid_state, fluid_all_boundaries,
         time=time, quadrature_tag=quadrature_tag, dd=fluid_dd,

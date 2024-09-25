@@ -11,7 +11,7 @@ dependencies:
 - gh
 - mypy
 - conda-forge::numpy
-- pocl
+- pocl<6
 - clinfo
 - pudb
 - islpy
@@ -23,7 +23,7 @@ dependencies:
 - pytest
 - pylint
 - pydocstyle
-- cantera
+- cantera=3.0.0
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
 - gmsh
 - vtk

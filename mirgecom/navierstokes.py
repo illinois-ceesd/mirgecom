@@ -73,6 +73,7 @@ from grudge.dof_desc import (
     DISCR_TAG_BASE,
 )
 
+import grudge.geometry as geo
 import grudge.op as op
 
 from mirgecom.euler import (
@@ -120,7 +121,7 @@ def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
     actx = tpair.int.array_context
     dd_trace = tpair.dd
     dd_allfaces = dd_trace.with_boundary_tag(FACE_RESTR_ALL)
-    normal = actx.thaw(dcoll.normal(dd_trace))
+    normal = geo.normal(actx, dcoll, dd_trace)
     flux = outer(numerical_flux_func(tpair.int, tpair.ext), normal)
     return op.project(dcoll, dd_trace, dd_allfaces, flux)
 
@@ -492,7 +493,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dcoll, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
-            operator_states_quad=operator_states_quad, comm_tag=comm_tag)
+            operator_states_quad=operator_states_quad, comm_tag=comm_tag,
+            use_esdg=use_esdg, limiter_func=limiter_func)
 
     # Communicate grad(CV) and put it on the quadrature domain
     grad_cv_interior_pairs = [
@@ -512,7 +514,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             dcoll, gas_model, boundaries, state, time=time,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
-            operator_states_quad=operator_states_quad, comm_tag=comm_tag)
+            operator_states_quad=operator_states_quad, comm_tag=comm_tag,
+            use_esdg=use_esdg, limiter_func=limiter_func)
 
     # Create the interior face trace pairs, perform MPI exchange, interp to quad
     grad_t_interior_pairs = [

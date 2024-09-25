@@ -123,8 +123,9 @@ class TransportModel:
         raise NotImplementedError()
 
     @abstractmethod
-    def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
-                            eos: GasEOS) -> DOFArray:
+    def species_diffusivity(self, cv: ConservedVars,
+                            dv: Optional[GasDependentVars] = None,
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         raise NotImplementedError()
 
@@ -166,13 +167,13 @@ class SimpleTransport(TransportModel):
                        dv: Optional[GasDependentVars] = None,
                        eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
-        return self._mu_bulk*(0*cv.mass + 1.0)
+        return self._mu_bulk*(0*cv.mass + 1.0)  # type: ignore
 
     def viscosity(self, cv: ConservedVars,
                   dv: Optional[GasDependentVars] = None,
                   eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return self._mu*(0*cv.mass + 1.0)
+        return self._mu*(0*cv.mass + 1.0)  # type: ignore
 
     def volume_viscosity(self, cv: ConservedVars,
                          dv: Optional[GasDependentVars] = None,
@@ -186,19 +187,19 @@ class SimpleTransport(TransportModel):
             \lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)
 
         """
-        return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)
+        return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)  # type: ignore
 
     def thermal_conductivity(self, cv: ConservedVars,
                              dv: Optional[GasDependentVars] = None,
                              eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
-        return self._kappa*(0*cv.mass + 1.0)
+        return self._kappa*(0*cv.mass + 1.0)  # type: ignore
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return self._d_alpha*(0*cv.species_mass + 1.0)
+        return self._d_alpha*(0*cv.species_mass + 1.0)  # type: ignore
 
 
 class PowerLawTransport(TransportModel):
@@ -318,7 +319,7 @@ class PowerLawTransport(TransportModel):
             return (self._sigma * self.viscosity(cv, dv)/(
                 cv.mass*self._lewis*eos.gamma(cv, dv.temperature))
             )
-        return self._d_alpha*(0*cv.species_mass + 1.)
+        return self._d_alpha*(0*cv.species_mass + 1.)  # type: ignore
 
 
 class MixtureAveragedTransport(TransportModel):
@@ -339,7 +340,7 @@ class MixtureAveragedTransport(TransportModel):
 
     def __init__(self, pyrometheus_mech, alpha=0.6, factor=1.0, lewis=None,
                  epsilon=1e-4, singular_diffusivity=1e-6):
-        r"""Initialize coefficients and parameters.
+        r"""Initialize mixture averaged transport coefficients and parameters.
 
         Parameters
         ----------
@@ -579,7 +580,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return (self.av_species_diffusivity + 0*cv.species_mass
                 + self._physical_transport.species_diffusivity(cv, dv, eos))
@@ -705,7 +706,7 @@ class ArtificialViscosityTransportDiv2(TransportModel):
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._physical_transport.species_diffusivity(cv, dv, eos)
 

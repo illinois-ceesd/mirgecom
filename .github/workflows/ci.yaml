@@ -18,9 +18,9 @@ jobs:
         name: Flake8
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         -
-          uses: actions/setup-python@v4
+          uses: actions/setup-python@v5
           with:
             # matches compat target in setup.py
             python-version: '3.8'
@@ -36,9 +36,9 @@ jobs:
         name: Mypy
         runs-on: ubuntu-latest
         steps:
-        -   uses: actions/checkout@v3
+        -   uses: actions/checkout@v4
         -
-            uses: actions/setup-python@v4
+            uses: actions/setup-python@v5
             with:
                 python-version: '3.x'
         -   name: Install
@@ -55,9 +55,9 @@ jobs:
         name: Pylint
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         -
-          uses: actions/setup-python@v4
+          uses: actions/setup-python@v5
           with:
             python-version: '3.x'
         - name: Install
@@ -73,9 +73,9 @@ jobs:
     pydocstyle:
         runs-on: ubuntu-latest
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         -
-          uses: actions/setup-python@v4
+          uses: actions/setup-python@v5
           with:
             python-version: '3.x'
         - name: Run Pydocstyle
@@ -91,7 +91,7 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - name: Install
           run: |
             . .ci-support/install.sh
@@ -112,7 +112,7 @@ jobs:
             os: [ubuntu-latest, porter]
 
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - name: Install
           run: |
             . .ci-support/install.sh
@@ -124,6 +124,9 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             export XDG_CACHE_HOME=/tmp
             mamba install vtk  # needed for the accuracy comparison
+
+            # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
+
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
 
              # This is only possible because actions run sequentially on porter
@@ -136,7 +139,7 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - name: Install
           run: |
             . .ci-support/install.sh
@@ -168,11 +171,11 @@ jobs:
             os: [ubuntu-latest, macos-latest]
 
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
         - name: Install emirge
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+            [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
@@ -194,14 +197,14 @@ jobs:
             os: [ubuntu-latest, macos-latest, porter]
 
         steps:
-        - uses: actions/checkout@v3
+        - uses: actions/checkout@v4
           with:
             fetch-depth: '0'
         - name: Prepare production environment
           run: |
             set -x
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+            [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
 
             # This is only possible because actions run sequentially on porter
             [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
@@ -222,4 +225,7 @@ jobs:
         - name: Run production test
           run: |
             source ../config/activate_env.sh
+
+            # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
+
             scripts/run-integrated-tests.sh --production

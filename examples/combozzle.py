@@ -31,7 +31,7 @@ from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from mirgecom.discretization import create_discretization_collection
 
 
@@ -143,7 +143,7 @@ class InitSponge:
 
 
 @mpi_entry_point
-def main(actx_class, rst_filename=None,
+def main(actx_class, rst_filename=None, use_tpe=False,
          use_overintegration=False, casename=None,
          log_dependent=False, input_file=None,
          force_eval=True, use_esdg=False):
@@ -167,8 +167,8 @@ def main(actx_class, rst_filename=None,
 
     # {{{ Some discretization parameters
 
-    dim = 2
-    order = 3
+    dim = 3
+    order = 1
 
     # - scales the size of the domain
     x_scale = 1
@@ -602,7 +602,7 @@ def main(actx_class, rst_filename=None,
         rst_order = restart_data["order"]
     else:  # generate the grid from scratch
         generate_mesh = partial(get_box_mesh, dim, a=box_ll, b=box_ur, n=nels_axis,
-                                periodic=periodic)
+                                periodic=periodic, tensor_product_elements=use_tpe)
 
         local_mesh, global_nelements = generate_and_distribute_mesh(comm,
                                                                     generate_mesh)
@@ -612,7 +612,8 @@ def main(actx_class, rst_filename=None,
     if grid_only:
         return 0
 
-    dcoll = create_discretization_collection(actx, local_mesh, order)
+    dcoll = create_discretization_collection(actx, local_mesh, order,
+                                             tensor_product_elements=use_tpe)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.0
 
@@ -652,7 +653,7 @@ def main(actx_class, rst_filename=None,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     ones = dcoll.zeros(actx) + 1.0
 
@@ -703,9 +704,9 @@ def main(actx_class, rst_filename=None,
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
                 ("max_temperature",    "{value:7g})\n")])
 
+    init_y = 0
     if single_gas_only:
         nspecies = 0
-        init_y = 0
     elif use_cantera:
 
         # {{{  Set up initial state using Cantera
@@ -765,8 +766,10 @@ def main(actx_class, rst_filename=None,
         eos = IdealSingleGas()
     else:
         if use_cantera:
-            from mirgecom.thermochemistry import make_pyrometheus_mechanism_class
-            pyro_mechanism = make_pyrometheus_mechanism_class(cantera_soln)(actx.np)
+            from mirgecom.thermochemistry \
+                import get_pyrometheus_wrapper_class_from_cantera
+            pyro_mechanism = \
+                get_pyrometheus_wrapper_class_from_cantera(cantera_soln)(actx.np)
             eos = PyrometheusMixture(pyro_mechanism,
                                      temperature_guess=temperature_seed)
         else:
@@ -1109,6 +1112,7 @@ def main(actx_class, rst_filename=None,
         fluid_operator_states = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries, quadrature_tag=quadrature_tag)
 
+        grad_cv = None
         if inviscid_only:
             fluid_rhs = \
                 euler_operator(
@@ -1136,7 +1140,7 @@ def main(actx_class, rst_filename=None,
             fluid_rhs = fluid_rhs + eos.get_species_source_terms(
                 cv, fluid_state.temperature)
 
-        if av_on:
+        if av_on and not inviscid_only:
             alpha_f = compute_av_alpha_field(fluid_state)
             indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
                                              kappa=kappa_sc, s0=s0_sc)
@@ -1249,6 +1253,8 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--tpe", action="store_true",
+                        help="Use tensor product elements (quads/hexes).")
     args = parser.parse_args()
 
     from warnings import warn
@@ -1285,7 +1291,7 @@ if __name__ == "__main__":
 
     main(actx_class, input_file=input_file,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename,
+         casename=casename, rst_filename=rst_filename, use_tpe=args.tpe,
          log_dependent=log_dependent, force_eval=force_eval, use_esdg=args.esdg)
 
 # vim: foldmethod=marker

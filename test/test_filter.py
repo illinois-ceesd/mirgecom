@@ -29,13 +29,17 @@ import numpy as np
 from functools import partial
 
 from mirgecom.discretization import create_discretization_collection
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from pytools.obj_array import (
     make_obj_array
 )
 from mirgecom.filter import make_spectral_filter
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
@@ -124,7 +128,7 @@ def test_filter_coeff(actx_factory, filter_order, order, dim):
     print(f"{vol_discr.groups=}")
 
     for group in vol_discr.groups:
-        mode_ids = group.mode_ids()
+        mode_ids = group.basis_obj().mode_ids
         print(f"{mode_ids=}")
         filter_coeff = actx.thaw(
             make_spectral_filter(

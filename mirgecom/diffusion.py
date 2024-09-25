@@ -55,6 +55,7 @@ Boundary conditions
 .. autoclass:: DiffusionBoundary
 .. autoclass:: DirichletDiffusionBoundary
 .. autoclass:: NeumannDiffusionBoundary
+.. autoclass:: RobinDiffusionBoundary
 .. autoclass:: PrescribedFluxDiffusionBoundary
 .. autoclass:: DummyDiffusionBoundary
 """
@@ -98,7 +99,8 @@ from grudge.trace_pair import (
     interior_trace_pairs,
     tracepair_with_discr_tag,
 )
-import grudge.op as op
+import grudge.geometry as geo
+from grudge import op
 from mirgecom.math import harmonic_mean
 from mirgecom.utils import normalize_boundaries
 
@@ -184,7 +186,8 @@ def diffusion_facial_flux_central(
 
     .. math::
 
-        F = -\frac{\kappa^- u^- + \kappa^+ u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
+        F = -\frac{\kappa^- \nabla u^- + \kappa^+ \nabla u^+}{2} \cdot \hat{n}
+                - \tau (u^+ - u^-).
 
     The amount of penalization $\tau$ is given by
 
@@ -229,9 +232,9 @@ def diffusion_facial_flux_harmonic(
     .. math::
 
         F = -\frac{2 \kappa_{ii}^- \kappa_{ii}^+}{\kappa_{ii}^- + \kappa_{ii}^+}
-                \frac{u^- + u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
+                \frac{\nabla u^- + \nabla u^+}{2} \cdot \hat{n} - \tau (u^+ - u^-).
 
-    The amout of penalization $\tau$ is given by
+    The amount of penalization $\tau$ is given by
 
     .. math::
 
@@ -330,7 +333,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
             exterior=2*self.value-u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
         return numerical_flux_func(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
@@ -349,7 +352,7 @@ class DirichletDiffusionBoundary(DiffusionBoundary):
             exterior=grad_u_minus)
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
         return numerical_flux_func(
             kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
             penalty_amount=penalty_amount)
@@ -403,7 +406,7 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
             exterior=u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
         return numerical_flux_func(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
@@ -417,12 +420,100 @@ class NeumannDiffusionBoundary(DiffusionBoundary):
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
             exterior=u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
         grad_u_tpair = TracePair(dd_bdry,
             interior=grad_u_minus,
             exterior=(
                 grad_u_minus
                 + 2 * (self.value - np.dot(grad_u_minus, normal)) * normal))
+        lengthscales_tpair = TracePair(
+            dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
+        return numerical_flux_func(
+            kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
+            penalty_amount=penalty_amount)
+
+
+class RobinDiffusionBoundary(DiffusionBoundary):
+    r"""
+    Robin boundary condition for the diffusion operator.
+
+    The non-homogeneous Robin boundary condition is a linear combination of
+    $u$ and its gradient $\nabla u$, given by
+
+    .. math::
+
+        (\alpha u - \kappa \nabla u \cdot \mathbf{\hat{n}})|_\Gamma =
+            \alpha u_{ref}.
+
+    where $u_{ref}$ is the reference value of $u$ for $x \to \infty$ and
+    $\alpha$ is the weight for $u$. The gradient weight $\kappa$ is the
+    conductivity (thermal) or the diffusivity (species).
+
+    The current implementation uses external data
+
+    .. math::
+
+        u^+ = u^-
+
+    when computing the boundary fluxes for $\nabla u$, and
+
+    .. math::
+
+        \nabla u\cdot\mathbf{\hat{n}} |_\Gamma =
+            \frac{\alpha}{\kappa}(u_{ref} - u^-)
+
+    when computing the boundary fluxes for $\nabla \cdot (\kappa \nabla u)$.
+
+    .. automethod:: __init__
+    .. automethod:: get_grad_flux
+    .. automethod:: get_diffusion_flux
+    """
+
+    def __init__(self, u_ref, alpha):
+        """
+        Initialize the boundary condition.
+
+        Parameters
+        ----------
+        u_ref: float or meshmode.dof_array.DOFArray
+            the reference value(s) of $u$ along the boundary
+        alpha: float or meshmode.dof_array.DOFArray
+            the weight for the variable $u$ at the boundary
+        """
+        self.u_ref = u_ref
+        self.alpha = alpha
+
+    def get_grad_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, *,
+            numerical_flux_func=grad_facial_flux_weighted):  # noqa: D102
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        normal = geo.normal(actx, dcoll, dd_bdry)
+        return numerical_flux_func(kappa_tpair, u_tpair, normal)
+
+    def get_diffusion_flux(
+            self, dcoll, dd_bdry, kappa_minus, u_minus, grad_u_minus,
+            lengthscales_minus, *, penalty_amount=None,
+            numerical_flux_func=diffusion_facial_flux_harmonic):  # noqa: D102
+        actx = u_minus.array_context
+        kappa_tpair = TracePair(dd_bdry,
+            interior=kappa_minus,
+            exterior=kappa_minus)
+        u_tpair = TracePair(dd_bdry,
+            interior=u_minus,
+            exterior=u_minus)
+        normal = geo.normal(actx, dcoll, dd_bdry)
+        dudn_bc = self.alpha * (self.u_ref - u_minus)/kappa_minus
+        grad_u_tpair = TracePair(dd_bdry,
+            interior=grad_u_minus,
+            exterior=(
+                grad_u_minus
+                + 2 * (dudn_bc - np.dot(grad_u_minus, normal)) * normal))
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
         return numerical_flux_func(
@@ -471,7 +562,7 @@ class PrescribedFluxDiffusionBoundary(DiffusionBoundary):
             dd_bdry, interior=kappa_minus, exterior=kappa_minus)
         u_tpair = TracePair(
             dd_bdry, interior=u_minus, exterior=u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
         return numerical_flux_func(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(
@@ -496,7 +587,7 @@ class DummyDiffusionBoundary(DiffusionBoundary):
         u_tpair = TracePair(dd_bdry,
             interior=u_minus,
             exterior=u_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
         return numerical_flux_func(kappa_tpair, u_tpair, normal)
 
     def get_diffusion_flux(self, dcoll, dd_bdry, kappa_minus, u_minus,
@@ -515,7 +606,7 @@ class DummyDiffusionBoundary(DiffusionBoundary):
             exterior=grad_u_minus)
         lengthscales_tpair = TracePair(
             dd_bdry, interior=lengthscales_minus, exterior=lengthscales_minus)
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
         return numerical_flux_func(
             kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
             penalty_amount=penalty_amount)
@@ -619,7 +710,7 @@ def grad_operator(
         dd_trace_quad = kappa_tpair.dd.with_discr_tag(quadrature_tag)
         kappa_tpair_quad = interp_to_surf_quad(kappa_tpair)
         u_tpair_quad = interp_to_surf_quad(u_tpair)
-        normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
+        normal_quad = geo.normal(actx, dcoll, dd_trace_quad)
         return op.project(
             dcoll, dd_trace_quad, dd_allfaces_quad,
             numerical_flux_func(kappa_tpair_quad, u_tpair_quad, normal_quad))
@@ -634,9 +725,11 @@ def grad_operator(
                 dcoll, dd_bdry_quad, kappa_minus_quad, u_minus_quad,
                 numerical_flux_func=numerical_flux_func))
 
+    u_quad = op.project(dcoll, dd_vol, dd_vol_quad, u)
+
     return op.inverse_mass(
-        dcoll, dd_vol,
-        op.weak_local_grad(dcoll, dd_vol, -u)
+        dcoll, dd_vol_quad,
+        op.weak_local_grad(dcoll, dd_vol_quad, -u_quad)
         -  # noqa: W504
         op.face_mass(
             dcoll, dd_allfaces_quad,
@@ -774,7 +867,7 @@ def diffusion_operator(
         kappa_tpair_quad = interp_to_surf_quad(kappa_tpair)
         grad_u_tpair_quad = interp_to_surf_quad(grad_u_tpair)
         lengthscales_tpair_quad = interp_to_surf_quad(lengthscales_tpair)
-        normal_quad = actx.thaw(dcoll.normal(dd_trace_quad))
+        normal_quad = geo.normal(actx, dcoll, dd_trace_quad)
         return op.project(
             dcoll, dd_trace_quad, dd_allfaces_quad,
             diffusion_numerical_flux_func(
@@ -798,7 +891,7 @@ def diffusion_operator(
                 numerical_flux_func=diffusion_numerical_flux_func))
 
     diff_u = op.inverse_mass(
-        dcoll, dd_vol,
+        dcoll, dd_vol_quad,
         op.weak_local_div(dcoll, dd_vol_quad, -kappa_quad*grad_u_quad)
         -  # noqa: W504
         op.face_mass(

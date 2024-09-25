@@ -48,9 +48,10 @@ from mirgecom.eos import IdealSingleGas
 from mirgecom.transport import SimpleTransport
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from abc import ABCMeta, abstractmethod
 from meshmode.dof_array import DOFArray
 import pymbolic as pmbl
@@ -70,6 +71,9 @@ from mirgecom.simutil import (
 
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
@@ -244,7 +248,7 @@ class FluidCase(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Return :class:`dict` mapping boundary tags to bc at time *t*."""
         pass
 
@@ -276,7 +280,7 @@ class FluidManufacturedSolution(FluidCase):
         """Return the symbolically-compatible solution."""
         pass
 
-    def get_boundaries(self):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundary condition dictionary: prescribed exact by default."""
         from mirgecom.gas_model import make_fluid_state
 
@@ -311,7 +315,7 @@ class UniformSolution(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries(dcoll, actx, t)
 
@@ -373,7 +377,7 @@ class ShearFlow(FluidManufacturedSolution):
         periodic = (False,)*self._dim
         return get_box_mesh(self._dim, 0, 1, n, periodic=periodic)
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries()
 
@@ -387,6 +391,7 @@ class ShearFlow(FluidManufacturedSolution):
 
         v_x = y_c**2
         v_y = 1.*zeros
+        v_z = 0
         if self._dim > 2:
             v_z = 1.*zeros
 
@@ -438,7 +443,7 @@ class IsentropicVortex(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(n)
 
-    def get_boundaries(self, dcoll, actx, t):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries(dcoll, actx, t)
 
@@ -512,42 +517,9 @@ class TrigSolution1(FluidManufacturedSolution):
         """Get the mesh."""
         return super().get_mesh(x, t)
 
-    def get_boundaries(self):
+    def get_boundaries(self, dcoll=None, actx=None, t=None):
         """Get the boundaries."""
         return super().get_boundaries()
-
-
-class TestSolution(FluidManufacturedSolution):
-    """Trivial manufactured solution."""
-
-    def __init__(self, dim=2, density=1, pressure=1, velocity=None):
-        """Init the man soln."""
-        super().__init__(dim)
-        if velocity is None:
-            velocity = make_obj_array([0 for _ in range(dim)])
-        assert len(velocity) == dim
-        self._vel = velocity
-        self._rho = density
-        self._pressure = pressure
-
-    def get_mesh(self, n):
-        """Get the mesh."""
-        return super().get_mesh(n)
-
-    def get_boundaries(self, dcoll, actx, t):
-        """Get the boundaries."""
-        return super().get_boundaries(dcoll, actx, t)
-
-    def get_solution(self, x, t):
-        """Return sym soln."""
-        density = 1*x[0]
-        energy = 2*x[1]**2
-        mom = make_obj_array([i*x[0]*x[1] for i in range(self._dim)])
-        pressure = x[0]*x[0]*x[0]
-        temperature = x[1]*x[1]*x[1]
-
-        return make_conserved(dim=self._dim, mass=density, momentum=mom,
-                              energy=energy), pressure, temperature
 
 
 # @pytest.mark.parametrize("nspecies", [0, 10])
@@ -768,6 +740,8 @@ class RoySolution(FluidManufacturedSolution):
         funcs = [mm.sin, mm.cos, mm.cos]
         u = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
                        for i in range(self._dim))*tone
+        v = 0
+        w = 0
 
         if self._dim > 1:
             c = self._q_coeff[3]
@@ -782,7 +756,7 @@ class RoySolution(FluidManufacturedSolution):
             funcs = [mm.sin, mm.sin, mm.cos]
             w = c[0] + sum(c[i+1]*funcs[i](ax[i]*omega_x[i])
                            for i in range(self._dim))*tone
-
+        velocity = 0
         if self._dim == 1:
             velocity = make_obj_array([u])
         if self._dim == 2:

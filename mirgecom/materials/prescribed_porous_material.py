@@ -68,24 +68,20 @@ class PrescribedMaterialEOS(PorousWallEOS):
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the oxidation
         progress ratio $\tau$.
         """
-        return 1.0 - self.volume_fraction(tau)
+        return 1.0 - self.volume_fraction(tau)  # type: ignore
 
     def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
-        r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
+        r"""Evaluate the solid enthalpy $h_s$."""
         return self._enthalpy_func(temperature)
 
     def heat_capacity(self, temperature: DOFArray,
-                      tau: Optional[DOFArray]) -> DOFArray:
-        r"""Evaluate the heat capacity $C_{p_s}$ of the fibers."""
+                      tau: Optional[DOFArray] = None) -> DOFArray:
+        r"""Evaluate the heat capacity $C_{p_s}$."""
         return self._heat_capacity_func(temperature)
 
     def thermal_conductivity(self, temperature: DOFArray,
-                                   tau: DOFArray) -> DOFArray:
-        r"""Evaluate the thermal conductivity $\kappa$ of the fibers.
-
-        It employs a rescaling of the experimental data based on the fiber
-        shrinkage during the oxidation.
-        """
+                             tau: Optional[DOFArray] = None) -> DOFArray:
+        r"""Evaluate the thermal conductivity $\kappa$"""
         return self._thermal_conductivity_func(temperature)
 
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
@@ -109,5 +105,5 @@ class PrescribedMaterialEOS(PorousWallEOS):
         return self._tortuosity_func(tau) + actx.np.zeros_like(tau)
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
-        r"""Evaluate the progress rate $\tau$."""
+        r"""Evaluate the progress ratio $\tau$."""
         return self._decomposition_progress_func(mass)
