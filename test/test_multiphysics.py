@@ -570,8 +570,9 @@ def test_thermally_coupled_fluid_wall_with_radiation(
 
 @pytest.mark.parametrize("order", [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
+@pytest.mark.parametrize("use_trc", [False, True])
 def test_wall_wall_heat_coupling(actx_factory, order, use_overintegration,
-                                 visualize=False):
+                                 use_trc, visualize=True):
     """Check the wall-wlal coupling for heat equation-only."""
     try:
         from grudge.discretization import PartID  # noqa: F401
@@ -620,9 +621,16 @@ def test_wall_wall_heat_coupling(actx_factory, order, use_overintegration,
     step = 0
     isothermal_wall_temp = 300
 
-    presc_grad = 150.0
-    current_wall_1_temp = 450.0 + presc_grad*wall_1_nodes[1]
-    current_wall_2_temp = 450.0 + presc_grad*wall_2_nodes[1]
+    if use_trc:
+        presc_grad = 125.0
+        current_wall_1_temp = 475.0 + presc_grad*wall_1_nodes[1]
+        current_wall_2_temp = 425.0 + presc_grad*wall_2_nodes[1]
+        interface_resistance = 0.4
+    else:
+        presc_grad = 150.0
+        current_wall_1_temp = 450.0 + presc_grad*wall_1_nodes[1]
+        current_wall_2_temp = 450.0 + presc_grad*wall_2_nodes[1]
+        interface_resistance = None
 
     current_state = make_obj_array([current_wall_1_temp, current_wall_2_temp])
 
@@ -643,40 +651,6 @@ def test_wall_wall_heat_coupling(actx_factory, order, use_overintegration,
         NeumannDiffusionBoundary(0.0)
     }
 
-    wall_1_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_wall_1)
-    wall_2_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_wall_2)
-
-    def my_write_viz(step, t, state):
-        wall_1_temperature = state[0]
-        wall_2_temperature = state[1]
-
-        wall_1_rhs, wall_2_rhs, wall_1_grad_temp, wall_2_grad_temp = \
-            my_rhs_and_gradients(t, state)
-
-        if use_overintegration:
-            viz_suffix = f"over_{order}_{nelems}"
-        else:
-            viz_suffix = f"{order}_{nelems}"
-
-        wall_1_viz_fields = [
-            ("temperature", wall_1_temperature),
-            ("grad_t", wall_1_grad_temp),
-            ("rhs", wall_1_rhs),
-            ("kappa", wall_1_kappa)]
-        wall_2_viz_fields = [
-            ("temperature", wall_2_temperature),
-            ("grad_t", wall_2_grad_temp),
-            ("rhs", wall_2_rhs),
-            ("kappa", wall_2_kappa)]
-
-        wall_1_visualizer.write_vtk_file(
-            f"thermally_coupled_walls_1_{viz_suffix}.vtu", wall_1_viz_fields,
-            overwrite=True)
-
-        wall_2_visualizer.write_vtk_file(
-            f"thermally_coupled_walls_2_{viz_suffix}.vtu", wall_2_viz_fields,
-            overwrite=True)
-
     def my_rhs(t, state, return_gradients=False):
 
         wall_1_temperature = state[0]
@@ -687,13 +661,51 @@ def test_wall_wall_heat_coupling(actx_factory, order, use_overintegration,
             wall_1_boundaries, wall_2_boundaries,
             wall_1_temperature, wall_2_temperature,
             wall_1_kappa, wall_2_kappa, time=0.0,
-            quadrature_tag=quadrature_tag, interface_resistance=None,
+            quadrature_tag=quadrature_tag,
+            interface_resistance=interface_resistance,
             return_gradients=return_gradients)
 
     def my_rhs_and_gradients(t, state):
         return my_rhs(t, state, return_gradients=True)
 
     if visualize:
+        wall_1_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_wall_1)
+        wall_2_visualizer = make_visualizer(dcoll, volume_dd=dd_vol_wall_2)
+
+        def my_write_viz(step, t, state):
+            wall_1_temperature = state[0]
+            wall_2_temperature = state[1]
+
+            wall_1_rhs, wall_2_rhs, wall_1_grad_temp, wall_2_grad_temp = \
+                my_rhs_and_gradients(t, state)
+
+            if use_overintegration:
+                viz_suffix = f"over_{order}_{nelems}"
+            else:
+                viz_suffix = f"{order}_{nelems}"
+
+            if use_trc:
+                viz_suffix = viz_suffix + "_trc"
+
+            wall_1_viz_fields = [
+                ("temperature", wall_1_temperature),
+                ("grad_t", wall_1_grad_temp),
+                ("rhs", wall_1_rhs),
+                ("kappa", wall_1_kappa)]
+            wall_2_viz_fields = [
+                ("temperature", wall_2_temperature),
+                ("grad_t", wall_2_grad_temp),
+                ("rhs", wall_2_rhs),
+                ("kappa", wall_2_kappa)]
+
+            wall_1_visualizer.write_vtk_file(
+                f"thermally_coupled_walls_1_{viz_suffix}.vtu", wall_1_viz_fields,
+                overwrite=True)
+
+            wall_2_visualizer.write_vtk_file(
+                f"thermally_coupled_walls_2_{viz_suffix}.vtu", wall_2_viz_fields,
+                overwrite=True)
+
         my_write_viz(step, t, current_state)
 
     wall_1_rhs, wall_2_rhs, wall_1_grad_t, wall_2_grad_t = \

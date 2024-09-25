@@ -1,10 +1,42 @@
 r""":mod:`mirgecom.multiphysics.thermally_coupled_walls` for thermally-coupled walls.
 
+Couple two wall subdomains governed by the heat equation (:mod:`mirgecom.diffusion`)
+through temperature and heat flux.
+
+.. math::
+    T_\text{1} &= T_\text{2} \\
+    -\kappa_\text{1} \nabla T_\text{1} \cdot \hat{n} &=
+        -\kappa_\text{2} \nabla T_\text{2} \cdot \hat{n},
+
+The interface between the two walls can include a thermal contact resistance, where
+the contact between the two domains is not perfect and a small gap exists.
+In this case, usually a low heat-conduction fluid fills the gap, and an equivalent
+temperature jump exists between the walls, such that the heat flux can be modeled as
+
+.. math::
+    \kappa \nabla T \cdot \hat{n} =  \frac{\kappa_\text{f}}{\delta} (T^+ - T^-)
+        \cdot \hat{n} = \frac{\Delta T}{R} \cdot \hat{n}
+
+where the thermal resistance $R$ is given by
+
+.. math::
+    \frac{\delta}{\kappa_\text{f}}
+
+In this case, the heat flux is directly prescribed based on the temperature jump
+between the two domains. Also, it is assumed that the jump is small enough such that
+radiation is not relevant inside the gap.
+The temperature gradient is evaluated as usual.
+
 Boundary Setup Functions
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. autofunction:: add_interface_boundaries_no_grad
 .. autofunction:: add_interface_boundaries
+
+Basic Coupled Operators
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autofunction:: coupled_heat_operator
 
 Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^
@@ -89,7 +121,8 @@ class InterfaceWallBoundary(DiffusionBoundary):
     .. automethod:: get_diffusion_flux
     """
 
-    def __init__(self, kappa_plus, u_plus, grad_u_plus=None, gap_resistance=None):
+    def __init__(self, kappa_plus, u_plus, grad_u_plus=None,
+                 interface_resistance=None):
         r"""
         Initialize InterfaceWallBoundary.
 
@@ -109,11 +142,16 @@ class InterfaceWallBoundary(DiffusionBoundary):
         grad_u_plus: :class:`meshmode.dof_array.DOFArray` or None
 
             Temperature gradient from the fluid side.
+
+        interface_resistance: float
+
+            Coefficient $R$ that models the thermal contact resistance between the
+            two wall subdomains.
         """
         self.kappa_plus = kappa_plus
         self.u_plus = u_plus
         self.grad_u_plus = grad_u_plus
-        self._gap_resistance = gap_resistance
+        self._intfc_resistance = interface_resistance
 
     def get_grad_flux(
             self, dcoll, dd_bdry, kappa_minus, u_minus, *,
@@ -121,7 +159,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
         actx = u_minus.array_context
         normal = actx.thaw(dcoll.normal(dd_bdry))
 
-        if self._gap_resistance is None:
+        if self._intfc_resistance is None:
             kappa_plus = project_from_base(dcoll, dd_bdry, self.kappa_plus)
 
             kappa_tpair = TracePair(
@@ -153,7 +191,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
         u_plus = project_from_base(dcoll, dd_bdry, self.u_plus)
         u_tpair = TracePair(dd_bdry, interior=u_minus, exterior=u_plus)
 
-        if self._gap_resistance is None:
+        if self._intfc_resistance is None:
             grad_u_plus = project_from_base(dcoll, dd_bdry, self.grad_u_plus)
             grad_u_tpair = TracePair(
                 dd_bdry, interior=grad_u_minus, exterior=grad_u_plus)
@@ -165,7 +203,7 @@ class InterfaceWallBoundary(DiffusionBoundary):
                 kappa_tpair, u_tpair, grad_u_tpair, lengthscales_tpair, normal,
                 penalty_amount=penalty_amount)
         else:
-            return -(u_plus - u_minus)/self._gap_resistance
+            return -(u_plus - u_minus)/self._intfc_resistance
 
 
 @dataclass_array_container
@@ -251,7 +289,7 @@ def _get_interface_boundaries_no_grad(
         return InterfaceWallBoundary(
             interface_tpair.ext.kappa,
             interface_tpair.ext.temperature,
-            gap_resistance=interface_resistance)
+            interface_resistance=interface_resistance)
 
     bdry_factories = {
         (wall_2_dd, wall_1_dd): make_wall_boundary,
@@ -288,7 +326,7 @@ def _get_interface_boundaries(
             interface_tpair.ext.kappa,
             interface_tpair.ext.temperature,
             grad_u_plus=interface_tpair.ext.grad_temperature,
-            gap_resistance=interface_resistance)
+            interface_resistance=interface_resistance)
 
     bdry_factories = {
         (wall_2_dd, wall_1_dd): make_wall_boundary,
@@ -313,9 +351,10 @@ def add_interface_boundaries_no_grad(
         interface_resistance=None,
         comm_tag=None):
     """
+    Include the wall-wall interface boundaries for gradient calculation.
+
     Parameters
     ----------
-
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
@@ -337,7 +376,10 @@ def add_interface_boundaries_no_grad(
         Dictionary of boundary functions, one for each valid non-interface
         :class:`~grudge.dof_desc.BoundaryDomainTag` on the wall subdomain.
 
-    interface_resistance:
+    interface_resistance: float
+
+        Coefficient $R$ that models the thermal contact resistance between the
+        two wall subdomains.
 
     comm_tag: Hashable
         Tag for distributed communication
@@ -374,11 +416,10 @@ def add_interface_boundaries(
         wall_penalty_amount=None,
         comm_tag=None):
     """
-    Include the wall-wall interface boundaries.
+    Include the wall-wall interface boundaries for heat flux calculation.
 
     Parameters
     ----------
-
     dcoll: class:`~grudge.discretization.DiscretizationCollection`
 
         A discretization collection encapsulating the DG elements
@@ -404,7 +445,10 @@ def add_interface_boundaries(
         Dictionary of boundary functions, one for each valid non-interface
         :class:`~grudge.dof_desc.BoundaryDomainTag` on the wall subdomain.
 
-    interface_resistance:
+    interface_resistance: float
+
+        Coefficient $R$ that models the thermal contact resistance between the
+        two wall subdomains.
 
     wall_penalty_amount: float
 
@@ -448,7 +492,71 @@ def coupled_heat_operator(
         wall_1_temperature, wall_2_temperature,
         wall_1_kappa, wall_2_kappa,
         time=0.0, quadrature_tag=None, wall_penalty_amount=None,
-        interface_resistance=False, return_gradients=False):
+        interface_resistance=None, return_gradients=False):
+    r"""
+    Implement a simple thermally-coupled wall/wall operator.
+
+    Computes the RHS for a two-volume domain coupled by temperature and heat flux,
+    by augmenting *wall_boundaries* the boundaries for the interface and calling
+    the respective diffusion operators.
+
+    Parameters
+    ----------
+    dcoll: class:`~grudge.discretization.DiscretizationCollection`
+
+        A discretization collection encapsulating the DG elements
+
+    wall_dd: :class:`grudge.dof_desc.DOFDesc`
+
+        DOF descriptor for the wall volume.
+
+    wall_boundaries:
+
+        Dictionary of boundary objects for the wall subdomain, one for each
+        :class:`~grudge.dof_desc.BoundaryDomainTag` that represents a domain
+        boundary.
+
+    fluid_state: :class:`~mirgecom.gas_model.FluidState`
+
+        Fluid state object with the conserved state and dependent
+        quantities for the fluid volume.
+
+    wall_temperature: :class:`meshmode.dof_array.DOFArray`
+
+        Temperature for the wall volume.
+
+    wall_kappa: float or :class:`meshmode.dof_array.DOFArray`
+
+        Thermal conductivity for the wall volume.
+
+    time:
+
+        Time
+
+    quadrature_tag:
+
+        An identifier denoting a particular quadrature discretization to use during
+        operator evaluations.
+
+    wall_penalty_amount: float
+
+        Coefficient $c$ for the interior penalty on the heat flux.
+        Not used if *interface_resistance* is `True`.
+
+    interface_resistance: float
+
+        Coefficient $R$ that models the thermal contact resistance between the
+        two wall subdomains.
+
+    return_gradients: bool
+
+        If `True`, returns the respective temperature gradients for each one of the
+        wall subdomains.
+
+    Returns
+    -------
+        The tuple `(fluid_rhs, wall_rhs)`.
+    """
 
     if wall_penalty_amount is None:
         wall_penalty_amount = 1.0
