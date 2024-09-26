@@ -156,15 +156,6 @@ class SolidWallModel:
             return material_densities
         return sum(material_densities)
 
-    def decomposition_progress(self, material_densities) -> DOFArray:
-        r"""Evaluate the progress ratio $\tau$ of the decomposition."""
-        mass = self.solid_density(material_densities)
-        if self._decomposition_func:
-            # for materials that decompose when heated
-            return self._decomposition_func(mass)
-        actx = mass.array_context
-        return actx.np.zeros_like(mass) + 1.0
-
     def heat_capacity(self, temperature: DOFArray = None, tau=None) -> DOFArray:
         """Return the wall heat_capacity."""
         return self._heat_capacity_func(temperature=temperature, tau=tau)
@@ -211,6 +202,15 @@ class SolidWallModel:
             density=density,
             thermal_conductivity=kappa,
             temperature=temperature)
+
+    def decomposition_progress(self, material_densities) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the decomposition."""
+        mass = self.solid_density(material_densities)
+        if self._decomposition_func:
+            # for materials that decompose when heated
+            return self._decomposition_func(mass)
+        actx = mass.array_context
+        return actx.np.zeros_like(mass) + 1.0
 
 
 @dataclass_array_container
