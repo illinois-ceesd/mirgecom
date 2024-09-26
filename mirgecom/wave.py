@@ -31,7 +31,9 @@ import numpy as np
 import numpy.linalg as la  # noqa
 from pytools.obj_array import flat_obj_array
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from grudge.dof_desc import as_dofdesc
 from grudge.trace_pair import TracePair, interior_trace_pairs
+import grudge.geometry as geo
 import grudge.op as op
 
 
@@ -40,7 +42,7 @@ def _flux(dcoll, c, w_tpair):
     v = w_tpair[1:]
 
     actx = w_tpair.int[0].array_context
-    normal = actx.thaw(dcoll.normal(w_tpair.dd))
+    normal = geo.normal(actx, dcoll, w_tpair.dd)
 
     flux_weak = flat_obj_array(
         np.dot(v.avg, normal),
@@ -48,7 +50,7 @@ def _flux(dcoll, c, w_tpair):
         )
 
     # upwind
-    flux_weak += flat_obj_array(
+    flux_weak = flux_weak + flat_obj_array(
         0.5*(u.ext-u.int),
         0.5*normal*np.dot(normal, v.ext-v.int),
         )
@@ -96,7 +98,7 @@ def wave_operator(dcoll, c, w, *, comm_tag=None):
             +  # noqa: W504
             op.face_mass(dcoll,
                 _flux(dcoll, c=c,
-                      w_tpair=TracePair(BTAG_ALL, interior=dir_bval,
+                      w_tpair=TracePair(as_dofdesc(BTAG_ALL), interior=dir_bval,
                                         exterior=dir_bc))
                 + sum(
                     _flux(dcoll, c=c, w_tpair=tpair)

@@ -11,7 +11,7 @@ dependencies:
 - gh
 - mypy
 - conda-forge::numpy
-- pocl
+- pocl<6
 - clinfo
 - pudb
 - islpy

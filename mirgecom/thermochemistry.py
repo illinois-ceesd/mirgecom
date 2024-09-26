@@ -85,8 +85,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
         # This only affects chemistry-related evaluations and does not interfere
         # with the actual fluid state.
         def get_concentrations(self, rho, mass_fractions):
-            # concs = self.inv_molecular_weights * rho * mass_fractions
-            concs = self.iwts * rho * mass_fractions
+            concs = self.inv_molecular_weights * rho * mass_fractions
             # ensure non-negative concentrations
             zero = self._pyro_zeros_like(concs[0])
             for i in range(self.num_species):
@@ -177,8 +176,7 @@ def get_pyrometheus_wrapper_class(pyro_class, temperature_niter=5, zero_level=0.
 
             heat_rls = state.cv.mass*0.0
             for i in range(self.num_species):
-                # heat_rls = heat_rls - h_a[i]*w_dot[i]/(self.molecular_weights[i])
-                heat_rls = heat_rls - h_a[i]*w_dot[i]/(self.wts[i])
+                heat_rls = heat_rls - h_a[i]*w_dot[i]/(self.molecular_weights[i])
 
             return heat_rls*self.gas_constant*state.temperature
 
@@ -202,8 +200,8 @@ def get_pyrometheus_wrapper_class_from_cantera(cantera_soln, temperature_niter=5
     zero_level: float
         Squash concentrations below this level to 0. (default=0.)
     """
-    import pyrometheus as pyro
-    pyro_class = pyro.get_thermochem_class(cantera_soln)
+    from pyrometheus.codegen.python import get_thermochem_class
+    pyro_class = get_thermochem_class(cantera_soln)
     return get_pyrometheus_wrapper_class(pyro_class,
                                          temperature_niter=temperature_niter,
                                          zero_level=zero_level)
