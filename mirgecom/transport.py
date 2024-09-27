@@ -218,7 +218,7 @@ class SutherlandTransport(TransportModel):
     individual viscosities by the respective mass fractions.
 
     .. math::
-        \mu = \sum_i \mu_i
+        \mu = \sum_i Y_i \mu_i
 
     The thermal conductivity is given by the Eucken correlation as
 
@@ -233,7 +233,6 @@ class SutherlandTransport(TransportModel):
     .. automethod:: species_diffusivity
     """
 
-    # air-like defaults here
     def __init__(self, a_sutherland, t_sutherland,
                  prandtl=None, species_diffusivity=None, lewis=None):
         """Initialize Sutherland law coefficients and parameters.
@@ -270,7 +269,7 @@ class SutherlandTransport(TransportModel):
                        eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$.
 
-        This model assumes no bulk viscosity.
+        This model assumes zero bulk viscosity.
         """
         actx = cv.mass.array_context
         return actx.np.zeros_like(cv.mass)
