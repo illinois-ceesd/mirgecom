@@ -73,6 +73,7 @@ from grudge.dof_desc import (
     DISCR_TAG_BASE,
 )
 
+import grudge.geometry as geo
 import grudge.op as op
 
 from mirgecom.euler import (
@@ -120,7 +121,7 @@ def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
     actx = tpair.int.array_context
     dd_trace = tpair.dd
     dd_allfaces = dd_trace.with_boundary_tag(FACE_RESTR_ALL)
-    normal = actx.thaw(dcoll.normal(dd_trace))
+    normal = geo.normal(actx, dcoll, dd_trace)
     flux = outer(numerical_flux_func(tpair.int, tpair.ext), normal)
     return op.project(dcoll, dd_trace, dd_allfaces, flux)
 

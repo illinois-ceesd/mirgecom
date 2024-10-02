@@ -50,6 +50,7 @@ from grudge.dof_desc import (
     VolumeDomainTag,
     DISCR_TAG_BASE,
 )
+import grudge.geometry as geo
 import grudge.op as op
 from mirgecom.fluid import (
     make_conserved,
@@ -356,7 +357,7 @@ def inviscid_flux_on_element_boundary(
             state_pair.dd, dd_allfaces_quad,
             numerical_flux_func(
                 state_pair, gas_model,
-                state_pair.int.array_context.thaw(dcoll.normal(state_pair.dd))))
+                geo.normal(state_pair.int.array_context, dcoll, state_pair.dd)))
 
     def _boundary_flux(bdtag, boundary, state_minus_quad):
         dd_bdry_quad = dd_vol_quad.with_domain_tag(bdtag)
@@ -475,11 +476,11 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     gamma_rr = gas_model.eos.gamma(state_rr.cv, state_rr.temperature)
 
     def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
-        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # type: ignore
         return actx.np.where(
             actx.np.less(f2, epsilon),
-            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
-            (y - x) / actx.np.log(y / x)
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),  # type: ignore
+            (y - x) / actx.np.log(y / x)  # type: ignore
         )
 
     # Primitive variables for left and right states
@@ -556,11 +557,11 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
     pot_avg = 0.5*(pot_ll + pot_rr)
 
     def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
-        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # type: ignore
         return actx.np.where(
             actx.np.less(f2, epsilon),
-            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
-            (y - x) / actx.np.log(y / x)
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),  # type: ignore
+            (y - x) / actx.np.log(y / x)  # type: ignore
         )
 
     theta_mean = ln_mean(theta_ll, theta_rr)

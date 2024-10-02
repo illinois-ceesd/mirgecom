@@ -28,16 +28,20 @@ import numpy as np
 import logging
 import pytest
 import importlib
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.integrators import (
     euler_step, lsrk54_step, lsrk144_step,
     rk4_step, ssprk43_step
 )
+from mirgecom.steppers import advance_state
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize(("integrator", "method_order"),
@@ -148,7 +152,6 @@ if found:
         SSPRK22MethodBuilder, SSPRK33MethodBuilder,
         )
     from leap.rk.imex import KennedyCarpenterIMEXARK4MethodBuilder
-    from mirgecom.steppers import advance_state
 
     @pytest.mark.parametrize(("method", "method_order"), [
         (ODE23MethodBuilder("y", use_high_order=False), 2),

@@ -52,13 +52,17 @@ from mirgecom.boundary import (
 from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
     basic_coupled_ns_heat_operator as coupled_ns_heat_operator,
 )
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 import pytest
 
 import logging
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -153,6 +157,11 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 def test_thermally_coupled_fluid_wall(
         actx_factory, order, use_overintegration, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     from pytools.convergence import EOCRecorder
@@ -160,6 +169,7 @@ def test_thermally_coupled_fluid_wall(
     eoc_rec_wall = EOCRecorder()
 
     scales = [6, 8, 12]
+    dt = 0.
 
     for n in scales:
         global_mesh = get_box_mesh(2, -1, 1, n)
@@ -180,7 +190,7 @@ def test_thermally_coupled_fluid_wall(
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
         else:
-            quadrature_tag = None
+            quadrature_tag = DISCR_TAG_BASE
 
         dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
         dd_vol_wall = DOFDesc(VolumeDomainTag("Wall"), DISCR_TAG_BASE)
@@ -258,7 +268,11 @@ def test_thermally_coupled_fluid_wall(
         # This perturbation function is nonzero at the interface, so the two alphas
         # need to be the same (otherwise the perturbations will decay at different
         # rates and a discontinuity will form)
-        assert abs(fluid_alpha - np.max(actx.to_numpy(wall_alpha))) < 1e-12
+        if np.isscalar(wall_alpha):
+            max_wall_alpha = wall_alpha
+        else:
+            max_wall_alpha = actx.to_numpy(actx.np.max(wall_alpha))
+        assert abs(fluid_alpha - max_wall_alpha) < 1e-12
 
         fluid_perturb_func = partial(perturb_func, fluid_alpha)
         wall_perturb_func = partial(perturb_func, wall_alpha)
@@ -454,6 +468,11 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     Analytic solution prescribed as initial condition, then the RHS is assessed
     to ensure that it is nearly zero.
     """
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     dim = 2
@@ -477,7 +496,7 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)
@@ -554,6 +573,11 @@ def test_orthotropic_flux(
         actx_factory, use_overintegration, use_radiation, use_noslip,
         visualize=False):
     """Check the RHS shape for orthotropic kappa cases."""
+    try:
+        from grudge.discretization import PartID  # noqa: F401
+    except ImportError:
+        pytest.skip("Test requires a coupling-enabled branch of grudge.")
+
     actx = actx_factory()
 
     dim = 2
@@ -575,7 +599,7 @@ def test_orthotropic_flux(
     dcoll = create_discretization_collection(
         actx, volume_meshes, order=order, quadrature_order=2*order+1)
 
-    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
 
     dd_vol_fluid = DOFDesc(VolumeDomainTag("Fluid"), DISCR_TAG_BASE)
     dd_vol_solid = DOFDesc(VolumeDomainTag("Solid"), DISCR_TAG_BASE)

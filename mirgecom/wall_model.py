@@ -152,7 +152,7 @@ class SolidWallModel:
         """Return the wall density for all components."""
         return self._density_func()
 
-    def heat_capacity(self, temperature: DOFArray = None) -> DOFArray:
+    def heat_capacity(self, temperature: Optional[DOFArray] = None) -> DOFArray:
         """Return the wall heat_capacity for all components."""
         return self._heat_capacity_func(temperature)
 
@@ -161,31 +161,33 @@ class SolidWallModel:
         return self._enthalpy_func(temperature)
 
     def thermal_diffusivity(self, mass: DOFArray, temperature: DOFArray,
-            thermal_conductivity: DOFArray = None) -> DOFArray:
+            thermal_conductivity: Optional[DOFArray] = None) -> DOFArray:
         """Return the wall thermal diffusivity for all components."""
         if thermal_conductivity is None:
             thermal_conductivity = self.thermal_conductivity(temperature)
-        return thermal_conductivity/(mass * self.heat_capacity(temperature))
+        denom = mass * self.heat_capacity(temperature)  # type: ignore
+        return thermal_conductivity/denom
 
     def thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
         """Return the wall thermal conductivity for all components."""
         return self._thermal_conductivity_func(temperature)
 
     def get_temperature(self, wv: SolidWallConservedVars,
-            tseed: DOFArray = None, niter: int = 3) -> DOFArray:
+            tseed: Optional[DOFArray] = None, niter: int = 3) -> DOFArray:
         """Evaluate the temperature based on the energy."""
         if tseed is not None:
-            temp = tseed*1.0
+            temp = tseed*1.0  # type: ignore
             for _ in range(0, niter):
-                h = self.enthalpy(temp)
-                cp = self.heat_capacity(temp)
-                temp = temp - (h - wv.energy/wv.mass)/cp
-            return temp
+                h = self.enthalpy(temp)  # type: ignore
+                cp = self.heat_capacity(temp)  # type: ignore
+                temp = temp - (h - wv.energy/wv.mass)/cp  # type: ignore
+            return temp  # type: ignore
 
-        return wv.energy/(self.density()*self.heat_capacity())
+        return wv.energy/(self.density()*self.heat_capacity())  # type: ignore
 
     def dependent_vars(self, wv: SolidWallConservedVars,
-            tseed: DOFArray = None, niter: int = 3) -> SolidWallDependentVars:
+            tseed: Optional[DOFArray] = None,
+                       niter: int = 3) -> SolidWallDependentVars:
         """Return solid wall dependent variables."""
         temperature = self.get_temperature(wv, tseed, niter)
         kappa = self.thermal_conductivity(temperature)
@@ -255,7 +257,7 @@ class PorousWallEOS:
 
     @abstractmethod
     def thermal_conductivity(self, temperature: DOFArray,
-                             tau: Optional[DOFArray]) -> DOFArray:
+                             tau: Optional[DOFArray]) -> Union[np.ndarray, DOFArray]:
         r"""Evaluate the thermal conductivity $\kappa$ of the solid."""
         raise NotImplementedError()
 
@@ -315,14 +317,14 @@ class PorousWallTransport:
     def volume_viscosity(self, cv: ConservedVars, dv: GasDependentVars,
             wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         r"""Get the 2nd viscosity coefficent, $\lambda$."""
-        return (self.bulk_viscosity(cv, dv, wv, eos)
-            - 2./3. * self.viscosity(cv, dv, wv, eos))
+        return (self.bulk_viscosity(cv, dv, wv, eos)  # type: ignore
+            - 2./3. * self.viscosity(cv, dv, wv, eos))  # type: ignore
 
     def viscosity(self, cv: ConservedVars, dv: GasDependentVars,
             wv: PorousWallVars, eos: GasEOS) -> DOFArray:
         """Viscosity of the gas through the porous wall."""
-        return 1.0/wv.void_fraction*(
-            self.base_transport.viscosity(cv, dv, eos))
+        return 1.0/wv.void_fraction*(  # type: ignore
+            self.base_transport.viscosity(cv, dv, eos))  # type: ignore
 
     def thermal_conductivity(self, cv: ConservedVars, dv: GasDependentVars,
             wv: PorousWallVars, eos: GasEOS,
@@ -340,12 +342,13 @@ class PorousWallTransport:
         """
         kappa_s = wall_eos.thermal_conductivity(dv.temperature, wv.tau)
         kappa_g = self.base_transport.thermal_conductivity(cv, dv, eos)
-        return (wv.density*kappa_s + cv.mass*kappa_g)/(cv.mass + wv.density)
+        return (wv.density*kappa_s  # type: ignore
+                + cv.mass*kappa_g)/(cv.mass + wv.density)  # type: ignore
 
     def species_diffusivity(self, cv: ConservedVars, dv: GasDependentVars,
-            wv: PorousWallVars, eos: GasEOS) -> DOFArray:
+            wv: PorousWallVars, eos: GasEOS) -> np.ndarray:
         """Mass diffusivity of gaseous species through the porous wall."""
-        return 1.0/wv.tortuosity*(
+        return 1.0/wv.tortuosity*(  # type: ignore
             self.base_transport.species_diffusivity(cv, dv, eos))
 
     def transport_vars(self, cv: ConservedVars, dv: GasDependentVars,
@@ -355,8 +358,8 @@ class PorousWallTransport:
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv, dv, wv, eos),
             viscosity=self.viscosity(cv, dv, wv, eos),
-            thermal_conductivity=self.thermal_conductivity(cv, dv, wv, eos,
-                                                           wall_eos),
+            thermal_conductivity=self.thermal_conductivity(  # type: ignore
+                cv, dv, wv, eos, wall_eos),
             species_diffusivity=self.species_diffusivity(cv, dv, wv, eos)
         )
 
@@ -444,9 +447,10 @@ class PorousFlowModel:
             actx = cv.array_context
             temp = tseed + actx.np.zeros_like(wv.tau)
         else:
-            temp = tseed*1.0
+            temp = tseed*1.0  # type: ignore
 
-        internal_energy = cv.energy - 0.5/cv.mass*np.dot(cv.momentum, cv.momentum)
+        internal_energy = \
+            cv.energy - 0.5/cv.mass*np.dot(cv.momentum, cv.momentum)  # type: ignore
 
         for _ in range(0, self.temperature_iteration):
             eps_rho_e = self.internal_energy(cv, wv, temp)
@@ -479,9 +483,10 @@ class PorousFlowModel:
         .. math::
             \rho e = \epsilon_s \rho_s e_s + \epsilon_g \rho_g e_g
         """
-        return (cv.mass*self.eos.get_internal_energy(temperature,
+        return (cv.mass*self.eos.get_internal_energy(temperature,  # type: ignore
                                                      cv.species_mass_fractions)
-                + wv.density*self.wall_eos.enthalpy(temperature, wv.tau))
+                + wv.density*self.wall_eos.enthalpy(temperature,  # type: ignore
+                                                    wv.tau))
 
     def heat_capacity(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
@@ -490,5 +495,7 @@ class PorousFlowModel:
         .. math::
             \rho C_v = \epsilon_s \rho_s {C_p}_s + \epsilon_g \rho_g {C_v}_g
         """
-        return (cv.mass*self.eos.heat_capacity_cv(cv, temperature)
-                + wv.density*self.wall_eos.heat_capacity(temperature, wv.tau))
+        term1 = cv.mass*self.eos.heat_capacity_cv(cv, temperature)
+        term2 = self.wall_eos.heat_capacity(temperature, wv.tau)
+        term2 = wv.density*term2  # type: ignore
+        return term1 + term2

@@ -29,13 +29,15 @@ import pymbolic as pmbl
 import mirgecom.math as mm
 import pytest
 from pytools.obj_array import make_obj_array
+import grudge.geometry as geo
 from grudge import op
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 from meshmode.dof_array import DOFArray
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
@@ -54,6 +56,9 @@ from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def test_diffusion_boundary_conditions(actx_factory):
@@ -216,7 +221,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
             lower_bdtag = BoundaryDomainTag("-"+str(i+1))
             upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             upper_grad_u = op.project(dcoll, "vol", upper_bdtag, exact_grad_u)
-            normal = actx.thaw(dcoll.normal(upper_bdtag))
+            normal = geo.normal(actx, dcoll, upper_bdtag)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)

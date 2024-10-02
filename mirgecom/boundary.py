@@ -53,6 +53,7 @@ THE SOFTWARE.
 
 from abc import ABCMeta, abstractmethod
 import numpy as np
+import grudge.geometry as geo
 import grudge.op as op
 from arraycontext import outer, get_container_context_recursively
 from meshmode.discretization.connection import FACE_RESTR_ALL
@@ -624,7 +625,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         boundary_state_pair = TracePair(dd=dd_bdry,
                                         interior=state_minus,
                                         exterior=state_plus)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
         return numerical_flux_func(boundary_state_pair, gas_model, normal)
 
     def viscous_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
@@ -689,7 +690,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         dd_bdry = as_dofdesc(dd_bdry)
 
         actx = state_minus.array_context
-        normal = actx.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(actx, dcoll, dd_bdry)
 
         state_bc = self.state_bc(dcoll=dcoll, dd_bdry=dd_bdry,
                                  gas_model=gas_model,
@@ -746,7 +747,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         # Mengaldo Eqn (50)+
         state_bc = self.state_bc(dcoll, dd_bdry, gas_model, state_minus, **kwargs)
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         return outer(state_bc.cv, nhat)
 
@@ -788,7 +789,7 @@ class MengaldoBoundaryCondition(FluidBoundary):
         # Mengaldo Eqn (50)+
         temperature_bc = self.temperature_bc(dcoll, dd_bdry, state_minus, **kwargs)
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         return outer(temperature_bc, nhat)
 
@@ -904,7 +905,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                             exterior=boundary_state.cv)
 
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         return outer(self._grad_num_flux_func(cv_pair.int, cv_pair.ext), nhat)
 
@@ -914,7 +915,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                   state_minus, **kwargs):
         # Feed a boundary temperature to numerical flux for grad op
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
         bnd_tpair = TracePair(dd_bdry,
                               interior=state_minus.temperature,
                               exterior=self._bnd_temperature_func(
@@ -935,7 +936,7 @@ class PrescribedFluidBoundary(FluidBoundary):
                                                         gas_model=gas_model,
                                                         state_minus=state_minus,
                                                         **kwargs)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
         return numerical_flux_func(boundary_state_pair, gas_model, normal)
 
     # Returns the flux to be used by the divergence operator when computing the
@@ -1026,18 +1027,18 @@ class DummyBoundary(FluidBoundary):
                                  numerical_flux_func=inviscid_facial_flux_rusanov,
                                  **kwargs):
         """Get the inviscid boundary flux for the divergence operator."""
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
-        return inviscid_flux(state_minus, gas_model=gas_model)@normal
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
+        return inviscid_flux(state_minus)@normal
 
     def cv_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Get the cv flux for *dd_bdry* for use in the gradient operator."""
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
         return outer(state_minus.cv, normal)
 
     def temperature_gradient_flux(self, dcoll, dd_bdry, gas_model, state_minus,
                                   **kwargs):
         """Get the T flux for *dd_bdry* for use in the gradient operator."""
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
         return state_minus.temperature*normal
 
     def viscous_divergence_flux(self, dcoll, dd_bdry, gas_model, state_minus,
@@ -1045,7 +1046,7 @@ class DummyBoundary(FluidBoundary):
                                 numerical_flux_func=viscous_facial_flux_central,
                                 **kwargs):
         """Get the viscous flux for *dd_bdry* for use in the divergence operator."""
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
         return viscous_flux(state_minus, grad_cv_minus, grad_t_minus)@normal
 
 
@@ -1074,7 +1075,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # set the normal momentum to 0
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, nhat)
@@ -1085,7 +1086,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # set the normal momentum to 0
         mom_bc = self._slip.momentum_bc(state_minus.momentum_density, nhat)
@@ -1125,7 +1126,7 @@ class AdiabaticSlipBoundary(MengaldoBoundaryCondition):
         to ensure zero flux of species across the boundary.
         """
         dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
         state_bc = self.state_bc(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
             state_minus=state_minus, **kwargs)
@@ -1313,7 +1314,7 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         For ideal gas, the internal energy is obtained directly from pressure.
         """
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
         # boundary-normal velocity
         boundary_vel = np.dot(state_minus.velocity, nhat)*nhat
         boundary_speed = actx.np.sqrt(np.dot(boundary_vel, boundary_vel))
@@ -1361,7 +1362,7 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
     def state_bc(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Return state."""
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # boundary-normal velocity
         boundary_vel = np.dot(state_minus.velocity, nhat)*nhat
@@ -1447,7 +1448,7 @@ class RiemannInflowBoundary(MengaldoBoundaryCondition):
         [Mengaldo_2014]_ eqn. 40 if super-sonic, 41 if sub-sonic.
         """
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         v_plus = np.dot(self._cv_plus.velocity, nhat)
         rho_plus = self._cv_plus.mass
@@ -1568,7 +1569,7 @@ class RiemannOutflowBoundary(MengaldoBoundaryCondition):
         [Mengaldo_2014]_ in eqs. 8 to 18.
         """
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         v_plus = np.dot(self._cv_plus.velocity, nhat)
         c_plus = gas_model.eos.sound_speed(self._cv_plus, self._t_plus)
@@ -1687,7 +1688,7 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
         """Return BC fluid state."""
         dd_bdry = as_dofdesc(dd_bdry)
 
-        nhat = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(state_minus.array_context, dcoll, dd_bdry)
 
         mom_bc = self._slip.momentum_bc(state_minus.momentum_density, nhat)
         t_bc = self.temperature_bc(dcoll, dd_bdry, state_minus, **kwargs)
@@ -1716,7 +1717,7 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
         to ensure zero flux of species across the boundary.
         """
         dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
         state_bc = self.state_bc(
             dcoll=dcoll, dd_bdry=dd_bdry, gas_model=gas_model,
             state_minus=state_minus, **kwargs)
@@ -1745,7 +1746,7 @@ class IsothermalSlipWallBoundary(MengaldoBoundaryCondition):
         actx = state_minus.array_context
 
         # Grab a unit normal to the boundary
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         # set the normal momentum to 0
         mom_plus = self._slip.momentum_plus(state_minus.momentum_density, nhat)
@@ -1873,7 +1874,7 @@ class AdiabaticNoslipWallBoundary(MengaldoBoundaryCondition):
                    normal, **kwargs):
         """Return grad(CV) to be used in the boundary calculation of viscous flux."""
         dd_bdry = as_dofdesc(dd_bdry)
-        normal = state_minus.array_context.thaw(dcoll.normal(dd_bdry))
+        normal = geo.normal(state_minus.array_context, dcoll, dd_bdry)
 
         grad_species_mass_bc = self._impermeable.grad_species_mass_bc(
             state_minus, grad_cv_minus, normal)
@@ -1946,7 +1947,7 @@ class LinearizedOutflowBoundary(MengaldoBoundaryCondition):
         """Non-reflecting outflow."""
         dim = state_minus.dim
         actx = state_minus.array_context
-        nhat = actx.thaw(dcoll.normal(dd_bdry))
+        nhat = geo.normal(actx, dcoll, dd_bdry)
 
         rtilde = state_minus.cv.mass - self._ref_mass
         utilde = state_minus.velocity - self._ref_velocity
@@ -2064,7 +2065,7 @@ class LinearizedInflowBoundary(MengaldoBoundaryCondition):
     def state_plus(self, dcoll, dd_bdry, gas_model, state_minus, **kwargs):
         """Non-reflecting inflow."""
         actx = state_minus.array_context
-        nhat = -1.0*actx.thaw(dcoll.normal(dd_bdry))
+        nhat = -1.0*geo.normal(actx, dcoll, dd_bdry)
 
         # rtilde = state_minus.cv.mass - self._ref_mass
         utilde = state_minus.velocity - self._ref_velocity

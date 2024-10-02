@@ -952,7 +952,8 @@ def replace_fluid_state(
 def make_entropy_projected_fluid_state(
         discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model):
     """Projects the entropy vars to target manifold, computes the CV from that."""
-    from grudge.interpolation import volume_and_surface_quadrature_interpolation
+    from grudge.interpolation import volume_and_surface_quadrature_interpolation  \
+        # pylint: disable=no-name-in-module
 
     # Interpolate to the volume and surface (concatenated) quadrature
     # discretizations: v = [v_vol, v_surf]
