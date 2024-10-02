@@ -43,6 +43,10 @@ from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
 
 
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
+
+
 @pytest.mark.parametrize("order", [1, 4])
 @pytest.mark.parametrize("my_material", ["fiber", "composite"])
 @pytest.mark.parametrize("my_eos", ["ideal", "mixture"])
@@ -82,7 +86,7 @@ def test_wall_eos(actx_factory, order, my_material, my_eos, use_diffused_interfa
 
         eos = PyrometheusMixture(pyro_obj, temperature_guess=cantera_soln.T)
 
-    if my_eos == "ideal":
+    else:
         eos = IdealSingleGas()
         y = None
 
@@ -90,6 +94,7 @@ def test_wall_eos(actx_factory, order, my_material, my_eos, use_diffused_interfa
 
     # {{{ Initialize wall model
 
+    material = None
     if my_material == "fiber":
         import mirgecom.materials.carbon_fiber as material_sample
         material = material_sample.FiberEOS(
@@ -151,9 +156,6 @@ def test_wall_eos(actx_factory, order, my_material, my_eos, use_diffused_interfa
         op.norm(dcoll, solid_state.pressure - 101325.0, np.inf)) < tol
     assert actx.to_numpy(
         op.norm(dcoll, solid_state.temperature - 900.0, np.inf)) < tol
-
-pytest_generate_tests = pytest_generate_tests_for_array_contexts(
-    [PytestPyOpenCLArrayContextFactory])
 
 
 def test_tacot_decomposition(actx_factory):
