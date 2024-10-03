@@ -550,7 +550,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     # To get separate inviscid operator, set inviscid_fluid_operator explicitly
     # or use ESDG.
     if inviscid_terms_on and inviscid_fluid_operator is None:
-        vol_term = vol_term - inviscid_flux(state=vol_state_quad)
+        vol_term = vol_term - inviscid_flux(state=vol_state_quad,
+                                            gas_model=gas_model)
         bnd_term = bnd_term - inviscid_flux_on_element_boundary(
             dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
             domain_bnd_states_quad, quadrature_tag=quadrature_tag,
