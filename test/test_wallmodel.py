@@ -145,12 +145,12 @@ def test_wall_eos(actx_factory, order, my_material, my_eos, use_diffused_interfa
     assert isinstance(solid_state.wv.density, DOFArray)
 
     if my_material == "fiber":
-        assert np.max(actx.to_numpy(wv.density - 168.0)) < tol
-        assert np.max(actx.to_numpy(wv.void_fraction)) - 1.00 < tol
+        assert actx.to_numpy(actx.np.max(wv.density - 168.0)) < tol
+        assert actx.to_numpy(actx.np.max(wv.void_fraction)) - 1.00 < tol
 
     if my_material == "composite":
-        assert np.max(actx.to_numpy(wv.density - 280.0)) < tol
-        assert np.max(actx.to_numpy(wv.void_fraction)) - 1.00 < tol
+        assert actx.to_numpy(actx.np.max(wv.density - 280.0)) < tol
+        assert actx.to_numpy(actx.np.max(wv.void_fraction)) - 1.00 < tol
 
     assert actx.to_numpy(
         op.norm(dcoll, solid_state.pressure - 101325.0, np.inf)) < tol

@@ -474,7 +474,7 @@ class PorousFlowModel:
         """
         if isinstance(self.eos, MixtureEOS):
             return self.eos.pressure(cv, temperature)/wv.void_fraction
-        return 1.0/wv.void_fraction*(
+        return 1.0/wv.void_fraction*(  # type: ignore
             cv.mass*self.eos.gas_const()*temperature)  # type: ignore
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
