@@ -464,7 +464,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
+@pytest.mark.parametrize("quad", [True, False])
+def test_diffusion_discontinuous_kappa(actx_factory, order, quad, visualize=False):
     """
     Checks the accuracy of the diffusion operator for an kappa field that has a
     jump across an element face.
@@ -478,6 +479,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     dcoll = create_discretization_collection(actx, mesh, order)
 
     nodes = actx.thaw(dcoll.nodes())
+    qtag = DISCR_TAG_QUAD if quad else DISCR_TAG_BASE
 
     # Set up a 1D heat equation interface problem, apply the diffusion operator to
     # the exact steady state solution, and check that it's zero
@@ -511,7 +513,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     def get_rhs(t, u, return_grad_u=False):
         return diffusion_operator(
             dcoll, kappa=kappa, boundaries=boundaries, u=u,
-            return_grad_u=return_grad_u)
+            quadrature_tag=qtag, return_grad_u=return_grad_u)
 
     rhs, grad_u_steady = get_rhs(0, u_steady, return_grad_u=True)
 
