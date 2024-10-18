@@ -101,6 +101,7 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
+            export PYTEST_ADDOPTS="-p no:warnings"
             python -m pip install pytest pytest-timeout
             python -m pytest --timeout=60  --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
