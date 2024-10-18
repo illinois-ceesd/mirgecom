@@ -51,7 +51,8 @@ from mirgecom.integrators import rk4_step, euler_step
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticSlipBoundary,
-    IsothermalWallBoundary
+    IsothermalWallBoundary,
+    FarfieldBoundary
 )
 from mirgecom.initializers import (
     Uniform,
@@ -109,7 +110,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          rotation_angle=0, add_pulse=False, nsteps=20,
          mesh_filename=None, euler_timestepping=False,
          geometry_name=None, init_name=None, velocity_field=None,
-         density_field=None, inviscid_flux=None):
+         density_field=None, inviscid_flux=None,
+         quad_order=None):
     """Drive the example."""
     if casename is None:
         casename = "gas-in-box"
@@ -119,6 +121,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         init_name = "quiescent"
     if inviscid_flux is None:
         inviscid_flux = "rusanov"
+    if quad_order is None:
+        quad_order = 2*order if use_tpe else order + 3
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -156,8 +160,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 100
-    nviz = 1
-    nhealth = 1
+    nviz = 100
+    nhealth = 100
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -202,7 +206,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             box_ll = -1
             box_ur = 1
             r0 = .333
-            r1 = 1.0
+            r1 = 8.0
             center = make_obj_array([0, 0, 0])
             if geometry_name == "box":
                 generate_mesh = partial(
@@ -212,8 +216,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             elif geometry_name == "annulus":
                 generate_mesh = partial(
                     generate_annular_cylinder_mesh, inner_radius=r0, n=12,
-                    outer_radius=r1, nelements_per_axis=(10, 72, 3), periodic=True,
-                    group_cls=group_cls, center=center)
+                    outer_radius=r1, nelements_per_axis=(100, 200, 3), periodic=True,
+                    group_cls=group_cls, center=center, dim=dim)
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
@@ -246,7 +250,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             theta = rotation_angle/180.0 * np.pi
             local_mesh = rotate_mesh_around_axis(local_mesh, theta=theta)
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=quad_order)
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.
 
@@ -270,11 +275,16 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     rho_init = 1.2039086127319172
     velocity_init = 0*nodes
+    vinit = make_obj_array([0, 0, 0])[:dim]
 
     if velocity_field == "rotational":
         vmax = 280.0
         velocity_init[0] = -vmax*nodes[1]/r1
         velocity_init[1] = vmax*nodes[0]/r1
+    elif geometry_name == "annulus":
+        vmax = 65.0
+        vinit = make_obj_array([vmax, 0])
+        velocity_init = 0*nodes + vinit
 
     if density_field == "gaussian":
         r2 = np.dot(nodes, nodes)/(r1*r1)
@@ -340,6 +350,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
                               species_mass_fractions=can_y, velocity=velocity_init)
         init_t = can_t
+        init_p = can_p
     else:
         use_reactions = False
         eos = IdealSingleGas(gamma=1.4)
@@ -352,16 +363,19 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             species_diffusivity = np.array([spec_diff * 1./float(j+1)
                                             for j in range(nspecies)])
 
-        initializer = Uniform(velocity=velocity_init, pressure=101325,
+        init_p = 101325
+        initializer = Uniform(velocity=velocity_init, pressure=init_p,
                               rho=rho_init,
                               species_mass_fractions=species_y)
         init_t = 293.15
-
     temperature_seed = init_t * ones
     temperature_seed = force_evaluation(actx, temperature_seed)
 
     wall_bc = IsothermalWallBoundary(wall_temperature=init_t) \
         if use_navierstokes else AdiabaticSlipBoundary()
+    farfield_bc = FarfieldBoundary(free_stream_velocity=vinit,
+                                   free_stream_temperature=init_t,
+                                   free_stream_pressure=init_p)
 
     # initialize parameters for transport model
     transport = None
@@ -579,6 +593,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                     boundaries[BoundaryDomainTag(f"-{axis_names[idir]}")] = wall_bc
         else:
             boundaries = {BTAG_ALL: wall_bc}
+    elif geometry_name == "annulus" and dim==2:
+        boundaries[BoundaryDomainTag("-r")] = wall_bc
+        boundaries[BoundaryDomainTag("+r")] = farfield_bc
 
     def mfs(cv, tseed):
         return make_fluid_state(cv, gas_model, limiter_func=limiter_func,
@@ -640,8 +657,11 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     def my_write_viz(step, t, gas_state):
         dv = gas_state.dv
         cv = gas_state.cv
+        gamma = eos.gamma()
+        entropy = actx.np.sqrt(dv.pressure / cv.mass**gamma)
         viz_fields = [("cv", cv),
-                      ("dv", dv)]
+                      ("dv", dv),
+                      ("entropy", entropy)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -736,6 +756,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     def my_rhs(t, stepper_state):
         gas_state = stepper_state_to_gas_state(stepper_state)
+        # gas_rhs = 0*gas_state.cv
         gas_rhs = fluid_operator(dcoll, state=gas_state, time=t,
                                  boundaries=boundaries,
                                  inviscid_numerical_flux_func=inviscid_flux_func,

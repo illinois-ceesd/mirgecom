@@ -34,6 +34,8 @@ from arraycontext import get_container_context_recursively
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DD_VOLUME_ALL
+from meshmode.discretization.poly_element import TensorProductElementGroupBase
+from meshmode.mesh.generation import generate_regular_rect_mesh
 
 from logpyle import IntervalTimer, set_dt
 
@@ -118,7 +120,8 @@ def _advection_flux_interior(dcoll, state_tpair, velocity):
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
          casename=None, rst_filename=None,
-         init_type=None):
+         init_type=None, order=4, quad_order=7,
+         tpe=False):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -149,17 +152,21 @@ def main(actx_class, use_esdg=False,
     else:
         timestepper = rk4_step
 
-    nsteps = 2000
+    # nsteps = 5000
     current_cfl = 1.0
-    current_dt = 1e-2
-    t_final = nsteps * current_dt
+    current_dt = 1e-3
+    # t_final = nsteps * current_dt
     current_t = 0
     constant_cfl = False
+    geom_scale = 1e-3
+    nsteps_period = 1000
+    period = nsteps_period*current_dt
+    t_final = 2*period
 
     # some i/o frequencies
     nstatus = 1
     nrestart = 5
-    nviz = 1
+    nviz = 10
     nhealth = 1
 
     # Bunch of problem setup stuff
@@ -167,12 +174,11 @@ def main(actx_class, use_esdg=False,
     if init_type == "mengaldo":
         dim = 2
 
-    nel_1d = 8
-    order = 1
+    nel_1d = 4
+    # order = 1
 
     advect = True
     diffuse = False
-    geom_scale = 1e-3
     # wavelength = 2 * np.pi * geom_scale
     wavelength = geom_scale
     wavenumber = 2 * np.pi / wavelength
@@ -192,11 +198,12 @@ def main(actx_class, use_esdg=False,
     # velocity[0] = .1
     # velocity[1] = .1
     velocity = velocity * geom_scale
-    p_adv = 2.
-    period = 100*current_dt
+    p_adv = 1.
 
-    def g(t):
-        return np.cos(np.pi*t/period)
+    def g(t, actx=None):
+        if actx is None:
+            return np.cos(np.pi*t/period)
+        return actx.np.cos(np.pi*t/period)
 
     # Note that *r* here is used only to get the array_context
     # The actual velocity is returned at points on the discretization
@@ -211,7 +218,7 @@ def main(actx_class, use_esdg=False,
         y = r_local[1]
         vx = y**p_adv
         vy = -1*x**p_adv
-        return np.pi * g(t) * make_obj_array([vx, vy])
+        return np.pi * g(t, actx) * make_obj_array([vx, vy])
 
     cos_axis = np.zeros(shape=(dim,))
     scal_fac = np.ones(shape=(dim,))
@@ -261,18 +268,20 @@ def main(actx_class, use_esdg=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        from meshmode.mesh.generation import generate_regular_rect_mesh
+        group_cls = TensorProductElementGroupBase if tpe else None
+        mesh_type = None if tpe else "X"
         generate_mesh = partial(
             generate_regular_rect_mesh,
             a=box_ll, b=box_ur, nelements_per_axis=nel_axes,
-            periodic=(True,)*dim, mesh_type="X"
+            periodic=(True,)*dim, mesh_type=mesh_type,
+            group_cls=group_cls
         )
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
-                                             quadrature_order=3*order+1)
+                                             quadrature_order=quad_order)
 
     nodes_base = actx.thaw(dcoll.nodes())
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
@@ -551,24 +560,32 @@ def main(actx_class, use_esdg=False,
 
         return div_operator(dcoll, dd_vol, dd_allfaces, vol_flux, surf_flux)
 
-    def my_advection_rhs(t, state, state_interior_trace_pairs=None,
+    def my_advection_rhs(t, state, velocity,
+                         state_interior_trace_pairs=None,
                          flux_only=False):
 
         if state_interior_trace_pairs is None:
             state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
+        v_quad = op.project(dcoll, dd_vol, dd_vol_quad, velocity)
 
         # This "flux" function returns the *numerical flux* that will
         # be used in the divergence operation given a trace pair,
         # i.e. the soln on the -/+ sides of the face.
-        def flux(tpair):
+        def flux(state_tpair):
             # why project to all_faces? to "size" the array correctly
             # for all faces rather than just the selected "tpair.dd"
+            # return op.project(
+            #    dcoll, tpair.dd, dd_allfaces_quad,
+            #    _advection_flux_interior(
+            #        dcoll, tpair, get_velocity(r=nodes_base, t=t, dd=tpair.dd)))
+            v_dd = op.project(dcoll, dd_vol, state_tpair.dd, velocity)
             return op.project(
-                dcoll, tpair.dd, dd_allfaces_quad,
+                dcoll, state_tpair.dd, dd_allfaces_quad,
                 _advection_flux_interior(
-                    dcoll, tpair, get_velocity(r=nodes_base, t=t, dd=tpair.dd)))
+                    dcoll, state_tpair, v_dd))
 
-        vol_flux = state * get_velocity(r=nodes_base, t=t, dd=dd_vol_quad)
+        # vol_flux = state * get_velocity(r=nodes_base, t=t, dd=dd_vol_quad)
+        vol_flux = state * v_quad
 
         # sums up the fluxes for each element boundary
         surf_flux = sum(flux(tpair)
@@ -584,6 +601,8 @@ def main(actx_class, use_esdg=False,
         vol_fluxes = 0
         surf_fluxes = 0
         state_quad = op.project(dcoll, dd_vol, dd_vol_quad, state)
+        velocity = get_velocity(nodes_base, t, dd_vol)
+
         if advect:
             if state_interior_trace_pairs is None:
                 state_interior_trace_pairs = [
@@ -591,7 +610,8 @@ def main(actx_class, use_esdg=False,
                     for tpair in op.interior_trace_pairs(dcoll, state)
                 ]
             vol_fluxes, surf_fluxes = my_advection_rhs(
-                t, state_quad, state_interior_trace_pairs, flux_only=True)
+                t, state_quad, velocity,
+                state_interior_trace_pairs, flux_only=True)
 
             vol_fluxes = -1.0*vol_fluxes
             surf_fluxes = -1.0*surf_fluxes
@@ -660,6 +680,12 @@ if __name__ == "__main__":
         help="use entropy-stable dg for inviscid terms.")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
+    parser.add_argument("--tpe", action="store_true",
+        help="use tensor product elements.")
+    parser.add_argument("--order", type=int, default=4,
+        help="use polynomials of degree=order for element basis")
+    parser.add_argument("--quad_order", type=int,
+        help="use quadrature exact to *quad_order*.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--init", type=str, help="name of the init type",
                         default="mengaldo")
@@ -685,9 +711,16 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
+    order = args.order
+    quad_order = args.quad_order
+    tpe = args.tpe
+    if quad_order is None:
+        quad_order = order if tpe else order + 3
+
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, init_type=args.init,
+         order=order, quad_order=quad_order, tpe=tpe,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

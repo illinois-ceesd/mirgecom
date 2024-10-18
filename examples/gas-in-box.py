@@ -65,6 +65,10 @@ from mirgecom.gas_model import (
     GasModel,
     make_fluid_state
 )
+from mirgecom.inviscid import (
+    inviscid_facial_flux_rusanov,
+    inviscid_facial_flux_central,
+)
 from mirgecom.transport import (
     SimpleTransport,
     MixtureAveragedTransport,
@@ -103,16 +107,21 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          use_av=0, use_limiter=False, order=1,
          nscale=1, npassive_species=0, map_mesh=False,
          rotation_angle=0, add_pulse=False, nsteps=20,
-         mesh_filename=None, euler_timestepping=False):
+         mesh_filename=None, euler_timestepping=False, quad_order=None):
     """Drive the example."""
     if casename is None:
         casename = "gas-in-box"
+
+    if quad_order is None:
+        quad_order = 7
+        # quad_order = order if use_tpe else order + 3
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
 
+    inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
@@ -696,11 +705,11 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     def my_rhs(t, stepper_state):
         gas_state = stepper_state_to_gas_state(stepper_state)
         gas_rhs = fluid_operator(dcoll, state=gas_state, time=t,
-                                   boundaries=boundaries,
-                                   gas_model=gas_model, use_esdg=use_esdg,
-                                   quadrature_tag=quadrature_tag)
-        if use_reactions:
-            gas_rhs = \
+                                 boundaries=boundaries,
+                                 inviscid_numerical_flux_func=inviscid_numerical_flux_func,
+                                 gas_model=gas_model, use_esdg=use_esdg,
+                                 quadrature_tag=quadrature_tag)
+        if use_reactions:            gas_rhs = \
                 gas_rhs + eos.get_species_source_terms(gas_state.cv,
                                                        gas_state.temperature)
         return gas_rhs_to_stepper_rhs(gas_rhs, gas_state.temperature)
