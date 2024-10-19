@@ -83,7 +83,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     if order is None:
         order = 1
     if quad_order is None:
-        quad_order = order if use_tpe else 2*order
+        quad_order = order if use_tpe else 2*order + 1
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
