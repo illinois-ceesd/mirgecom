@@ -114,15 +114,15 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          quad_order=None):
     """Drive the example."""
     if casename is None:
-        casename = "gas-in-box"
+        casename = "flow-over-cylinder"
     if geometry_name is None:
-        geometry_name = "box"
-    if init_name is None:
-        init_name = "quiescent"
+        geometry_name = "annulus"
     if inviscid_flux is None:
         inviscid_flux = "rusanov"
     if quad_order is None:
         quad_order = order if use_tpe else order + 3
+    if velocity_field is None:
+        velocity_field = "subsonic-flow"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -213,7 +213,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                     get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
                     n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
                     tensor_product_elements=use_tpe)
-            elif geometry_name == "annulus":
+            else:
                 generate_mesh = partial(
                     generate_annular_cylinder_mesh, inner_radius=r0, n=12,
                     outer_radius=r1, nelements_per_axis=(100, 200, 3), periodic=True,
@@ -250,7 +250,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             theta = rotation_angle/180.0 * np.pi
             local_mesh = rotate_mesh_around_axis(local_mesh, theta=theta)
 
-    print(f"Creating discretization collection: {use_tpe=}{order=}{quad_order=}")
+    print(f"Creating discretization collection: {use_tpe=},{order=},{quad_order=}")
     dcoll = create_discretization_collection(actx, local_mesh, order=order,
                                              quadrature_order=quad_order)
     nodes = actx.thaw(dcoll.nodes())
@@ -287,10 +287,11 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         vinit = make_obj_array([vmax, 0])
         velocity_init = 0*nodes + vinit
 
-    if density_field == "gaussian":
-        r2 = np.dot(nodes, nodes)/(r1*r1)
-        alpha = np.log(1e-5)  # make it 1e-5 at the boundary
-        rho_init = rho_init*actx.np.exp(-alpha*r2)
+    if density_field is not None:
+        if density_field == "gaussian":
+            r2 = np.dot(nodes, nodes)/(r1*r1)
+            alpha = np.log(1e-5)  # make it 1e-5 at the boundary
+            rho_init = rho_init*actx.np.exp(-alpha*r2)
 
     species_diffusivity = None
     speedup_factor = 1.0
@@ -643,7 +644,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     visualizer = make_visualizer(dcoll)
 
-    initname = casename
+    initname = velocity_field
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
@@ -802,7 +803,7 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         level=logging.INFO)
 
-    example_name = "gas-in-box"
+    example_name = "flow-over-cylinder"
     parser = argparse.ArgumentParser(
         description=f"MIRGE-Com Example: {example_name}")
     parser.add_argument("-a", "--artificial-viscosity", type=int,
