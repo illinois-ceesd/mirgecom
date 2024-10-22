@@ -28,7 +28,7 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def mem_usage():
+def mem_usage(capsys, pytestconfig):
     # Code that will run before your test goes here
 
     yield
@@ -36,6 +36,9 @@ def mem_usage():
     # Code that will run after your test goes here
 
     # {{{ Memory usage reporting
+
+    if not pytestconfig.option.verbose:
+        return
 
     # Copied from logpyle.MemoryHwm
     import os
@@ -46,6 +49,8 @@ def mem_usage():
 
     from resource import RUSAGE_SELF, getrusage
     res = getrusage(RUSAGE_SELF)
-    print("RUSAGE", res.ru_maxrss / fac)
+
+    with capsys.disabled():
+        print(f" HWM={res.ru_maxrss / fac}")
 
     # }}}
