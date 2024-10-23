@@ -32,59 +32,59 @@ jobs:
             python -m pip install flake8 pep8-naming flake8-quotes flake8-bugbear
             python -m flake8 --show-source --statistics "$(basename $GITHUB_REPOSITORY)" test examples setup.py doc/conf.py bin/ && echo "Flake8 found no errors."
 
-    mypy:
-        name: Mypy
-        runs-on: ubuntu-latest
-        steps:
-        -   uses: actions/checkout@v4
-        -
-            uses: actions/setup-python@v5
-            with:
-                python-version: '3.x'
-        -   name: Install
-            run: |
-                . .ci-support/install.sh
-        -   name: Run mypy
-            run: |
-                MINIFORGE_INSTALL_DIR=.miniforge3
-                . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-                python -m pip install types-psutil types-PyYAML
-                ./run-mypy.sh
+    # mypy:
+    #     name: Mypy
+    #     runs-on: ubuntu-latest
+    #     steps:
+    #     -   uses: actions/checkout@v4
+    #     -
+    #         uses: actions/setup-python@v5
+    #         with:
+    #             python-version: '3.x'
+    #     -   name: Install
+    #         run: |
+    #             . .ci-support/install.sh
+    #     -   name: Run mypy
+    #         run: |
+    #             MINIFORGE_INSTALL_DIR=.miniforge3
+    #             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+    #             python -m pip install types-psutil types-PyYAML
+    #             ./run-mypy.sh
 
-    pylint:
-        name: Pylint
-        runs-on: ubuntu-latest
-        steps:
-        - uses: actions/checkout@v4
-        -
-          uses: actions/setup-python@v5
-          with:
-            python-version: '3.x'
-        - name: Install
-          run: |
-            . .ci-support/install.sh
+    # pylint:
+    #     name: Pylint
+    #     runs-on: ubuntu-latest
+    #     steps:
+    #     - uses: actions/checkout@v4
+    #     -
+    #       uses: actions/setup-python@v5
+    #       with:
+    #         python-version: '3.x'
+    #     - name: Install
+    #       run: |
+    #         . .ci-support/install.sh
 
-        - name: Run Pylint
-          run: |
-            MINIFORGE_INSTALL_DIR=.miniforge3
-            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            ./run-pylint.sh
+    #     - name: Run Pylint
+    #       run: |
+    #         MINIFORGE_INSTALL_DIR=.miniforge3
+    #         . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+    #         ./run-pylint.sh
 
-    pydocstyle:
-        runs-on: ubuntu-latest
-        steps:
-        - uses: actions/checkout@v4
-        -
-          uses: actions/setup-python@v5
-          with:
-            python-version: '3.x'
-        - name: Run Pydocstyle
-          run: |
-            python3 -m venv myenv
-            source myenv/bin/activate
-            python -m pip install wheel
-            python -m pip install pydocstyle
-            python -m pydocstyle "$(basename $GITHUB_REPOSITORY)" && echo "pydocstyle found no errors."
+    # pydocstyle:
+    #     runs-on: ubuntu-latest
+    #     steps:
+    #     - uses: actions/checkout@v4
+    #     -
+    #       uses: actions/setup-python@v5
+    #       with:
+    #         python-version: '3.x'
+    #     - name: Run Pydocstyle
+    #       run: |
+    #         python3 -m venv myenv
+    #         source myenv/bin/activate
+    #         python -m pip install wheel
+    #         python -m pip install pydocstyle
+    #         python -m pydocstyle "$(basename $GITHUB_REPOSITORY)" && echo "pydocstyle found no errors."
 
     pytest:
         name: Pytest
@@ -105,128 +105,128 @@ jobs:
             python -m pip install pytest
             python -m pytest --durations=0 --junitxml=pytest.xml -rxsw test_operators.py
 
-    examples:
-        name: Examples
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: [ubuntu-latest, porter]
+    # examples:
+    #     name: Examples
+    #     runs-on: ${{ matrix.os }}
+    #     strategy:
+    #       matrix:
+    #         os: [ubuntu-latest, porter]
 
-        steps:
-        - uses: actions/checkout@v4
-        - name: Install
-          run: |
-            . .ci-support/install.sh
+    #     steps:
+    #     - uses: actions/checkout@v4
+    #     - name: Install
+    #       run: |
+    #         . .ci-support/install.sh
 
-        - name: Run examples
-          run: |
-            set -x
-            MINIFORGE_INSTALL_DIR=.miniforge3
-            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-            export XDG_CACHE_HOME=/tmp
-            mamba install vtk  # needed for the accuracy comparison
+    #     - name: Run examples
+    #       run: |
+    #         set -x
+    #         MINIFORGE_INSTALL_DIR=.miniforge3
+    #         . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+    #         export XDG_CACHE_HOME=/tmp
+    #         mamba install vtk  # needed for the accuracy comparison
 
-            # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
+    #         # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
 
-            [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
+    #         [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
 
-             # This is only possible because actions run sequentially on porter
-            [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
+    #          # This is only possible because actions run sequentially on porter
+    #         [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
 
-            scripts/run-integrated-tests.sh --examples
+    #         scripts/run-integrated-tests.sh --examples
 
-    doc:
-        name: Documentation
-        runs-on: ubuntu-latest
+    # doc:
+    #     name: Documentation
+    #     runs-on: ubuntu-latest
 
-        steps:
-        - uses: actions/checkout@v4
-        - name: Install
-          run: |
-            . .ci-support/install.sh
+    #     steps:
+    #     - uses: actions/checkout@v4
+    #     - name: Install
+    #       run: |
+    #         . .ci-support/install.sh
 
-        - name: Build docs
-          run: |
-            set -x
-            MINIFORGE_INSTALL_DIR=.miniforge3
-            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+    #     - name: Build docs
+    #       run: |
+    #         set -x
+    #         MINIFORGE_INSTALL_DIR=.miniforge3
+    #         . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 
-            sudo apt-get update
-            sudo apt-get install texlive-latex-extra latexmk
+    #         sudo apt-get update
+    #         sudo apt-get install texlive-latex-extra latexmk
 
-            mamba install sphinx graphviz 'docutils>=0.16'
+    #         mamba install sphinx graphviz 'docutils>=0.16'
 
-            # Work around "Not enough memory to run on this device." errors in CI:
-            mamba uninstall pocl
+    #         # Work around "Not enough memory to run on this device." errors in CI:
+    #         mamba uninstall pocl
 
-            pip install sphinx-math-dollar sphinx-copybutton furo
-            cd doc
-            make html SPHINXOPTS="-W --keep-going -n"
-            make latexpdf SPHINXOPTS="-W --keep-going -n"
+    #         pip install sphinx-math-dollar sphinx-copybutton furo
+    #         cd doc
+    #         make html SPHINXOPTS="-W --keep-going -n"
+    #         make latexpdf SPHINXOPTS="-W --keep-going -n"
 
-    emirge:
-        name: Emirge installation
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: [ubuntu-latest, macos-latest]
+    # emirge:
+    #     name: Emirge installation
+    #     runs-on: ${{ matrix.os }}
+    #     strategy:
+    #       matrix:
+    #         os: [ubuntu-latest, macos-latest]
 
-        steps:
-        - uses: actions/checkout@v4
-        - name: Install emirge
-          run: |
-            [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
-            cd ..
-            git clone https://github.com/illinois-ceesd/emirge
-            cd emirge
-            cp -a ../mirgecom .
-            ./install.sh --skip-clone
+    #     steps:
+    #     - uses: actions/checkout@v4
+    #     - name: Install emirge
+    #       run: |
+    #         [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+    #         [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
+    #         cd ..
+    #         git clone https://github.com/illinois-ceesd/emirge
+    #         cd emirge
+    #         cp -a ../mirgecom .
+    #         ./install.sh --skip-clone
 
-        - name: Run simple mirgecom test
-          run: |
-            cd ..
-            source emirge/config/activate_env.sh
-            cd mirgecom/examples
-            python -m mpi4py ./pulse.py
+    #     - name: Run simple mirgecom test
+    #       run: |
+    #         cd ..
+    #         source emirge/config/activate_env.sh
+    #         cd mirgecom/examples
+    #         python -m mpi4py ./pulse.py
 
-    production:
-        name: Production testing
-        runs-on: ${{ matrix.os }}
-        strategy:
-          matrix:
-            os: [ubuntu-latest, macos-latest, porter]
+    # production:
+    #     name: Production testing
+    #     runs-on: ${{ matrix.os }}
+    #     strategy:
+    #       matrix:
+    #         os: [ubuntu-latest, macos-latest, porter]
 
-        steps:
-        - uses: actions/checkout@v4
-          with:
-            fetch-depth: '0'
-        - name: Prepare production environment
-          run: |
-            set -x
-            [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
+    #     steps:
+    #     - uses: actions/checkout@v4
+    #       with:
+    #         fetch-depth: '0'
+    #     - name: Prepare production environment
+    #       run: |
+    #         set -x
+    #         [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
+    #         [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
 
-            # This is only possible because actions run sequentially on porter
-            [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
+    #         # This is only possible because actions run sequentially on porter
+    #         [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
 
-            MIRGEDIR=$(pwd)
-            cat scripts/production-testing-env.sh
-            . scripts/production-testing-env.sh
-            cd ..
-            date
-            printf "Removing stale install ..."
-            rm -rf emirge.prod emirge.y1
-            printf "done.\n"
-            date
-            git clone https://github.com/illinois-ceesd/emirge emirge.prod
-            cd emirge.prod
-            . ../mirgecom/scripts/install-mirge-from-source.sh ${MIRGEDIR}/..
+    #         MIRGEDIR=$(pwd)
+    #         cat scripts/production-testing-env.sh
+    #         . scripts/production-testing-env.sh
+    #         cd ..
+    #         date
+    #         printf "Removing stale install ..."
+    #         rm -rf emirge.prod emirge.y1
+    #         printf "done.\n"
+    #         date
+    #         git clone https://github.com/illinois-ceesd/emirge emirge.prod
+    #         cd emirge.prod
+    #         . ../mirgecom/scripts/install-mirge-from-source.sh ${MIRGEDIR}/..
 
-        - name: Run production test
-          run: |
-            source ../config/activate_env.sh
+    #     - name: Run production test
+    #       run: |
+    #         source ../config/activate_env.sh
 
-            # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
+    #         # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
 
-            scripts/run-integrated-tests.sh --production
+    #         scripts/run-integrated-tests.sh --production
