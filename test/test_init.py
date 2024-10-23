@@ -25,13 +25,9 @@ THE SOFTWARE.
 import logging
 import numpy as np
 import numpy.linalg as la  # noqa
-import pyopencl as cl
-import pyopencl.clrandom
-import pyopencl.clmath
 from pytools.obj_array import make_obj_array
 import pytest
 
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 
 from mirgecom.initializers import Vortex2D
@@ -54,15 +50,13 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("nspecies", [0, 10])
-def test_uniform_init(ctx_factory, dim, nspecies):
+def test_uniform_init(actx_factory, dim, nspecies):
     """Test the uniform flow initializer.
 
     Simple test to check that uniform initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -113,14 +107,12 @@ def test_uniform_init(ctx_factory, dim, nspecies):
     assert mferrmax < 1e-15
 
 
-def test_lump_init(ctx_factory):
+def test_lump_init(actx_factory):
     """
     Simple test to check that Lump initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
     dim = 2
     nel_1d = 4
 
@@ -154,14 +146,12 @@ def test_lump_init(ctx_factory):
     assert errmax < 1e-15
 
 
-def test_vortex_init(ctx_factory):
+def test_vortex_init(actx_factory):
     """
     Simple test to check that Vortex2D initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
     dim = 2
     nel_1d = 4
 
@@ -191,14 +181,12 @@ def test_vortex_init(ctx_factory):
     assert errmax < 1e-15
 
 
-def test_shock_init(ctx_factory):
+def test_shock_init(actx_factory):
     """
     Simple test to check that Shock1D initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 10
     dim = 2
@@ -231,14 +219,12 @@ def test_shock_init(ctx_factory):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_uniform(ctx_factory, dim):
+def test_uniform(actx_factory, dim):
     """
     Simple test to check that Uniform initializer
     creates the expected solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 2
 
@@ -277,14 +263,12 @@ def test_uniform(ctx_factory, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_pulse(ctx_factory, dim):
+def test_pulse(actx_factory, dim):
     """
     Test of Gaussian pulse generator.
     If it looks, walks, and quacks like a Gaussian, then ...
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 10
 
@@ -342,11 +326,9 @@ def test_pulse(ctx_factory, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_multilump(ctx_factory, dim):
+def test_multilump(actx_factory, dim):
     """Test the multi-component lump initializer."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
     nspecies = 10
