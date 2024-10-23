@@ -103,7 +103,7 @@ jobs:
             cd test
             export PYTEST_ADDOPTS="-v"
             python -m pip install pytest
-            python -m pytest --durations=0 --junitxml=pytest.xml -rxsw test_operators.py
+            python -m pytest --durations=0 --junitxml=pytest.xml -rxsw test_euler.py test_limiter.py  test_symbolic.py conftest.py test_filter.py test_mech_input.py test_time_integrators.py test_av.py test_fluid.py test_multiphysics.py test_transport.py test_bc.py test_flux.py test_navierstokes.py test_viscous.py test_chemistry.py test_init.py test_operators.py test_wallmodel.py test_diffusion.py test_inviscid.py test_restart.py  test_wave.py test_eos.py test_simutil.py
 
     # examples:
     #     name: Examples
