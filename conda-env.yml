@@ -23,7 +23,7 @@ dependencies:
 - pytest
 - pylint
 - pydocstyle
-- cantera=3.0.0
+- cantera=3
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
 - gmsh
 - vtk
