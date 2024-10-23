@@ -26,6 +26,8 @@ THE SOFTWARE.
 
 import pytest
 
+oldtime = None
+
 
 @pytest.fixture(autouse=True)
 def mem_usage(capsys, pytestconfig):
@@ -50,7 +52,15 @@ def mem_usage(capsys, pytestconfig):
     from resource import RUSAGE_SELF, getrusage
     res = getrusage(RUSAGE_SELF)
 
+    import time
+    global oldtime
+
     with capsys.disabled():
-        print(f" HWM={res.ru_maxrss / fac}")
+        if oldtime is not None:
+            print(f" HWM={res.ru_maxrss / fac} TIME={time.time() - oldtime}")
+        else:
+            print(f" HWM={res.ru_maxrss / fac} TIME=n/a")
+
+    oldtime = time.time()
 
     # }}}
