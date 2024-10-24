@@ -101,9 +101,8 @@ jobs:
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
-            export PYTEST_ADDOPTS="-v"
             python -m pip install pytest
-            python -m pytest --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
+            python -m pytest --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
         name: Examples
