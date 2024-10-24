@@ -376,8 +376,7 @@ class PorousFlowModel:
 
     .. attribute:: eos
 
-        The thermophysical properties of the gas and its EOS. For now, only
-        mixtures are considered.
+        The thermophysical properties of the gas and its EOS.
 
     .. attribute:: transport
 
@@ -400,7 +399,7 @@ class PorousFlowModel:
     .. automethod:: heat_capacity
     """
 
-    eos: MixtureEOS
+    eos: Union[GasEOS, MixtureEOS]
     wall_eos: PorousWallEOS
     transport: PorousWallTransport
     temperature_iteration: int = 3
@@ -425,6 +424,7 @@ class PorousFlowModel:
         Where $\tau=1$, the material is locally virgin. On the other hand, if
         $\tau=0$, then the fibers were all consumed.
         """
+        # TODO consider the resin+carbon case, where both are degrading.
         mass = self.solid_density(material_densities)
         return self.wall_eos.decomposition_progress(mass)
 
@@ -472,7 +472,10 @@ class PorousFlowModel:
         where $\epsilon \rho$ is stored in :class:`~mirgecom.fluid.ConservedVars`
         and $M$ is the molar mass of the mixture.
         """
-        return self.eos.pressure(cv, temperature)/wv.void_fraction
+        if isinstance(self.eos, MixtureEOS):
+            return self.eos.pressure(cv, temperature)/wv.void_fraction
+        return 1.0/wv.void_fraction*(  # type: ignore
+            cv.mass*self.eos.gas_const()*temperature)  # type: ignore
 
     def internal_energy(self, cv: ConservedVars, wv: PorousWallVars,
                  temperature: DOFArray) -> DOFArray:
