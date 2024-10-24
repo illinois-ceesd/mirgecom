@@ -27,7 +27,9 @@ THE SOFTWARE.
 
 import logging
 import numpy as np
+import pyopencl as cl
 import pytest
+from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
@@ -70,7 +72,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 
 @pytest.mark.parametrize("dim",  [1, 2, 3])
 @pytest.mark.parametrize("order",  [1, 5])
-def test_tag_cells(actx_factory, dim, order):
+def test_tag_cells(ctx_factory, dim, order):
     """Test tag_cells.
 
     This test checks that tag_cells properly tags cells near
@@ -81,7 +83,9 @@ def test_tag_cells(actx_factory, dim, order):
     - Detection thresholding/(p, p-1) polynomials greater/less/equal to s0
     - Detection bounds checking for s_e = s_0 +/- delta
     """
-    actx = actx_factory()
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 1
     tolerance = 1.e-16
@@ -181,7 +185,7 @@ def test_tag_cells(actx_factory, dim, order):
 
 @pytest.mark.parametrize("dim",  [1, 2, 3])
 @pytest.mark.parametrize("order",  [2, 3])
-def test_artificial_viscosity(actx_factory, dim, order):
+def test_artificial_viscosity(ctx_factory, dim, order):
     """Test artificial_viscosity.
 
     Test AV operator for some test functions to verify artificial viscosity
@@ -189,7 +193,9 @@ def test_artificial_viscosity(actx_factory, dim, order):
     - 1d x^n (expected rhs = n*(n-1)*x^(n-2)
     - x^2 + y^2 + z^2  (expected rhs = 2*dim)
     """
-    actx = actx_factory()
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     nel_1d = 10
     tolerance = 1.e-6
@@ -268,13 +274,15 @@ def test_artificial_viscosity(actx_factory, dim, order):
 
 @pytest.mark.parametrize("order",  [2, 3])
 @pytest.mark.parametrize("dim",  [1, 2])
-def test_trig(actx_factory, dim, order):
+def test_trig(ctx_factory, dim, order):
     """Test artificial_viscosity.
 
     Test AV operator for some test functions to verify artificial viscosity
     returns the analytical result.
     """
-    actx = actx_factory()
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
@@ -369,9 +377,11 @@ class _TestSoln:
                                              _TestSoln(dim=2),
                                              _TestSoln(dim=3)])
 @pytest.mark.parametrize("order", [2, 3])
-def test_fluid_av_boundaries(actx_factory, prescribed_soln, order):
+def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     """Check fluid boundary AV interface."""
-    actx = actx_factory()
+    cl_ctx = ctx_factory()
+    queue = cl.CommandQueue(cl_ctx)
+    actx = PyOpenCLArrayContext(queue)
 
     dim = prescribed_soln.dim()
 
