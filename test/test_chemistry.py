@@ -25,14 +25,12 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 import numpy as np
-import pyopencl as cl
 import pytest
 import cantera
 from pytools.obj_array import make_obj_array
 
 from grudge import op
 
-from meshmode.array_context import PyOpenCLArrayContext
 from meshmode.mesh.generation import generate_regular_rect_mesh
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
@@ -57,7 +55,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
                          ["IdealGasReactor", "IdealGasConstPressureReactor"])
 @pytest.mark.parametrize(("pressure", "nsteps"),
                          [(25000.0, 100), (101325.0, 50)])
-def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
+def test_pyrometheus_kinetics(actx_factory, mechname, fuel, rate_tol, reactor_type,
                               pressure, nsteps, output_mechanism=True):
     """Test known pyrometheus reaction mechanisms.
 
@@ -67,9 +65,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
     the corresponding mechanism in Cantera. The reactions are integrated in
     time and verified against homogeneous reactors in Cantera.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 1
     nel_1d = 4
@@ -271,7 +267,7 @@ def test_pyrometheus_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_typ
                          ["IdealGasReactor", "IdealGasConstPressureReactor"])
 @pytest.mark.parametrize(("pressure", "nsteps"),
                          [(25000.0, 100), (101325.0, 50)])
-def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
+def test_mirgecom_kinetics(actx_factory, mechname, fuel, rate_tol, reactor_type,
                            pressure, nsteps):
     """Test of known pyrometheus reaction mechanisms in the MIRGE context.
 
@@ -279,9 +275,7 @@ def test_mirgecom_kinetics(ctx_factory, mechname, fuel, rate_tol, reactor_type,
     the corresponding mechanism in Cantera. The reactions are integrated in
     time and verified against a homogeneous reactor in Cantera.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 1
     nel_1d = 1
