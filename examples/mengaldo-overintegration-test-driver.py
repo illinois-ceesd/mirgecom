@@ -34,7 +34,7 @@ from arraycontext import get_container_context_recursively
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.shortcuts import make_visualizer
 from grudge.dof_desc import DD_VOLUME_ALL
-from meshmode.discretization.poly_element import TensorProductElementGroupBase
+from meshmode.mesh import TensorProductElementGroup
 from meshmode.mesh.generation import generate_regular_rect_mesh
 
 from logpyle import IntervalTimer, set_dt
@@ -120,13 +120,21 @@ def _advection_flux_interior(dcoll, state_tpair, velocity):
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
          casename=None, rst_filename=None,
-         init_type=None, order=4, quad_order=7,
-         tpe=False):
+         init_type=None, order=None, quad_order=None,
+         tpe=None, p_adv=1.0):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
     if init_type is None:
         init_type = "mengaldo"
+    if order is None:
+        order = 1
+    if quad_order is None:
+        quad_order = order if tpe else order + 3
+    if tpe is None:
+        tpe = False
+    if use_overintegration is None:
+        use_overintegration = False
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -159,14 +167,14 @@ def main(actx_class, use_esdg=False,
     current_t = 0
     constant_cfl = False
     geom_scale = 1e-3
-    nsteps_period = 1000
+    nsteps_period = 2000
     period = nsteps_period*current_dt
-    t_final = 2*period
+    t_final = 4*period
 
     # some i/o frequencies
     nstatus = 1
-    nrestart = 5
-    nviz = 10
+    nrestart = 10000
+    nviz = 100
     nhealth = 1
 
     # Bunch of problem setup stuff
@@ -174,7 +182,7 @@ def main(actx_class, use_esdg=False,
     if init_type == "mengaldo":
         dim = 2
 
-    nel_1d = 4
+    nel_1d = 32
     # order = 1
 
     advect = True
@@ -198,7 +206,6 @@ def main(actx_class, use_esdg=False,
     # velocity[0] = .1
     # velocity[1] = .1
     velocity = velocity * geom_scale
-    p_adv = 1.
 
     def g(t, actx=None):
         if actx is None:
@@ -268,13 +275,13 @@ def main(actx_class, use_esdg=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        group_cls = TensorProductElementGroupBase if tpe else None
+        grp_cls = TensorProductElementGroup if tpe else None
         mesh_type = None if tpe else "X"
         generate_mesh = partial(
             generate_regular_rect_mesh,
             a=box_ll, b=box_ur, nelements_per_axis=nel_axes,
             periodic=(True,)*dim, mesh_type=mesh_type,
-            group_cls=group_cls
+            group_cls=grp_cls
         )
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
@@ -285,6 +292,8 @@ def main(actx_class, use_esdg=False,
 
     nodes_base = actx.thaw(dcoll.nodes())
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
+    if use_overintegration:
+        print(f"Using Overintegraiton: {quadrature_tag=}, {order=}, {quad_order=}")
 
     # transfer trace pairs to quad grid, update pair dd
     interp_to_surf_quad = partial(op.tracepair_with_discr_tag,
@@ -453,6 +462,8 @@ def main(actx_class, use_esdg=False,
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
+        norm_err = actx.to_numpy(op.norm(dcoll, state_resid, 2))
+        print(f"L2 Error: {norm_err=}")
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
@@ -518,7 +529,8 @@ def main(actx_class, use_esdg=False,
         # Need a timestep calculator for scalar fields
         # dt = get_sim_timestep(dcoll, fluid_state, t, dt, current_cfl, t_final,
         #                      constant_cfl)
-
+        time_left = max(0, t_final - t)
+        dt = min(time_left, dt)
         return state, dt
 
     def my_post_step(step, t, dt, state):
@@ -668,9 +680,9 @@ if __name__ == "__main__":
     import argparse
     casename = "mengaldo"
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
-    parser.add_argument("--overintegration", action="store_true",
+    parser.add_argument("-o", "--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
-    parser.add_argument("--lazy", action="store_true",
+    parser.add_argument("-l", "--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
@@ -680,16 +692,18 @@ if __name__ == "__main__":
         help="use entropy-stable dg for inviscid terms.")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
-    parser.add_argument("--tpe", action="store_true",
+    parser.add_argument("-t", "--tpe", action="store_true",
         help="use tensor product elements.")
-    parser.add_argument("--order", type=int, default=4,
+    parser.add_argument("-y", "--order", type=int, default=1,
         help="use polynomials of degree=order for element basis")
-    parser.add_argument("--quad_order", type=int,
-        help="use quadrature exact to *quad_order*.")
+    parser.add_argument("-q", "--quad-order", type=int,
+        help="use quadrature exact to *quad-order*.")
     parser.add_argument("--restart_file", help="root name of restart file")
-    parser.add_argument("--init", type=str, help="name of the init type",
+    parser.add_argument("-i", "--init", type=str, help="name of the init type",
                         default="mengaldo")
-    parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("-w", "--warp", type=float,
+                        help="warp power for velocity field", default=1.0)
+    parser.add_argument("-c", "--casename", help="casename to use for i/o")
     args = parser.parse_args()
 
     from warnings import warn
@@ -711,16 +725,10 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    order = args.order
-    quad_order = args.quad_order
-    tpe = args.tpe
-    if quad_order is None:
-        quad_order = order if tpe else order + 3
-
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap, init_type=args.init,
-         order=order, quad_order=quad_order, tpe=tpe,
+         use_leap=args.leap, init_type=args.init, p_adv=args.warp,
+         order=args.order, quad_order=args.quad_order, tpe=args.tpe,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
