@@ -35,7 +35,6 @@ from grudge import op
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
-
 from meshmode.mesh.generation import generate_regular_rect_mesh
 
 from mirgecom.fluid import make_conserved

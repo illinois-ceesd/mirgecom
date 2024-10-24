@@ -64,7 +64,8 @@ def bump(actx, nodes, t=0):
 
 @mpi_entry_point
 def main(actx_class, casename="wave",
-         restart_step=None, use_logmgr: bool = False, mpi: bool = True) -> None:
+         restart_step=None, use_logmgr: bool = False, mpi: bool = True,
+         use_tpe: bool = False) -> None:
     """Drive the example."""
 
     if mpi:
@@ -100,9 +101,11 @@ def main(actx_class, casename="wave",
         from functools import partial
         from meshmode.mesh.generation import generate_regular_rect_mesh
 
-        generate_mesh = partial(generate_regular_rect_mesh,
-            a=(-0.5,)*dim, b=(0.5,)*dim,
-            nelements_per_axis=(nel_1d,)*dim)
+        group_cls = TensorProductElementGroup if use_tpe else None
+        generate_mesh = \
+            partial(generate_regular_rect_mesh,
+                    a=(-0.5,)*dim, b=(0.5,)*dim, group_cls=group_cls,
+                    nelements_per_axis=(nel_1d,)*dim)
 
         if comm:
             from mirgecom.simutil import distribute_mesh
@@ -127,7 +130,8 @@ def main(actx_class, casename="wave",
 
     order = 3
 
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=order)
     nodes = actx.thaw(dcoll.nodes())
 
     current_cfl = 0.485

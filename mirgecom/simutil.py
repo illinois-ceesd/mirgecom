@@ -181,6 +181,8 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None,
         periodic = (False,)*dim
     elif np.isscalar(periodic):
         periodic = (periodic,)*dim
+    if tensor_product_elements is None:
+        tensor_product_elements = False
 
     dim_names = ["x", "y", "z"]
     bttf = {}

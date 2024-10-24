@@ -62,7 +62,7 @@ def create_discretization_collection(actx, volume_meshes, order, *,
     )
 
     if quadrature_order < 0:
-        quadrature_order = 2*order + 1
+        quadrature_order = 2*order
 
     return make_discretization_collection(
         actx, volume_meshes,
