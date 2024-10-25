@@ -26,14 +26,12 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import pyopencl as cl
 import pytest
 import cantera
 from pytools.obj_array import make_obj_array
 
 from grudge import op
 
-from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
@@ -57,11 +55,9 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
                                       "uiuc_8sp_phenol", "uiuc_4sp_oxidation"])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("pressure", [25000.0, 101325.0])
-def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
+def test_mixture_dependent_properties(actx_factory, mechname, dim, pressure):
     """Test MixtureEOS functionality."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
 
@@ -253,15 +249,13 @@ def test_mixture_dependent_properties(ctx_factory, mechname, dim, pressure):
 
 @pytest.mark.parametrize("mechname", ["air_3sp", "uiuc_7sp", "sandiego",
                                       "uiuc_8sp_phenol", "uiuc_4sp_oxidation"])
-def test_pyrometheus_mechanisms(ctx_factory, mechname, output_mechanism=True):
+def test_pyrometheus_mechanisms(actx_factory, mechname, output_mechanism=True):
     """Test known pyrometheus mechanisms.
 
     This test reproduces a pyrometheus-native test in the MIRGE context and
     compare thermo properties to the corresponding mechanism in Cantera.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 1
     nel_1d = 2
@@ -363,15 +357,13 @@ def test_pyrometheus_mechanisms(ctx_factory, mechname, output_mechanism=True):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
-def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
+def test_pyrometheus_eos(actx_factory, mechname, dim, y0, vel):
     """Test PyrometheusMixture EOS for all available mechanisms.
 
     Tests that the PyrometheusMixture EOS gets the same thermo properties
     (p, T, e) as the Pyrometheus-native mechanism code.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
 
@@ -480,11 +472,9 @@ def test_pyrometheus_eos(ctx_factory, mechname, dim, y0, vel):
 
 
 @pytest.mark.parametrize("mechname", ["uiuc_7sp_const_gamma"])
-def test_temperature_constant_cv(ctx_factory, mechname):
+def test_temperature_constant_cv(actx_factory, mechname):
     """Test mechanism with constant heat capacity."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 1
     nel_1d = 1
@@ -535,15 +525,13 @@ def test_temperature_constant_cv(ctx_factory, mechname):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_idealsingle_lump(ctx_factory, dim):
+def test_idealsingle_lump(actx_factory, dim):
     """Test IdealSingle EOS with mass lump.
 
     Tests that the IdealSingleGas EOS returns the correct (uniform) pressure for the
     Lump solution field.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
 
@@ -587,15 +575,13 @@ def test_idealsingle_lump(ctx_factory, dim):
     assert terr < 1e-15
 
 
-def test_idealsingle_vortex(ctx_factory):
+def test_idealsingle_vortex(actx_factory):
     r"""Test EOS with isentropic vortex.
 
     Tests that the IdealSingleGas EOS returns the correct pressure (p) for the
     Vortex2D solution field (i.e. $p = \rho^{\gamma}$).
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = 2
     nel_1d = 4
