@@ -28,10 +28,10 @@ import grudge.op as op
 import numpy as np
 from grudge.shortcuts import make_visualizer
 from logpyle import IntervalTimer, set_dt
-from meshmode.mesh import {
+from meshmode.mesh import (
     BTAG_ALL, BTAG_NONE,
     TensorProductElementGroup
-}
+)
 rom pytools.obj_array import flat_obj_array
 
 from mirgecom.array_context import initialize_actx

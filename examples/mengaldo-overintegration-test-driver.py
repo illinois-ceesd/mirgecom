@@ -504,7 +504,7 @@ def main(actx_class, use_esdg=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
-
+            grad_state = None
             if do_viz or do_health:
                 grad_state = force_evaluation(actx, my_scalar_gradient(state))
 
