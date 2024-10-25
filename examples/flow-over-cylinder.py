@@ -1,4 +1,4 @@
-"""Demonstrate a generic gas example."""
+"""Demonstrate an iviscid subsonic flow over a cylinder."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -659,7 +659,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     def my_write_viz(step, t, gas_state):
         dv = gas_state.dv
         cv = gas_state.cv
-        gamma = eos.gamma()
+        gamma = eos.gamma(cv=cv, temperature=dv.temperature)
+        # We should probably add an entropy func to EOS
         entropy = actx.np.sqrt(dv.pressure / cv.mass**gamma)
         viz_fields = [("cv", cv),
                       ("dv", dv),

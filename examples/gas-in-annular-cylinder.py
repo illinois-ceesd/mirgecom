@@ -176,6 +176,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
+        generate_mesh = None
         if mesh_filename is not None:
             from meshmode.mesh.io import read_gmsh
             mesh_construction_kwargs = {
@@ -658,7 +659,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     def my_write_viz(step, t, gas_state):
         dv = gas_state.dv
         cv = gas_state.cv
-        gamma = eos.gamma()
+        gamma = eos.gamma(cv=cv, temperature=dv.temperature)
         entropy = actx.np.sqrt(dv.pressure / cv.mass**gamma)
         viz_fields = [("cv", cv),
                       ("dv", dv),

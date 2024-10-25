@@ -386,6 +386,9 @@ def main(actx_class, use_esdg=False,
         dr2 = 2*r_vec
         return -alpha*dr2*gaussian_initializer(xyz_vec, t)
 
+    velocity_func = None
+    exact_gradient_func = None
+    exact_state_func = None
     if init_type == "gaussian":
         exact_state_func = gaussian_initializer
         exact_gradient_func = gaussian_gradient

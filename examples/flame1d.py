@@ -367,7 +367,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
     species_names = pyro_mech.species_names
 
     # }}}
-
+    transport_model = None
     if transport == "power-law":
         from mirgecom.transport import PowerLawTransport
         transport_model = PowerLawTransport(lewis=np.ones((nspecies,)),

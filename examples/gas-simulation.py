@@ -189,6 +189,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
+        generate_mesh = None
         if mesh_filename is not None:
             from meshmode.mesh.io import read_gmsh
             mesh_construction_kwargs = {
