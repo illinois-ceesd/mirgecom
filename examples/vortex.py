@@ -273,9 +273,13 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
         if check_naninf_local(dcoll, "vol", pressure):
-            # or check_range_local(dcoll, "vol", pressure, .2, 1.02):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
+
+        if not periodic:
+            if check_range_local(dcoll, "vol", pressure, .2, 1.02):
+                health_error = True
+                logger.info(f"{rank=}: Pessure data range violation.")
 
         exittol = 1000.0
         if max(component_errors) > exittol:

@@ -595,7 +595,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                     boundaries[BoundaryDomainTag(f"-{axis_names[idir]}")] = wall_bc
         else:
             boundaries = {BTAG_ALL: wall_bc}
-    elif geometry_name == "annulus" and dim==2:
+    elif geometry_name == "annulus" and dim == 2:
         boundaries[BoundaryDomainTag("-r")] = wall_bc
         boundaries[BoundaryDomainTag("+r")] = farfield_bc
 

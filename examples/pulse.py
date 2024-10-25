@@ -74,7 +74,7 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_esdg=False, use_tpe=False,
+def main(actx_class, use_esdg=False, use_tpe=False, periodic=False,
          use_overintegration=False, use_leap=False, order=None,
          casename=None, rst_filename=None, quad_order=None):
     """Drive the example."""
@@ -140,13 +140,13 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         nel_1d = 16
         from meshmode.mesh import TensorProductElementGroup
         group_cls = TensorProductElementGroup if use_tpe else None
+        periodic_ax = (periodic,)*dim
         generate_mesh = \
             partial(generate_regular_rect_mesh,
                     a=(box_ll,)*dim, b=(box_ur,)*dim,
                     nelements_per_axis=(nel_1d,)*dim,
                     group_cls=group_cls,
-                    periodic=(True,)*dim
-        )
+                    periodic=periodic_ax)
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
@@ -184,8 +184,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
-    # boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
     boundaries = {}
+    if not periodic:
+        boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
@@ -353,6 +354,8 @@ if __name__ == "__main__":
         help="order for QuadratureGroupFactory")
     parser.add_argument("--tpe", action="store_true",
         help="use tensor product elements")
+    parser.add_argument("--periodic", action="store_true",
+        help="use periodic domain")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--esdg", action="store_true",
@@ -383,6 +386,7 @@ if __name__ == "__main__":
         rst_filename = args.restart_file
 
     main(actx_class, use_esdg=args.esdg, order=args.order,
+         periodic=args.periodic,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap, use_tpe=args.tpe, quad_order=args.quad_order,
          casename=casename, rst_filename=rst_filename)
