@@ -1,6 +1,6 @@
 # Conda packages needed by mirgecom.
 # The packages listed here are common to all OS/architectures,
-# Linux systems also need pocl-cuda (which is installed directly by emirge).
+# Some OS-specific packages are installed directly by emirge.
 #
 name: ceesd
 channels:
@@ -23,6 +23,7 @@ dependencies:
 - pytest
 - pylint
 - pydocstyle
+- cantera=3.0
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
 - gmsh
 - vtk
