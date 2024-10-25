@@ -162,7 +162,7 @@ def main(actx_class, use_esdg=False,
 
     # nsteps = 5000
     current_cfl = 1.0
-    current_dt = 1e-3
+    current_dt = 5e-3
     # t_final = nsteps * current_dt
     current_t = 0
     constant_cfl = False
@@ -182,7 +182,7 @@ def main(actx_class, use_esdg=False,
     if init_type == "mengaldo":
         dim = 2
 
-    nel_1d = 32
+    nel_1d = 6
     # order = 1
 
     advect = True
@@ -463,7 +463,7 @@ def main(actx_class, use_esdg=False,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
         norm_err = actx.to_numpy(op.norm(dcoll, state_resid, 2))
-        print(f"L2 Error: {norm_err=}")
+        print(f"L2 Error: {norm_err:.12g}")
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
