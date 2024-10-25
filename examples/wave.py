@@ -32,7 +32,7 @@ from meshmode.mesh import (
     BTAG_ALL, BTAG_NONE,
     TensorProductElementGroup
 )
-rom pytools.obj_array import flat_obj_array
+from pytools.obj_array import flat_obj_array
 
 from mirgecom.array_context import initialize_actx
 from mirgecom.discretization import create_discretization_collection

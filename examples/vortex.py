@@ -276,7 +276,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        if not periodic:
+        if t_final < .02:
             if check_range_local(dcoll, "vol", pressure, .2, 1.02):
                 health_error = True
                 logger.info(f"{rank=}: Pessure data range violation.")

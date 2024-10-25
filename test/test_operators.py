@@ -394,22 +394,20 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     )
 
 
-
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
-                         [
-                             (1, "tet_box1", None, False),
-                             (2, "tet_box2", None, False),
-                             (3, "tet_box3", None, False),
-                             (2, "hex_box2", None, False),
-                             (3, "hex_box3", None, False),
-                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
-                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
-                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
-                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),])
+                         [(1, "tet_box1", None, False),
+                          (2, "tet_box2", None, False),
+                          (3, "tet_box3", None, False),
+                          (2, "hex_box2", None, False),
+                          (3, "hex_box3", None, False),
+                          (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+                          (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+                          (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+                          (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+                          (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+                          (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+                          (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+                          (3, "hex_box3_rot3", np.array([1, 1, 1]), False),])
 @pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("overint", [False, True])
 def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
