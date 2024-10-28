@@ -38,7 +38,7 @@ import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge import dof_desc, geometry, op
+from grudge import dof_desc
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
     make_conserved
@@ -50,7 +50,6 @@ from grudge.trace_pair import interior_trace_pairs
 from mirgecom.discretization import create_discretization_collection
 from functools import partial
 from mirgecom.simutil import get_box_mesh
-from grudge import geometry
 from grudge.dof_desc import (
     DISCR_TAG_BASE,
     DISCR_TAG_QUAD,
@@ -65,7 +64,6 @@ from sympy import cos, acos, symbols, integrate, simplify
 
 sys.path.append(os.path.dirname(__file__))
 import mesh_data  # noqa: E402
-
 
 
 logger = logging.getLogger(__name__)
@@ -528,7 +526,7 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
             dd_allfaces = dd.with_domain_tag(
                 BoundaryDomainTag(FACE_RESTR_ALL, VTAG_ALL)
                 )
-            normal = geometry.normal(actx, dcoll, dd)
+            normal = geo.normal(actx, dcoll, dd)
             u_avg = u_tpair.avg
             flux = u_avg * normal
             return op.project(dcoll, dd, dd_allfaces, flux)
