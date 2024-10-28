@@ -63,7 +63,7 @@ from sympy import cos, acos, symbols, integrate, simplify
 
 
 sys.path.append(os.path.dirname(__file__))
-import mesh_data  # noqa: E402
+import mesh_data  # noqa: E402  # type: ignore  # pylint: disable=import-error
 
 
 logger = logging.getLogger(__name__)
