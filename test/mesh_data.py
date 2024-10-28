@@ -42,7 +42,7 @@ class GmshMeshBuilder3D(_GmshMeshBuilder):
 class Curve2DMeshBuilder(MeshBuilder):
     ambient_dim = 2
     resolutions: ClassVar[Sequence[Hashable]] = [16, 32, 64, 128]
-    
+
     def get_mesh(self, resolution, mesh_order=None):
         if mesh_order is None:
             mesh_order = 4
@@ -115,13 +115,13 @@ class _BoxMeshBuilderBase(MeshBuilder):
     a = (-0.5, -0.5, -0.5)
     b = (+0.5, +0.5, +0.5)
     tpe: bool = False
-    
+
     def __init__(self, tpe=False, a=(-0.5, -0.5, -0.5),
                  b=(0.5, 0.5, 0.5)):
         self.tpe = tpe
         self.a = a
         self.b = b
-        
+
     def get_mesh(self, resolution, mesh_order=None):
         if mesh_order is None:
             mesh_order = self.mesh_order

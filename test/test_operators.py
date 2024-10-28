@@ -30,9 +30,6 @@ import logging
 import sys
 import os
 
-sys.path.append(os.path.dirname(__file__))  # noqa: E402
-
-import mesh_data
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
 
@@ -41,14 +38,12 @@ import pymbolic as pmbl  # noqa
 import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
-from grudge.dof_desc import as_dofdesc
 from grudge import dof_desc, geometry, op
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
-import mesh_data
 import grudge.geometry as geo
 import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
@@ -63,9 +58,15 @@ from grudge.dof_desc import (
     # FACE_RESTR_ALL,
     VTAG_ALL,
     BoundaryDomainTag,
-    # as_dofdesc,
+    as_dofdesc
 )
 from sympy import cos, acos, symbols, integrate, simplify
+
+
+sys.path.append(os.path.dirname(__file__))
+import mesh_data  # noqa: E402
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -637,7 +638,7 @@ def _analytic_chebyshev_integral(n, domain=None):
     if domain is None:
         domain = [0, 1]
 
-    x = symbols('x')
+    x = symbols("x")
     chebyshev_poly = _sym_chebyshev_polynomial(n, x)
     exact_integral = integrate(chebyshev_poly, (x, domain[0], domain[1]))
 
@@ -645,7 +646,7 @@ def _analytic_chebyshev_integral(n, domain=None):
 
 
 @pytest.mark.parametrize("name", [
-     "interval", "box2d", "box2d-tpe", "box3d", "box3d-tpe"])
+    "interval", "box2d", "box2d-tpe", "box3d", "box3d-tpe"])
 def test_correctness_of_quadrature(actx_factory, name):
     # This test ensures that the quadrature rules used in mirgecom are
     # correct and are exact to (at least) the advertised order.
@@ -668,7 +669,6 @@ def test_correctness_of_quadrature(actx_factory, name):
     #
     # Optionally, the test will produce markdown-ready tables of the results
     #
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, as_dofdesc
     actx = actx_factory()
     vol_dd_base = as_dofdesc(dof_desc.DTAG_VOLUME_ALL)
     vol_dd_quad = vol_dd_base.with_discr_tag(DISCR_TAG_QUAD)
@@ -682,18 +682,16 @@ def test_correctness_of_quadrature(actx_factory, name):
 
     tpe = name.endswith("-tpe")
     if name.startswith("box2d"):
-        builder = mesh_data.BoxMeshBuilder2D(tpe=tpe,
-                                             a=(0, 0),
-                                             b=(1.0, 1.0))
+        builder = mesh_data.BoxMeshBuilder2D(
+            tpe=tpe, a=(0, 0), b=(1.0, 1.0))
         dim = 2
     elif name.startswith("box3d"):
-        builder = mesh_data.BoxMeshBuilder3D(tpe=tpe,
-                                             a=(0, 0, 0),
-                                             b=(1.0, 1.0, 1.0))
+        builder = mesh_data.BoxMeshBuilder3D(
+            tpe=tpe, a=(0, 0, 0), b=(1.0, 1.0, 1.0))
         dim = 3
     elif name == "interval":
-        builder = mesh_data.BoxMeshBuilder1D(tpe=False, a=(0.0,),
-                                             b=(1.0,))
+        builder = mesh_data.BoxMeshBuilder1D(
+            tpe=False, a=(0.0,), b=(1.0,))
         dim = 1.0
     else:
         raise ValueError(f"unknown geometry name: {name}")
@@ -812,7 +810,7 @@ def test_correctness_of_quadrature(actx_factory, name):
             if discr_order >= field_order:
                 assert eoc_base.max_error() < exact_tol
                 assert eoc_quad.max_error() < exact_tol
-            else: # if errors are large enough, check convergence rate
+            else:  # if errors are large enough, check convergence rate
                 if eoc_base.max_error() > switch_tol:
                     base_order = eoc_base.order_estimate()
                     max_order_base = max(max_order_base, base_order)
@@ -839,15 +837,21 @@ def test_correctness_of_quadrature(actx_factory, name):
         qresult[discr_order] = [dofs_per_el_quad, xact_to_quad,
                                 min_order_quad, max_order_quad]
     print(f"### BaseDiscr Rule Name: {base_rule_name}")
-    print("| Basis degree (p) | Num quadrature nodes | Exact to | Order of error term  ")
-    print("| ---------------- | -------------------- | -------- | ------------------- |")
+    print("| Basis degree (p) | Num quadrature nodes | Exact to |"
+          " Order of error term  ")
+    print("| ---------------- | -------------------- | -------- |"
+          " ------------------- |")
     for p, data in bresult.items():
-        print(f"|     {p}       |    {data[0]}     | {data[1]} |   {data[3]}   |")
+        print(f"|     {p}       |    {data[0]}     | {data[1]} |"
+              f"   {data[3]}   |")
     print("\n\n")
     print(f"### QuadDiscr Rule Name: {quad_rule_name}")
-    print("| Basis degree (p) | Num quadrature nodes | Exact to | Order of error term  ")
-    print("| ---------------- | -------------------- | -------- | ------------------- |")
+    print("| Basis degree (p) | Num quadrature nodes | Exact to |"
+          " Order of error term  ")
+    print("| ---------------- | -------------------- | -------- |"
+          " ------------------- |")
     for p, data in qresult.items():
-        print(f"|     {p}       |    {data[0]}     | {data[1]} |   {data[3]}   |")
+        print(f"|     {p}       |    {data[0]}     | {data[1]} |"
+              f"   {data[3]}   |")
     print("")
     print("-"*75)
