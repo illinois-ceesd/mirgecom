@@ -27,7 +27,11 @@ THE SOFTWARE.
 import numpy as np  # noqa
 import pytest  # noqa
 import logging
+import sys
+import os
+sys.path.append(os.path.dirname(__file__))
 
+import mesh_data
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
 
@@ -37,11 +41,13 @@ import pymbolic.primitives as prim
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import as_dofdesc
+from grudge import dof_desc, geometry, op
 from mirgecom.flux import num_flux_central
 from mirgecom.fluid import (
     make_conserved
 )
 import mirgecom.symbolic as sym
+import mesh_data
 import grudge.geometry as geo
 import grudge.op as op
 from grudge.trace_pair import interior_trace_pairs
@@ -58,6 +64,8 @@ from grudge.dof_desc import (
     BoundaryDomainTag,
     # as_dofdesc,
 )
+from sympy import cos, acos, symbols, integrate, simplify
+
 logger = logging.getLogger(__name__)
 
 pytest_generate_tests = pytest_generate_tests_for_array_contexts(
@@ -611,3 +619,234 @@ def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
 
         test_passed = test_passed and this_test
     assert test_passed
+
+
+def _sym_chebyshev_polynomial(n, x):
+    return cos(n * acos(x))
+
+
+# array context version
+def _chebyshev_polynomial(n, x):
+    actx = x.array_context
+    return actx.np.cos(float(n) * actx.np.arccos(x))
+
+
+# Integrate Chebyshev poly using sympy
+def _analytic_chebyshev_integral(n, domain=None):
+    if domain is None:
+        domain = [0, 1]
+
+    x = symbols('x')
+    chebyshev_poly = _sym_chebyshev_polynomial(n, x)
+    exact_integral = integrate(chebyshev_poly, (x, domain[0], domain[1]))
+
+    return simplify(exact_integral)
+
+
+@pytest.mark.parametrize("name", [
+     "interval", "box2d", "box2d-tpe", "box3d", "box3d-tpe"])
+def test_correctness_of_quadrature(actx_factory, name):
+    # This test ensures that the quadrature rules used in mirgecom are
+    # correct and are exact to (at least) the advertised order.
+    # Quadrature rules: The quadrature rule is returned by the group factories.
+    # In the following, the base discretization has polynomial order *p*, and
+    # the quadrature group has order *q*.
+    #   - Simplices:
+    #       - Base Group: Generic Newton/Cotes; npoints: (p+1), exact to: (p)
+    #       - Quad Group:
+    #           - 1D: Legendre/Gauss; npoints: (q+1), exact to (>= q)
+    #           - >1D: Xiao/Gimbutas; npoints: (>= q), exact to (q)
+    #   - Tensor Product Elements:
+    #       - Base Group: Generic Newton/Cotes; npoints: (p+1)^dim, exact to: (p)
+    #       - Quad Group: Jacobi/Gauss; npoints: (q+1)^dim, exact to: (2q + 1)
+    #
+    # The test uses Chebyshev polynomials to test domain quadrature of order q,
+    # and requires that all quadrature rules:
+    #    - Are exact for expressions with polynomial degree <= q
+    #    - Have correct error behavior for expressions with degree > q
+    #
+    # Optionally, the test will produce markdown-ready tables of the results
+    #
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, as_dofdesc
+    actx = actx_factory()
+    vol_dd_base = as_dofdesc(dof_desc.DTAG_VOLUME_ALL)
+    vol_dd_quad = vol_dd_base.with_discr_tag(DISCR_TAG_QUAD)
+
+    # Require max errors to be at least this large when evaluting EOC
+    switch_tol = 1e-4
+    # Require min errors to be less than this to identify exact quadrature
+    exact_tol = 1e-13
+    dim = None
+    mesh_order = 1
+
+    tpe = name.endswith("-tpe")
+    if name.startswith("box2d"):
+        builder = mesh_data.BoxMeshBuilder2D(tpe=tpe,
+                                             a=(0, 0),
+                                             b=(1.0, 1.0))
+        dim = 2
+    elif name.startswith("box3d"):
+        builder = mesh_data.BoxMeshBuilder3D(tpe=tpe,
+                                             a=(0, 0, 0),
+                                             b=(1.0, 1.0, 1.0))
+        dim = 3
+    elif name == "interval":
+        builder = mesh_data.BoxMeshBuilder1D(tpe=False, a=(0.0,),
+                                             b=(1.0,))
+        dim = 1.0
+    else:
+        raise ValueError(f"unknown geometry name: {name}")
+    exact_volume = 1.0
+    elem_type = "line"
+    if dim > 1:
+        elem_type = "quad" if tpe else "tri"
+    if dim > 2:
+        elem_type = "hex" if tpe else "tet"
+
+    print(f"\n## Domain: {name} ({dim}d), {exact_volume=},"
+          f"Element type: {elem_type}\n")
+
+    bresult = {}
+    qresult = {}
+    base_rule_name = ""
+    quad_rule_name = ""
+
+    from pytools.convergence import EOCRecorder
+    # Test base and quadrature discretizations with order=[1,8]
+    # for incoming geometry and element type
+    for discr_order in range(1, 8):
+        ndofs_base = 0
+        ndofs_quad = 0
+        dofs_per_el_base = 0
+        dofs_per_el_quad = 0
+        max_order_base = 0
+        min_order_base = 10000
+        max_order_quad = 0
+        min_order_quad = 10000
+        order_search_done = False
+        base_order_found = False
+        quad_order_found = False
+        field_order = 0
+        # Test increasing orders of Chebyshev polynomials to probe
+        # quadrature rule exactness and error behavior
+        while not order_search_done:
+            field_order = field_order + 1
+            eoc_base = EOCRecorder()
+            eoc_quad = EOCRecorder()
+            # Do grid convergence for this polynomial order
+            for resolution in builder.resolutions:
+                mesh = builder.get_mesh(resolution, mesh_order)
+                # Create both base and quadrature discretizations
+                # with the same order so we can test them
+                dcoll = create_discretization_collection(
+                    actx, mesh, order=discr_order, quadrature_order=discr_order)
+                vol_discr_base = dcoll.discr_from_dd(vol_dd_base)
+                vol_discr_quad = dcoll.discr_from_dd(vol_dd_quad)
+                # Grab some info about the quadrature rule
+                #  - What is the name of the quadrature rule?
+                #  - What order does the rule claim to be exact to?
+                nelem = vol_discr_base.mesh.nelements
+                ndofs_base = vol_discr_base.ndofs
+                ndofs_quad = vol_discr_quad.ndofs
+                dofs_per_el_base = ndofs_base/nelem
+                dofs_per_el_quad = ndofs_quad/nelem
+                for grp in vol_discr_base.groups:
+                    qr = grp.quadrature_rule()
+                    base_rule_name = type(qr).__name__
+                    # This base rule claims to be exact to this:
+                    xact_to_base = qr._exact_to
+                for grp in vol_discr_quad.groups:
+                    qr = grp.quadrature_rule()
+                    quad_rule_name = type(qr).__name__
+                    # This quad group rule claims exact to:
+                    xact_to_quad = qr._exact_to
+
+                nodes_base = actx.thaw(vol_discr_base.nodes())
+                nodes_quad = actx.thaw(vol_discr_quad.nodes())
+                one_base = 0*nodes_base[0] + 1.
+                zero_base = 0*nodes_base[0] + 0.
+                field_base = 0
+                field_quad = 0
+                exact_integral = 0
+                for i in range(int(dim)):
+                    x_base = nodes_base[i]
+                    # Heh woops! The base nodes aren't in [0,1]!
+                    x_base = actx.np.where(x_base > one_base, one_base,
+                                           x_base)
+                    x_base = actx.np.where(x_base < zero_base, zero_base,
+                                           x_base)
+                    x_quad = nodes_quad[i]
+
+                    field_base = \
+                        field_base + _chebyshev_polynomial(field_order, x_base)
+                    field_quad = \
+                        field_quad + _chebyshev_polynomial(field_order, x_quad)
+                    # Use sympy to get the exact integral for the Chebyshev poly
+                    exact_integral = \
+                        (exact_integral
+                         + _analytic_chebyshev_integral(field_order))
+
+                integral_base =  \
+                    actx.to_numpy(op.integral(dcoll, vol_dd_base, field_base))
+                integral_quad =  \
+                    actx.to_numpy(op.integral(dcoll, vol_dd_quad, field_quad))
+                err_base = \
+                    abs(integral_base - exact_integral)/abs(exact_integral)
+                err_quad = \
+                    abs(integral_quad - exact_integral)/abs(exact_integral)
+
+                # Must be exact if the poly degree is less than the rule order
+                if field_order <= discr_order:
+                    assert err_base < exact_tol
+                    assert err_quad < exact_tol
+
+                # compute max element size
+                from grudge.dt_utils import h_max_from_volume
+                h_max = actx.to_numpy(h_max_from_volume(dcoll))
+
+                eoc_base.add_data_point(float(h_max), float(err_base))
+                eoc_quad.add_data_point(float(h_max), float(err_quad))
+
+            # Sanity check here (again): *must* be exact if discr_order is sufficient
+            if discr_order >= field_order:
+                assert eoc_base.max_error() < exact_tol
+                assert eoc_quad.max_error() < exact_tol
+            else: # if errors are large enough, check convergence rate
+                if eoc_base.max_error() > switch_tol:
+                    base_order = eoc_base.order_estimate()
+                    max_order_base = max(max_order_base, base_order)
+                    min_order_base = min(min_order_base, base_order)
+                    base_order_found = True
+                    # Main test for base group
+                    assert base_order > xact_to_base
+                if eoc_quad.max_error() > switch_tol:
+                    # errors are large enough, check convergence rate
+                    quad_order = eoc_quad.order_estimate()
+                    max_order_quad = max(max_order_quad, quad_order)
+                    min_order_quad = min(min_order_quad, quad_order)
+                    quad_order_found = True
+                    # Main test for quadrature group
+                    assert eoc_quad.order_estimate() > xact_to_quad
+
+            # Only quit after convergence rate is determined for both
+            # base and quadrature groups.
+            order_search_done = quad_order_found and base_order_found
+
+        # Accumulate the test results for output table
+        bresult[discr_order] = [dofs_per_el_base, xact_to_base,
+                                min_order_base, max_order_base]
+        qresult[discr_order] = [dofs_per_el_quad, xact_to_quad,
+                                min_order_quad, max_order_quad]
+    print(f"### BaseDiscr Rule Name: {base_rule_name}")
+    print("| Basis degree (p) | Num quadrature nodes | Exact to | Order of error term  ")
+    print("| ---------------- | -------------------- | -------- | ------------------- |")
+    for p, data in bresult.items():
+        print(f"|     {p}       |    {data[0]}     | {data[1]} |   {data[3]}   |")
+    print("\n\n")
+    print(f"### QuadDiscr Rule Name: {quad_rule_name}")
+    print("| Basis degree (p) | Num quadrature nodes | Exact to | Order of error term  ")
+    print("| ---------------- | -------------------- | -------- | ------------------- |")
+    for p, data in qresult.items():
+        print(f"|     {p}       |    {data[0]}     | {data[1]} |   {data[3]}   |")
+    print("")
+    print("-"*75)
