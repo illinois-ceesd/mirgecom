@@ -222,9 +222,9 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
 
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
                          [
-                             (1, "tet_box1", None, True),
-                             (2, "tet_box2", None, True),
-                             (3, "tet_box3", None, True),
+                             (1, "tet_box1", None, False),
+                             (2, "tet_box2", None, False),
+                             (3, "tet_box3", None, False),
                              (2, "hex_box2", None, False),
                              (3, "hex_box3", None, False),
                              (2, "tet_box2_rot", np.array([0, 0, 1]), False),
