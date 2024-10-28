@@ -59,7 +59,7 @@ from grudge.dof_desc import (
     BoundaryDomainTag,
     as_dofdesc
 )
-from sympy import cos, acos, symbols, integrate, simplify
+from sympy import cos, acos, symbols, integrate, simplify  # type: ignore
 
 
 sys.path.append(os.path.dirname(__file__))
