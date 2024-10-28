@@ -11,7 +11,8 @@ dependencies:
 - gh
 - mypy
 - conda-forge::numpy
-- pocl<6
+# See https://github.com/illinois-ceesd/mirgecom/pull/1055:
+- pocl=5.0=*_6
 - clinfo
 - pudb
 - islpy
@@ -23,6 +24,7 @@ dependencies:
 - pytest
 - pylint
 - pydocstyle
+# See https://github.com/conda-forge/cantera-feedstock/issues/46 why we need 3.0.0:
 - cantera=3.0.0
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
 - gmsh
