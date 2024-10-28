@@ -14,11 +14,8 @@ class MeshBuilder(ABC):
     ambient_dim: ClassVar[int]
 
     @abstractmethod
-    def get_mesh(
-             self,
-             resolution: Hashable,
-             mesh_order: Optional[int] = None
-         ) -> Mesh:
+    def get_mesh(self, resolution: Hashable,
+                 mesh_order: Optional[int] = None) -> Mesh:
         ...
 
 
@@ -45,14 +42,14 @@ class GmshMeshBuilder3D(_GmshMeshBuilder):
 class Curve2DMeshBuilder(MeshBuilder):
     ambient_dim = 2
     resolutions: ClassVar[Sequence[Hashable]] = [16, 32, 64, 128]
-
+    
     def get_mesh(self, resolution, mesh_order=None):
         if mesh_order is None:
             mesh_order = 4
         return mgen.make_curve_mesh(
-                self.curve_fn,      # pylint: disable=no-member
-                np.linspace(0.0, 1.0, resolution + 1),
-                mesh_order)
+            self.curve_fn,      # pylint: disable=no-member
+            np.linspace(0.0, 1.0, resolution + 1),
+            mesh_order)
 
 
 class EllipseMeshBuilder(Curve2DMeshBuilder):
@@ -118,24 +115,23 @@ class _BoxMeshBuilderBase(MeshBuilder):
     a = (-0.5, -0.5, -0.5)
     b = (+0.5, +0.5, +0.5)
     tpe: bool = False
-
+    
     def __init__(self, tpe=False, a=(-0.5, -0.5, -0.5),
                  b=(0.5, 0.5, 0.5)):
         self.tpe = tpe
         self.a = a
         self.b = b
-
+        
     def get_mesh(self, resolution, mesh_order=None):
         if mesh_order is None:
             mesh_order = self.mesh_order
         if not isinstance(resolution, (list, tuple)):
             resolution = (resolution,) * self.ambient_dim
-        from meshmode.mesh import TensorProductElementGroup
         group_cls = TensorProductElementGroup if self.tpe else None
         return mgen.generate_regular_rect_mesh(
-                a=self.a, b=self.b,
-                nelements_per_axis=resolution,
-                group_cls=group_cls, order=mesh_order)
+            a=self.a, b=self.b,
+            nelements_per_axis=resolution,
+            group_cls=group_cls, order=mesh_order)
 
 
 class BoxMeshBuilder1D(_BoxMeshBuilderBase):
@@ -158,4 +154,4 @@ class WarpedRectMeshBuilder(MeshBuilder):
 
     def get_mesh(self, resolution, mesh_order=4):
         return mgen.generate_warped_rect_mesh(
-                dim=self.dim, order=mesh_order, nelements_side=resolution)
+            dim=self.dim, order=mesh_order, nelements_side=resolution)
