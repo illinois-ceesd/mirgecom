@@ -69,7 +69,7 @@ def create_discretization_collection(actx, volume_meshes, order, *,
         else:
             the_mesh = next(iter(volume_meshes.values()))
         mesh_is_tpe = \
-            isinstance(next(iter(the_mesh.groups())), TensorProductElementGroup)
+            isinstance(next(iter(the_mesh.groups)), TensorProductElementGroup)
 
         quadrature_order = order if mesh_is_tpe else 2*order
 
