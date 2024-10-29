@@ -55,8 +55,8 @@ from grudge.dof_desc import (
     DISCR_TAG_QUAD,
     DTAG_VOLUME_ALL,
     # FACE_RESTR_ALL,
-    VTAG_ALL,
-    BoundaryDomainTag,
+    # VTAG_ALL,
+    # BoundaryDomainTag,
     as_dofdesc
 )
 from sympy import cos, acos, symbols, integrate, simplify  # type: ignore
