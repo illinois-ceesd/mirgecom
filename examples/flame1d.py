@@ -213,7 +213,7 @@ def main(actx_class, use_esdg=False, use_tpe=False, use_overintegration=False,
     constant_cfl = False
     current_cfl = 0.4
     current_dt = 1.0e-9
-    niter = 1000000
+    niter = 20
     t_final = current_dt * niter
 
     use_sponge = False

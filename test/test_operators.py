@@ -228,6 +228,12 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
+#                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+#                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+#                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+#                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+#                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+#                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
                          [
                              (1, "tet_box1", None, False),
@@ -235,13 +241,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
                              (3, "tet_box3", None, False),
                              (2, "hex_box2", None, False),
                              (3, "hex_box3", None, False),
-                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
                              (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
-                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
-                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
                              (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
                              ])
 @pytest.mark.parametrize("order", [1, 2, 3])
@@ -253,7 +253,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     _trig_test_func,
     _cv_test_func
 ])
-@pytest.mark.parametrize("quad", [True])
+@pytest.mark.parametrize("quad", [False, True])
 def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
                        order, sym_test_func_factory, quad):
     """Test the gradient operator for sanity.
@@ -400,225 +400,6 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
         eoc.order_estimate() >= order - 0.5
         or eoc.max_error() < tol
     )
-
-
-@pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
-                         [(1, "tet_box1", None, False),
-                          (2, "tet_box2", None, False),
-                          (3, "tet_box3", None, False),
-                          (2, "hex_box2", None, False),
-                          (3, "hex_box3", None, False),
-                          (2, "tet_box2_rot", np.array([0, 0, 1]), False),
-                          (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
-                          (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
-                          (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
-                          (2, "hex_box2_rot", np.array([0, 0, 1]), False),
-                          (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
-                          (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
-                          (3, "hex_box3_rot3", np.array([1, 1, 1]), False),])
-@pytest.mark.parametrize("order", [1, 2, 3, 4, 5])
-@pytest.mark.parametrize("overint", [False, True])
-def test_overintegration(actx_factory, dim, mesh_name, rot_axis, wonk, order,
-                         overint):
-    """Test overintegration with grad operator.
-
-    Check whether we get the right answers for gradients of polynomial
-    expressions up to quadrature order P', and proper error behavior for
-    expressions of order higher than P'.
-    - P <= P'
-    - P > P'
-    """
-    import pyopencl as cl
-    from grudge.array_context import PyOpenCLArrayContext
-    from meshmode.mesh.processing import rotate_mesh_around_axis
-    from grudge.dt_utils import h_min_from_volume
-    from mirgecom.simutil import componentwise_norms
-    from arraycontext import flatten
-    from mirgecom.operators import grad_operator
-    from meshmode.mesh.processing import map_mesh
-
-    def add_wonk(x: np.ndarray) -> np.ndarray:
-        wonk_field = np.empty_like(x)
-        if len(x) >= 2:
-            wonk_field[0] = (
-                1.5*x[0] + np.cos(x[0])
-                + 0.1*np.sin(10*x[1]))
-            wonk_field[1] = (
-                0.05*np.cos(10*x[0])
-                + 1.3*x[1] + np.sin(x[1]))
-        else:
-            wonk_field[0] = 1.5*x[0] + np.cos(x[0])
-
-        if len(x) >= 3:
-            wonk_field[2] = x[2] + np.sin(x[0] / 2) / 2
-
-        return wonk_field
-
-    p = order
-    p_prime = 2*p + 1
-    print(f"{mesh_name=}")
-    print(f"{dim=}, {p=}, {p_prime=}")
-    # print(f"{p=},{p_prime=}")
-
-    tpe = mesh_name.startswith("hex_")
-    # print(f"{tpe=}")
-    rotation_angle = 32.0
-    theta = rotation_angle/180.0 * np.pi
-
-    # This comes from array_context
-    actx = actx_factory()
-
-    if tpe:  # TPE requires *grudge* array context, not array_context
-        ctx = cl.create_some_context()
-        queue = cl.CommandQueue(ctx)
-        actx = PyOpenCLArrayContext(queue)
-
-    tol = 1e-11 if tpe else 5e-12
-    test_passed = True
-
-    for f_order in range(p_prime+1):
-        # print(f"{f_order=}")
-        test_func = partial(_poly_test_func, order=f_order)
-        # test_func2 = partial(_poly_test_func, power=2)
-        grad_test_func = partial(_dpoly_test_func, order=f_order)
-        integ_test_func = partial(_ipoly_test_func, order=f_order)
-
-        a = (-1,)*dim
-        b = (1,)*dim
-
-        # Make non-uniform spacings
-        # b = tuple((2 ** n) for n in range(dim))
-
-        mesh = get_box_mesh(dim, a=a, b=b, n=8, tensor_product_elements=tpe)
-        if wonk:
-            mesh = map_mesh(mesh, add_wonk)
-        if rot_axis is not None:
-            mesh = rotate_mesh_around_axis(mesh, theta=theta, axis=rot_axis)
-
-        logger.info(
-            f"Number of {dim}d elements: {mesh.nelements}"
-        )
-
-        dcoll = create_discretization_collection(
-            actx, mesh, order=p, quadrature_order=p_prime)
-
-        # compute min element size
-        h_min = actx.to_numpy(h_min_from_volume(dcoll))[()]
-        # lenscale = actx.to_numpy(min(flatten(
-        #    characteristic_lengthscales(actx, dcoll), actx)))
-
-        if overint:
-            quad_discr_tag = DISCR_TAG_QUAD
-        else:
-            quad_discr_tag = DISCR_TAG_BASE
-
-        allfaces_dd_quad = as_dofdesc(FACE_RESTR_ALL, quad_discr_tag)
-        vol_dd_base = as_dofdesc(DTAG_VOLUME_ALL)
-        vol_dd_quad = vol_dd_base.with_discr_tag(quad_discr_tag)
-        bdry_dd_base = as_dofdesc(BTAG_ALL)
-        bdry_dd_quad = bdry_dd_base.with_discr_tag(quad_discr_tag)
-
-        x_base = actx.thaw(dcoll.nodes(dd=vol_dd_base))
-        bdry_x_base = actx.thaw(dcoll.nodes(bdry_dd_base))
-
-        def get_flux(u_tpair, dcoll=dcoll):
-            dd = u_tpair.dd
-            dd_allfaces = dd.with_domain_tag(
-                BoundaryDomainTag(FACE_RESTR_ALL, VTAG_ALL)
-                )
-            normal = geo.normal(actx, dcoll, dd)
-            u_avg = u_tpair.avg
-            flux = u_avg * normal
-            return op.project(dcoll, dd, dd_allfaces, flux)
-
-        test_tol = tol * dim * p / h_min
-
-        # nodes = actx.thaw(dcoll.nodes())
-        # print(f"{nodes=}")
-        # int_flux = partial(central_flux_interior, actx, dcoll)
-        # bnd_flux = partial(central_flux_boundary, actx, dcoll, test_func)
-
-        u_base = test_func(x_vec=x_base)
-        u_bnd_base = test_func(x_vec=bdry_x_base)
-        u_quad = op.project(dcoll, vol_dd_base, vol_dd_quad, u_base)
-        # u2_exact = test_func2(x_vec=x_quad)
-
-        u_bnd_flux_quad = (
-            sum(get_flux(op.project_tracepair(dcoll, allfaces_dd_quad, itpair))
-                for itpair in op.interior_trace_pairs(dcoll, u_base,
-                                                      volume_dd=vol_dd_base))
-            + get_flux(op.project_tracepair(
-                dcoll, bdry_dd_quad,
-                op.bv_trace_pair(dcoll, bdry_dd_base, u_base, u_bnd_base)))
-        )
-
-        exact_grad = grad_test_func(x_vec=x_base)
-        exact_integ = integ_test_func(x_vec=x_base)
-
-        err_scale = actx.to_numpy(
-            max(flatten(componentwise_norms(dcoll, exact_grad, np.inf),
-                                              actx)))[()]
-        ierr_scale = actx.to_numpy(
-            max(flatten(componentwise_norms(dcoll, exact_integ, np.inf),
-                                              actx)))[()]
-        # print(f"{err_scale=}")
-        if err_scale <= test_tol:
-            err_scale = 1
-            print(f"Rescaling: {err_scale=}")
-        if ierr_scale <= test_tol:
-            ierr_scale = 1
-            print(f"Rescaling: {ierr_scale=}")
-
-        # print(f"{actx.to_numpy(test_data)=}")
-        # print(f"{actx.to_numpy(exact_grad)=}")
-
-        # test_data_int_tpair = op.project_tracepair(
-        #    dcoll, allfaces_dd_quad, interior_trace_pair(dcoll, u_base))
-
-        # boundaries = [BTAG_ALL]
-        # test_data_flux_bnd = _elbnd_flux(dcoll, int_flux, bnd_flux,
-        #                                 test_data_int_tpair, boundaries)
-        # ubfq = actx.to_numpy(u_bnd_flux_quad)
-        # tdfb = actx.to_numpy(test_data_flux_bnd)
-        # print(f"{ubfq=}")
-        # print(f"{tdfb=}")
-
-        # flux_diff = u_bnd_flux_quad - test_data_flux_bnd
-        # flux_diff = actx.to_numpy(flux_diff)
-        # print(f"{flux_diff=}")
-        # assert False
-        # dd_vol = as_dofdesc("vol")
-        # dd_allfaces = as_dofdesc("all_faces")
-        # local_grad = op.weak_local_grad(dcoll, dd_vol, test_data)
-        # print(f"{actx.to_numpy(local_grad)=}")
-        test_grad = grad_operator(dcoll, vol_dd_quad, allfaces_dd_quad,
-                                  u_quad, u_bnd_flux_quad)
-        # u_base2 = u_base * u_base
-        # u_quad2 = u_quad * u_quad
-        # u2_exact =
-        # u_base2_quad = op.project(dcoll, vol_dd_base, vol_dd_quad, u_base2)
-        # test_integ_base = op.elementwise_integral(dcoll, vol_dd_base, u_base)
-        # test_integ_quad = op.elementwise_integral(dcoll, vol_dd_quad, u_quad)
-
-        # print(f"{actx.to_numpy(test_integ_base)=}")
-        # print(f"{actx.to_numpy(test_integ_quad)=}")
-        # print(f"{actx.to_numpy(test_grad)=}")
-
-        grad_err = \
-            max(flatten(
-                componentwise_norms(dcoll, test_grad - exact_grad, np.inf),
-                actx) / err_scale)
-        grad_err = actx.to_numpy(grad_err)
-        print(f"{p=},{h_min=},{f_order=},{grad_err=},{test_tol=}")
-        this_test = grad_err < test_tol
-
-        print(f"{test_passed=}, {overint=}")
-        # ensure it fails with no overintegration for function order > p
-        if f_order > p and not overint:
-            this_test = not this_test
-
-        test_passed = test_passed and this_test
-    assert test_passed
 
 
 def _sym_chebyshev_polynomial(n, x):

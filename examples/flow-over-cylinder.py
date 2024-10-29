@@ -1,5 +1,30 @@
-"""Demonstrate an iviscid subsonic flow over a cylinder."""
+"""
+Inviscid Flow Over Cylinder Simulation (2D/3D)
 
+This driver simulates inviscid compressible flow past a cylinder.
+It supports both 2D and 3D configurations and demonstrates aliasing-driven
+instabilities on the downstream/trailing surface of the cylinder where
+there is entropy generation due to strong solution gradients.
+This case can highlight the effectiveness of dealiasing (overintegration)
+in for mitigating this spurious numerically generated entropy.
+
+The test case follows the setup in Section 4.3.1 of Mengaldo et al. [1],
+and the simulation results are consistent with Figure 14 from the paper.
+This simulation serves as a benchmark for evaluating aliasing effects in
+mirgecom.
+
+Key features:
+- **2D/3D Flow Geometry**: 2D is default, optionally run in 3D
+- **Dealiasing Techniques**: Overintegration (-o) with (-quad-order)
+
+References:
+-----------
+[1] G. Mengaldo, D. De Grazia, D. Moxey, P. E. Vincent, and S. J. Sherwin,
+    "Dealiasing techniques for high-order spectral element methods on
+    regular and irregular grids,"
+    Journal of Computational Physics, vol. 299, pp. 56–81, 2015.
+    DOI: 10.1016/j.jcp.2015.06.032
+"""
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
 """
