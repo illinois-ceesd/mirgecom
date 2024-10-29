@@ -67,7 +67,7 @@ def create_discretization_collection(actx, volume_meshes, order, *,
         if isinstance(volume_meshes, Mesh):
             the_mesh = volume_meshes
         else:
-            the_mesh = volume_meshes.values()[0]
+            the_mesh = next(iter(volume_meshes.values()))
         mesh_is_tpe = \
             isinstance(next(iter(the_mesh.groups())), TensorProductElementGroup)
 
