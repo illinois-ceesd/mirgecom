@@ -101,6 +101,8 @@ class MyRuntimeError(RuntimeError):
 
     pass
 
+class _AgitatorCommTag:
+    pass
 
 def _advection_flux_interior(dcoll, state_tpair, velocity):
     r"""Compute the numerical flux for divergence of advective flux."""
@@ -401,7 +403,8 @@ def main(actx_class,
                          flux_only=False):
 
         if state_interior_trace_pairs is None:
-            state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
+            state_interior_trace_pairs = \
+                op.interior_trace_pairs(dcoll, state, comm_tag=_AgitatorCommTag)
         v_quad = op.project(dcoll, dd_vol, dd_vol_quad, velocity)
 
         # This "flux" function returns the *numerical flux* that will
@@ -433,7 +436,8 @@ def main(actx_class,
 
         state_interior_trace_pairs = [
             interp_to_surf_quad(tpair=tpair)
-            for tpair in op.interior_trace_pairs(dcoll, state)
+            for tpair in op.interior_trace_pairs(dcoll, state,
+                                                 comm_tag=_AgitatorCommTag)
         ]
         vol_fluxes, surf_fluxes = \
             my_advection_rhs(t, state_quad, velocity,
