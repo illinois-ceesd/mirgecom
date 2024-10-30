@@ -101,8 +101,10 @@ class MyRuntimeError(RuntimeError):
 
     pass
 
+
 class _AgitatorCommTag:
     pass
+
 
 def _advection_flux_interior(dcoll, state_tpair, velocity):
     r"""Compute the numerical flux for divergence of advective flux."""
