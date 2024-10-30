@@ -175,7 +175,7 @@ def main(actx_class,
     # t_final = nsteps * current_dt
     current_t = 0
     constant_cfl = False
-    nsteps_period = 2000
+    nsteps_period = 20
     period = nsteps_period*current_dt
     t_final = 4*period
 
