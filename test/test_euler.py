@@ -407,7 +407,8 @@ def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
                          [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
-def test_vortex_rhs(actx_factory, order, tpe, use_overintegration, numerical_flux_func):
+def test_vortex_rhs(actx_factory, order, tpe, use_overintegration,
+                    numerical_flux_func):
     """Test the inviscid rhs using the non-trivial 2D isentropic vortex.
 
     The case is configured to yield rhs = 0. Checks several different orders
