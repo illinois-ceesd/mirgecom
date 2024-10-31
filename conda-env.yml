@@ -13,6 +13,7 @@ dependencies:
 - conda-forge::numpy
 # See https://github.com/illinois-ceesd/mirgecom/pull/1055:
 - pocl=5.0=*_6
+- nvtop
 - clinfo
 - pudb
 - islpy
