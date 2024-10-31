@@ -2,17 +2,11 @@ r"""
 2D Advection Simulation with Spatially Varying Coefficients
 
 This driver simulates the 2D advection of a Gaussian pulse with
-spatially varying velocity coefficients. The advection equation
-is solved using a high-order spectral element method optionally
-with dealiasing techniques (overintegration). The velocity field
-varies as a polynomial in space, which introduces aliasing errors
-that are addressed by applying consistent integration as described
-in the reference.
-
-The test case follows the setup in Section 4.1 of Mengaldo et al. [1],
-and the simulation results are consistent with Figure 7 from the paper.
-This case serves as a benchmark for evaluating the effectiveness
-of dealiasing strategies in high-order spectral element methods.
+spatially varying velocity coefficients. The test case follows the
+setup in Section 4.1 of Mengaldo et al. [1], and the simulation
+results are consistent with Figure 7 from the paper. This case serves
+as a benchmark for evaluating the effectiveness of dealiasing strategies
+using overintegration.
 
 The governing equations for the advection problem are:
 
@@ -25,6 +19,9 @@ $a_y(x, y, t)$ are the spatially varying advection velocities. The
 initial conditions include a Gaussian pulse, and the solution evolves
 periodically over time so that it recovers the initial state every
 *period*.
+
+An overintegration verification test using the setup in this example
+is implemented in 'test_overintegration.py`.
 
 References:
 -----------

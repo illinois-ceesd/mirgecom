@@ -1,4 +1,4 @@
-"""Test the Euler gas dynamics module."""
+"""Test overintegration."""
 
 __copyright__ = """
 Copyright (C) 2020 University of Illinois Board of Trustees
@@ -37,7 +37,10 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 
-from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from meshmode.array_context import (
+    PytestPyOpenCLArrayContextFactory,
+    PytatoPyOpenCLArrayContext
+)
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.integrators import rk4_step
@@ -52,6 +55,9 @@ from meshmode.discretization.connection import FACE_RESTR_ALL
 from mirgecom.steppers import advance_state
 import grudge.geometry as geo
 from mirgecom.operators import div_operator
+
+import pyopencl as cl
+import pyopencl.tools as cl_tools
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +89,8 @@ def _advection_flux_interior(dcoll, state_tpair, velocity):
 
 
 def run_agitator(
-        actx, use_overintegration=False,
+        actx=None, use_overintegration=False,
+        ctx_factory=None, actx_factory=None,
         use_leap=False, casename=None, rst_filename=None,
         init_type=None, order=None, quad_order=None,
         tpe=None, p_adv=1.0):
@@ -96,6 +103,19 @@ def run_agitator(
         tpe = False
     if use_overintegration is None:
         use_overintegration = False
+
+    if actx is None and ctx_factory is None and actx_factory is None:
+        raise RuntimeError("Requires actx, ctx_factory, or actx_factory")
+    if actx is None and actx_factory is not None:
+        actx = actx_factory()
+    elif actx is None:
+        cl_ctx = ctx_factory()
+        queue = cl.CommandQueue(cl_ctx)
+        actx = \
+            PytatoPyOpenCLArrayContext(
+                queue,
+                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
+            )
 
     # timestepping control
     current_step = 0
@@ -180,6 +200,9 @@ def run_agitator(
 
     def my_pre_step(step, t, dt, state):
 
+        if step % 1000 == 0:
+            print(f"{step=}, {t=}")
+
         time_left = max(0, t_final - t)
         dt = min(time_left, dt)
         return state, dt
@@ -250,28 +273,80 @@ def run_agitator(
     return actx.to_numpy(op.norm(dcoll, state_resid, 2))
 
 
-@pytest.mark.parametrize("warp", [1, 2, 3, 4])
-def test_dealiasing_with_overintegration(actx_factory, warp):
+@pytest.mark.parametrize("tpe", [True, False])
+@pytest.mark.parametrize("warp", [1, 2, 4])  # Skip 3 to save test time
+def test_dealiasing_with_overintegration(actx_factory, tpe, warp):
+    r"""
+    Test dealiasing with overintegration.
 
-    actx = actx_factory()
+    This test uses a 2D advection of a Gaussian pulse with
+    spatially varying velocity coefficients to introduce errors
+    caused by aliasing. The degree of spatial dependency dials-in
+    the quadrature required to eliminate the errors due to aliasing,
+    and thus can be used to test whether overintegration is working
+    properly.
+
+    The test case follows the setup in Section 4.1 of Mengaldo et al. [1],
+    and the simulation results are consistent with Figure 7 from the paper.
+    This case serves as a benchmark for evaluating the effectiveness
+    of dealiasing strategies in high-order spectral element methods.
+
+    The governing equations for the advection problem are:
+
+    $$
+    \partial_t{u} + \partial_x{(a_x u)} + \partial_y{(a_y u)} = 0
+    $$
+
+    where $u$ is the scalar conserved quantity, and $a_x(x, y, t)$ and
+    $a_y(x, y, t)$ are the spatially varying advection velocities. The
+    initial conditions include a Gaussian pulse, and the solution evolves
+    periodically over time so that it recovers the initial state every
+    *period*.
+
+    A stand-alone example driver that exercises this setup in a full
+    simulationvis implemented in 'agitator.py`.
+
+    References:
+    -----------
+    [1] G. Mengaldo, D. De Grazia, D. Moxey, P. E. Vincent, and S. J. Sherwin,
+    "Dealiasing techniques for high-order spectral element methods on
+     regular and irregular grids,"
+    Journal of Computational Physics, vol. 299, pp. 56–81, 2015.
+    DOI: 10.1016/j.jcp.2015.06.032
+    """
+
     poly_degree = 4
     tol = 2e-16
-    q_expected = int(poly_degree + warp/2. + 3./2. + 1./2.)
-    print(f"{q_expected=}")
-    l2_error_p = run_agitator(actx, use_overintegration=False,
-                              p_adv=warp, order=poly_degree, tpe=True)
-    l2_error_n = run_agitator(actx, use_overintegration=True,
-                              p_adv=warp, order=poly_degree, tpe=True)
-    q_n = poly_degree
+    q_expected = 2*poly_degree + warp  # XiaoGimbutas *order*
+    if tpe:  # JacobiGauss num points/axis
+        q_expected = int(poly_degree + warp/2. + 3./2. + 1./2.)
+    print(f"{tpe=}, {warp=}, {q_expected=}")
+    l2_error_p = run_agitator(actx_factory=actx_factory,
+                              use_overintegration=False,
+                              p_adv=warp, order=poly_degree, tpe=tpe)
+    print(f"l2_error_base={l2_error_p}")
+    # Start trials at target order - 2 to save test time
+    q_n = 2*poly_degree + warp - 1
+    if tpe:
+        q_n = max(poly_degree, q_expected - 2)
+    l2_error_n = run_agitator(actx_factory=actx_factory,
+                              use_overintegration=True,
+                              p_adv=warp, order=poly_degree, tpe=tpe,
+                              quad_order=q_n)
     diff = abs(l2_error_p - l2_error_n)
+    print(f"l2_error_q{q_n}={l2_error_n}, {diff=}")
     while diff > tol:
         q_n = q_n + 1
         l2_error_m = l2_error_n
-        l2_error_n = run_agitator(actx, use_overintegration=True,
-                                  p_adv=warp, order=poly_degree, tpe=True,
+        l2_error_n = run_agitator(actx_factory=actx_factory,
+                                  use_overintegration=True,
+                                  p_adv=warp, order=poly_degree, tpe=tpe,
                                   quad_order=q_n)
         diff = abs(l2_error_m - l2_error_n)
-
-    print(f"{diff=}, {q_n=}")
-    q = q_n + 1
+        print(f"l2_error_q{q_n}={l2_error_n}, {diff=}")
+    assert diff < tol
+    q = q_n  # Simplices; q_expected is XiaoGimbutas order
+    if tpe:
+        q = q + 1  # TPEs; q_expected is num points / axis
+    print(f"Final: {diff=}, {q_n=}, {q=}")
     assert q == q_expected
