@@ -30,8 +30,16 @@ import numpy as np
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL
+from meshmode.mesh import TensorProductElementGroup
+from meshmode.mesh.generation import generate_annular_cylinder_mesh
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD, BoundaryDomainTag
+from grudge.dof_desc import (
+    DD_VOLUME_ALL,
+    DISCR_TAG_BASE,
+    DISCR_TAG_QUAD,
+    BoundaryDomainTag,
+)
+from grudge.op import nodal_max
 import grudge.op as op
 
 from logpyle import IntervalTimer, set_dt
@@ -42,16 +50,19 @@ from mirgecom.euler import euler_operator
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
     get_sim_timestep,
-    distribute_mesh
+    distribute_mesh,
+    get_box_mesh,
 )
 from mirgecom.utils import force_evaluation
-from mirgecom.io import make_init_message
-
 from mirgecom.integrators import rk4_step, euler_step
+from mirgecom.inviscid import get_inviscid_cfl
+from mirgecom.io import make_init_message
 from mirgecom.steppers import advance_state
 from mirgecom.boundary import (
     AdiabaticSlipBoundary,
-    IsothermalWallBoundary
+    IsothermalWallBoundary,
+    DummyBoundary,
+    PrescribedFluidBoundary
 )
 from mirgecom.initializers import (
     Uniform,
@@ -107,26 +118,30 @@ def main(actx_class, use_esdg=False, use_tpe=False,
          use_av=0, use_limiter=False, order=1,
          nscale=1, npassive_species=0, map_mesh=False,
          rotation_angle=0, add_pulse=False, nsteps=20,
-         mesh_filename=None, euler_timestepping=False, quad_order=None,
-         inviscid_flux=None):
+         mesh_filename=None, euler_timestepping=False,
+         geometry_name=None, init_name=None, velocity_field=None,
+         density_field=None, inviscid_flux=None):
     """Drive the example."""
     if casename is None:
-        casename = "gas-in-box"
+        casename = "gas-simulation"
+    if geometry_name is None:
+        geometry_name = "box"
+    if init_name is None:
+        init_name = "quiescent"
     if inviscid_flux is None:
         inviscid_flux = "rusanov"
-
-    if quad_order is None:
-        quad_order = 7
-        # quad_order = order if use_tpe else order + 3
+    if dim is None:
+        dim = 2
+    if geometry_name == "annulus":
+        axis_names = ["r", "theta", "z"]
+    else:
+        axis_names = ["1", "2", "3"]
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
 
-    inviscid_numerical_flux_func = inviscid_facial_flux_rusanov
-    if inviscid_flux == "central":
-        inviscid_numerical_flux_func = inviscid_facial_flux_central
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
 
@@ -156,9 +171,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     temperature_tolerance = 1e-2
 
     # some i/o frequencies
-    nstatus = 1
+    nstatus = 100
     nrestart = 100
-    nviz = 1
+    nviz = 100
     nhealth = 1
 
     rst_path = "restart_data/"
@@ -174,6 +189,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
+        generate_mesh = None
         if mesh_filename is not None:
             from meshmode.mesh.io import read_gmsh
             mesh_construction_kwargs = {
@@ -192,18 +208,28 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                     force_ambient_dim=dim
                 )
         else:
-            if dim is None:
-                dim = 2
             nscale = max(nscale, 1)
             scale_fac = pow(float(nscale), 1.0/dim)
             nel_1d = int(scale_fac*24/dim)
-            from mirgecom.simutil import get_box_mesh
+            group_cls = TensorProductElementGroup if use_tpe else None
             box_ll = -1
             box_ur = 1
-            generate_mesh = partial(
-                get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
-                n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
-                tensor_product_elements=use_tpe)
+            r0 = .333
+            r1 = 1.0
+            center = make_obj_array([0, 0, 0])
+            if geometry_name == "box":
+                print(f"MESH RESOLUTION: {nel_1d=}")
+                generate_mesh = partial(
+                    get_box_mesh, dim=dim, a=(box_ll,)*dim, b=(box_ur,)*dim,
+                    n=(nel_1d,)*dim, periodic=(periodic_mesh,)*dim,
+                    tensor_product_elements=use_tpe)
+            elif geometry_name == "annulus":
+                nel_axes = (10, 72, 3)
+                print(f"MESH RESOLUTION: {nel_axes=}")
+                generate_mesh = partial(
+                    generate_annular_cylinder_mesh, inner_radius=r0, n=12,
+                    outer_radius=r1, nelements_per_axis=nel_axes, periodic=True,
+                    group_cls=group_cls, center=center)
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
@@ -240,7 +266,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     nodes = actx.thaw(dcoll.nodes())
     ones = dcoll.zeros(actx) + 1.
 
-    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
+    quadrature_tag = DISCR_TAG_QUAD if use_overintegration else DISCR_TAG_BASE
 
     vis_timer = None
 
@@ -258,13 +284,35 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             ("t_log.max", "log walltime: {value:6g} s")
         ])
 
-    velocity = np.zeros(shape=(dim,))
+    rho_base = 1.2039086127319172
+    rho_init = rho_base
+    velocity_init = 0*nodes
+    v_r = 50.0
+    v_z = 0.
+
+    if velocity_field == "rotational":
+        if rank == 0:
+            print("Initializing rotational velocity field.")
+        velocity_init[0] = -v_r*nodes[1]/r1
+        velocity_init[1] = v_r*nodes[0]/r1
+        if dim > 2:
+            velocity_init[2] = v_z
+
+    if density_field == "gaussian":
+        if rank == 0:
+            print("Initializing Gaussian lump density.")
+        r2 = np.dot(nodes, nodes)/(r1*r1)
+        alpha = np.log(1e-5)  # make it 1e-5 at the boundary
+        rho_init = rho_init + rho_init*actx.np.exp(alpha*r2)/5.
 
     species_diffusivity = None
     speedup_factor = 1.0
     pyro_mechanism = None
+
     if use_mixture:
         # {{{  Set up initial state using Cantera
+        if rank == 0:
+            print(f"Initializing for gas mixture {mech_name=}.")
 
         # Use Cantera for initialization
         # -- Pick up the input data for the thermochemistry mechanism
@@ -315,31 +363,40 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             get_pyrometheus_wrapper_class_from_cantera(
                 cantera_soln, temperature_niter=newton_iters)(actx.np)
         eos = PyrometheusMixture(pyro_mechanism, temperature_guess=temperature_seed)
-        initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
-                              species_mass_fractions=can_y, velocity=velocity)
+        pressure_init = can_p
+        temperature_init = can_t
+        y_init = can_y
+        rho_init = None
+        # initializer = Uniform(dim=dim, pressure=can_p, temperature=can_t,
+        #                      species_mass_fractions=can_y, velocity=velocity_init)
         init_t = can_t
     else:
         use_reactions = False
         eos = IdealSingleGas(gamma=1.4)
-        species_y = None
+        pressure_init = 101325
+        y_init = None
+        init_t = 293.15
+        temperature_init = None
         if npassive_species > 0:
-            print(f"Initializing with {npassive_species} passive species.")
+            if rank == 0:
+                print(f"Initializing with {npassive_species} passive species.")
             nspecies = npassive_species
             spec_diff = 1e-4
-            species_y = np.array([1./float(nspecies) for _ in range(nspecies)])
+            y_init = np.array([1./float(nspecies) for _ in range(nspecies)])
             species_diffusivity = np.array([spec_diff * 1./float(j+1)
                                             for j in range(nspecies)])
-
-        initializer = Uniform(velocity=velocity, pressure=101325,
-                              rho=1.2039086127319172,
-                              species_mass_fractions=species_y)
-        init_t = 293.15
 
     temperature_seed = init_t * ones
     temperature_seed = force_evaluation(actx, temperature_seed)
 
+    initializer = Uniform(dim=dim, pressure=pressure_init,
+                          temperature=temperature_init, rho=rho_init,
+                          velocity=velocity_init, species_mass_fractions=y_init)
+
     wall_bc = IsothermalWallBoundary(wall_temperature=init_t) \
         if use_navierstokes else AdiabaticSlipBoundary()
+    if velocity_field == "rotational" and geometry_name == "box":
+        wall_bc = DummyBoundary()
 
     # initialize parameters for transport model
     transport = None
@@ -469,10 +526,66 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             error_message = "Unknown artifical viscosity model {}".format(use_av)
             raise RuntimeError(error_message)
 
+    inviscid_flux_func = inviscid_facial_flux_rusanov
+    if inviscid_flux == "central":
+        inviscid_flux_func = inviscid_facial_flux_central
     gas_model = GasModel(eos=eos, transport=transport)
     fluid_operator = ns_operator if use_navierstokes else euler_operator
     orig = np.zeros(shape=(dim,))
+
+    def rotational_flow_init(dcoll, dd_bdry=None, gas_model=gas_model,
+                             state_minus=None, **kwargs):
+
+        if dd_bdry is None:
+            dd_bdry = DD_VOLUME_ALL
+        loc_discr = dcoll.discr_from_dd(dd_bdry)
+        loc_nodes = actx.thaw(loc_discr.nodes())
+
+        dim = len(loc_nodes)
+        velocity_init = 0*loc_nodes
+
+        if velocity_field == "rotational":
+            if rank == 0:
+                print("Initializing rotational velocity field.")
+            velocity_init[0] = -v_r*loc_nodes[1]/r1
+            velocity_init[1] = v_r*loc_nodes[0]/r1
+            if dim > 2:
+                velocity_init[2] = v_z
+
+        loc_rho_init = rho_base
+        if density_field == "gaussian":
+            if rank == 0:
+                print("Initializing Gaussian lump density.")
+            r2 = np.dot(loc_nodes, loc_nodes)/(r1*r1)
+            alpha = np.log(1e-5)  # make it 1e-5 at the boundary
+            loc_rho_init = rho_base + rho_base*actx.np.exp(alpha*r2)/5.
+
+        init_func = Uniform(
+            dim=dim, pressure=pressure_init,
+            temperature=temperature_init, rho=loc_rho_init,
+            velocity=velocity_init, species_mass_fractions=y_init)
+        loc_cv = init_func(loc_nodes, eos=eos)
+
+        if add_pulse:
+            loc_orig = np.zeros(shape=(dim,))
+            acoustic_pulse = AcousticPulse(dim=dim, amplitude=100., width=.1,
+                                           center=loc_orig)
+            loc_cv = acoustic_pulse(x_vec=loc_nodes, cv=loc_cv, eos=eos,
+                                        tseed=temperature_seed)
+
+        # loc_limiter_func = None
+        return make_fluid_state(cv=loc_cv, gas_model=gas_model,
+                                    temperature_seed=temperature_seed)
+
+    wall_state_func = rotational_flow_init
     uniform_cv = initializer(nodes, eos=eos)
+
+    if rank == 0:
+        if use_navierstokes:
+            print("Using compressible Navier-Stokes RHS operator.")
+        else:
+            print("Using Euler RHS operator.")
+        print(f"Using inviscid numerical flux: {inviscid_flux}")
 
     def mixture_mass_fraction_limiter(cv, temperature_seed, gas_model, dd=None):
 
@@ -544,12 +657,20 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         else:
             return gas_state.cv
 
+    wall_bc_type = "prescribed"
+    wall_bc_type = ""
     boundaries = {}
-    if not periodic_mesh:
+    if wall_bc_type == "prescribed":
+        wall_bc = PrescribedFluidBoundary(boundary_state_func=wall_state_func)
+
+    if geometry_name == "annulus":  # Force r-direction to be a wall
+        boundaries[BoundaryDomainTag(f"+{axis_names[0]}")] = wall_bc
+        boundaries[BoundaryDomainTag(f"-{axis_names[0]}")] = wall_bc
+    if not periodic_mesh and geometry_name != "annulus":
         if multiple_boundaries:
             for idir in range(dim):
-                boundaries[BoundaryDomainTag(f"+{idir+1}")] = wall_bc
-                boundaries[BoundaryDomainTag(f"-{idir+1}")] = wall_bc
+                boundaries[BoundaryDomainTag(f"+{axis_names[idir]}")] = wall_bc
+                boundaries[BoundaryDomainTag(f"-{axis_names[idir]}")] = wall_bc
         else:
             boundaries = {BTAG_ALL: wall_bc}
 
@@ -596,9 +717,17 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         from mirgecom.logging_quantities import logmgr_set_time
         logmgr_set_time(logmgr, current_step, current_t)
 
+    def get_simulation_cfl(gas_state, dt):
+        cfl = current_cfl
+        if not constant_cfl:
+            cfl = actx.to_numpy(
+                nodal_max(dcoll, "vol",
+                          get_inviscid_cfl(dcoll, gas_state, dt)))[()]
+        return cfl
+
     visualizer = make_visualizer(dcoll)
 
-    initname = "gas-in-box"
+    initname = "gas-simulation"
     eosname = eos.__class__.__name__
     init_message = make_init_message(dim=dim, order=order,
                                      nelements=local_nelements,
@@ -610,11 +739,21 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     if rank == 0:
         logger.info(init_message)
 
+    exact_func = None
+
     def my_write_viz(step, t, gas_state):
         dv = gas_state.dv
         cv = gas_state.cv
+        ones = actx.np.zeros_like(nodes[0]) + 1
+        rank_field = rank*ones
         viz_fields = [("cv", cv),
-                      ("dv", dv)]
+                      ("dv", dv),
+                      ("vel", cv.velocity),
+                      ("rank", rank_field)]
+        if exact_func is not None:
+            exact = exact_func(time=t, state=gas_state)
+            viz_fields.append(("exact", exact))
+
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -676,6 +815,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
             do_health = check_step(step=step, interval=nhealth)
+            do_status = check_step(step=step, interval=nstatus)
 
             if do_health:
                 health_errors = global_reduce(my_health_check(gas_state), op="lor")
@@ -690,6 +830,18 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             if do_viz:
                 my_write_viz(step=step, t=t, gas_state=gas_state)
 
+            dt = get_sim_timestep(dcoll, gas_state.cv, t, dt, current_cfl,
+                                  t_final, constant_cfl)
+
+            if do_status:
+                if rank == 0:
+                    print(f"=== STATUS-Step({step}) ===")
+                cfl = current_cfl
+                if not constant_cfl:
+                    cfl = get_simulation_cfl(gas_state, dt)
+                if rank == 0:
+                    print(f"{dt=}, {cfl=}")
+
         except MyRuntimeError:
             if rank == 0:
                 logger.info("Errors detected; attempting graceful exit.")
@@ -697,8 +849,6 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             my_write_restart(step=step, t=t, gas_state=gas_state)
             raise
 
-        dt = get_sim_timestep(dcoll, gas_state.cv, t, dt, current_cfl, t_final,
-                              constant_cfl)
         return gas_state_to_stepper_state(gas_state), dt
 
     def my_post_step(step, t, dt, state):
@@ -709,11 +859,11 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     def my_rhs(t, stepper_state):
         gas_state = stepper_state_to_gas_state(stepper_state)
-        gas_rhs = fluid_operator(
-            dcoll, state=gas_state, time=t,
-            boundaries=boundaries,
-            inviscid_numerical_flux_func=inviscid_numerical_flux_func,
-            gas_model=gas_model, use_esdg=use_esdg, quadrature_tag=quadrature_tag)
+        gas_rhs = fluid_operator(dcoll, state=gas_state, time=t,
+                                 boundaries=boundaries,
+                                 inviscid_numerical_flux_func=inviscid_flux_func,
+                                 gas_model=gas_model, use_esdg=use_esdg,
+                                 quadrature_tag=quadrature_tag)
         if use_reactions:
             gas_rhs = \
                 gas_rhs + eos.get_species_source_terms(gas_state.cv,
@@ -753,67 +903,77 @@ if __name__ == "__main__":
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         level=logging.INFO)
 
-    example_name = "gas-in-box"
+    example_name = "gas-simulation"
     parser = argparse.ArgumentParser(
         description=f"MIRGE-Com Example: {example_name}")
-    parser.add_argument("-o", "--overintegration", action="store_true",
-        help="use overintegration in the RHS computations")
-    parser.add_argument("-l", "--lazy", action="store_true",
-        help="switch to a lazy computation mode")
-    parser.add_argument("--profiling", action="store_true",
-        help="turn on detailed performance profiling")
-    parser.add_argument("--leap", action="store_true",
-        help="use leap timestepper")
-    parser.add_argument("--esdg", action="store_true",
-        help="use entropy-stable dg for inviscid terms.")
-    parser.add_argument("--euler-timestepping", action="store_true",
-                        help="use euler timestepping")
-    parser.add_argument("--nsteps", type=int, default=20,
-                        help="number of timesteps to take")
-    parser.add_argument("--numpy", action="store_true",
-        help="use numpy-based eager actx.")
-    parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
-                        help="spatial dimension of simulation")
-    parser.add_argument("-i", "--iters", type=int, default=1,
-                        help="number of Newton iterations for mixture temperature")
-    parser.add_argument("-r", "--restart_file", help="root name of restart file")
-    parser.add_argument("-c", "--casename", help="casename to use for i/o")
-    parser.add_argument("-p", "--periodic", action="store_true",
-                        help="use periodic boundaries")
-    parser.add_argument("-n", "--navierstokes", action="store_true",
-                        help="use Navier-Stokes operator")
     parser.add_argument("-a", "--artificial-viscosity", type=int,
                         choices=[0, 1, 2, 3],
                         default=0, help="use artificial viscosity")
     parser.add_argument("-b", "--boundaries", action="store_true",
                         help="use multiple (2*ndim) boundaries")
-    parser.add_argument("-k", "--wonky", action="store_true", default=False,
-                        help="make a wonky mesh")
-    parser.add_argument("-m", "--mixture", action="store_true",
-                        help="use gas mixture EOS")
+    parser.add_argument("-c", "--casename", help="casename to use for i/o")
+    parser.add_argument("-d", "--dimension", type=int, choices=[1, 2, 3],
+                        help="spatial dimension of simulation")
+    parser.add_argument("--density-field", type=str,
+                        help="use a named density field initialization")
+    parser.add_argument("-e", "--limiter", action="store_true",
+                        help="use limiter to limit fluid state")
+    parser.add_argument("--esdg", action="store_true",
+        help="use entropy-stable dg for inviscid terms.")
+    parser.add_argument("--euler-timestepping", action="store_true",
+                        help="use euler timestepping")
     parser.add_argument("-f", "--flame", action="store_true",
                         help="use combustion chemistry")
     parser.add_argument("-g", "--rotate", type=float, default=0,
                         help="rotate mesh by angle (degrees)")
-    parser.add_argument("-x", "--transport", type=int, choices=[0, 1, 2], default=0,
-                        help=("transport model specification\n"
-                              + "(0)Simple\n(1)PowerLaw\n(2)Mix"))
-    parser.add_argument("-e", "--limiter", action="store_true",
-                        help="use limiter to limit fluid state")
+    parser.add_argument("--geometry-name", type=str, default="box",
+                        help="preset geometry name (determines mesh shape)")
+    parser.add_argument("-i", "--iters", type=int, default=1,
+                        help="number of Newton iterations for mixture temperature")
+    parser.add_argument("--init-name", type=str, default="quiescent",
+                        help="solution initialization name")
+    parser.add_argument("--inviscid-flux", type=str, default="rusanov",
+                        help="use named inviscid flux function")
+    parser.add_argument("-k", "--wonky", action="store_true", default=False,
+                        help="make a wonky mesh (adds wonk field)")
+    parser.add_argument("-l", "--lazy", action="store_true",
+        help="switch to a lazy computation mode")
+    parser.add_argument("--leap", action="store_true",
+        help="use leap timestepper")
+    parser.add_argument("-m", "--mixture", action="store_true",
+                        help="use gas mixture EOS")
+    parser.add_argument("--meshfile", type=str,
+                        help="name of gmsh input file")
+    parser.add_argument("-n", "--navierstokes", action="store_true",
+                        help="use Navier-Stokes operator", default=False)
+    parser.add_argument("--nsteps", type=int, default=20,
+                        help="number of timesteps to take")
+    parser.add_argument("--numpy", action="store_true",
+        help="use numpy-based eager actx.")
+    parser.add_argument("-o", "--overintegration", action="store_true",
+        help="use overintegration in the RHS computations")
+    parser.add_argument("-p", "--periodic", action="store_true",
+                        help="use periodic boundaries")
+    parser.add_argument("--profiling", action="store_true",
+        help="turn on detailed performance profiling")
+    parser.add_argument("-r", "--restart_file", help="root name of restart file")
     parser.add_argument("-s", "--species", type=int, default=0,
                         help="number of passive species")
     parser.add_argument("-t", "--tpe", action="store_true",
                         help="use tensor-product elements (quads/hexes)")
     parser.add_argument("-u", "--pulse", action="store_true", default=False,
                         help="add an acoustic pulse at the origin")
-    parser.add_argument("-y", "--polynomial-order", type=int, default=1,
-                        help="polynomal order for the discretization")
+    parser.add_argument("--velocity-field", type=str,
+                        help="use a named velocity field initialization.")
     parser.add_argument("-w", "--weak-scale", type=int, default=1,
                         help="factor by which to scale the number of elements")
+    parser.add_argument("-x", "--transport", type=int, choices=[0, 1, 2], default=0,
+                        help=("transport model specification\n"
+                              + "(0)Simple\n(1)PowerLaw\n(2)Mix"))
+    parser.add_argument("-y", "--polynomial-order", type=int, default=1,
+                        help="polynomal order for the discretization")
     parser.add_argument("-z", "--mechanism-name", type=str, default="uiuc_7sp",
                         help="name of thermochemical mechanism yaml file")
-    parser.add_argument("--meshfile", type=str,
-                        help="name of gmsh input file")
     args = parser.parse_args()
 
     from warnings import warn
@@ -847,6 +1007,9 @@ if __name__ == "__main__":
          use_navierstokes=args.navierstokes, npassive_species=args.species,
          nscale=args.weak_scale, mech_name=args.mechanism_name,
          map_mesh=args.wonky, rotation_angle=args.rotate, add_pulse=args.pulse,
-         mesh_filename=args.meshfile, euler_timestepping=args.euler_timestepping)
+         mesh_filename=args.meshfile, euler_timestepping=args.euler_timestepping,
+         geometry_name=args.geometry_name, init_name=args.init_name,
+         velocity_field=args.velocity_field, density_field=args.density_field,
+         inviscid_flux=args.inviscid_flux)
 
 # vim: foldmethod=marker
