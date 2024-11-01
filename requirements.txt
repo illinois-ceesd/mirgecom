@@ -9,6 +9,7 @@ psutil
 pyyaml
 meson-python
 ninja
+sympy
 git+https://github.com/pythological/kanren.git#egg=miniKanren
 
 # The following packages will be git cloned by emirge:
