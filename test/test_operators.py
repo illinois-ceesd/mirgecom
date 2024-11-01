@@ -300,13 +300,6 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     # This comes from array_context
     actx = actx_factory()
 
-    if tpe:  # TPE requires *grudge* array context, not array_context
-        ctx = cl.create_some_context()
-        queue = cl.CommandQueue(ctx)
-        actx = PyOpenCLArrayContext(
-            queue=queue,
-            allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue)))
-
     sym_test_func = sym_test_func_factory(dim)
 
     tol = 1e-10 if dim < 3 else 2e-9
