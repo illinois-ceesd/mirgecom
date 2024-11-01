@@ -37,10 +37,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 
-from meshmode.array_context import (
-    PytestPyOpenCLArrayContextFactory,
-    PytatoPyOpenCLArrayContext
-)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.integrators import rk4_step
@@ -57,7 +54,6 @@ import grudge.geometry as geo
 from mirgecom.operators import div_operator
 
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 
 logger = logging.getLogger(__name__)
 
@@ -109,13 +105,12 @@ def run_agitator(
     if actx is None and actx_factory is not None:
         actx = actx_factory()
     elif actx is None:
+        from grudge.array_context import FusionContractorArrayContext
+        from mirgecom.simutil import get_reasonable_memory_pool
         cl_ctx = ctx_factory()
         queue = cl.CommandQueue(cl_ctx)
-        actx = \
-            PytatoPyOpenCLArrayContext(
-                queue,
-                allocator=cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
-            )
+        alloc = get_reasonable_memory_pool(cl_ctx, queue)
+        actx = FusionContractorArrayContext(queue, allocator=alloc)
 
     # timestepping control
     current_step = 0
@@ -275,7 +270,7 @@ def run_agitator(
 
 @pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("warp", [1, 2, 4])  # Skip 3 to save test time
-def test_dealiasing_with_overintegration(actx_factory, tpe, warp):
+def test_dealiasing_with_overintegration(ctx_factory, tpe, warp):
     r"""
     Test dealiasing with overintegration.
 
@@ -288,8 +283,10 @@ def test_dealiasing_with_overintegration(actx_factory, tpe, warp):
 
     The test case follows the setup in Section 4.1 of Mengaldo et al. [1],
     and the simulation results are consistent with Figure 7 from the paper.
-    This case serves as a benchmark for evaluating the effectiveness
-    of dealiasing strategies in high-order spectral element methods.
+    The general idea is to keep increasing the quadrature order until the
+    improvement is on the scale of machine precision.  The quadrature
+    order at which the error saturates is predicted through analysis.
+    See [1] for details.
 
     The governing equations for the advection problem are:
 
@@ -321,7 +318,7 @@ def test_dealiasing_with_overintegration(actx_factory, tpe, warp):
     if tpe:  # JacobiGauss num points/axis
         q_expected = int(poly_degree + warp/2. + 3./2. + 1./2.)
     print(f"{tpe=}, {warp=}, {q_expected=}")
-    l2_error_p = run_agitator(actx_factory=actx_factory,
+    l2_error_p = run_agitator(ctx_factory=ctx_factory,
                               use_overintegration=False,
                               p_adv=warp, order=poly_degree, tpe=tpe)
     print(f"l2_error_base={l2_error_p}")
@@ -329,7 +326,7 @@ def test_dealiasing_with_overintegration(actx_factory, tpe, warp):
     q_n = 2*poly_degree + warp - 1
     if tpe:
         q_n = max(poly_degree, q_expected - 2)
-    l2_error_n = run_agitator(actx_factory=actx_factory,
+    l2_error_n = run_agitator(ctx_factory=ctx_factory,
                               use_overintegration=True,
                               p_adv=warp, order=poly_degree, tpe=tpe,
                               quad_order=q_n)
@@ -338,7 +335,7 @@ def test_dealiasing_with_overintegration(actx_factory, tpe, warp):
     while diff > tol:
         q_n = q_n + 1
         l2_error_m = l2_error_n
-        l2_error_n = run_agitator(actx_factory=actx_factory,
+        l2_error_n = run_agitator(ctx_factory=ctx_factory,
                                   use_overintegration=True,
                                   p_adv=warp, order=poly_degree, tpe=tpe,
                                   quad_order=q_n)

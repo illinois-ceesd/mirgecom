@@ -7,8 +7,6 @@ pymetis
 importlib-resources
 psutil
 pyyaml
-meson-python
-ninja
 sympy
 git+https://github.com/pythological/kanren.git#egg=miniKanren
 
