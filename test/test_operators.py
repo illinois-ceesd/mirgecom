@@ -266,9 +266,6 @@ def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
     - trig funcs
     - :class:`~mirgecom.fluid.ConservedVars` composed of funcs from above
     """
-    import pyopencl as cl
-    import pyopencl.tools as cl_tools
-    from grudge.array_context import PyOpenCLArrayContext
     from meshmode.mesh.processing import rotate_mesh_around_axis
     from grudge.dt_utils import h_max_from_volume
     from mirgecom.simutil import componentwise_norms

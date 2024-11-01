@@ -37,10 +37,7 @@ from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 
-from meshmode.array_context import (
-    PytestPyOpenCLArrayContextFactory,
-    PytatoPyOpenCLArrayContext
-)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.integrators import rk4_step
@@ -57,7 +54,6 @@ import grudge.geometry as geo
 from mirgecom.operators import div_operator
 
 import pyopencl as cl
-import pyopencl.tools as cl_tools
 
 logger = logging.getLogger(__name__)
 
@@ -110,12 +106,11 @@ def run_agitator(
         actx = actx_factory()
     elif actx is None:
         from grudge.array_context import FusionContractorArrayContext
-        from mirgecom.array_context import initialize_actx
         from mirgecom.simutil import get_reasonable_memory_pool
         cl_ctx = ctx_factory()
         queue = cl.CommandQueue(cl_ctx)
         alloc = get_reasonable_memory_pool(cl_ctx, queue)
-        actx =  FusionContractorArrayContext(queue, allocator=alloc)
+        actx = FusionContractorArrayContext(queue, allocator=alloc)
 
     # timestepping control
     current_step = 0
