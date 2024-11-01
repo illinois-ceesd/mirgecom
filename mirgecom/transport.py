@@ -4,7 +4,7 @@ r"""
 Transport Models
 ^^^^^^^^^^^^^^^^
 This module is designed provide Transport Model objects used to compute and
-manage the transport properties in viscous flows.  The transport properties
+manage the transport properties in viscous flows. The transport properties
 currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 ($\mu_{B}$), the thermal conductivity ($\kappa$), and the species diffusivities
 ($d_{\alpha}$).
@@ -12,6 +12,7 @@ currently implemented are the dynamic viscosity ($\mu$), the bulk viscosity
 .. autoclass:: GasTransportVars
 .. autoclass:: TransportModel
 .. autoclass:: SimpleTransport
+.. autoclass:: SutherlandTransport
 .. autoclass:: PowerLawTransport
 .. autoclass:: MixtureAveragedTransport
 .. autoclass:: ArtificialViscosityTransportDiv
@@ -51,7 +52,6 @@ from typing import Optional
 from dataclasses import dataclass
 from arraycontext import dataclass_array_container
 import numpy as np
-from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from meshmode.dof_array import DOFArray
 from mirgecom.fluid import ConservedVars
 from mirgecom.eos import GasEOS, GasDependentVars
@@ -199,7 +199,142 @@ class SimpleTransport(TransportModel):
                             dv: Optional[GasDependentVars] = None,
                             eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return self._d_alpha*(0*cv.mass + 1.0)  # type: ignore
+        return self._d_alpha*(0*cv.species_mass + 1.0)
+
+
+class SutherlandTransport(TransportModel):
+    r"""Transport model with Sutherland law properties.
+
+    Inherits from (and implements) :class:`TransportModel` based on the
+    temperature-dependent Sutherland law. The implementation here follows OpenFOAM
+    for a comparison between both codes.
+
+    The species viscosity is given by
+
+    .. math::
+        \mu_i = A_{s,i} \frac{\sqrt{T}}{1 + \frac{T_{s,i}}{T}}
+
+    The mixture viscosity, in this case, is simply the weighted sum of
+    individual viscosities by the respective mass fractions.
+
+    .. math::
+        \mu = \sum_i Y_i \mu_i
+
+    The thermal conductivity is given by the Eucken correlation as
+
+    .. math::
+        \kappa = \mu c_v \left( 1.32 + 1.77 \frac{R}{c_v} \right)
+
+    .. automethod:: __init__
+    .. automethod:: bulk_viscosity
+    .. automethod:: viscosity
+    .. automethod:: volume_viscosity
+    .. automethod:: thermal_conductivity
+    .. automethod:: species_diffusivity
+    """
+
+    def __init__(self, a_sutherland, t_sutherland,
+                 prandtl=None, species_diffusivity=None, lewis=None):
+        """Initialize Sutherland law coefficients and parameters.
+
+        Parameters
+        ----------
+        a_sutherland: numpy.ndarray
+            Linear coefficient for the viscosity. The input array
+            must have a shape of "nspecies".
+
+        t_sutherland: numpy.ndarray
+            Temperature coefficient for the viscosity. The input array
+            must have a shape of "nspecies".
+
+        lewis: numpy.ndarray
+            If required, the Lewis number specify the relation between the
+            thermal conductivity and the species diffusivities. The input array
+            must have a shape of "nspecies".
+
+        prandtl: float
+            The Prandtl number specify the relation between the thermal
+            conductivity and the viscosity.
+        """
+        if species_diffusivity is None and lewis is None:
+            species_diffusivity = np.empty((0,), dtype=object)
+        self._d_alpha = species_diffusivity
+        self._lewis = lewis
+        self._prandtl = prandtl
+        self._as = a_sutherland
+        self._ts = t_sutherland
+
+    def bulk_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                       dv: GasDependentVars,
+                       eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the bulk viscosity for the gas, $\mu_{B}$.
+
+        This model assumes zero bulk viscosity.
+        """
+        actx = cv.mass.array_context
+        return actx.np.zeros_like(cv.mass)
+
+    def viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                  dv: GasDependentVars,
+                  eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the gas dynamic viscosity, $\mu$."""
+        actx = cv.mass.array_context
+
+        mu = actx.np.zeros_like(cv.mass)
+        nspecies = len(cv.species_mass_fractions)
+        for i in range(0, nspecies):
+            mu = mu + cv.species_mass_fractions[i]*self._as[i]*(
+                actx.np.sqrt(dv.temperature)/(1.0 + self._ts[i]/dv.temperature))
+
+        return mu
+
+    def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]
+                         dv: GasDependentVars,
+                         eos: Optional[GasEOS] = None) -> DOFArray:
+        r"""Get the 2nd viscosity coefficent, $\lambda$.
+
+        In this transport model, the second coefficient of viscosity is defined as:
+
+        .. math::
+
+            \lambda = - \frac{2}{3} \mu
+        """
+        return - 2.0/3.0 * self.viscosity(cv, dv)  # type: ignore
+
+    def thermal_conductivity(self, cv: ConservedVars,  # type: ignore[override]
+                             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        r"""Get the gas thermal conductivity, $\kappa$."""
+        if self._prandtl is not None:
+            return self.viscosity(cv, dv) * (
+                eos.heat_capacity_cp(cv, dv.temperature)/self._prandtl
+            )
+        # Eucken correlation
+        y = cv.species_mass_fractions
+        return self.viscosity(cv, dv) * (
+            1.32*eos.heat_capacity_cv(cv, dv.temperature)
+            + 1.77*eos.gas_const(species_mass_fractions=y)  # type: ignore
+        )
+
+    def species_diffusivity(self, cv: ConservedVars,  # type: ignore[override]
+                            dv: GasDependentVars, eos: GasEOS) -> DOFArray:
+        r"""Get the vector of species diffusivities, ${d}_{\alpha}$.
+
+        The species diffusivities can be either
+        (1) specified directly or
+        (2) using user-imposed Lewis number $Le$ w/ shape "nspecies"
+
+        In the latter, it is then evaluate based on the heat capacity at
+        constant pressure $C_p$ and the thermal conductivity $\kappa$ as:
+
+        .. math::
+
+            d_{\alpha} = \frac{\kappa}{\rho \; Le \; C_p}
+        """
+        if self._lewis is not None:
+            return self.thermal_conductivity(cv, dv, eos)/(
+                cv.mass * self._lewis * eos.heat_capacity_cp(cv, dv.temperature)
+            )
+        return self._d_alpha*(0*cv.species_mass + 1.)
 
 
 class PowerLawTransport(TransportModel):
@@ -290,6 +425,7 @@ class PowerLawTransport(TransportModel):
                              dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the gas thermal conductivity, $\kappa$.
 
+        The thermal conductivity is obtained by the Chapman-Enskog approach:
         .. math::
 
             \kappa = \sigma\mu{C}_{v}
@@ -305,7 +441,7 @@ class PowerLawTransport(TransportModel):
 
         The species diffusivities can be either
         (1) specified directly or
-        (2) using user-imposed Lewis number $Le$ w/shape "nspecies"
+        (2) using user-imposed Lewis number $Le$ w/ shape "nspecies"
 
         In the latter, it is then evaluate based on the heat capacity at
         constant pressure $C_p$ and the thermal conductivity $\kappa$ as:
@@ -318,7 +454,7 @@ class PowerLawTransport(TransportModel):
             return (self._sigma * self.viscosity(cv, dv)/(
                 cv.mass*self._lewis*eos.gamma(cv, dv.temperature))
             )
-        return self._d_alpha*(0*cv.mass + 1.)  # type: ignore
+        return self._d_alpha*(0*cv.species_mass + 1.)
 
 
 class MixtureAveragedTransport(TransportModel):
@@ -381,7 +517,7 @@ class MixtureAveragedTransport(TransportModel):
         self._epsilon = epsilon
         self._singular_diffusivity = singular_diffusivity
         if self._lewis is not None:
-            if (len(self._lewis) != self._pyro_mech.num_species):
+            if len(self._lewis) != self._pyro_mech.num_species:
                 raise ValueError("Lewis number should match number of species")
 
     def viscosity(self, cv: ConservedVars,  # type: ignore[override]
