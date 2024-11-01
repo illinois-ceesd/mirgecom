@@ -111,6 +111,8 @@ class SolidWallConservedVars:
 class SolidWallDependentVars:
     """Wall dependent variables for heat conduction only materials."""
 
+    tau: DOFArray
+    density: Union[DOFArray, np.ndarray]
     thermal_conductivity: DOFArray
     temperature: DOFArray
 
@@ -132,7 +134,7 @@ class SolidWallModel:
     driver-defined functions that prescribe the actual properties and their
     spatial distribution.
 
-    .. automethod:: density
+    .. automethod:: solid_density
     .. automethod:: heat_capacity
     .. automethod:: enthalpy
     .. automethod:: thermal_diffusivity
@@ -141,59 +143,76 @@ class SolidWallModel:
     .. automethod:: dependent_vars
     """
 
-    def __init__(self, density_func, enthalpy_func, heat_capacity_func,
-                 thermal_conductivity_func):
-        self._density_func = density_func
+    def __init__(self, enthalpy_func, heat_capacity_func,
+                 thermal_conductivity_func, decomposition_func=None):
         self._enthalpy_func = enthalpy_func
         self._heat_capacity_func = heat_capacity_func
         self._thermal_conductivity_func = thermal_conductivity_func
+        self._decomposition_func = decomposition_func
 
-    def density(self) -> DOFArray:
-        """Return the wall density for all components."""
-        return self._density_func()
+    def solid_density(self, material_densities) -> DOFArray:
+        r"""Return the solid density $\rho_s$."""
+        if isinstance(material_densities, DOFArray):
+            return material_densities
+        return sum(material_densities)
 
-    def heat_capacity(self, temperature: Optional[DOFArray] = None) -> DOFArray:
-        """Return the wall heat_capacity for all components."""
-        return self._heat_capacity_func(temperature)
+    def heat_capacity(self, temperature: Optional[DOFArray] = None,
+                      tau=None) -> DOFArray:
+        """Return the wall heat_capacity."""
+        return self._heat_capacity_func(temperature=temperature, tau=tau)
 
-    def enthalpy(self, temperature: DOFArray) -> DOFArray:
-        """Return the wall enthalpy for all components."""
-        return self._enthalpy_func(temperature)
+    def enthalpy(self, temperature: DOFArray, tau=None) -> DOFArray:
+        """Return the wall enthalpy."""
+        return self._enthalpy_func(temperature=temperature, tau=tau)
 
-    def thermal_diffusivity(self, mass: DOFArray, temperature: DOFArray,
-            thermal_conductivity: Optional[DOFArray] = None) -> DOFArray:
+    def thermal_diffusivity(self, solid_state: SolidWallState) -> DOFArray:
         """Return the wall thermal diffusivity for all components."""
-        if thermal_conductivity is None:
-            thermal_conductivity = self.thermal_conductivity(temperature)
-        denom = mass * self.heat_capacity(temperature)  # type: ignore
-        return thermal_conductivity/denom
+        tau = self.decomposition_progress(solid_state.cv.mass)
+        mass = self.solid_density(solid_state.cv.mass)
+        kappa = self.thermal_conductivity(solid_state.dv.temperature, tau)
+        cp = self.heat_capacity(solid_state.dv.temperature, tau)
+        return kappa/(mass * cp)
 
-    def thermal_conductivity(self, temperature: DOFArray) -> DOFArray:
-        """Return the wall thermal conductivity for all components."""
-        return self._thermal_conductivity_func(temperature)
+    def thermal_conductivity(self, temperature: DOFArray, tau=None) -> DOFArray:
+        """Return the wall thermal conductivity."""
+        return self._thermal_conductivity_func(temperature=temperature, tau=tau)
 
     def get_temperature(self, wv: SolidWallConservedVars,
             tseed: Optional[DOFArray] = None, niter: int = 3) -> DOFArray:
         """Evaluate the temperature based on the energy."""
         if tseed is not None:
+            tau = self.decomposition_progress(wv.mass)
             temp = tseed*1.0  # type: ignore
             for _ in range(0, niter):
-                h = self.enthalpy(temp)  # type: ignore
-                cp = self.heat_capacity(temp)  # type: ignore
-                temp = temp - (h - wv.energy/wv.mass)/cp  # type: ignore
+                h = self.enthalpy(temperature=temp, tau=tau)  # type: ignore
+                cp = self.heat_capacity(temperature=temp, tau=tau)  # type: ignore
+                temp = temp - (h - wv.energy/self.solid_density(wv.mass))/cp  # type: ignore
             return temp  # type: ignore
 
-        return wv.energy/(self.density()*self.heat_capacity())  # type: ignore
+        return wv.energy/(self.solid_density(wv.mass)*self.heat_capacity())  # type: ignore
 
     def dependent_vars(self, wv: SolidWallConservedVars,
             tseed: Optional[DOFArray] = None,
                        niter: int = 3) -> SolidWallDependentVars:
         """Return solid wall dependent variables."""
+        tau = self.decomposition_progress(wv.mass)
+        density = self.solid_density(wv.mass)
         temperature = self.get_temperature(wv, tseed, niter)
-        kappa = self.thermal_conductivity(temperature)
+        kappa = self.thermal_conductivity(temperature=temperature, tau=tau)
         return SolidWallDependentVars(
+            tau=tau,
+            density=density,
             thermal_conductivity=kappa,
             temperature=temperature)
+
+    def decomposition_progress(self, material_densities) -> DOFArray:
+        r"""Evaluate the progress ratio $\tau$ of the decomposition."""
+        mass = self.solid_density(material_densities)
+        if self._decomposition_func:
+            # for materials that decompose when heated
+            return self._decomposition_func(mass)
+        actx = mass.array_context
+        return actx.np.zeros_like(mass) + 1.0
 
 
 @dataclass_array_container
