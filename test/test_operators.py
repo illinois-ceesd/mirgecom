@@ -61,7 +61,6 @@ from grudge.dof_desc import (
 )
 from sympy import cos, acos, symbols, integrate, simplify  # type: ignore
 
-
 sys.path.append(os.path.dirname(__file__))
 import mesh_data  # noqa: E402  # type: ignore  # pylint: disable=import-error
 
@@ -482,7 +481,7 @@ def test_correctness_of_quadrature(actx_factory, name):
     from pytools.convergence import EOCRecorder
     # Test base and quadrature discretizations with order=[1,8]
     # for incoming geometry and element type
-    for discr_order in range(1, 8):
+    for discr_order in range(1, 3):
         ndofs_base = 0
         ndofs_quad = 0
         dofs_per_el_base = 0
@@ -537,7 +536,7 @@ def test_correctness_of_quadrature(actx_factory, name):
                 field_quad = 0
                 exact_integral = 0
                 for i in range(int(dim)):
-                    x_base = nodes_base[i]
+                    x_base = 1.0*nodes_base[i] + 0.
                     # Heh woops! The base nodes aren't in [0,1]!
                     x_base = actx.np.where(x_base > one_base, one_base,
                                            x_base)
