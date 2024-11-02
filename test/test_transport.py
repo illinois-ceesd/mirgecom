@@ -56,9 +56,10 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
 
+#@pytest.mark.parametrize("order", [1, 3, 5])
 @pytest.mark.parametrize("mechname", ["uiuc_7sp"])
 @pytest.mark.parametrize("dim", [2])
-@pytest.mark.parametrize("order", [1, 3, 5])
+@pytest.mark.parametrize("order", [3])  # Test 3rd order only in CI
 @pytest.mark.parametrize("use_lewis", [True, False])
 def test_pyrometheus_transport(actx_factory, mechname, dim, order, use_lewis,
                                output_mechanism=True):

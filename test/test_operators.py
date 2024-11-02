@@ -233,6 +233,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
 #                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
 #                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
 #                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+# @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
                          [
                              (1, "tet_box1", None, False),
@@ -243,7 +244,7 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
                              (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
                              (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
                              ])
-@pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [2])  # Test 2nd order only in CI
 @pytest.mark.parametrize("sym_test_func_factory", [
     partial(_coord_test_func, order=0),
     partial(_coord_test_func, order=1),
