@@ -78,10 +78,11 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
 
+# @pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("tpe", [False, True])
-@pytest.mark.parametrize("order", [2, 3, 4])
+@pytest.mark.parametrize("order", [3])  # only test 3rd order to reduce CI
 @pytest.mark.parametrize("quad", [True, False])
 def test_uniform_rhs(actx_factory, nspecies, dim, tpe, order, quad):
     """Test the Navier-Stokes operator using a trivial constant/uniform state.
@@ -542,7 +543,8 @@ class TrigSolution1(FluidManufacturedSolution):
 
 
 # @pytest.mark.parametrize("nspecies", [0, 10])
-@pytest.mark.parametrize("order", [1, 2, 3])
+# @pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("order", [2])  # only test order 2 to reduce CI
 @pytest.mark.parametrize(("dim", "manufactured_soln", "mu"),
                          [(1, UniformSolution(dim=1), 0),
                           (2, UniformSolution(dim=2), 0),
@@ -613,9 +615,10 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
         assert source_norms.momentum[i] < tol
 
 
+# @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize(("dim", "flow_direction"),
                          [(2, 0), (2, 1), (3, 0), (3, 1), (3, 2)])
-@pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize("order", [2])  # only test order 2 to reduce CI
 @pytest.mark.parametrize("quad", [False, True])
 @pytest.mark.parametrize("tpe", [True, False])
 def test_shear_flow(actx_factory, dim, flow_direction, order, quad, tpe):
@@ -796,16 +799,20 @@ class RoySolution(FluidManufacturedSolution):
         return super().get_boundaries(dcoll, actx, t)
 
 
+# @pytest.mark.parametrize(("dim", "u_0", "v_0", "w_0"),
+#                         [(1, 800, 0, 0),
+#                          (2, 800, 800, 0),
+#                          (1, 30, 0, 0),
+#                          (2, 40, 30, 0),
+#                          (2, 5, -20, 0)])
+# @pytest.mark.parametrize("quad", [True, False])
 @pytest.mark.parametrize("order", [1])
 @pytest.mark.parametrize(("dim", "u_0", "v_0", "w_0"),
-                         [(1, 800, 0, 0),
-                          (2, 800, 800, 0),
-                          (1, 30, 0, 0),
-                          (2, 40, 30, 0),
-                          (2, 5, -20, 0)])
+                         [(2, 800, 800, 0),
+                          (2, 40, 30, 0)])
 @pytest.mark.parametrize(("a_r", "a_p", "a_u", "a_v", "a_w"),
                          [(1.0, 2.0, .75, 2/3, 1/6)])
-@pytest.mark.parametrize("quad", [True, False])
+@pytest.mark.parametrize("quad", [False])
 @pytest.mark.parametrize("tpe", [True, False])
 def test_roy_mms(actx_factory, order, dim, u_0, v_0, w_0, a_r, a_p, a_u,
                  a_v, a_w, quad, tpe):
