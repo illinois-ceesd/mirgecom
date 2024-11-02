@@ -56,7 +56,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
 
-#@pytest.mark.parametrize("order", [1, 3, 5])
+# @pytest.mark.parametrize("order", [1, 3, 5])
 @pytest.mark.parametrize("mechname", ["uiuc_7sp"])
 @pytest.mark.parametrize("dim", [2])
 @pytest.mark.parametrize("order", [3])  # Test 3rd order only in CI

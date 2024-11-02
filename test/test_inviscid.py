@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
+
 # @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("nspecies", [0, 1, 10])
 @pytest.mark.parametrize("dim", [3])  # Test 3d only in CI
