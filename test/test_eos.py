@@ -52,9 +52,10 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
 
+# @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("mechname", ["air_3sp", "uiuc_7sp", "sandiego",
                                       "uiuc_8sp_phenol", "uiuc_4sp_oxidation"])
-@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [3])  # only test 3d to reduce CI time
 @pytest.mark.parametrize("pressure", [25000.0, 101325.0])
 def test_mixture_dependent_properties(actx_factory, mechname, dim, pressure):
     """Test MixtureEOS functionality."""
@@ -354,8 +355,9 @@ def test_pyrometheus_mechanisms(actx_factory, mechname, output_mechanism=True):
             assert inf_norm(conc[spec]) < 1e-14
 
 
+# @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("mechname", ["uiuc_7sp", "sandiego"])
-@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [3])  # Only test 3d to reduce CI time
 @pytest.mark.parametrize("y0", [0, 1])
 @pytest.mark.parametrize("vel", [0.0, 1.0])
 def test_pyrometheus_eos(actx_factory, mechname, dim, y0, vel):
@@ -525,7 +527,7 @@ def test_temperature_constant_cv(actx_factory, mechname):
         assert inf_norm(temp - tin) > 1e-15
 
 
-@pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("dim", [3])  # Only test 3d to reduce CI time
 def test_idealsingle_lump(actx_factory, dim):
     """Test IdealSingle EOS with mass lump.
 
