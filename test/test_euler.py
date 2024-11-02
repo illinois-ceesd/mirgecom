@@ -487,7 +487,7 @@ def test_vortex_rhs(actx_factory, order, tpe, use_overintegration,
 # @pytest.mark.parametrize("dim", [1, 2, 3])
 # @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [3])  # only test 3d reduce CI time
-@pytest.mark.parametrize("order", [3])  # only test 3rd order to reduce CI time 
+@pytest.mark.parametrize("order", [3])  # only test 3rd order to reduce CI time
 @pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
