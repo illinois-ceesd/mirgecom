@@ -496,7 +496,7 @@ def test_correctness_of_quadrature(actx_factory, name):
     # Test base and quadrature discretizations with order=[1,8]
     # for incoming geometry and element type
     # Test range(1, 8) to create fuller table, (1,3) for CI.
-    for discr_order in range(conditional_value((1, 3), (1, 8))):
+    for discr_order in range(1, conditional_value(3, 8)):
         ndofs_base = 0
         ndofs_quad = 0
         dofs_per_el_base = 0
