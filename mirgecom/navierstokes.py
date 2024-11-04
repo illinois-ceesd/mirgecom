@@ -536,7 +536,6 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                      # Interpolate gradients to the quadrature grid
                      grad_cv=op.project(dcoll, dd_vol, dd_vol_quad, grad_cv),
                      grad_t=op.project(dcoll, dd_vol, dd_vol_quad, grad_t))
-    vol_term_visc = vol_term
 
     # Physical viscous flux (f .dot. n) is the boundary term for the div op
     bnd_term = viscous_flux_on_element_boundary(
@@ -545,72 +544,18 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
         grad_t, grad_t_interior_pairs, quadrature_tag=quadrature_tag,
         numerical_flux_func=viscous_numerical_flux_func, time=time,
         dd=dd_vol)
-    bnd_term_visc = bnd_term
 
     # Add corresponding inviscid parts if enabled
     # Note that this is the default, and highest performing path.
     # To get separate inviscid operator, set inviscid_fluid_operator explicitly
     # or use ESDG.
     if inviscid_terms_on and inviscid_fluid_operator is None:
-        vol_term_inv = inviscid_flux(state=vol_state_quad)
         vol_term = vol_term - inviscid_flux(state=vol_state_quad)
         bnd_term = bnd_term - inviscid_flux_on_element_boundary(
             dcoll, gas_model, boundaries, inter_elem_bnd_states_quad,
             domain_bnd_states_quad, quadrature_tag=quadrature_tag,
             numerical_flux_func=inviscid_numerical_flux_func, time=time,
             dd=dd_vol)
-
-    print_stuff = True
-    index = 19120
-
-    if print_stuff:
-        print(f"{vol_term=}")
-        print(f"{bnd_term=}")
-        #np.set_printoptions(threshold=sys.maxsize, precision=16)
-
-        actx = state.cv.array_context
-        nspecies = state.cv.nspecies
-        #print("inside navier_stokes_rhs viscous_flux")
-        #for i in range(0, nspecies):
-            #data = actx.to_numpy(vol_term_visc.species_mass)
-            #print(f"rho*Y[{i}]_volterm_x \n {data[i][0][0][index]}")
-            #print(f"rho*Y[{i}]_volterm_y \n {data[i][1][0][index]}")
-        #for i in range(0, nspecies):
-            #data = actx.to_numpy(bnd_term_visc.species_mass)
-            #print(f"rho*Y[{i}]_bndterm_x \n {data[i][0][0][index]}")
-            #print(f"rho*Y[{i}]_bndterm_y \n {data[i][1][0][index]}")
-
-        print("inside navier_stokes_rhs inviscid")
-        actx = state.cv.array_context
-        data = actx.to_numpy(vol_state_quad.cv.mass)
-        print(f"rho_vol_state_quad \n {data[0][index]}")
-        data = actx.to_numpy(vol_state_quad.cv.species_mass)
-        print(f"rho*Y[1]_vol_state_quad \n {data[1][0][index]}")
-        data = actx.to_numpy(vol_state_quad.cv.species_mass_fractions)
-        print(f"Y[1]_vol_state_quad \n {data[1][0][index]}")
-        nspecies = state.cv.nspecies
-        #for i in range(0, nspecies):
-            #data = actx.to_numpy(vol_term_inv.species_mass)
-            #print(f"rho*Y[{i}]_volterm_x \n {data[i][0][0][index]}")
-            #print(f"rho*Y[{i}]_volterm_y \n {data[i][1][0][index]}")
-
-        data = actx.to_numpy(vol_term_inv.mass)
-        print(f"rho_volterm_x \n {data[0][0][index]}")
-        data = actx.to_numpy(vol_term_inv.mass)
-        print(f"rho_volterm_y \n {data[1][0][index]}")
-        data = actx.to_numpy(vol_term_inv.species_mass)
-        print(f"rho*Y[1]_volterm_x \n {data[1][0][0][index]}")
-        data = actx.to_numpy(vol_term_inv.species_mass)
-        print(f"rho*Y[1]_volterm_y \n {data[1][1][0][index]}")
-        data = actx.to_numpy(vol_term_inv.species_mass/vol_term_inv.mass)
-        print(f"Y[1]_volterm_x \n {data[1][0][0][index]}")
-        data = actx.to_numpy(vol_term_inv.species_mass/vol_term_inv.mass)
-        print(f"Y[1]_volterm_y \n {data[1][1][0][index]}")
-
-        #for i in range(0, nspecies):
-            #data = actx.to_numpy(bnd_term_inv.species_mass)
-            #print(f"rho*Y[{i}]_bndterm_x \n {data[i][0][0][index]}")
-            #print(f"rho*Y[{i}]_bndterm_y \n {data[i][1][0][index]}")
 
     ns_rhs = div_operator(dcoll, dd_vol_quad, dd_allfaces_quad, vol_term, bnd_term)
 
