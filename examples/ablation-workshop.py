@@ -495,8 +495,8 @@ class TabulatedGasEOS(MixtureEOS):
 
     def dependent_vars(self, cv: ConservedVars, temperature_seed=None,
             smoothness_mu=None, smoothness_kappa=None,
-            smoothness_d=None, smoothness_beta=None,
-            entropy_min=None):
+            smoothness_d=None, entropy_min=None,
+            smoothness_beta=None):
         raise NotImplementedError
 
 
