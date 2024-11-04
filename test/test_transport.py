@@ -26,14 +26,12 @@ THE SOFTWARE.
 """
 import logging
 import numpy as np
-import pyopencl as cl
 import pytest
 import cantera
 from pytools.obj_array import make_obj_array
 
 from grudge import op
 
-from meshmode.array_context import PyOpenCLArrayContext
 
 from meshmode.mesh.generation import generate_regular_rect_mesh
 
@@ -62,12 +60,10 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 @pytest.mark.parametrize("dim", [2])
 @pytest.mark.parametrize("order", [1, 3, 5])
 @pytest.mark.parametrize("use_lewis", [True, False])
-def test_pyrometheus_transport(ctx_factory, mechname, dim, order, use_lewis,
+def test_pyrometheus_transport(actx_factory, mechname, dim, order, use_lewis,
                                output_mechanism=True):
     """Test mixture-averaged transport properties."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 4
 

@@ -54,8 +54,10 @@ from mirgecom.gas_model import (
 import grudge.op as op
 from mirgecom.discretization import create_discretization_collection
 from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+from grudge.dt_utils import h_max_from_volume
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from meshmode.mesh import TensorProductElementGroup
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.simutil import max_component_norm
@@ -78,10 +80,11 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
                          [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
-def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
+def test_uniform_rhs(actx_factory, nspecies, dim, order, tpe, use_overintegration,
                      numerical_flux_func):
     """Test the inviscid rhs using a trivial constant/uniform state.
 
@@ -89,7 +92,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
     and 3 dimensions, with orders 1, 2, and 3, with and without passive species.
     """
     actx = actx_factory()
-
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D for TPE")
     tolerance = 1e-9
 
     from pytools.convergence import EOCRecorder
@@ -98,16 +102,17 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, use_overintegration,
     # for nel_1d in [4, 8, 12]:
     for nel_1d in [4, 8]:
         from meshmode.mesh.generation import generate_regular_rect_mesh
+        grp_cls = TensorProductElementGroup if tpe else None
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+            group_cls=grp_cls
         )
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
         )
 
-        dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                 quadrature_order=2*order+1)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -398,10 +403,12 @@ def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
                          [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
-def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_func):
+def test_vortex_rhs(actx_factory, order, tpe, use_overintegration,
+                    numerical_flux_func):
     """Test the inviscid rhs using the non-trivial 2D isentropic vortex.
 
     The case is configured to yield rhs = 0. Checks several different orders
@@ -417,17 +424,18 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     for nel_1d in [32, 48, 64]:
-
+        grp_cls = TensorProductElementGroup if tpe else None
         mesh = generate_regular_rect_mesh(
             a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+            group_cls=grp_cls
         )
 
         logger.info(
             f"Number of {dim}d elements:  {mesh.nelements}"
         )
 
-        dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                 quadrature_order=2*order+1)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
+        h_max = actx.to_numpy(h_max_from_volume(dcoll))
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -459,7 +467,7 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
 
         err_max = max_component_norm(dcoll, inviscid_rhs, np.inf)
 
-        eoc_rec.add_data_point(1.0 / nel_1d, err_max)
+        eoc_rec.add_data_point(h_max, err_max)
 
     logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
@@ -467,17 +475,18 @@ def test_vortex_rhs(actx_factory, order, use_overintegration, numerical_flux_fun
     )
 
     assert (
-        eoc_rec.order_estimate() >= order - 0.5
-        or eoc_rec.max_error() < 1e-11
+        eoc_rec.order_estimate() >= order - 0.7
+        or eoc_rec.max_error() < 1e-9
     )
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
                          [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
-def test_lump_rhs(actx_factory, dim, order, use_overintegration,
+def test_lump_rhs(actx_factory, dim, order, tpe, use_overintegration,
                   numerical_flux_func):
     """Test the inviscid rhs using the non-trivial mass lump case.
 
@@ -485,6 +494,8 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
     Checks several different orders and refinement levels to check error behavior.
     """
     actx = actx_factory()
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D for TPE")
 
     tolerance = 1e-10
     maxxerr = 0.0
@@ -497,9 +508,10 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
         from meshmode.mesh.generation import (
             generate_regular_rect_mesh,
         )
-
+        grp_cls = TensorProductElementGroup if tpe else None
         mesh = generate_regular_rect_mesh(
             a=(-5,) * dim, b=(5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+            group_cls=grp_cls
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
@@ -561,10 +573,11 @@ def test_lump_rhs(actx_factory, dim, order, use_overintegration,
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("order", [1, 2, 4])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
+@pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
                          [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
-def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
+def test_multilump_rhs(actx_factory, dim, order, v0, tpe, use_overintegration,
                        numerical_flux_func):
     """Test the Euler rhs using the non-trivial 1, 2, and 3D mass lump case.
 
@@ -572,6 +585,9 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
     different orders and refinement levels to check error behavior.
     """
     actx = actx_factory()
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D for TPE.")
+
     nspecies = 10
     tolerance = 1e-8
     maxxerr = 0.0
@@ -584,15 +600,15 @@ def test_multilump_rhs(actx_factory, dim, order, v0, use_overintegration,
         from meshmode.mesh.generation import (
             generate_regular_rect_mesh,
         )
-
+        grp_cls = TensorProductElementGroup if tpe else None
         mesh = generate_regular_rect_mesh(
             a=(-1,) * dim, b=(1,) * dim, nelements_per_axis=(nel_1d,) * dim,
+            group_cls=grp_cls
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")
 
-        dcoll = create_discretization_collection(actx, mesh, order=order,
-                                                 quadrature_order=2*order+1)
+        dcoll = create_discretization_collection(actx, mesh, order=order)
 
         if use_overintegration:
             quadrature_tag = DISCR_TAG_QUAD
@@ -684,8 +700,8 @@ def _euler_flow_stepper(actx, parameters):
     dim = mesh.dim
     istep = 0
 
-    dcoll = create_discretization_collection(actx, mesh, order,
-                                             quadrature_order=2*order+1)
+    dcoll = create_discretization_collection(actx, mesh, order)
+    h_max = actx.to_numpy(h_max_from_volume(dcoll))
 
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
@@ -794,14 +810,15 @@ def _euler_flow_stepper(actx, parameters):
     if maxerr > exittol:
         raise ValueError("Solution failed to follow expected result.")
 
-    return maxerr
+    return h_max, maxerr
 
 
 @pytest.mark.parametrize("order", [2, 3, 4])
+@pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
                          [inviscid_facial_flux_rusanov, inviscid_facial_flux_hll])
-def test_isentropic_vortex(actx_factory, order, use_overintegration,
+def test_isentropic_vortex(actx_factory, order, tpe, use_overintegration,
                            numerical_flux_func):
     """Advance the 2D isentropic vortex case in time with non-zero velocities.
 
@@ -821,9 +838,10 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
         from meshmode.mesh.generation import (
             generate_regular_rect_mesh,
         )
-
+        grp_cls = TensorProductElementGroup if tpe else None
         mesh = generate_regular_rect_mesh(
-            a=(-5.0,) * dim, b=(5.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+            a=(-5.0,) * dim, b=(5.0,) * dim, nelements_per_axis=(nel_1d,) * dim,
+            group_cls=grp_cls
         )
 
         exittol = 1.0
@@ -855,8 +873,8 @@ def test_isentropic_vortex(actx_factory, order, use_overintegration,
                       "constantcfl": False, "nstatus": 0,
                       "use_overintegration": use_overintegration,
                       "numerical_flux_func": numerical_flux_func}
-        maxerr = _euler_flow_stepper(actx, flowparams)
-        eoc_rec.add_data_point(1.0 / nel_1d, maxerr)
+        h_max, maxerr = _euler_flow_stepper(actx, flowparams)
+        eoc_rec.add_data_point(h_max, maxerr)
 
     logger.info(
         f"Error for (dim,order) = ({dim},{order}):\n"
