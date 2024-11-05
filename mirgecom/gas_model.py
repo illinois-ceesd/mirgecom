@@ -374,7 +374,6 @@ def make_fluid_state(cv, gas_model,
     """
     actx = cv.array_context
 
-
     if isinstance(gas_model, GasModel):
         pressure = None
         temperature = None
