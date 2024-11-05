@@ -374,26 +374,24 @@ def make_fluid_state(cv, gas_model,
     """
     actx = cv.array_context
 
-    # FIXME work-around for now
-    smoothness_mu = (actx.np.zeros_like(cv.mass) if smoothness_mu
-                     is None else smoothness_mu)
-    smoothness_kappa = (actx.np.zeros_like(cv.mass) if smoothness_kappa
-                        is None else smoothness_kappa)
-    smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
-                       is None else smoothness_beta)
-    smoothness_d = (actx.np.zeros_like(cv.mass) if smoothness_d
-                        is None else smoothness_d)
-    entropy_min = (actx.np.zeros_like(cv.mass) if entropy_min
-                        is None else entropy_min)
 
     if isinstance(gas_model, GasModel):
         pressure = None
         temperature = None
 
         if limiter_func:
+            if entropy_min is None:
+                rv = limiter_func(cv=cv, temperature_seed=temperature_seed,
+                                  gas_model=gas_model, dd=limiter_dd)
+            else:
+                rv = limiter_func(cv=cv, temperature_seed=temperature_seed,
+                                  entropy_min=entropy_min,
+                                  gas_model=gas_model, dd=limiter_dd)
+            """
             rv = limiter_func(cv=cv, temperature_seed=temperature_seed,
                               entropy_min=entropy_min,
                               gas_model=gas_model, dd=limiter_dd)
+                              """
             if isinstance(rv, np.ndarray):
                 cv, pressure, temperature = rv
             else:
@@ -404,6 +402,18 @@ def make_fluid_state(cv, gas_model,
                 cv=cv, temperature_seed=temperature_seed)
         if pressure is None:
             pressure = gas_model.eos.pressure(cv=cv, temperature=temperature)
+
+        # FIXME work-around for now
+        smoothness_mu = (actx.np.zeros_like(cv.mass) if smoothness_mu
+                         is None else smoothness_mu)
+        smoothness_kappa = (actx.np.zeros_like(cv.mass) if smoothness_kappa
+                            is None else smoothness_kappa)
+        smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
+                           is None else smoothness_beta)
+        smoothness_d = (actx.np.zeros_like(cv.mass) if smoothness_d
+                            is None else smoothness_d)
+        entropy_min = (actx.np.zeros_like(cv.mass) if entropy_min
+                            is None else entropy_min)
 
         dv = GasDependentVars(
             temperature=temperature,
@@ -460,8 +470,25 @@ def make_fluid_state(cv, gas_model,
         pressure = gas_model.get_pressure(cv, wv, temperature)
 
         if limiter_func:
-            cv = limiter_func(cv=cv, wv=wv, pressure=pressure,
-                              temperature=temperature, dd=limiter_dd)
+            if entropy_min is None:
+                cv = limiter_func(cv=cv, wv=wv, pressure=pressure,
+                                  temperature=temperature, dd=limiter_dd)
+            else:
+                cv = limiter_func(cv=cv, wv=wv, pressure=pressure,
+                                  temperature=temperature, entropy_min=entropy_min,
+                                  dd=limiter_dd)
+
+        # FIXME work-around for now
+        smoothness_mu = (actx.np.zeros_like(cv.mass) if smoothness_mu
+                         is None else smoothness_mu)
+        smoothness_kappa = (actx.np.zeros_like(cv.mass) if smoothness_kappa
+                            is None else smoothness_kappa)
+        smoothness_beta = (actx.np.zeros_like(cv.mass) if smoothness_beta
+                           is None else smoothness_beta)
+        smoothness_d = (actx.np.zeros_like(cv.mass) if smoothness_d
+                            is None else smoothness_d)
+        entropy_min = (actx.np.zeros_like(cv.mass) if entropy_min
+                            is None else entropy_min)
 
         dv = MixtureDependentVars(
             temperature=temperature,
