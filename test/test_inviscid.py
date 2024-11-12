@@ -63,7 +63,8 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 
 @pytest.mark.parametrize("nspecies", [0, 1, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux(actx_factory, nspecies, dim):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_inviscid_flux(actx_factory, nspecies, dim, tpe):
     """Check inviscid flux against exact expected result: Identity test.
 
     Directly check inviscid flux routine, :func:`mirgecom.inviscid.inviscid_flux`,
@@ -73,15 +74,20 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
     The expected inviscid flux is:
       F(q) = <rhoV, (E+p)V, rho(V.x.V) + pI, rhoY V>
     """
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D test for TPE.")
+
     actx = actx_factory()
 
     nel_1d = 16
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
     #    for dim in [1, 2, 3]:
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 3
@@ -143,7 +149,8 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
 
 
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_inviscid_flux_components(actx_factory, dim):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_inviscid_flux_components(actx_factory, dim, tpe):
     """Test uniform pressure case.
 
     Checks that the Euler-internal inviscid flux routine
@@ -156,6 +163,9 @@ def test_inviscid_flux_components(actx_factory, dim):
     Checks that only diagonal terms of the momentum flux:
       [ rho(V.x.V) + pI ] are non-zero and return the correctly calculated p.
     """
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D for TPE.")
+
     actx = actx_factory()
 
     eos = IdealSingleGas()
@@ -165,8 +175,11 @@ def test_inviscid_flux_components(actx_factory, dim):
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 3
@@ -217,12 +230,15 @@ def test_inviscid_flux_components(actx_factory, dim):
     (3, 1),
     (3, 2),
     ])
-def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_inviscid_mom_flux_components(actx_factory, dim, livedim, tpe):
     r"""Test components of the momentum flux with constant pressure, V != 0.
 
     Checks that the flux terms are returned in the proper order by running
     only 1 non-zero velocity component at-a-time.
     """
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D test for TPE.")
     actx = actx_factory()
 
     eos = IdealSingleGas()
@@ -232,8 +248,11 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
     mesh = generate_regular_rect_mesh(
-        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 3
@@ -276,9 +295,10 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("order", [1, 2, 3])
 @pytest.mark.parametrize("dim", [1, 2, 3])
+@pytest.mark.parametrize("tpe", [False, True])
 @pytest.mark.parametrize("num_flux", [inviscid_facial_flux_rusanov,
                                       inviscid_facial_flux_hll])
-def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
+def test_facial_flux(actx_factory, nspecies, order, dim, num_flux, tpe):
     """Check the flux across element faces.
 
     The flux is checked by prescribing states (q) with known fluxes. Only uniform
@@ -288,6 +308,8 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
     Since the returned fluxes use state data which has been interpolated
     to-and-from the element faces, this test is grid-dependent.
     """
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D test for TPE.")
     actx = actx_factory()
 
     tolerance = 1e-14
@@ -295,13 +317,16 @@ def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
     from pytools.convergence import EOCRecorder
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
 
     eoc_rec0 = EOCRecorder()
     eoc_rec1 = EOCRecorder()
     for nel_1d in [4, 8, 12]:
 
         mesh = generate_regular_rect_mesh(
-            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim
+            a=(-0.5,) * dim, b=(0.5,) * dim, nelements_per_axis=(nel_1d,) * dim,
+            group_cls=grp_cls
         )
 
         logger.info(f"Number of elements: {mesh.nelements}")

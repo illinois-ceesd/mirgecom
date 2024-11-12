@@ -541,8 +541,8 @@ class TrigSolution1(FluidManufacturedSolution):
         return super().get_boundaries()
 
 
-# @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("order", [1, 2, 3])
+@pytest.mark.parametrize("tpe", [False, True])
 @pytest.mark.parametrize(("dim", "manufactured_soln", "mu"),
                          [(1, UniformSolution(dim=1), 0),
                           (2, UniformSolution(dim=2), 0),
@@ -552,7 +552,7 @@ class TrigSolution1(FluidManufacturedSolution):
                           (2, IsentropicVortex(), 0),
                           (2, IsentropicVortex(velocity=[1, 1]), 0),
                           (2, ShearFlow(mu=.01, gamma=3/2), .01)])
-def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
+def test_exact_mms(actx_factory, order, tpe, dim, manufactured_soln, mu):
     """CNS manufactured solution tests."""
     # This is a test for the symbolic operators themselves.
     # It verifies that exact solutions to the Euler and NS systems actually
@@ -562,6 +562,9 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     # - Uniform solution with and without momentum terms
     # - Isentropic vortex (explict time-dependence)
     # - ShearFlow exact soln for NS (not Euler)
+    if dim == 1 and tpe:
+        pytest.skip("Skipping 1D test for TPE")
+
     actx = actx_factory()
     sym_x = pmbl.make_sym_vector("x", dim)
     sym_t = pmbl.var("t")
@@ -596,7 +599,7 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
     logger.info(f"{sym_source=}")
 
     n = 1
-    mesh = man_soln.get_mesh(n)
+    mesh = man_soln.get_mesh(n, tpe=tpe)
 
     from mirgecom.discretization import create_discretization_collection
     dcoll = create_discretization_collection(actx, mesh, order)

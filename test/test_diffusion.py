@@ -71,7 +71,7 @@ def test_diffusion_boundary_conditions(actx_factory, tpe):
     mesh = get_box_mesh(dim, -1, 1, n,
                         tensor_product_elements=tpe)
     dcoll = create_discretization_collection(actx, mesh, order)
-    nodes = actx.thaw(dcoll.nodes()) 
+    nodes = actx.thaw(dcoll.nodes())
     u_ref = -1.5
     alpha = 0.5
     kappa = 2
