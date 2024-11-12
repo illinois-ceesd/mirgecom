@@ -1,6 +1,6 @@
 islpy
 mpi4py
-numpy
+numpy>2
 pytest
 pytest-cov
 pymetis
