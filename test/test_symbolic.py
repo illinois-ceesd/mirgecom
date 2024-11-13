@@ -143,7 +143,6 @@ def test_symbolic_diff(actx_factory, sym_f, expected_sym_df):
 
     sym_df = sym.diff(pmbl.var("x"))(sym_f)
 
-
     from pymbolic.primitives import Expression
 
     if isinstance(sym_f, Expression):
