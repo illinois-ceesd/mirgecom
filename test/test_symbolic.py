@@ -50,7 +50,7 @@ def _const_deriv_pair():
 def _poly_deriv_pair():
     """Return a polynomial ($x^2$) and its derivative ($2x$)."""
     sym_x = pmbl.var("x")
-    return sym_x**2, 2*sym_x
+    return sym_x**2, 2*sym_x**1
 
 
 def _cos_deriv_pair():
@@ -143,7 +143,11 @@ def test_symbolic_diff(actx_factory, sym_f, expected_sym_df):
 
     sym_df = sym.diff(pmbl.var("x"))(sym_f)
 
+
     from pymbolic.primitives import Expression
+    print(f"{sym_df=}")
+    print(f"{expected_sym_df=}")
+
     if isinstance(sym_f, Expression):
         assert sym_df == expected_sym_df
     elif isinstance(sym_f, np.ndarray):
@@ -193,8 +197,10 @@ def test_symbolic_div():
     sym_div_f = sym.div(3, sym_f)
     expected_sym_div_f = make_obj_array([
         sym_x + sym_x + sym_x + sym_x,
-        sym_y + sym_y + sym_y + sym_y,
-        sym_z + sym_z + sym_z + sym_z])
+        0 + sym_y + sym_y + sym_y + sym_y,
+        0 + sym_z + sym_z + sym_z + sym_z])
+    print(f"{sym_div_f=}")
+    print(f"{expected_sym_div_f=}")
     assert (sym_div_f == expected_sym_div_f).all()
 
     # Array container
@@ -212,8 +218,8 @@ def test_symbolic_div():
         mass=1 + sym_x + 0,
         momentum=make_obj_array([
             sym_x + sym_x + sym_x + sym_x,
-            sym_y + sym_y + sym_y + sym_y,
-            sym_z + sym_z + sym_z + sym_z]),
+            0 + sym_y + sym_y + sym_y + sym_y,
+            0 + sym_z + sym_z + sym_z + sym_z]),
         energy=0 + sym_z + 1)
     assert sym_div_f.mass == expected_sym_div_f.mass
     assert (sym_div_f.momentum == expected_sym_div_f.momentum).all()
@@ -236,7 +242,7 @@ def test_symbolic_grad():
 
     sym_grad_f = sym.grad(3, sym_f)
     expected_sym_grad_f = make_obj_array([
-        sym_y * 2*sym_x,
+        sym_y * 2*sym_x**1,
         sym_x**2,
         0])
     assert (sym_grad_f == expected_sym_grad_f).all()
