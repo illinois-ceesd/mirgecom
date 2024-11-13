@@ -145,8 +145,6 @@ def test_symbolic_diff(actx_factory, sym_f, expected_sym_df):
 
 
     from pymbolic.primitives import Expression
-    print(f"{sym_df=}")
-    print(f"{expected_sym_df=}")
 
     if isinstance(sym_f, Expression):
         assert sym_df == expected_sym_df
@@ -199,8 +197,6 @@ def test_symbolic_div():
         sym_x + sym_x + sym_x + sym_x,
         0 + sym_y + sym_y + sym_y + sym_y,
         0 + sym_z + sym_z + sym_z + sym_z])
-    print(f"{sym_div_f=}")
-    print(f"{expected_sym_div_f=}")
     assert (sym_div_f == expected_sym_div_f).all()
 
     # Array container
