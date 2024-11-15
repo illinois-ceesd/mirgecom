@@ -60,6 +60,7 @@ logger = logging.getLogger(__name__)
 pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
+
 @pytest.mark.parametrize("tpe", [False, True])
 def test_diffusion_boundary_conditions(actx_factory, tpe):
     """Checks the boundary conditions for diffusion operator."""
