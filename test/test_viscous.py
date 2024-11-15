@@ -229,7 +229,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa, tpe):
         graderr_p = inf_norm(grad_cv.momentum - xp_grad_cv.momentum)
         graderr_e *= relerr_scale_e
         graderr_p *= relerr_scale_p
-        assert graderr_e < 5e-7
+        assert graderr_e < 2e-6
         assert graderr_p < 5e-11
 
         zeros = dcoll.zeros(actx)

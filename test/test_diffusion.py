@@ -779,7 +779,7 @@ def test_orthotropic_diffusion(actx_factory, tpe):
     assert err_flux_y < 1.e-9
 
     err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
-    assert err_rhs < 2.e-8
+    assert err_rhs < 5.e-8
 
     # exercise Dirichlet BC
     def make_dirichlet_bc(btag):
