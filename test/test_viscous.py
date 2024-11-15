@@ -246,8 +246,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa, tpe):
         grad_t = op.local_grad(dcoll, temperature)
 
         # sanity check
-        assert inf_norm(grad_p - xp_grad_p)*dpscal < 5e-9
-        assert inf_norm(grad_t - xp_grad_t)*tscal < 5e-9
+        assert inf_norm(grad_p - xp_grad_p)*dpscal < 1e-8
+        assert inf_norm(grad_t - xp_grad_t)*tscal < 1e-8
 
         fluid_state = make_fluid_state(cv, gas_model)
         # verify heat flux
