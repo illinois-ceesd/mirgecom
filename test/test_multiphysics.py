@@ -87,7 +87,7 @@ def test_independent_volumes(actx_factory, order, tpe, visualize=False):
     mesh = generate_regular_rect_mesh(
         a=(-1,)*dim, b=(1,)*dim,
         nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face,
-        group_cls = grp_cls)
+        group_cls=grp_cls)
 
     volume_meshes = {
         "vol1": mesh,
