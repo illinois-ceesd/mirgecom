@@ -152,8 +152,7 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     assert linf_err2 < 1e-9
 
 
-# @pytest.mark.parametrize("order", [2, 3])
-@pytest.mark.parametrize("order", [3])  # Test only 3rd order in CI
+@conditional.parametrize("order", [3], [2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall(
         actx_factory, order, use_overintegration, visualize=False):
@@ -460,8 +459,7 @@ def test_thermally_coupled_fluid_wall(
         or eoc_rec_wall.max_error() < 1e-11)
 
 
-# @pytest.mark.parametrize("order", [1, 3])
-@pytest.mark.parametrize("order", [3])  # Test only 3rd order in CI
+@conditional.parametrize("order", [3], [1, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
         actx_factory, order, use_overintegration, visualize=False):
