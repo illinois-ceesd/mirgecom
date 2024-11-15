@@ -63,7 +63,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 
 
 @pytest.mark.parametrize("nspecies", [0, 1, 10])
-@conditional.parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("dim", [3], [1, 2, 3])
 def test_inviscid_flux(actx_factory, nspecies, dim):
     """Check inviscid flux against exact expected result: Identity test.
 
@@ -143,7 +143,7 @@ def test_inviscid_flux(actx_factory, nspecies, dim):
             assert (la.norm(flux_resid[i, j].get())) == 0.0
 
 
-@conditional.parametrize("dim", [3], [1, 2, 3])  # Test 3D only in CI
+@conditional_parametrize("dim", [3], [1, 2, 3])  # Test 3D only in CI
 def test_inviscid_flux_components(actx_factory, dim):
     """Test uniform pressure case.
 
@@ -210,7 +210,7 @@ def test_inviscid_flux_components(actx_factory, dim):
     assert inf_norm(flux.momentum - p0*np.identity(dim)) < tolerance
 
 
-@conditional.parametrize(("dim", "livedim"),
+@conditional_parametrize(("dim", "livedim"),
                          [(3, 0), (3, 1), (3, 2)],
                          [(1, 0), (2, 0), (2, 1),
                           (3, 0), (3, 1), (3, 2)])
@@ -271,8 +271,8 @@ def test_inviscid_mom_flux_components(actx_factory, dim, livedim):
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
-@conditional.parametrize("order", [2], [1, 2, 3])
-@conditional.parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("order", [2], [1, 2, 3])
+@conditional_parametrize("dim", [3], [1, 2, 3])
 @pytest.mark.parametrize("num_flux", [inviscid_facial_flux_rusanov,
                                       inviscid_facial_flux_hll])
 def test_facial_flux(actx_factory, nspecies, order, dim, num_flux):

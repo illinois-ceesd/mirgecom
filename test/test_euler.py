@@ -80,7 +80,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-@conditional.parametrize("order", [3], [1, 2, 3])
+@conditional_parametrize("order", [3], [1, 2, 3])
 @pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
@@ -234,8 +234,8 @@ def test_uniform_rhs(actx_factory, nspecies, dim, order, tpe, use_overintegratio
 
 
 @pytest.mark.parametrize("nspecies", [0, 10])
-@conditional.parametrize("dim", [3], [1, 2, 3])
-@conditional.parametrize("order", [3], [2, 3, 4])
+@conditional_parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("order", [3], [2, 3, 4])
 def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
     """Test the entropy-to-conservative vars conversion utility.
 
@@ -403,7 +403,7 @@ def test_entropy_to_conserved_conversion(actx_factory, nspecies, dim, order):
     )
 
 
-@conditional.parametrize("order", [3], [1, 2, 3])
+@conditional_parametrize("order", [3], [1, 2, 3])
 @pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
@@ -481,8 +481,8 @@ def test_vortex_rhs(actx_factory, order, tpe, use_overintegration,
     )
 
 
-@conditional.parametrize("dim", [3], [1, 2, 3])
-@conditional.parametrize("order", [3], [1, 2, 3])
+@conditional_parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("order", [3], [1, 2, 3])
 @pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",
@@ -571,8 +571,8 @@ def test_lump_rhs(actx_factory, dim, order, tpe, use_overintegration,
     )
 
 
-@conditional.parametrize("dim", [3], [1, 2, 3])
-@conditional.parametrize("order", [2], [1, 2, 4])
+@conditional_parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("order", [2], [1, 2, 4])
 @pytest.mark.parametrize("v0", [0.0, 1.0])
 @pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
@@ -814,7 +814,7 @@ def _euler_flow_stepper(actx, parameters):
     return h_max, maxerr
 
 
-@conditional.parametrize("order", [3], [2, 3, 4])
+@conditional_parametrize("order", [3], [2, 3, 4])
 @pytest.mark.parametrize("tpe", [True, False])
 @pytest.mark.parametrize("use_overintegration", [True, False])
 @pytest.mark.parametrize("numerical_flux_func",

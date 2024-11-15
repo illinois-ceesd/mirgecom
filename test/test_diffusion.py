@@ -375,7 +375,7 @@ def sym_diffusion(dim, sym_kappa, sym_u):
 #
 # Working hypothesis: RHS lives in lower order polynomial space and thus doesn't
 # attain full-order convergence.
-@conditional.parametrize("order", [3], [2, 3])
+@conditional_parametrize("order", [3], [2, 3])
 @pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
     [
         (DecayingTrigTruncatedDomain(1, 2.), 50, 5.e-5, [8, 16, 24]),
@@ -464,7 +464,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
             or eoc_rec.max_error() < 1e-11)
 
 
-@conditional.parametrize("order", [3], [1, 2, 3, 4])
+@conditional_parametrize("order", [3], [1, 2, 3, 4])
 @pytest.mark.parametrize("quad", [True, False])
 def test_diffusion_discontinuous_kappa(actx_factory, order, quad, visualize=False):
     """
@@ -567,7 +567,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, quad, visualize=Fals
     assert linf_diff < 0.1
 
 
-@conditional.parametrize("order", [3], [1, 2, 3, 4])
+@conditional_parametrize("order", [3], [1, 2, 3, 4])
 @pytest.mark.parametrize("problem",
     [
         DecayingTrig(1, 1.)

@@ -82,7 +82,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 @pytest.mark.parametrize("nspecies", [0, 10])
 @pytest.mark.parametrize("dim", [2, 3])
 @pytest.mark.parametrize("tpe", [False, True])
-@conditional.parametrize("order", [3], [2, 3, 4])
+@conditional_parametrize("order", [3], [2, 3, 4])
 @pytest.mark.parametrize("quad", [True, False])
 def test_uniform_rhs(actx_factory, nspecies, dim, tpe, order, quad):
     """Test the Navier-Stokes operator using a trivial constant/uniform state.
@@ -543,7 +543,7 @@ class TrigSolution1(FluidManufacturedSolution):
 
 
 # @pytest.mark.parametrize("nspecies", [0, 10])
-@conditional.parametrize("order", [2], [1, 2, 3])
+@conditional_parametrize("order", [2], [1, 2, 3])
 @pytest.mark.parametrize(("dim", "manufactured_soln", "mu"),
                          [(1, UniformSolution(dim=1), 0),
                           (2, UniformSolution(dim=2), 0),
@@ -616,7 +616,7 @@ def test_exact_mms(actx_factory, order, dim, manufactured_soln, mu):
 
 @pytest.mark.parametrize(("dim", "flow_direction"),
                          [(2, 0), (2, 1), (3, 0), (3, 1), (3, 2)])
-@conditional.parametrize("order", [2], [2, 3])
+@conditional_parametrize("order", [2], [2, 3])
 @pytest.mark.parametrize("quad", [False, True])
 @pytest.mark.parametrize("tpe", [True, False])
 def test_shear_flow(actx_factory, dim, flow_direction, order, quad, tpe):

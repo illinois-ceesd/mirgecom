@@ -56,7 +56,7 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 
 
 @pytest.mark.parametrize("nspecies", [0, 1, 10])
-@conditional.parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("dim", [3], [1, 2, 3])
 @pytest.mark.parametrize("norm_dir", [1, -1])
 @pytest.mark.parametrize("vel_mag", [0, 1, -1])
 def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
@@ -210,7 +210,7 @@ def test_lfr_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
 #    vel_mag = -4, right traveling shock
 @pytest.mark.parametrize("vel_mag", [0, 1, 2, -1, -4])
 @pytest.mark.parametrize("nspecies", [0, 1, 10])
-@conditional.parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("dim", [3], [1, 2, 3])
 @pytest.mark.parametrize("norm_dir", [1, -1])
 def test_hll_flux(actx_factory, nspecies, dim, norm_dir, vel_mag):
     """Check inviscid flux against exact expected result.

@@ -120,7 +120,7 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
     assert actx.to_numpy(op.norm(dcoll, tau - exp_tau, np.inf)) < 1e-12
 
 
-@conditional.parametrize("order", [3], [2, 3, 4])
+@conditional_parametrize("order", [3], [2, 3, 4])
 @pytest.mark.parametrize("kappa", [0.0, 1.0, 2.3])
 def test_poiseuille_fluxes(actx_factory, order, kappa):
     """Test the viscous fluxes using a Poiseuille input state."""
@@ -445,7 +445,7 @@ def test_diffusive_heat_flux(actx_factory):
 
 
 @pytest.mark.parametrize("array_valued", [False, True])
-@conditional.parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("dim", [3], [1, 2, 3])
 def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     """Test the local maximum species diffusivity."""
     actx = actx_factory()
@@ -498,7 +498,7 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
     assert actx.to_numpy(op.norm(dcoll, calculated-expected, np.inf)) == 0
 
 
-@conditional.parametrize("dim", [3], [1, 2, 3])
+@conditional_parametrize("dim", [3], [1, 2, 3])
 @pytest.mark.parametrize("mu", [-1, 0, 1, 2])
 @pytest.mark.parametrize("vel", [0, 1])
 def test_viscous_timestep(actx_factory, dim, mu, vel):
