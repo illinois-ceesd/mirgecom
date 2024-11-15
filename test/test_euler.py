@@ -70,6 +70,7 @@ from mirgecom.inviscid import (
 )
 
 from mirgecom.integrators import rk4_step
+from conftest import conditional_parametrize
 
 logger = logging.getLogger(__name__)
 

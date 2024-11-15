@@ -45,6 +45,7 @@ from mirgecom.initializers import Vortex2D, Lump, Uniform
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.mechanisms import get_mechanism_input
 from mirgecom.thermochemistry import get_pyrometheus_wrapper_class_from_cantera
+from conftest import conditional_parametrize
 
 logger = logging.getLogger(__name__)
 

@@ -70,6 +70,7 @@ from mirgecom.simutil import (
     componentwise_norms,
     get_box_mesh
 )
+from conftest import conditional_parametrize
 
 
 logger = logging.getLogger(__name__)

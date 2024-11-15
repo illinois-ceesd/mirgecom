@@ -54,6 +54,7 @@ from mirgecom.diffusion import (
 from mirgecom.integrators import rk4_step
 from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
+from conftest import conditional_parametrize
 
 logger = logging.getLogger(__name__)
 

@@ -47,6 +47,7 @@ from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
 
 from mirgecom.inviscid import inviscid_flux
+from conftest import conditional_parametrize
 
 logger = logging.getLogger(__name__)
 

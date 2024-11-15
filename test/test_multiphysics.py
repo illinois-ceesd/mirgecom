@@ -55,6 +55,7 @@ from mirgecom.multiphysics.thermally_coupled_fluid_wall import (
 
 from meshmode.array_context import PytestPyOpenCLArrayContextFactory
 from arraycontext import pytest_generate_tests_for_array_contexts
+from conftest import conditional_parametrize
 
 import pytest
 

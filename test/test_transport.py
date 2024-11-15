@@ -49,6 +49,7 @@ from mirgecom.thermochemistry import (
     get_pyrometheus_wrapper_class
 )
 import pyrometheus
+from conftest import conditional_parametrize
 
 logger = logging.getLogger(__name__)
 

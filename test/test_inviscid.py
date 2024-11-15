@@ -54,6 +54,7 @@ from mirgecom.inviscid import (
     inviscid_facial_flux_rusanov,
     inviscid_facial_flux_hll
 )
+from conftest import conditional_parametrize
 
 logger = logging.getLogger(__name__)
 
