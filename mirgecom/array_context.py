@@ -56,16 +56,11 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
         if lazy:
             raise ValueError("Can't specify both numpy and lazy")
 
-        from warnings import warn
-        warn("The NumpyArrayContext is still under development")
-
         if distributed:
-            from grudge.array_context import MPINumpyArrayContext  \
-                # pylint: disable=no-name-in-module
+            from grudge.array_context import MPINumpyArrayContext
             return MPINumpyArrayContext
         else:
-            from grudge.array_context import NumpyArrayContext  \
-                # pylint: disable=no-name-in-module
+            from grudge.array_context import NumpyArrayContext
             return NumpyArrayContext
 
     if profiling:
@@ -101,14 +96,8 @@ def actx_class_is_pyopencl(actx_class: Type[ArrayContext]) -> bool:
 
 def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* is numpy-based."""
-    try:
-        from grudge.array_context import NumpyArrayContext
-        if issubclass(actx_class, NumpyArrayContext):
-            return True
-        else:
-            return False
-    except ImportError:
-        return False
+    from grudge.array_context import NumpyArrayContext
+    return issubclass(actx_class, NumpyArrayContext)
 
 
 def actx_class_is_distributed(actx_class: Type[ArrayContext]) -> bool:
@@ -313,8 +302,7 @@ def initialize_actx(
         actx_kwargs["mpi_communicator"] = comm
 
     if actx_class_is_numpy(actx_class):
-        from grudge.array_context import MPINumpyArrayContext  \
-            # pylint: disable=no-name-in-module
+        from grudge.array_context import MPINumpyArrayContext
         if comm:
             assert issubclass(actx_class, MPINumpyArrayContext)
         else:

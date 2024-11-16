@@ -20,7 +20,7 @@ else
 fi
 
 MINIFORGE_INSTALL_DIR=.miniforge3
-MINIFORGE_INSTALL_SH=Mambaforge-$myos-$myarch.sh
+MINIFORGE_INSTALL_SH=Miniforge3-$myos-$myarch.sh
 curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/$MINIFORGE_INSTALL_SH"
 rm -Rf "$MINIFORGE_INSTALL_DIR"
 bash "$MINIFORGE_INSTALL_SH" -b -p "$MINIFORGE_INSTALL_DIR"

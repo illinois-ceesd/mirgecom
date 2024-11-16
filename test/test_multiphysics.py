@@ -170,6 +170,7 @@ def test_thermally_coupled_fluid_wall(
     eoc_rec_wall = EOCRecorder()
 
     scales = [6, 8, 12]
+    dt = 0.
 
     for n in scales:
         global_mesh = get_box_mesh(2, -1, 1, n)
