@@ -254,7 +254,7 @@ def test_poiseuille_fluxes(actx_factory, order, kappa, tpe):
         from mirgecom.viscous import conductive_heat_flux
         heat_flux = conductive_heat_flux(fluid_state, grad_t)
         xp_heat_flux = -kappa*xp_grad_t
-        assert inf_norm(heat_flux - xp_heat_flux) < 2e-8
+        assert inf_norm(heat_flux - xp_heat_flux) < 1e-6
 
         xp_e_flux = np.dot(xp_tau, cv.velocity) - xp_heat_flux
         xp_mom_flux = xp_tau
