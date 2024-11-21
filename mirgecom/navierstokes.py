@@ -241,7 +241,7 @@ def grad_t_operator(
         quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        operator_states_quad=None, limiter_func=None, 
+        operator_states_quad=None, limiter_func=None,
         entropy_min=None, use_esdg=False):
     r"""Compute the gradient of the fluid temperature.
 
@@ -354,7 +354,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
                 dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None,
-                entropy_min=None, 
+                entropy_min=None,
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None, use_esdg=False,

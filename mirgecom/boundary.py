@@ -1315,7 +1315,8 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
 
         # evaluate internal energy based on prescribed pressure
         # keep the external pressure >= 0
-        pressure_plus = actx.np.where(actx.np.greater(state_minus.pressure, 2.0*self._pressure),
+        pressure_plus = actx.np.where(actx.np.greater(state_minus.pressure,
+                                                      2.0*self._pressure),
                                       state_minus.pressure,
                                       2.0*self._pressure - state_minus.pressure)
         if state_minus.is_mixture:
