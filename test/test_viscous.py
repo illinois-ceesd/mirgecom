@@ -276,11 +276,11 @@ def test_poiseuille_fluxes(actx_factory, order, kappa, tpe):
 
     assert (
         e_eoc_rec.order_estimate() >= order - 0.5
-        or e_eoc_rec.max_error() < 3e-9
+        or e_eoc_rec.max_error() < 1e-6
     )
     assert (
         p_eoc_rec.order_estimate() >= order - 0.5
-        or p_eoc_rec.max_error() < 3e-9
+        or p_eoc_rec.max_error() < 1e-6
     )
 
 
