@@ -1314,7 +1314,10 @@ class PressureOutflowBoundary(MengaldoBoundaryCondition):
         gamma = gas_model.eos.gamma(state_minus.cv, state_minus.temperature)
 
         # evaluate internal energy based on prescribed pressure
-        pressure_plus = 2.0*self._pressure - state_minus.pressure
+        # keep the external pressure >= 0
+        pressure_plus = actx.np.where(actx.np.greater(state_minus.pressure, 2.0*self._pressure),
+                                      state_minus.pressure,
+                                      2.0*self._pressure - state_minus.pressure)
         if state_minus.is_mixture:
             gas_const = gas_model.eos.gas_const(
                 species_mass_fractions=state_minus.cv.species_mass_fractions)

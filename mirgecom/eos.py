@@ -78,7 +78,6 @@ class GasDependentVars:
     .. attribute:: smoothness_kappa
     .. attribute:: smoothness_beta
     .. attribute:: smoothness_d
-    .. attribute:: entropy_min
     """
 
     temperature: DOFArray
@@ -88,7 +87,6 @@ class GasDependentVars:
     smoothness_kappa: DOFArray
     smoothness_d: DOFArray
     smoothness_beta: DOFArray
-    entropy_min: DOFArray
 
 
 @dataclass_array_container
@@ -206,8 +204,6 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
-        if entropy_min is None:
-            entropy_min = zeros
 
         return GasDependentVars(
             temperature=temperature,
@@ -216,8 +212,7 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
             smoothness_d=smoothness_d,
-            smoothness_beta=smoothness_beta,
-            entropy_min=entropy_min
+            smoothness_beta=smoothness_beta
         )
 
 
@@ -293,8 +288,6 @@ class MixtureEOS(GasEOS):
             smoothness_d = zeros
         if smoothness_beta is None:
             smoothness_beta = zeros
-        if entropy_min is None:
-            entropy_min = zeros
 
         return MixtureDependentVars(
             temperature=temperature,
@@ -304,8 +297,7 @@ class MixtureEOS(GasEOS):
             smoothness_mu=smoothness_mu,
             smoothness_kappa=smoothness_kappa,
             smoothness_d=smoothness_d,
-            smoothness_beta=smoothness_beta,
-            entropy_min=entropy_min
+            smoothness_beta=smoothness_beta
         )
 
 

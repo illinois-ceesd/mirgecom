@@ -133,7 +133,7 @@ def grad_cv_operator(
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
         operator_states_quad=None, limiter_func=None,
-        use_esdg=False):
+        entropy_min=None, use_esdg=False):
     r"""Compute the gradient of the fluid conserved variables.
 
     Parameters
@@ -198,7 +198,7 @@ def grad_cv_operator(
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
-            entropy_stable=use_esdg)
+            entropy_min=entropy_min, entropy_stable=use_esdg)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -241,7 +241,8 @@ def grad_t_operator(
         quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL, comm_tag=None,
         # Added to avoid repeated computation
         # FIXME: See if there's a better way to do this
-        operator_states_quad=None, limiter_func=None, use_esdg=False):
+        operator_states_quad=None, limiter_func=None, 
+        entropy_min=None, use_esdg=False):
     r"""Compute the gradient of the fluid temperature.
 
     Parameters
@@ -305,7 +306,7 @@ def grad_t_operator(
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
-            entropy_stable=use_esdg)
+            entropy_min=entropy_min, entropy_stable=use_esdg)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -353,6 +354,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                 viscous_numerical_flux_func=viscous_facial_flux_central,
                 return_gradients=False, quadrature_tag=DISCR_TAG_BASE,
                 dd=DD_VOLUME_ALL, comm_tag=None, limiter_func=None,
+                entropy_min=None, 
                 # Added to avoid repeated computation
                 # FIXME: See if there's a better way to do this
                 operator_states_quad=None, use_esdg=False,
@@ -474,7 +476,8 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
                  "limited states or provide a limiter_func to this operator.")
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
-            limiter_func=limiter_func, dd=dd_vol, comm_tag=comm_tag)
+            limiter_func=limiter_func, entropy_min=entropy_min,
+            dd=dd_vol, comm_tag=comm_tag)
 
     vol_state_quad, inter_elem_bnd_states_quad, domain_bnd_states_quad = \
         operator_states_quad
@@ -494,7 +497,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
             operator_states_quad=operator_states_quad, comm_tag=comm_tag,
-            use_esdg=use_esdg, limiter_func=limiter_func)
+            use_esdg=use_esdg, limiter_func=limiter_func, entropy_min=entropy_min)
 
     # Communicate grad(CV) and put it on the quadrature domain
     grad_cv_interior_pairs = [
@@ -515,7 +518,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             numerical_flux_func=gradient_numerical_flux_func,
             quadrature_tag=quadrature_tag, dd=dd_vol,
             operator_states_quad=operator_states_quad, comm_tag=comm_tag,
-            use_esdg=use_esdg, limiter_func=limiter_func)
+            use_esdg=use_esdg, limiter_func=limiter_func, entropy_min=entropy_min)
 
     # Create the interior face trace pairs, perform MPI exchange, interp to quad
     grad_t_interior_pairs = [
