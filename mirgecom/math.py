@@ -103,8 +103,8 @@ def __getattr__(name):
 
     Returns a function that inspects the types of its input arguments and dispatches
     to the appropriate math function. If any of the arguments are symbolic, the
-    function returns a :class:`pymbolic.primitives.Expression` representing the call
-    to *name*. If not, it next checks whether any of the arguments have array
+    function returns a :class:`pymbolic.primitives.ExpressionNode` representing the
+    call to *name*. If not, it next checks whether any of the arguments have array
     contexts. If so, it calls *name* from the array context's :mod:`numpy` workalike.
     And if none of the arguments have array contexts, it calls :mod:`numpy`'s version
     of *name*.
