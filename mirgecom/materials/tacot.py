@@ -200,16 +200,14 @@ class TacotEOS(PorousWallEOS):
             + 1.872060335623e-06*temperature**3  # type: ignore[operator]
             - 3.951464865603e-03*temperature**2  # type: ignore[operator]
             + 4.291080938736e+00*temperature
-                               + 1.397594340362e+01,
-            2008.8139143251735)
+            + 1.397594340362e+01, 2008.8139143251735)
 
         char = (
             + 1.461303669323e-14*temperature**5  # type: ignore[operator]
             - 1.862489701581e-10*temperature**4  # type: ignore[operator]
             + 9.685398830530e-07*temperature**3  # type: ignore[operator]
             - 2.599755262540e-03*temperature**2  # type: ignore[operator]
-            + 3.667295510844e+00*temperature
-            - 7.816218435655e+01)
+            + 3.667295510844e+00*temperature - 7.816218435655e+01)
 
         return virgin*tau + char*(1.0 - tau)  # type: ignore[operator]
 
