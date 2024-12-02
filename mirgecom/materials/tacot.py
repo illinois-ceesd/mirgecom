@@ -165,7 +165,7 @@ class TacotEOS(PorousWallEOS):
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the pyrolysis
         progress ratio $\tau$.
         """
-        return 1.0 - self.volume_fraction(tau)  # type: ignore[operator]
+        return 1.0 - self.volume_fraction(tau)
 
     def enthalpy(self, temperature: DOFArray,
                  tau: Optional[DOFArray] = None) -> DOFArray:
@@ -197,8 +197,8 @@ class TacotEOS(PorousWallEOS):
             + 4.122658916891e-14*temperature**5  # type: ignore[operator]
                                - 4.430937180604e-10*temperature**4  # type: ignore[operator]
             + 1.872060335623e-06*temperature**3  # type: ignore[operator]
-                               - 3.951464865603e-03*temperature**2
-            + 4.291080938736e+00*temperature  # type: ignore[operator]
+                               - 3.951464865603e-03*temperature**2  # type: ignore[operator]
+            + 4.291080938736e+00*temperature
                                + 1.397594340362e+01,
             2008.8139143251735)
 
