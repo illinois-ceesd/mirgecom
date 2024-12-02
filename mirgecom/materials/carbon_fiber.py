@@ -222,7 +222,7 @@ class FiberEOS(PorousWallEOS):
         permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
         return permeability
 
-    def emissivity(self, temperature: DOFArray,[override]
+    def emissivity(self, temperature: DOFArray,
                    tau: Optional[DOFArray] = None) -> DOFArray:
         """Emissivity for energy radiation."""
         return (
