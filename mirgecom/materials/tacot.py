@@ -175,7 +175,7 @@ class TacotEOS(PorousWallEOS):
             + 1.521029626150e-07*temperature**4  # type: ignore[operator]
             - 6.733769958659e-04*temperature**3  # type: ignore[operator]
             + 1.497082282729e+00*temperature**2  # type: ignore[operator]
-            + 3.009865156984e+02*temperature  # type: ignore[operator]
+            + 3.009865156984e+02*temperature
             - 1.062767983774e+06)
 
         char = (
@@ -183,7 +183,7 @@ class TacotEOS(PorousWallEOS):
             + 1.491175465285e-07*temperature**4  # type: ignore[operator]
             - 6.994595296860e-04*temperature**3  # type: ignore[operator]
             + 1.691564018109e+00*temperature**2  # type: ignore[operator]
-            - 3.441837408320e+01*temperature  # type: ignore[operator]
+            - 3.441837408320e+01*temperature
             - 1.235438104496e+05)
 
         return virgin*tau + char*(1.0 - tau)  # type: ignore[operator]
@@ -197,7 +197,7 @@ class TacotEOS(PorousWallEOS):
             + 4.122658916891e-14*temperature**5  # type: ignore[operator]
                                - 4.430937180604e-10*temperature**4  # type: ignore[operator]
             + 1.872060335623e-06*temperature**3  # type: ignore[operator]
-                               - 3.951464865603e-03*temperature**2  # type: ignore[operator]
+                               - 3.951464865603e-03*temperature**2
             + 4.291080938736e+00*temperature  # type: ignore[operator]
                                + 1.397594340362e+01,
             2008.8139143251735)
@@ -207,7 +207,7 @@ class TacotEOS(PorousWallEOS):
             - 1.862489701581e-10*temperature**4  # type: ignore[operator]
             + 9.685398830530e-07*temperature**3  # type: ignore[operator]
             - 2.599755262540e-03*temperature**2  # type: ignore[operator]
-            + 3.667295510844e+00*temperature  # type: ignore[operator]
+            + 3.667295510844e+00*temperature
             - 7.816218435655e+01)
 
         return virgin*tau + char*(1.0 - tau)  # type: ignore[operator]
@@ -220,7 +220,7 @@ class TacotEOS(PorousWallEOS):
             - 2.167785032562e-13*temperature**4  # type: ignore[operator]
             + 8.24498395180905e-10*temperature**3  # type: ignore[operator]
             - 1.221612456223e-06*temperature**2  # type: ignore[operator]
-            + 8.46459266618945e-04*temperature  # type: ignore[operator]
+            + 8.46459266618945e-04*temperature
             + 2.387112689755e-01)
 
         char = (
@@ -228,7 +228,7 @@ class TacotEOS(PorousWallEOS):
             + 4.709353498411e-14*temperature**4  # type: ignore[operator]
             + 1.530236899258e-11*temperature**3  # type: ignore[operator]
             - 2.305611352452e-07*temperature**2  # type: ignore[operator]
-            + 3.668624886569e-04*temperature  # type: ignore[operator]
+            + 3.668624886569e-04*temperature
             + 3.120898814888e-01)
 
         return virgin*tau + char*(1.0 - tau)  # type: ignore[operator]
@@ -238,13 +238,13 @@ class TacotEOS(PorousWallEOS):
         fiber = 0.10
         virgin = 0.10
         char = 0.05
-        return virgin*tau + char*(1.0 - tau) + fiber  # type: ignore[operator]
+        return virgin*tau + char*(1.0 - tau) + fiber
 
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the composite material."""
         virgin = 1.6e-11
         char = 2.0e-11
-        return virgin*tau + char*(1.0 - tau)  # type: ignore[operator]
+        return virgin*tau + char*(1.0 - tau)
 
     def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
@@ -256,7 +256,7 @@ class TacotEOS(PorousWallEOS):
         r"""Tortuosity $\eta$ affects the species diffusivity."""
         virgin = 1.2
         char = 1.1
-        return virgin*tau + char*(1.0 - tau)  # type: ignore[operator]
+        return virgin*tau + char*(1.0 - tau)
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
         r"""Evaluate the progress ratio $\tau$ of the phenolics decomposition.
