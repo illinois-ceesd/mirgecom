@@ -358,7 +358,7 @@ class PorousWallTransport:
         return GasTransportVars(
             bulk_viscosity=self.bulk_viscosity(cv, dv, wv, eos),
             viscosity=self.viscosity(cv, dv, wv, eos),
-            thermal_conductivity=self.thermal_conductivity(
+            thermal_conductivity=self.thermal_conductivity(  # type: ignore[arg-type]
                 cv, dv, wv, eos, wall_eos),
             species_diffusivity=self.species_diffusivity(cv, dv, wv, eos)
         )
