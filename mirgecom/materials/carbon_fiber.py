@@ -163,7 +163,8 @@ class FiberEOS(PorousWallEOS):
             + 3.13156695e-07*temperature**4  # type: ignore[operator]
             - 1.17026962e-03*temperature**3  # type: ignore[operator]
             + 2.29194901e+00*temperature**2  # type: ignore[operator]
-            - 3.62422269e+02*temperature**1 - 5.96993843e+04)  # type: ignore[operator]
+            - 3.62422269e+02*temperature**1  # type: ignore[operator]
+            - 5.96993843e+04)
 
     def heat_capacity(self, temperature: DOFArray,
                       tau: Optional[DOFArray] = None) -> DOFArray:
@@ -230,7 +231,8 @@ class FiberEOS(PorousWallEOS):
             - 2.03008004e-14*temperature**4  # type: ignore[operator]
             + 7.05300324e-11*temperature**3  # type: ignore[operator]
             - 1.22131715e-07*temperature**2  # type: ignore[operator]
-            + 1.21137817e-04*temperature**1 + 8.66656964e-01)  # type: ignore[operator]
+            + 1.21137817e-04*temperature**1  # type: ignore[operator]
+            + 8.66656964e-01)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity.

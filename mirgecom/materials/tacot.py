@@ -193,11 +193,12 @@ class TacotEOS(PorousWallEOS):
         r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
 
-        virgin = actx.np.where(actx.np.less(temperature, 2222.0),
+        virgin = actx.np.where(
+            actx.np.less(temperature, 2222.0),
             + 4.122658916891e-14*temperature**5  # type: ignore[operator]
-                               - 4.430937180604e-10*temperature**4  # type: ignore[operator]
+            - 4.430937180604e-10*temperature**4  # type: ignore[operator]
             + 1.872060335623e-06*temperature**3  # type: ignore[operator]
-                               - 3.951464865603e-03*temperature**2  # type: ignore[operator]
+            - 3.951464865603e-03*temperature**2  # type: ignore[operator]
             + 4.291080938736e+00*temperature
                                + 1.397594340362e+01,
             2008.8139143251735)
