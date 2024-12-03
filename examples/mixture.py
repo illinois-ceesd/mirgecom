@@ -277,7 +277,8 @@ def main(actx_class, use_esdg=False,
             exact = initializer(x_vec=nodes, eos=eos, time=t)
         if resid is None:
             resid = state - exact
-        viz_fields = [("cv", state), ("dv", dv)]
+        viz_fields = [("cv", state), ("dv", dv),
+                      ("resid", cv), ("exact", exact)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -350,7 +351,7 @@ def main(actx_class, use_esdg=False,
             if do_viz:
                 if exact is None:
                     exact = initializer(x_vec=nodes, eos=eos, time=t)
-                resid = state - exact
+                resid = fluid_state.cv - exact
                 my_write_viz(step=step, t=t, state=cv, dv=dv, exact=exact,
                              resid=resid)
 
