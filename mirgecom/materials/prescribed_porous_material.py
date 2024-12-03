@@ -68,7 +68,7 @@ class PrescribedMaterialEOS(PorousWallEOS):
         $\epsilon_g + \epsilon_s = 1$. Both depend only on the oxidation
         progress ratio $\tau$.
         """
-        return 1.0 - self.volume_fraction(tau)  # type: ignore
+        return 1.0 - self.volume_fraction(tau)
 
     def enthalpy(self, temperature: DOFArray, tau: Optional[DOFArray]) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$."""
