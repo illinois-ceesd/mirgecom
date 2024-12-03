@@ -137,7 +137,7 @@ def main(actx_class, casename="wave",
 
     dt = actx.to_numpy(current_cfl
                        * op.nodal_min(dcoll,
-                                      "vol", nodal_dt))[()]  # type: ignore[index]
+                                      "vol", nodal_dt))[()]
 
     t_final = 1
 
@@ -247,7 +247,7 @@ def main(actx_class, casename="wave",
         logmgr.close()
 
     final_soln = actx.to_numpy(op.norm(dcoll, fields[0], 2))
-    assert np.abs(final_soln - 0.04409852463947439) < 1e-14  # type: ignore[operator]
+    assert np.abs(final_soln - 0.04409852463947439) < 1e-14
 
     if mpi:
         assert "mpi4py" in sys.modules
