@@ -105,6 +105,8 @@ class SolidWallConservedVars:
         """Return an array context for the :class:`SolidWallConservedVars` object."""
         return get_container_context_recursively(self.mass)
 
+    __array_ufunc__ = False
+
 
 @dataclass_array_container
 @dataclass(frozen=True, eq=False)
