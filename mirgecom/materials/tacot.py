@@ -267,8 +267,12 @@ class TacotEOS(PorousWallEOS):
         .. math::
             \tau = \frac{\rho_0}{\rho_0 - \rho_c}
                     \left( 1 - \frac{\rho_c}{\rho(t)} \right)
+
+        Note that $\rho(t)$ is the mass of resin only, not including fibers,
+        permeating gas or gas-only regions.
         """
+        actx = mass.array_context
         char_mass = self._char_mass
         virgin_mass = self._virgin_mass
-        return virgin_mass/(virgin_mass
-                            - char_mass)*(1.0 - char_mass/mass)
+        resin_mass = actx.np.maximum(char_mass, mass)
+        return virgin_mass/(virgin_mass - char_mass)*(1.0 - char_mass/resin_mass)
