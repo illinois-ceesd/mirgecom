@@ -272,6 +272,8 @@ class ConservedVars:
         from dataclasses import replace
         return replace(self, **kwargs)
 
+    __array_ufunc__ = None
+
 
 def _aux_shape(ary, leading_shape):
     """:arg leading_shape: a tuple with which ``ary.shape`` is expected to begin."""
