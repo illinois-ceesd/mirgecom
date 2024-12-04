@@ -184,7 +184,6 @@ class GasEOS(metaclass=ABCMeta):
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
             smoothness_d: Optional[DOFArray] = None,
-            entropy_min: Optional[DOFArray] = None,
             smoothness_beta: Optional[DOFArray] = None) -> GasDependentVars:
         """Get an agglomerated array of the dependent variables.
 
@@ -268,7 +267,6 @@ class MixtureEOS(GasEOS):
             smoothness_mu: Optional[DOFArray] = None,
             smoothness_kappa: Optional[DOFArray] = None,
             smoothness_d: Optional[DOFArray] = None,
-            entropy_min: Optional[DOFArray] = None,
             smoothness_beta: Optional[DOFArray] = None) -> MixtureDependentVars:
         """Get an agglomerated array of the dependent variables.
 
