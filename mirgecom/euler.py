@@ -111,7 +111,7 @@ def entropy_stable_euler_operator(
         entropy_conserving_flux_func=None,
         operator_states_quad=None,
         dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None,
-        limiter_func=None):
+        entropy_min=None, limiter_func=None):
     """Compute RHS of the Euler flow equations using flux-differencing.
 
     Parameters
@@ -167,7 +167,7 @@ def entropy_stable_euler_operator(
                  "limited states, or least pass a limiter_func to this operator.")
         state_quad = project_fluid_state(
             dcoll, dd_vol, dd_vol_quad, state, gas_model, limiter_func=limiter_func,
-            entropy_stable=True)
+            entropy_min=entropy_min, entropy_stable=True)
 
     gamma_quad = gas_model.eos.gamma(state_quad.cv, state_quad.temperature)
 
@@ -314,7 +314,8 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=None,
                    quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
                    comm_tag=None, use_esdg=False, operator_states_quad=None,
-                   entropy_conserving_flux_func=None, limiter_func=None):
+                   entropy_conserving_flux_func=None, limiter_func=None,
+                   entropy_min=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -383,7 +384,7 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
-            entropy_stable=use_esdg)
+            entropy_min=entropy_min, entropy_stable=use_esdg)
 
     if use_esdg:
         return entropy_stable_euler_operator(
