@@ -480,9 +480,9 @@ def check_range_local(dcoll: DiscretizationCollection, dd: str, field: DOFArray,
                       min_value: float, max_value: float) -> List[float]:
     """Return the values that are outside the range [min_value, max_value]."""
     actx = field.array_context
-    local_min = actx.to_numpy(  # type: ignore[union-attr]
+    local_min = actx.to_numpy(
         op.nodal_min_loc(dcoll, dd, field)).item()
-    local_max = actx.to_numpy(  # type: ignore[union-attr]
+    local_max = actx.to_numpy(
         op.nodal_max_loc(dcoll, dd, field)).item()
 
     failing_values = []
