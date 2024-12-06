@@ -135,9 +135,9 @@ def main(actx_class, casename="wave",
     from grudge.dt_utils import characteristic_lengthscales
     nodal_dt = characteristic_lengthscales(actx, dcoll) / wave_speed
 
-    dt = actx.to_numpy(current_cfl
-                       * op.nodal_min(dcoll,
-                                      "vol", nodal_dt))[()]
+    dt = actx.to_numpy(  # type: ignore[index]
+        current_cfl * op.nodal_min(
+            dcoll, "vol", nodal_dt))[()]
 
     t_final = 1
 
