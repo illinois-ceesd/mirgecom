@@ -26,7 +26,9 @@ THE SOFTWARE.
 
 import logging
 import argparse
+import ctypes
 import numpy as np
+import os
 from functools import partial
 
 from meshmode.mesh import BTAG_ALL
@@ -109,9 +111,13 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         casename = "gas-in-box"
 
     from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
+
+    MPI.Pcontrol(0)
+    MPI.Pcontrol(2)
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -685,6 +691,10 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
         dt = get_sim_timestep(dcoll, gas_state.cv, t, dt, current_cfl, t_final,
                               constant_cfl)
+
+        if step == 1:
+            MPI.Pcontrol(1)
+
         return gas_state_to_stepper_state(gas_state), dt
 
     def my_post_step(step, t, dt, state):
@@ -714,6 +724,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
                       state=current_stepper_state, t=current_t, t_final=t_final)
+
+    # Optionally disable profiling after timestepping
+    MPI.Pcontrol(0)
 
     # Dump the final data
     if rank == 0:
