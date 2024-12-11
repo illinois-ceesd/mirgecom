@@ -81,17 +81,27 @@ def _check_isl_version() -> None:
 
 
 def _check_mpi4py_version() -> None:
+    from mpi4py import MPI
+
+    if MPI.COMM_WORLD.Get_rank() != 0:
+        return
+
     import mpi4py
 
     if mpi4py.__version__ < "4":
         from warnings import warn
         warn(f"mpi4py version {mpi4py.__version__} does not support pkl5 "
               "scatter. This may lead to errors when distributing large meshes. "
-              "Please upgrade to the git version of mpi4py.")
+              "Please upgrade to version 4+ of mpi4py.")
 
     else:
         logger.info(f"Using mpi4py version {mpi4py.__version__} with pkl5 "
                      "scatter support.")
+
+    mpi_ver = MPI.Get_version()
+
+    logger.info(f"mpi4py is using '{MPI.Get_library_version()}' "
+                f"with MPI v{mpi_ver[0]}.{mpi_ver[1]}.")
 
 
 def mpi_entry_point(func) -> Callable:
