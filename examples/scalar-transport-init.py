@@ -48,13 +48,12 @@ from mirgecom.operators import (
     div_operator
 )
 from mirgecom.utils import force_evaluation
-from mirgecom.integrators import rk4_step, euler_step
+from mirgecom.integrators import rk4_step
 from mirgecom.steppers import advance_state
 from mirgecom.logging_quantities import (
     initialize_logmgr,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
-    logmgr_add_mempool_usage
 )
 import grudge.op as op
 import grudge.geometry as geo
@@ -119,7 +118,7 @@ def main(actx_class, use_esdg=False,
     if casename is None:
         casename = "mirgecom"
     if init_type is None:
-        init_type = "wave"
+        init_type = "gaussian"
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -136,7 +135,6 @@ def main(actx_class, use_esdg=False,
     actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
-    alloc = getattr(actx, "allocator", None)
 
     # timestepping control
     current_step = 0
@@ -144,44 +142,40 @@ def main(actx_class, use_esdg=False,
         from leap.rk import RK4MethodBuilder
         timestepper = RK4MethodBuilder("state")
     else:
-        timestepper = euler_step
+        timestepper = rk4_step
 
-    nsteps = 400
+    nsteps = 20000
     current_cfl = 1.0
     current_dt = 1e-2
+    t_final = nsteps * current_dt
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nstatus = -1
-    nrestart = -1
-    nviz = -1
-    nhealth = -1
+    nstatus = 1
+    nrestart = 5
+    nviz = 100
+    nhealth = 1
 
     # Bunch of problem setup stuff
     dim = 3
     nel_1d = 8
-    order = 2
-
-    # Scale the number of elements by *nscale*
-    nscale = 37.5
-    nscale_fac = np.float_power(nscale, 1./dim)
+    order = 3
 
     advect = True
-    diffuse = False
+    diffuse = True
     geom_scale = 1e-3
+    # wavelength = 2 * np.pi * geom_scale
     wavelength = geom_scale
     wavenumber = 2 * np.pi / wavelength
     wavenumber2 = wavenumber * wavenumber
     current_dt = wavelength / 5
-    t_final = nsteps * current_dt
-
     wave_hat = np.ones(shape=(dim,))
     # wave_hat[0] = 0.3
     k2 = np.dot(wave_hat, wave_hat)
     wave_hat = wave_hat / np.sqrt(k2)
-    amplitude = wavelength/4
-    alpha = 1e-1 / (wavelength * wavelength)
+    amplitude = 1.0*geom_scale
+    alpha = 1e-1 / (geom_scale * geom_scale)
     diffusivity = 1e-3 / alpha
     print(f"{diffusivity=}")
     diffusion_flux_penalty = 0.
@@ -195,11 +189,9 @@ def main(actx_class, use_esdg=False,
     box_ll = (-wavelength,)*dim
     box_ur = (wavelength,)*dim
     nel_axes = (nel_1d,)*dim
-
     boxl = list(box_ll)
     boxr = list(box_ur)
     nelax = list(nel_axes)
-
     for d in range(dim):
         axis = np.zeros(shape=(dim,))
         axis[d] = 1
@@ -215,24 +207,15 @@ def main(actx_class, use_esdg=False,
         boxr[d] = scal_fac[d]*boxr[d]
         nelax[d] = int(scal_fac[d]*nelax[d])
 
-    # Scale it up to increase the number of elements by *nscale*
-    # without changing the physical characteristics of the problem
-    print(f"Scaling box from: {boxl=},{boxr=},{nelax=}")
-    boxl = [nscale_fac*boxl[d] for d in range(dim)]
-    boxr = [nscale_fac*boxr[d] for d in range(dim)]
-    snel_axes = [int(nscale_fac*nelax[d]+0.5) for d in range(dim)]
-
     box_ll = tuple(boxl)
     box_ur = tuple(boxr)
-    nel_axes = tuple(snel_axes)
-
-    print(f"{nscale=}, {nscale_fac=}, {box_ll=}, {box_ur=}, {nel_axes=}")
+    nel_axes = tuple(nelax)
+    print(f"{box_ll=}, {box_ur=}, {nel_axes=}")
 
     # renormalize wave_vector after it potentially changed
     k2 = np.dot(wave_hat, wave_hat)
     wave_hat = wave_hat / np.sqrt(k2)
 
-    print(f"Before Mesh: {actx.allocator.active_bytes=}")
     rst_path = "restart_data/"
     rst_pattern = (
         rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
@@ -255,12 +238,8 @@ def main(actx_class, use_esdg=False,
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
-    print(f"Before Dcoll: {actx.allocator.active_bytes=}")
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
-    print(f"Before Nodes : {actx.allocator.active_bytes=}")
     nodes = actx.thaw(dcoll.nodes())
-    print(f"After nodes: {actx.allocator.active_bytes=}")
-
     # quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
     vis_timer = None
@@ -268,7 +247,6 @@ def main(actx_class, use_esdg=False,
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
-        logmgr_add_mempool_usage(logmgr, alloc)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
@@ -277,13 +255,7 @@ def main(actx_class, use_esdg=False,
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s"),
-            ("memory_usage_python.max",
-             "| Memory:\n| \t python memory: {value:7g} Mb\n"),
-            ("memory_usage_mempool_managed.max",
-             "| \t mempool total: {value:7g} Mb\n"),
-            ("memory_usage_mempool_active.max",
-             "| \t mempool active: {value:7g} Mb")
+            ("t_log.max", "log walltime: {value:6g} s")
         ])
 
     def my_scalar_gradient(state, state_interior_trace_pairs=None,
@@ -297,11 +269,6 @@ def main(actx_class, use_esdg=False,
 
         get_interior_flux = partial(_gradient_flux_interior, dcoll)
 
-        # This "flux" function returns the *numerical flux* that will
-        # be used in the gradient given a trace pair
-        # i.e. a pair of states on the -/+ sides of the face.
-        # Note that this flux function *projects* to *allfaces* on the
-        # inside so no projection is required here.
         state_flux_bnd = sum(get_interior_flux(state_tpair) for state_tpair in
                              state_interior_trace_pairs)
 
@@ -394,7 +361,6 @@ def main(actx_class, use_esdg=False,
     def my_write_viz(step, t, state, grad_state=None):
         if grad_state is None:
             grad_state = force_evaluation(actx, my_scalar_gradient(state))
-        rank_field = rank + 0*state
         exact_state = exact_state_func(nodes, t)
         exact_grad = exact_gradient_func(nodes, t)
         state_resid = state - exact_state
@@ -411,8 +377,7 @@ def main(actx_class, use_esdg=False,
                       ("state_resid", state_resid),
                       ("grad_resid", grad_resid),
                       ("state_relerr", state_err),
-                      ("grad_relerr", grad_err),
-                      ("rank", rank_field)]
+                      ("grad_relerr", grad_err)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -494,7 +459,7 @@ def main(actx_class, use_esdg=False,
         return state, dt
 
     def my_diffusion_rhs(t, state, dstate=None, state_interior_trace_pairs=None,
-                         grad_state_interior_trace_pairs=None, flux_only=False):
+                         grad_state_interior_trace_pairs=None):
 
         if state_interior_trace_pairs is None:
             state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
@@ -511,27 +476,17 @@ def main(actx_class, use_esdg=False,
             _diffusion_flux_interior, dcoll, diffusivity=diffusivity,
             alpha=diffusion_flux_penalty)
 
-        # This flux interface drives the flux calculation given a pair of
-        # Q and grad(Q) for the +/- sides of the faces. The result is
-        # *projected* to "all_faces" so that the shape of the returned
-        # result can be used in arithmetic expressions with other
-        # data on "all_faces".
         def flux(grad_tpair, state_tpair):
             return op.project(
                 dcoll, grad_tpair.dd, "all_faces", get_interior_flux(grad_tpair,
                                                                      state_tpair))
 
-        # Sum the fluxes over "all_faces"
-        surf_flux = sum(flux(grad_tpair, state_tpair)
-                        for grad_tpair, state_tpair in all_trace_pairs)
+        surface_term = sum(flux(grad_tpair, state_tpair)
+                           for grad_tpair, state_tpair in all_trace_pairs)
 
-        if flux_only:
-            return vol_flux, surf_flux
+        return div_operator(dcoll, dd_vol, dd_allfaces, vol_flux, surface_term)
 
-        return div_operator(dcoll, dd_vol, dd_allfaces, vol_flux, surf_flux)
-
-    def my_advection_rhs(t, state, state_interior_trace_pairs=None,
-                         flux_only=False):
+    def my_advection_rhs(t, state, state_interior_trace_pairs=None):
 
         if state_interior_trace_pairs is None:
             state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
@@ -545,30 +500,27 @@ def main(actx_class, use_esdg=False,
             return op.project(dcoll, tpair.dd, "all_faces",
                               _advection_flux_interior(dcoll, tpair, velocity))
 
-        vol_flux = state * velocity
+        volume_flux = state * velocity
+        # volume_term = op.weak_local_div(dcoll, volume_flux)
 
-        # sums up the fluxes over "all_faces"
-        surf_flux = sum(flux(tpair) for tpair in state_interior_trace_pairs)
+        # sums up the fluxes for each element boundary
+        surface_term = sum(flux(tpair) for tpair in state_interior_trace_pairs)
 
-        if flux_only:
-            return vol_flux, surf_flux
-
-        # Div operator is (-) here because it is on the RHS of the ADT eqn.
-        return -div_operator(dcoll, dd_vol, dd_allfaces, vol_flux, surf_flux)
+        # return op.inverse_mass(
+        #    dcoll, volume_term - op.face_mass(dcoll, surface_term))
+        return -div_operator(dcoll, dd_vol, dd_allfaces, volume_flux, surface_term)
 
     def my_rhs(t, state):
+        rhs = 0*state
         state_interior_trace_pairs = None
-        vol_fluxes = 0
-        surf_fluxes = 0
 
         if advect:
             if state_interior_trace_pairs is None:
                 state_interior_trace_pairs = op.interior_trace_pairs(dcoll, state)
-            vol_fluxes, surf_fluxes = my_advection_rhs(
-                t, state, state_interior_trace_pairs, flux_only=True)
-            # Negate the fluxes for +DIV call
-            vol_fluxes = -1. * vol_fluxes
-            surf_fluxes = -1. * surf_fluxes
+
+            advection = my_advection_rhs(
+                t, state, state_interior_trace_pairs)
+            rhs = rhs + advection
 
         if diffuse:
             if state_interior_trace_pairs is None:
@@ -576,19 +528,13 @@ def main(actx_class, use_esdg=False,
             grad_state = my_scalar_gradient(state, state_interior_trace_pairs)
             grad_state_interior_trace_pairs = \
                 op.interior_trace_pairs(dcoll, grad_state)
-            diff_vol_fluxes, diff_surf_fluxes = my_diffusion_rhs(
+            diffusion = my_diffusion_rhs(
                 t, state, dstate=grad_state,
                 state_interior_trace_pairs=state_interior_trace_pairs,
-                grad_state_interior_trace_pairs=grad_state_interior_trace_pairs,
-                flux_only=True)
-            # {vol,surf}_fluxes have already been oriented for this sum
-            vol_fluxes = vol_fluxes + diff_vol_fluxes
-            surf_fluxes = surf_fluxes + diff_surf_fluxes
+                grad_state_interior_trace_pairs=grad_state_interior_trace_pairs)
+            rhs = rhs + diffusion
 
-        if diffuse or advect:
-            return div_operator(dcoll, dd_vol, dd_allfaces, vol_fluxes, surf_fluxes)
-
-        return 0*state
+        return rhs
 
     # Need to create a dt calculator for scalar field
     # current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
