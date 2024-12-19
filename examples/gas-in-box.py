@@ -24,6 +24,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import gc
 import logging
 import argparse
 import ctypes
@@ -81,7 +82,8 @@ from mirgecom.logging_quantities import (
     initialize_logmgr,
     # logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage
+    logmgr_add_device_memory_usage,
+    logmgr_add_mempool_usage
 )
 import cantera
 
@@ -116,8 +118,12 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     rank = comm.Get_rank()
     num_parts = comm.Get_size()
 
-    MPI.Pcontrol(0)
-    MPI.Pcontrol(2)
+    first_profiling_step = 4
+    last_profiling_step = 5
+
+    if first_profiling_step > 0:
+        MPI.Pcontrol(0)
+        MPI.Pcontrol(2)
 
     from mirgecom.simutil import global_reduce as _global_reduce
     global_reduce = partial(_global_reduce, comm=comm)
@@ -148,10 +154,10 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     temperature_tolerance = 1e-2
 
     # some i/o frequencies
-    nstatus = 1
-    nrestart = 100
-    nviz = 1
-    nhealth = 1
+    nstatus = 10000
+    nrestart = 100000
+    nviz = 10000
+    nhealth = 100000
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -247,8 +253,18 @@ def main(actx_class, use_esdg=False, use_tpe=False,
             ("step.max", "step = {value}, "),
             ("t_sim.max", "sim time: {value:1.6e} s\n"),
             ("t_step.max", "------- step walltime: {value:6g} s, "),
-            ("t_log.max", "log walltime: {value:6g} s")
-        ])
+            ("t_log.max", "log walltime: {value:6g} s"),
+            ("memory_usage_python.max",
+             "| Memory:\n| \t python memory: {value:7g} Mb\n"),
+            ("memory_usage_hwm.max",
+             "| \t memory hwm: {value:7g} Mb\n")])
+        try:
+            logmgr.add_watches([
+                ("memory_usage_gpu.max",
+                 "| \t gpu memory: {value:7g} Mb\n")
+            ])
+        except KeyError:
+            pass
 
     velocity = np.zeros(shape=(dim,))
 
@@ -692,7 +708,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         dt = get_sim_timestep(dcoll, gas_state.cv, t, dt, current_cfl, t_final,
                               constant_cfl)
 
-        if step == 1:
+        if step == first_profiling_step:
             MPI.Pcontrol(1)
 
         return gas_state_to_stepper_state(gas_state), dt
@@ -701,6 +717,12 @@ def main(actx_class, use_esdg=False, use_tpe=False,
         if logmgr:
             set_dt(logmgr, dt)
             logmgr.tick_after()
+        if step == last_profiling_step:
+            MPI.Pcontrol(0)
+        if step == 3:
+            gc.collect()
+            gc.freeze()
+
         return state, dt
 
     def my_rhs(t, stepper_state):
@@ -726,7 +748,8 @@ def main(actx_class, use_esdg=False, use_tpe=False,
                       state=current_stepper_state, t=current_t, t_final=t_final)
 
     # Optionally disable profiling after timestepping
-    MPI.Pcontrol(0)
+    if last_profiling_step <= 0:
+        MPI.Pcontrol(0)
 
     # Dump the final data
     if rank == 0:

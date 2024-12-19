@@ -137,7 +137,7 @@ def main(actx_class, use_esdg=False,
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
-            # periodic=(True,)*dim
+            periodic=(True,)*dim
         )
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
@@ -176,8 +176,8 @@ def main(actx_class, use_esdg=False,
     initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
-    boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
-    # boundaries = {}
+    # boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
+    boundaries = {}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
