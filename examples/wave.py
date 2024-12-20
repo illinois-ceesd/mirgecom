@@ -137,7 +137,7 @@ def main(actx_class, casename="wave",
 
     dt = actx.to_numpy(current_cfl
                        * op.nodal_min(dcoll,
-                                      "vol", nodal_dt))[()]
+                                      "vol", nodal_dt))[()]  # type: ignore[index]
 
     t_final = 1
 
