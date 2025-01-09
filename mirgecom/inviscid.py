@@ -152,6 +152,53 @@ def inviscid_facial_flux_rusanov(state_pair, gas_model, normal):
                         q_plus=state_pair.ext.cv, lam=lam)
 
 
+def inviscid_facial_flux_central(state_pair, gas_model, normal):
+    r"""High-level interface for inviscid facial flux using central numerical flux.
+
+    The central inviscid numerical flux is calculated
+    as:
+
+    .. math::
+
+        F^{*}_{\mathtt{central}} = \frac{1}{2}(\mathbf{F}(q^-)
+        +\mathbf{F}(q^+)) \cdot \hat{n},
+
+    where $q^-, q^+$ are the fluid solution state on the interior and the
+    exterior of the face where the flux is to be calculated, $\mathbf{F}$ is
+    the inviscid fluid flux, $\hat{n}$ is the face normal.
+
+    Parameters
+    ----------
+    state_pair: :class:`~grudge.trace_pair.TracePair`
+
+        Trace pair of :class:`~mirgecom.gas_model.FluidState` for the face upon
+        which the flux calculation is to be performed
+
+    gas_model: :class:`~mirgecom.gas_model.GasModel`
+
+        Physical gas model including equation of state, transport,
+        and kinetic properties as required by fluid state
+
+    normal: numpy.ndarray
+
+        The element interface normals
+
+    Returns
+    -------
+    :class:`~mirgecom.fluid.ConservedVars`
+
+        A CV object containing the scalar numerical fluxes at the input faces.
+        The returned fluxes are scalar because they've already been dotted with
+        the face normals as required by the divergence operator for which they
+        are being computed.
+    """
+    from mirgecom.flux import num_flux_lfr
+    return num_flux_lfr(f_minus_normal=inviscid_flux(state_pair.int)@normal,
+                        f_plus_normal=inviscid_flux(state_pair.ext)@normal,
+                        q_minus=state_pair.int.cv,
+                        q_plus=state_pair.ext.cv, lam=0)
+
+
 def inviscid_facial_flux_hll(state_pair, gas_model, normal):
     r"""High-level interface for inviscid facial flux using HLL numerical flux.
 
@@ -420,11 +467,11 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     gamma_rr = gas_model.eos.gamma(state_rr.cv, state_rr.temperature)
 
     def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
-        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # type: ignore
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
         return actx.np.where(
             actx.np.less(f2, epsilon),
-            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),  # type: ignore
-            (y - x) / actx.np.log(y / x)  # type: ignore
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
+            (y - x) / actx.np.log(y / x)
         )
 
     # Primitive variables for left and right states
@@ -501,11 +548,11 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
     pot_avg = 0.5*(pot_ll + pot_rr)
 
     def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
-        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # type: ignore
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
         return actx.np.where(
             actx.np.less(f2, epsilon),
-            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),  # type: ignore
-            (y - x) / actx.np.log(y / x)  # type: ignore
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
+            (y - x) / actx.np.log(y / x)
         )
 
     theta_mean = ln_mean(theta_ll, theta_rr)

@@ -60,9 +60,18 @@ def create_discretization_collection(actx, volume_meshes, order, *,
         QuadratureGroupFactory,
         ModalGroupFactory
     )
+    from meshmode.mesh import Mesh, TensorProductElementGroup
 
     if quadrature_order < 0:
-        quadrature_order = 2*order + 1
+        mesh_is_tpe = False
+        if isinstance(volume_meshes, Mesh):
+            the_mesh = volume_meshes
+        else:
+            the_mesh = next(iter(volume_meshes.values()))
+        mesh_is_tpe = \
+            isinstance(next(iter(the_mesh.groups)), TensorProductElementGroup)
+
+        quadrature_order = order if mesh_is_tpe else 2*order
 
     return make_discretization_collection(
         actx, volume_meshes,

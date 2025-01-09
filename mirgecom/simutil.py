@@ -181,6 +181,8 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None,
         periodic = (False,)*dim
     elif np.isscalar(periodic):
         periodic = (periodic,)*dim
+    if tensor_product_elements is None:
+        tensor_product_elements = False
 
     dim_names = ["x", "y", "z"]
     bttf = {}
@@ -478,10 +480,10 @@ def check_range_local(dcoll: DiscretizationCollection, dd: str, field: DOFArray,
                       min_value: float, max_value: float) -> List[float]:
     """Return the values that are outside the range [min_value, max_value]."""
     actx = field.array_context
-    local_min = actx.to_numpy(
-        op.nodal_min_loc(dcoll, dd, field)).item()  # type: ignore[attr-defined]
-    local_max = actx.to_numpy(
-        op.nodal_max_loc(dcoll, dd, field)).item()  # type: ignore[attr-defined]
+    local_min = actx.to_numpy(  # type: ignore[union-attr]
+        op.nodal_min_loc(dcoll, dd, field)).item()
+    local_max = actx.to_numpy(  # type: ignore[union-attr]
+        op.nodal_max_loc(dcoll, dd, field)).item()
 
     failing_values = []
 
@@ -498,7 +500,7 @@ def check_naninf_local(dcoll: DiscretizationCollection, dd: str,
     """Return True if there are any NaNs or Infs in the field."""
     actx = field.array_context
     s = actx.to_numpy(op.nodal_sum_loc(dcoll, dd, field))
-    return not np.isfinite(s)  # type: ignore[call-overload]
+    return not np.isfinite(s)
 
 
 def compare_fluid_solutions(dcoll, red_state, blue_state, *, dd=DD_VOLUME_ALL):
