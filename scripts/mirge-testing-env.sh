@@ -38,8 +38,15 @@ elif [[ $(hostname) == "delta"* ]]; then
     PYOPENCL_CTX="port:nvidia"
     PYOPENCL_TEST="port:nvidia"
     MIRGE_MPI_EXEC="srun"
+
 elif [[ $(hostname) == "tioga"* ]]; then
     MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/tioga-parallel-spawner.sh"
+    PYOPENCL_CTX="AMD:0"  # ROCR_VISIBLE_DEVICES handles device visibility
+    PYOPENCL_TEST="AMD:0"
+    MIRGE_MPI_EXEC="flux run --exclusive"
+
+elif [[ $(hostname) == "tuolumne"* ]]; then
+    MIRGE_PARALLEL_SPAWNER="bash ${MIRGE_HOME}/scripts/tuolumne-parallel-spawner.sh"
     PYOPENCL_CTX="AMD:0"  # ROCR_VISIBLE_DEVICES handles device visibility
     PYOPENCL_TEST="AMD:0"
     MIRGE_MPI_EXEC="flux run --exclusive"
