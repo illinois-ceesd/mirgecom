@@ -110,7 +110,10 @@ def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* has fallback arguments."""
     import inspect
     spec = inspect.getfullargspec(actx_class.__init__)
-    return "use_axis_tag_inference_fallback" in spec.args
+    return (
+        "use_axis_tag_inference_fallback" in spec.args or
+        "use_axis_tag_inference_fallback" in spec.kwonlyargs
+    )
 
 
 def _check_cache_dirs_node(actx: ArrayContext) -> None:
@@ -290,7 +293,8 @@ def initialize_actx(
         actx_class: Type[ArrayContext],
         comm=None, *,
         use_axis_tag_inference_fallback: bool = False,
-        use_einsum_inference_fallback: bool = False) -> ArrayContext:
+        use_einsum_inference_fallback: bool = False,
+        use_tp_transforms: bool = False) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from grudge.array_context import (MPIPyOpenCLArrayContext,
                                       MPIPytatoArrayContext
@@ -322,6 +326,8 @@ def initialize_actx(
 
         if actx_class_is_lazy(actx_class):
             assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
+            actx_kwargs["use_tp_transforms"] = \
+                use_tp_transforms
 
             if actx_class_has_fallback_args(actx_class):
                 actx_kwargs["use_axis_tag_inference_fallback"] = \
