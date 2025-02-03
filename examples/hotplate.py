@@ -147,11 +147,11 @@ def main(actx_class, use_esdg=False, use_leap=False, casename=None,
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)

@@ -77,9 +77,9 @@ class GasTransportVars:
     .. attribute:: species_diffusivity
     """
 
-    bulk_viscosity: np.ndarray
-    viscosity: np.ndarray
-    thermal_conductivity: np.ndarray
+    bulk_viscosity: DOFArray
+    viscosity: DOFArray
+    thermal_conductivity: DOFArray
     species_diffusivity: np.ndarray
 
 
@@ -124,7 +124,7 @@ class TransportModel:
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         raise NotImplementedError()
 
@@ -197,7 +197,7 @@ class SimpleTransport(TransportModel):
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._d_alpha*(0*cv.mass + 1.0)
 
@@ -576,7 +576,7 @@ class ArtificialViscosityTransportDiv(TransportModel):
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._physical_transport.species_diffusivity(cv, dv, eos)
 
@@ -696,7 +696,7 @@ class ArtificialViscosityTransportDiv2(TransportModel):
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
-                            eos: Optional[GasEOS] = None) -> DOFArray:
+                            eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
         return self._physical_transport.species_diffusivity(cv, dv, eos)
 

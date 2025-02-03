@@ -93,8 +93,6 @@ from grudge.trace_pair import (
     interior_trace_pairs,
     tracepair_with_discr_tag
 )
-from grudge.projection import volume_quadrature_project
-from grudge.flux_differencing import volume_flux_differencing
 
 import grudge.op as op
 
@@ -113,7 +111,7 @@ def entropy_stable_euler_operator(
         entropy_conserving_flux_func=None,
         operator_states_quad=None,
         dd=DD_VOLUME_ALL, quadrature_tag=None, comm_tag=None,
-        limiter_func=None):
+        entropy_min=None, limiter_func=None):
     """Compute RHS of the Euler flow equations using flux-differencing.
 
     Parameters
@@ -169,11 +167,14 @@ def entropy_stable_euler_operator(
                  "limited states, or least pass a limiter_func to this operator.")
         state_quad = project_fluid_state(
             dcoll, dd_vol, dd_vol_quad, state, gas_model, limiter_func=limiter_func,
-            entropy_stable=True)
+            entropy_min=entropy_min, entropy_stable=True)
 
     gamma_quad = gas_model.eos.gamma(state_quad.cv, state_quad.temperature)
 
     # Compute the projected (nodal) entropy variables
+    from grudge.projection import volume_quadrature_project  \
+        # pylint: disable=no-name-in-module
+
     entropy_vars = volume_quadrature_project(
         dcoll, dd_vol_quad,
         # Map to entropy variables
@@ -207,6 +208,9 @@ def entropy_stable_euler_operator(
         _reshape((-1, 1), modified_conserved_fluid_state))
 
     # Compute volume derivatives using flux differencing
+    from grudge.flux_differencing import volume_flux_differencing  \
+        # pylint: disable=no-name-in-module,import-error
+
     inviscid_vol_term = \
         -volume_flux_differencing(dcoll, dd_vol_quad, dd_allfaces_quad,
                                   flux_matrices)
@@ -300,7 +304,7 @@ def entropy_stable_euler_operator(
 
     return op.inverse_mass(
         dcoll,
-        dd_vol,
+        dd_vol_quad,
         inviscid_vol_term - op.face_mass(dcoll, dd_allfaces_quad,
                                          inviscid_flux_bnd)
     )
@@ -310,7 +314,8 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                    inviscid_numerical_flux_func=None,
                    quadrature_tag=DISCR_TAG_BASE, dd=DD_VOLUME_ALL,
                    comm_tag=None, use_esdg=False, operator_states_quad=None,
-                   entropy_conserving_flux_func=None, limiter_func=None):
+                   entropy_conserving_flux_func=None, limiter_func=None,
+                   entropy_min=None):
     r"""Compute RHS of the Euler flow equations.
 
     Returns
@@ -379,7 +384,7 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,
-            entropy_stable=use_esdg)
+            entropy_min=entropy_min, entropy_stable=use_esdg)
 
     if use_esdg:
         return entropy_stable_euler_operator(

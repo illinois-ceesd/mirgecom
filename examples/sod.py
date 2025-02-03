@@ -136,15 +136,18 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     nodes = actx.thaw(dcoll.nodes())
 
     # TODO: Fix this wonky dt estimate
-    from grudge.dt_utils import h_min_from_volume
     cn = 0.5*(order + 1)**2
-    current_dt = current_cfl * actx.to_numpy(h_min_from_volume(dcoll)) / cn
+    import grudge.op as op
+    from grudge.dt_utils import characteristic_lengthscales
+    nodal_h = characteristic_lengthscales(actx, dcoll) / cn
+    current_dt = actx.to_numpy(
+        current_cfl * op.nodal_min(dcoll, "vol", nodal_h))[()]
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 

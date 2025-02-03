@@ -42,7 +42,7 @@ from dataclasses import dataclass, fields, field
 from arraycontext import (
     dataclass_array_container,
     with_container_arithmetic,
-    get_container_context_recursively
+    get_container_context_recursively_opt
 )
 
 
@@ -226,7 +226,7 @@ class ConservedVars:
     @property
     def array_context(self):
         """Return an array context for the :class:`ConservedVars` object."""
-        return get_container_context_recursively(self.mass)
+        return get_container_context_recursively_opt(self.mass)
 
     @property
     def dim(self):
@@ -271,6 +271,8 @@ class ConservedVars:
         """Return a copy of *self* with the attributes in *kwargs* replaced."""
         from dataclasses import replace
         return replace(self, **kwargs)
+
+    __array_ufunc__ = None
 
 
 def _aux_shape(ary, leading_shape):

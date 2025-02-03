@@ -317,11 +317,13 @@ class PyOpenCLProfilingArrayContext(PyOpenCLArrayContext):
             ep_name = t_unit.default_entrypoint.name
             executor = t_unit.target.get_kernel_executor(t_unit, self.queue,
                     entrypoint=ep_name)
-            info = executor.translation_unit_info(
-                ep_name, executor.arg_to_dtype_set(kwargs))
+            info = executor.translation_unit_info(  # type: ignore[attr-defined]
+                ep_name,
+                executor.arg_to_dtype_set(kwargs))  # type: ignore[attr-defined]
 
-            typed_t_unit = executor.get_typed_and_scheduled_translation_unit(
-                ep_name, executor.arg_to_dtype_set(kwargs))
+            typed_t_unit = \
+                executor.get_typed_and_scheduled_translation_unit(
+                    ep_name, executor.arg_to_dtype_set(kwargs))
             kernel = typed_t_unit[ep_name]
 
             idi = info.implemented_data_info

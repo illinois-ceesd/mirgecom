@@ -93,7 +93,9 @@ def main(actx_class, use_esdg=False, use_tpe=True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm)
+    actx = initialize_actx(actx_class, comm,
+                           use_axis_tag_inference_fallback=True,
+                           use_einsum_inference_fallback=True)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -346,10 +348,9 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
-    parser.add_argument("--tpe", action="store_true",
-                        help="Use tensor product (quad/hex) elements.")
     parser.add_argument("--cupy", action="store_true",
         help="use cupy-based eager actx.")
+
     args = parser.parse_args()
 
     from warnings import warn
@@ -376,7 +377,6 @@ if __name__ == "__main__":
 
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap, use_tpe=args.tpe,
-         casename=casename, rst_filename=rst_filename)
+         use_leap=args.leap, casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker

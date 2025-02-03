@@ -91,7 +91,7 @@ def main(actx_class, use_overintegration=False, casename=None, rst_filename=None
 
     local_mesh, global_nelements = (
         generate_and_distribute_mesh(comm, generate_mesh))
-    print("%d elements" % global_nelements)
+    print(f"Number of  elements: {global_nelements}.")
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
 

@@ -102,7 +102,7 @@ jobs:
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
             cd test
             python -m pip install pytest
-            python -m pytest --cov=mirgecom --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
+            python -m pytest --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
     examples:
         name: Examples
@@ -126,7 +126,6 @@ jobs:
             mamba install vtk  # needed for the accuracy comparison
 
             # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
-            [[ $(hostname) == "porter" ]] && conda uninstall --yes ocl-icd-system
 
             [[ $(hostname) == "porter" ]] && export PYOPENCL_TEST="port:nv" && unset XDG_CACHE_HOME
 
@@ -176,7 +175,7 @@ jobs:
         - name: Install emirge
           run: |
             [[ $(uname) == Linux ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+            [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
             cd ..
             git clone https://github.com/illinois-ceesd/emirge
             cd emirge
@@ -205,7 +204,7 @@ jobs:
           run: |
             set -x
             [[ $(uname) == Linux ]] && [[ $(hostname) != "porter" ]] && sudo apt-get update && sudo apt-get install -y openmpi-bin libopenmpi-dev
-            [[ $(uname) == Darwin ]] && brew upgrade && brew install mpich
+            [[ $(uname) == Darwin ]] && ( brew upgrade || true; brew install mpich )
 
             # This is only possible because actions run sequentially on porter
             [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch && rm -rf /tmp/githubrunner/xdg-scratch
@@ -228,6 +227,5 @@ jobs:
             source ../config/activate_env.sh
 
             # Temporary workaround for https://github.com/conda-forge/openvino-feedstock/pull/73
-            [[ $(hostname) == "porter" ]] && conda uninstall --yes ocl-icd-system
 
             scripts/run-integrated-tests.sh --production

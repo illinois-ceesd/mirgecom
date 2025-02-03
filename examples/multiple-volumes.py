@@ -162,7 +162,7 @@ def main(actx_class, use_esdg=False,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 

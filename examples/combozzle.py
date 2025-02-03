@@ -31,7 +31,7 @@ from functools import partial
 
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_QUAD
+from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from mirgecom.discretization import create_discretization_collection
 
 
@@ -167,8 +167,8 @@ def main(actx_class, rst_filename=None, use_tpe=False,
 
     # {{{ Some discretization parameters
 
-    dim = 2
-    order = 3
+    dim = 3
+    order = 1
 
     # - scales the size of the domain
     x_scale = 1
@@ -653,7 +653,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     ones = dcoll.zeros(actx) + 1.0
 
@@ -704,9 +704,9 @@ def main(actx_class, rst_filename=None, use_tpe=False,
                 ("min_temperature", "------- T (min, max) (K)  = ({value:7g}, "),
                 ("max_temperature",    "{value:7g})\n")])
 
+    init_y = 0
     if single_gas_only:
         nspecies = 0
-        init_y = 0
     elif use_cantera:
 
         # {{{  Set up initial state using Cantera
@@ -1112,6 +1112,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
         fluid_operator_states = make_operator_fluid_states(
             dcoll, fluid_state, gas_model, boundaries, quadrature_tag=quadrature_tag)
 
+        grad_cv = None
         if inviscid_only:
             fluid_rhs = \
                 euler_operator(
@@ -1139,7 +1140,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
             fluid_rhs = fluid_rhs + eos.get_species_source_terms(
                 cv, fluid_state.temperature)
 
-        if av_on:
+        if av_on and not inviscid_only:
             alpha_f = compute_av_alpha_field(fluid_state)
             indicator = smoothness_indicator(dcoll, fluid_state.mass_density,
                                              kappa=kappa_sc, s0=s0_sc)

@@ -29,13 +29,15 @@ import pymbolic as pmbl
 import mirgecom.math as mm
 import pytest
 from pytools.obj_array import make_obj_array
+import grudge.geometry as geo
 from grudge import op
 from grudge.dof_desc import BoundaryDomainTag, DISCR_TAG_BASE, DISCR_TAG_QUAD
 from grudge.shortcuts import make_visualizer
 from meshmode.dof_array import DOFArray
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from mirgecom.symbolic import (
     diff as sym_diff,
     grad as sym_grad,
@@ -54,6 +56,9 @@ from mirgecom.simutil import get_box_mesh
 from mirgecom.discretization import create_discretization_collection
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def test_diffusion_boundary_conditions(actx_factory):
@@ -216,7 +221,7 @@ class DecayingTrigTruncatedDomain(HeatProblem):
             lower_bdtag = BoundaryDomainTag("-"+str(i+1))
             upper_bdtag = BoundaryDomainTag("+"+str(i+1))
             upper_grad_u = op.project(dcoll, "vol", upper_bdtag, exact_grad_u)
-            normal = actx.thaw(dcoll.normal(upper_bdtag))
+            normal = geo.normal(actx, dcoll, upper_bdtag)
             upper_grad_u_dot_n = np.dot(upper_grad_u, normal)
             boundaries[lower_bdtag] = NeumannDiffusionBoundary(0.)
             boundaries[upper_bdtag] = NeumannDiffusionBoundary(upper_grad_u_dot_n)
@@ -459,7 +464,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
 
 @pytest.mark.parametrize("order", [1, 2, 3, 4])
-def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
+@pytest.mark.parametrize("quad", [True, False])
+def test_diffusion_discontinuous_kappa(actx_factory, order, quad, visualize=False):
     """
     Checks the accuracy of the diffusion operator for an kappa field that has a
     jump across an element face.
@@ -473,6 +479,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     dcoll = create_discretization_collection(actx, mesh, order)
 
     nodes = actx.thaw(dcoll.nodes())
+    qtag = DISCR_TAG_QUAD if quad else DISCR_TAG_BASE
 
     # Set up a 1D heat equation interface problem, apply the diffusion operator to
     # the exact steady state solution, and check that it's zero
@@ -506,7 +513,7 @@ def test_diffusion_discontinuous_kappa(actx_factory, order, visualize=False):
     def get_rhs(t, u, return_grad_u=False):
         return diffusion_operator(
             dcoll, kappa=kappa, boundaries=boundaries, u=u,
-            return_grad_u=return_grad_u)
+            quadrature_tag=qtag, return_grad_u=return_grad_u)
 
     rhs, grad_u_steady = get_rhs(0, u_steady, return_grad_u=True)
 
@@ -731,8 +738,7 @@ def test_orthotropic_diffusion(actx_factory):
     dcoll = create_discretization_collection(actx, mesh, order)
     nodes = actx.thaw(dcoll.nodes())
 
-    zeros = actx.np.zeros_like(nodes[0])
-    kappa = make_obj_array([kappa0 + zeros, kappa1 + zeros])
+    kappa = make_obj_array([kappa0, kappa1])
     u = 30.0*nodes[0] + 60.0*nodes[1]
 
     # exercise Neumann BC
@@ -753,8 +759,8 @@ def test_orthotropic_diffusion(actx_factory):
     assert err_grad_y < 1.e-9
 
     diff_flux = diffusion_flux(kappa, grad_u)
-    flux_x = -(kappa0 + zeros)*grad_u[0]
-    flux_y = -(kappa1 + zeros)*grad_u[1]
+    flux_x = -kappa0*grad_u[0]
+    flux_y = -kappa1*grad_u[1]
     err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
     err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
     assert err_flux_x < 1.e-9
@@ -785,8 +791,8 @@ def test_orthotropic_diffusion(actx_factory):
     assert err_grad_y < 1.e-9
 
     diff_flux = diffusion_flux(kappa, grad_u)
-    flux_x = -(kappa0 + zeros)*grad_u[0]
-    flux_y = -(kappa1 + zeros)*grad_u[1]
+    flux_x = -kappa0*grad_u[0]
+    flux_y = -kappa1*grad_u[1]
     err_flux_x = actx.to_numpy(op.norm(dcoll, diff_flux[0] - flux_x, np.inf))
     err_flux_y = actx.to_numpy(op.norm(dcoll, diff_flux[1] - flux_y, np.inf))
     assert err_flux_x < 1.e-9

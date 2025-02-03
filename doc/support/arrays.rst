@@ -43,24 +43,25 @@ To demonstrate the effect of this, first we need some setup:
 .. doctest::
 
    >>> import pyopencl as cl
-   >>> from arraycontext import PyOpenCLArrayContext, thaw
+   >>> from arraycontext import thaw
+   >>> from meshmode.array_context import PyOpenCLArrayContext
    >>> ctx = cl.create_some_context()
    >>> queue = cl.CommandQueue(ctx)
    >>> actx = PyOpenCLArrayContext(queue)
    >>> from meshmode.mesh.generation import generate_regular_rect_mesh
    >>> mesh = generate_regular_rect_mesh(a=(0, 0), b=(1, 1), nelements_per_axis=(10, 10))
-   >>> from grudge import DiscretizationCollection
-   >>> dcoll = DiscretizationCollection(actx, mesh, order=5)
+   >>> from grudge import make_discretization_collection
+   >>> dcoll = make_discretization_collection(actx, mesh, order=5)
 
 Most quantities that are maintained by the discretization will be frozen. For example,
 if one wanted to grab the nodes of the mesh or normals of a named surface in the mesh:
 
 .. doctest::
 
-   >>> from grudge.dof_desc import DOFDesc
-   >>> nodes = thaw(dcoll.nodes(), actx)
-   >>> dd = DOFDesc("all_faces")
-   >>> nhat = thaw(dcoll.normal(dd), actx)
+   >>> from grudge.dof_desc import as_dofdesc
+   >>> nodes = actx.thaw(dcoll.nodes())
+   >>> dd = as_dofdesc("all_faces")
+   >>> nhat = actx.thaw(dcoll.normal(dd))
 
 What can go wrong?  Attempts to operate on frozen data will yield errors similar to
 the following:
@@ -76,7 +77,7 @@ Fortunately, recovering from this is straightforward:
 
 .. doctest::
 
-   >>> nodes = thaw(dcoll.nodes(), actx)
+   >>> nodes = actx.thaw(dcoll.nodes())
    >>> result = nodes * 5
 
 Array Containers

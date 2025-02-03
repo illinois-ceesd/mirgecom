@@ -31,9 +31,8 @@ from mirgecom.wave import wave_operator
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
 
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 import pytest
 
@@ -42,6 +41,9 @@ from typing import Callable
 
 import logging
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 @dataclass
@@ -236,7 +238,7 @@ def test_wave_stability(actx_factory, problem, timestep_scale, order,
 
     def get_rhs(t, w):
         result = wave_operator(dcoll, c=p.c, w=w)
-        result[0] += sym_eval(sym_f, t)
+        result[0] = result[0] + sym_eval(sym_f, t)
         return result
 
     t = 0.

@@ -29,7 +29,7 @@ from functools import partial
 
 from meshmode.mesh import BTAG_ALL
 from grudge.shortcuts import make_visualizer
-from grudge.dof_desc import DISCR_TAG_QUAD
+from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
 
 from mirgecom.discretization import create_discretization_collection
 from mirgecom.euler import euler_operator
@@ -145,7 +145,7 @@ def main(actx_class, use_esdg=False,
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None
+        quadrature_tag = DISCR_TAG_BASE
 
     vis_timer = None
 
@@ -277,7 +277,8 @@ def main(actx_class, use_esdg=False,
             exact = initializer(x_vec=nodes, eos=eos, time=t)
         if resid is None:
             resid = state - exact
-        viz_fields = [("cv", state), ("dv", dv)]
+        viz_fields = [("cv", state), ("dv", dv),
+                      ("resid", resid), ("exact", exact)]
         from mirgecom.simutil import write_visfile
         write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
@@ -350,7 +351,7 @@ def main(actx_class, use_esdg=False,
             if do_viz:
                 if exact is None:
                     exact = initializer(x_vec=nodes, eos=eos, time=t)
-                resid = state - exact
+                resid = fluid_state.cv - exact
                 my_write_viz(step=step, t=t, state=cv, dv=dv, exact=exact,
                              resid=resid)
 

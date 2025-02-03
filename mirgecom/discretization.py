@@ -49,32 +49,35 @@ def create_discretization_collection(actx, volume_meshes, order, *,
             DeprecationWarning, stacklevel=2)
 
     if tensor_product_elements:
-        warn("Overintegration is not supported for tensor product elements.")
+        warn(
+            "tensor_product_elements argument is not needed and will vanish soon.",
+            DeprecationWarning, stacklevel=2)
 
-    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD, DISCR_TAG_MODAL
     from grudge.discretization import make_discretization_collection
     from meshmode.discretization.poly_element import (
-        QuadratureSimplexGroupFactory,
-        PolynomialRecursiveNodesGroupFactory,
-        LegendreGaussLobattoTensorProductGroupFactory as Lgl
+        InterpolatoryEdgeClusteredGroupFactory,
+        QuadratureGroupFactory,
+        ModalGroupFactory
     )
+    from meshmode.mesh import Mesh, TensorProductElementGroup
 
     if quadrature_order < 0:
-        quadrature_order = 2*order+1
+        mesh_is_tpe = False
+        if isinstance(volume_meshes, Mesh):
+            the_mesh = volume_meshes
+        else:
+            the_mesh = next(iter(volume_meshes.values()))
+        mesh_is_tpe = \
+            isinstance(next(iter(the_mesh.groups)), TensorProductElementGroup)
 
-    if tensor_product_elements:
-        return make_discretization_collection(
-            actx, volume_meshes,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: Lgl(order)
-            }
-        )
-    else:
-        return make_discretization_collection(
-            actx, volume_meshes,
-            discr_tag_to_group_factory={
-                DISCR_TAG_BASE: PolynomialRecursiveNodesGroupFactory(order=order,
-                                                                     family="lgl"),
-                DISCR_TAG_QUAD: QuadratureSimplexGroupFactory(quadrature_order),
-            }
-        )
+        quadrature_order = order if mesh_is_tpe else 2*order
+
+    return make_discretization_collection(
+        actx, volume_meshes,
+        discr_tag_to_group_factory={
+            DISCR_TAG_BASE: InterpolatoryEdgeClusteredGroupFactory(order),
+            DISCR_TAG_MODAL: ModalGroupFactory(order),
+            DISCR_TAG_QUAD: QuadratureGroupFactory(quadrature_order)
+        }
+    )

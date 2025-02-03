@@ -33,16 +33,12 @@ THE SOFTWARE.
 from grudge.discretization import DiscretizationCollection
 import grudge.op as op
 
-from grudge.dof_desc import DD_VOLUME_ALL, DISCR_TAG_MODAL
-
-import numpy as np
-from meshmode.transform_metadata import FirstAxisIsElementsTag
-from meshmode.dof_array import DOFArray
+from grudge.dof_desc import DD_VOLUME_ALL
 
 
 def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
                              mmin=0.0, mmax=None, modify_average=False,
-                             dd=DD_VOLUME_ALL):
+                             dd=None):
     r"""Implement a slope limiter for bound-preserving properties.
 
     The implementation is summarized in [Zhang_2011]_, Sec. 2.3, Eq. 2.9,
@@ -91,38 +87,12 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         An array container containing the limited field(s).
     """
     actx = field.array_context
-
-    # Compute cell averages of the state
-    def cancel_polynomials(grp):
-        return actx.from_numpy(np.asarray([1 if sum(mode_id) == 0
-                                           else 0 for mode_id in grp.mode_ids()]))
-
-    # map from nodal to modal
     if dd is None:
         dd = DD_VOLUME_ALL
 
-    dd_nodal = dd
-    dd_modal = dd_nodal.with_discr_tag(DISCR_TAG_MODAL)
-
-    modal_map = dcoll.connection_from_dds(dd_nodal, dd_modal)
-    nodal_map = dcoll.connection_from_dds(dd_modal, dd_nodal)
-
-    modal_discr = dcoll.discr_from_dd(dd_modal)
-    modal_field = modal_map(field)
-
-    # cancel the ``high-order'' polynomials p > 0, and only the average remains
-    filtered_modal_field = DOFArray(
-        actx,
-        tuple(actx.einsum("ej,j->ej",
-                          vec_i,
-                          cancel_polynomials(grp),
-                          arg_names=("vec", "filter"),
-                          tagged=(FirstAxisIsElementsTag(),))
-              for grp, vec_i in zip(modal_discr.groups, modal_field))
-    )
-
-    # convert back to nodal to have the average at all points
-    cell_avgs = nodal_map(filtered_modal_field)
+    cell_vols = abs(op.elementwise_integral(  # type: ignore[arg-type, var-annotated]
+                    dcoll, dd, actx.np.zeros_like(field) + 1.0))
+    cell_avgs = op.elementwise_integral(dcoll, dd, field)/cell_vols
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:

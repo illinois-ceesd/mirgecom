@@ -116,11 +116,11 @@ def main(actx_class, use_esdg=False,
 
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
 
-    from grudge.dof_desc import DISCR_TAG_QUAD
+    from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
     if use_overintegration:
         quadrature_tag = DISCR_TAG_QUAD
     else:
-        quadrature_tag = None  # noqa
+        quadrature_tag = DISCR_TAG_BASE
 
     if dim == 2:
         # no deep meaning here, just a fudge factor
@@ -171,6 +171,8 @@ def main(actx_class, use_esdg=False,
 
         return health_error
 
+    from mirgecom.simutil import componentwise_norms
+
     def my_pre_step(step, t, dt, state):
         if logmgr:
             logmgr.tick_before()
@@ -178,7 +180,8 @@ def main(actx_class, use_esdg=False,
         try:
 
             if istep % 10 == 0:
-                print(istep, t, actx.to_numpy(actx.np.linalg.norm(state[0])))
+                norm = actx.to_numpy(componentwise_norms(dcoll, state))
+                print(istep, t, norm)
 
             health_errors = global_reduce(my_health_check(state), op="lor")
             if health_errors:

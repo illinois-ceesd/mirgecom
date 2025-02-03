@@ -1,4 +1,5 @@
 islpy
+mpi4py
 numpy
 pytest
 pytest-cov
@@ -6,9 +7,8 @@ pymetis
 importlib-resources
 psutil
 pyyaml
+sympy
 git+https://github.com/pythological/kanren.git#egg=miniKanren
-
-git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
@@ -24,4 +24,6 @@ git+https://github.com/mpi4py/mpi4py#egg=mpi4py
 --editable git+https://github.com/pyrometheus/pyrometheus.git@tulio/entropy#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 --editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
---editable git+https://github.com/inducer/pyvisfile.git#egg=pyvisfile
+
+# Non-editable due to https://github.com/inducer/pyvisfile/issues/45
+git+https://github.com/inducer/pyvisfile.git#egg=pyvisfile

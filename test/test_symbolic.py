@@ -29,14 +29,17 @@ from meshmode.mesh.generation import generate_regular_rect_mesh
 import mirgecom.symbolic as sym
 from mirgecom.discretization import create_discretization_collection
 import grudge.op as op
-from meshmode.array_context import (  # noqa
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
 
 import pytest
 
 import logging
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 def _const_deriv_pair():
@@ -47,7 +50,7 @@ def _const_deriv_pair():
 def _poly_deriv_pair():
     """Return a polynomial ($x^2$) and its derivative ($2x$)."""
     sym_x = pmbl.var("x")
-    return sym_x**2, 2*sym_x
+    return sym_x**2, 2*sym_x**1
 
 
 def _cos_deriv_pair():
@@ -141,6 +144,7 @@ def test_symbolic_diff(actx_factory, sym_f, expected_sym_df):
     sym_df = sym.diff(pmbl.var("x"))(sym_f)
 
     from pymbolic.primitives import Expression
+
     if isinstance(sym_f, Expression):
         assert sym_df == expected_sym_df
     elif isinstance(sym_f, np.ndarray):
@@ -190,8 +194,8 @@ def test_symbolic_div():
     sym_div_f = sym.div(3, sym_f)
     expected_sym_div_f = make_obj_array([
         sym_x + sym_x + sym_x + sym_x,
-        sym_y + sym_y + sym_y + sym_y,
-        sym_z + sym_z + sym_z + sym_z])
+        0 + sym_y + sym_y + sym_y + sym_y,
+        0 + sym_z + sym_z + sym_z + sym_z])
     assert (sym_div_f == expected_sym_div_f).all()
 
     # Array container
@@ -209,8 +213,8 @@ def test_symbolic_div():
         mass=1 + sym_x + 0,
         momentum=make_obj_array([
             sym_x + sym_x + sym_x + sym_x,
-            sym_y + sym_y + sym_y + sym_y,
-            sym_z + sym_z + sym_z + sym_z]),
+            0 + sym_y + sym_y + sym_y + sym_y,
+            0 + sym_z + sym_z + sym_z + sym_z]),
         energy=0 + sym_z + 1)
     assert sym_div_f.mass == expected_sym_div_f.mass
     assert (sym_div_f.momentum == expected_sym_div_f.momentum).all()
@@ -233,7 +237,7 @@ def test_symbolic_grad():
 
     sym_grad_f = sym.grad(3, sym_f)
     expected_sym_grad_f = make_obj_array([
-        sym_y * 2*sym_x,
+        sym_y * 2*sym_x**1,
         sym_x**2,
         0])
     assert (sym_grad_f == expected_sym_grad_f).all()

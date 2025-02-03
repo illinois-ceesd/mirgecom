@@ -27,15 +27,14 @@ THE SOFTWARE.
 
 import logging
 import numpy as np
-import pyopencl as cl
 import pytest
-from meshmode.array_context import (  # noqa
-    PyOpenCLArrayContext,
-    pytest_generate_tests_for_pyopencl_array_context
-    as pytest_generate_tests
-)
+
+from meshmode.array_context import PytestPyOpenCLArrayContextFactory
+from arraycontext import pytest_generate_tests_for_array_contexts
+
 from meshmode.mesh import BTAG_ALL
 from meshmode.discretization.connection import FACE_RESTR_ALL
+import grudge.geometry as geo
 import grudge.op as op
 from mirgecom.artificial_viscosity import (
     av_laplacian_operator,
@@ -51,13 +50,13 @@ from mirgecom.gas_model import (
 from mirgecom.eos import IdealSingleGas
 
 from mirgecom.discretization import create_discretization_collection
-from pyopencl.tools import (  # noqa
-    pytest_generate_tests_for_pyopencl as pytest_generate_tests,
-)
 from mirgecom.simutil import get_box_mesh
 from pytools.obj_array import make_obj_array
 
 logger = logging.getLogger(__name__)
+
+pytest_generate_tests = pytest_generate_tests_for_array_contexts(
+    [PytestPyOpenCLArrayContextFactory])
 
 
 # NOTE:  Testing of this av_laplacian_operator is currently
@@ -71,7 +70,7 @@ logger = logging.getLogger(__name__)
 
 @pytest.mark.parametrize("dim",  [1, 2, 3])
 @pytest.mark.parametrize("order",  [1, 5])
-def test_tag_cells(ctx_factory, dim, order):
+def test_tag_cells(actx_factory, dim, order):
     """Test tag_cells.
 
     This test checks that tag_cells properly tags cells near
@@ -82,11 +81,9 @@ def test_tag_cells(ctx_factory, dim, order):
     - Detection thresholding/(p, p-1) polynomials greater/less/equal to s0
     - Detection bounds checking for s_e = s_0 +/- delta
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
-    nel_1d = 2
+    nel_1d = 1
     tolerance = 1.e-16
 
     def norm_indicator(expected, dcoll, soln, **kwargs):
@@ -96,7 +93,7 @@ def test_tag_cells(ctx_factory, dim, order):
     from meshmode.mesh.generation import generate_regular_rect_mesh
 
     mesh = generate_regular_rect_mesh(
-        a=(-1.0, )*dim,  b=(1.0, )*dim,  n=(nel_1d, ) * dim
+        a=(-1.0, )*dim,  b=(1.0, )*dim,  nelements_per_axis=(nel_1d, ) * dim
     )
 
     dcoll = create_discretization_collection(actx, mesh, order=order)
@@ -111,9 +108,9 @@ def test_tag_cells(ctx_factory, dim, order):
 
     # get meshmode polynomials
     group = dcoll.discr_from_dd("vol").groups[0]
-    basis = group.basis()  # only one group
+    basis = group.basis_obj().functions  # only one group
     unit_nodes = group.unit_nodes
-    modes = group.mode_ids()
+    modes = group.basis_obj().mode_ids
     order = group.order
 
     # loop over modes and check smoothness
@@ -184,7 +181,7 @@ def test_tag_cells(ctx_factory, dim, order):
 
 @pytest.mark.parametrize("dim",  [1, 2, 3])
 @pytest.mark.parametrize("order",  [2, 3])
-def test_artificial_viscosity(ctx_factory, dim, order):
+def test_artificial_viscosity(actx_factory, dim, order):
     """Test artificial_viscosity.
 
     Test AV operator for some test functions to verify artificial viscosity
@@ -192,9 +189,7 @@ def test_artificial_viscosity(ctx_factory, dim, order):
     - 1d x^n (expected rhs = n*(n-1)*x^(n-2)
     - x^2 + y^2 + z^2  (expected rhs = 2*dim)
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     nel_1d = 10
     tolerance = 1.e-6
@@ -214,14 +209,14 @@ def test_artificial_viscosity(ctx_factory, dim, order):
             bnd_pair = TracePair(dd_bdry,
                                  interior=cv_int,
                                  exterior=cv_int)
-            nhat = actx.thaw(dcoll.normal(dd_bdry))
+            nhat = geo.normal(actx, dcoll, dd_bdry)
             from mirgecom.flux import num_flux_central
             from arraycontext import outer
             # Do not project to "all_faces" as now we use built-in grad_cv_operator
             return outer(num_flux_central(bnd_pair.int, bnd_pair.ext), nhat)
 
         def av_flux(self, dcoll, dd_bdry, diffusion, **kwargs):
-            nhat = actx.thaw(dcoll.normal(dd_bdry))
+            nhat = geo.normal(actx, dcoll, dd_bdry)
             diffusion_minus = op.project(dcoll, "vol", dd_bdry, diffusion)
             diffusion_plus = diffusion_minus
             from grudge.trace_pair import TracePair
@@ -273,15 +268,13 @@ def test_artificial_viscosity(ctx_factory, dim, order):
 
 @pytest.mark.parametrize("order",  [2, 3])
 @pytest.mark.parametrize("dim",  [1, 2])
-def test_trig(ctx_factory, dim, order):
+def test_trig(actx_factory, dim, order):
     """Test artificial_viscosity.
 
     Test AV operator for some test functions to verify artificial viscosity
     returns the analytical result.
     """
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
@@ -376,11 +369,9 @@ class _TestSoln:
                                              _TestSoln(dim=2),
                                              _TestSoln(dim=3)])
 @pytest.mark.parametrize("order", [2, 3])
-def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
+def test_fluid_av_boundaries(actx_factory, prescribed_soln, order):
     """Check fluid boundary AV interface."""
-    cl_ctx = ctx_factory()
-    queue = cl.CommandQueue(cl_ctx)
-    actx = PyOpenCLArrayContext(queue)
+    actx = actx_factory()
 
     dim = prescribed_soln.dim()
 
@@ -410,7 +401,7 @@ def test_fluid_av_boundaries(ctx_factory, prescribed_soln, order):
     cv = prescribed_soln(r=nodes, eos=gas_model.eos)
     fluid_state = make_fluid_state(cv, gas_model)
 
-    boundary_nhat = actx.thaw(dcoll.normal(BTAG_ALL))
+    boundary_nhat = geo.normal(actx, dcoll, BTAG_ALL)
 
     prescribed_boundary = \
         PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state_func)

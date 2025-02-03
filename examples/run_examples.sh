@@ -16,6 +16,7 @@ function endgroup {
 
 # }}}
 
+
 run_path=$(pwd)
 examples_dir=${1:-"./"}
 shift
@@ -92,14 +93,6 @@ do
     # But this is required to make them all pass
     TOL_LAZY=1e-9
     TOL_NUMPY=1e-9
-
-    # FIXME: Have to ignore "rhs", and "gradients" to make
-    # this example pass.
-    # if [[ $example == "thermally-coupled.py" ]]; then
-    #    echo "Setting tolerance=1 for $example"
-    #    TOL_LAZY=1
-    #    TOL_NUMPY=1
-    # fi
 
     date
     printf "***\n***\n"
