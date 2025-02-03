@@ -6,7 +6,6 @@ pytest-cov
 pymetis
 importlib-resources
 psutil
-pyrsistent
 pyyaml
 meson-python
 ninja
