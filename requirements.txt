@@ -6,7 +6,6 @@ pytest-cov
 pymetis
 importlib-resources
 psutil
-pyrsistent
 pyyaml
 sympy
 git+https://github.com/pythological/kanren.git#egg=miniKanren
