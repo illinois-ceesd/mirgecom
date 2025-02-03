@@ -64,11 +64,11 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
         warn("The CupyArrayContext is still under development")
 
         if distributed:
-            from grudge.array_context import (  # pylint: disable=no-name-in-module
+            from grudge.array_context import (  # pylint: disable=no-name-in-module # type: ignore[attr-defined] # noqa: E501
                 MPICupyArrayContext)
             return MPICupyArrayContext
         else:
-            from grudge.array_context import (  # pylint: disable=no-name-in-module
+            from grudge.array_context import (  # pylint: disable=no-name-in-module # type: ignore[attr-defined] # noqa: E501
                 CupyArrayContext)
             return CupyArrayContext
 
@@ -335,7 +335,8 @@ def initialize_actx(
     if comm:
         actx_kwargs["mpi_communicator"] = comm
 
-    # Special handling for NumpyArrayContext/CupyArrayContext since they need no CL context
+    # Special handling for NumpyArrayContext/CupyArrayContext
+    # since they need no CL context
     if actx_class_is_numpy(actx_class) or actx_class_is_cupy(actx_class):
         if actx_class_is_numpy(actx_class):
             from grudge.array_context import MPINumpyArrayContext
@@ -344,7 +345,7 @@ def initialize_actx(
             else:
                 assert not issubclass(actx_class, MPINumpyArrayContext)
         else:
-            from grudge.array_context import MPICupyArrayContext
+            from grudge.array_context import MPICupyArrayContext  # pylint: disable=no-name-in-module # type: ignore[attr-defined] # noqa: E501
             if comm:
                 assert issubclass(actx_class, MPICupyArrayContext)
             else:
