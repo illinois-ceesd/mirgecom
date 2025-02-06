@@ -26,15 +26,18 @@ THE SOFTWARE.
 """
 
 
-def ssprk43_step(state, t, dt, rhs):
-    """Take one step using an explicit 4-stage, 3rd-order, SSPRK method."""
+def ssprk43_step(state, t, dt, rhs, context):
+    """Take one step using an explicit 4-stage, 3rd-order, SSPRK method.
+    Context is a dictionary for any variables which can affect state,
+    but maybe not the initial state.
+    """
 
-    def rhs_update(t, y):
-        return y + dt*rhs(t, y)
+    def rhs_update(t, y, context):
+        return y + dt*rhs(t, y, context)
 
-    y1 = 1/2*state + 1/2*rhs_update(t, state)
-    y2 = 1/2*y1 + 1/2*rhs_update(t + dt/2, y1)
-    y3 = 2/3*state + 1/6*y2 + 1/6*rhs_update(t + dt, y2)
-    y4 = 1/2*y3 + 1/2*rhs_update(t + dt/2, y3)
+    y1 = 1/2*state + 1/2*rhs_update(t, state, context)
+    y2 = 1/2*y1 + 1/2*rhs_update(t + dt/2, y1, context)
+    y3 = 2/3*state + 1/6*y2 + 1/6*rhs_update(t + dt, y2, context)
+    y4 = 1/2*y3 + 1/2*rhs_update(t + dt/2, y3, context)
 
     return y4

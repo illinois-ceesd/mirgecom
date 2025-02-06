@@ -46,11 +46,11 @@ class LSRKCoefficients:
     C: np.ndarray
 
 
-def lsrk_step(coefs, state, t, dt, rhs):
+def lsrk_step(coefs, state, t, dt, rhs, context):
     """Take one step using a low-storage Runge-Kutta method."""
     k = 0.0 * state
     for i in range(len(coefs.A)):
-        k = coefs.A[i]*k + dt*rhs(t + coefs.C[i]*dt, state)
+        k = coefs.A[i]*k + dt*rhs(t + coefs.C[i]*dt, state, context)
         state = state + coefs.B[i]*k
 
     return state
@@ -62,9 +62,9 @@ EulerCoefs = LSRKCoefficients(
     C=np.array([0.]))
 
 
-def euler_step(state, t, dt, rhs):
+def euler_step(state, t, dt, rhs, context):
     """Take one step using the explicit, 1st-order accurate, Euler method."""
-    return lsrk_step(EulerCoefs, state, t, dt, rhs)
+    return lsrk_step(EulerCoefs, state, t, dt, rhs, context)
 
 
 LSRK54CarpenterKennedyCoefs = LSRKCoefficients(
@@ -88,12 +88,12 @@ LSRK54CarpenterKennedyCoefs = LSRKCoefficients(
         2802321613138/2924317926251]))
 
 
-def lsrk54_step(state, t, dt, rhs):
+def lsrk54_step(state, t, dt, rhs, context):
     """Take one step using an explicit 5-stage, 4th-order, LSRK method.
 
     Coefficients are summarized in [Hesthaven_2008]_, Section 3.4.
     """
-    return lsrk_step(LSRK54CarpenterKennedyCoefs, state, t, dt, rhs)
+    return lsrk_step(LSRK54CarpenterKennedyCoefs, state, t, dt, rhs, context)
 
 
 LSRK144NiegemannDiehlBuschCoefs = LSRKCoefficients(
@@ -144,11 +144,11 @@ LSRK144NiegemannDiehlBuschCoefs = LSRKCoefficients(
         0.8734213127600976]))
 
 
-def lsrk144_step(state, t, dt, rhs):
+def lsrk144_step(state, t, dt, rhs, context):
     """Take one step using an explicit 14-stage, 4th-order, LSRK method.
 
     This method is derived by Niegemann, Diehl, and Busch (2012), with
     an optimal stability region for advection-dominated flows. The
     LSRK coefficients are summarized in [Niegemann_2012]_, Table 3.
     """
-    return lsrk_step(LSRK144NiegemannDiehlBuschCoefs, state, t, dt, rhs)
+    return lsrk_step(LSRK144NiegemannDiehlBuschCoefs, state, t, dt, rhs, context)

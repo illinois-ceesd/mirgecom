@@ -73,7 +73,7 @@ def _is_unevaluated(actx, ary):
         return isinstance(ary, pt.Array) and not isinstance(ary, pt.DataWrapper)
 
 
-def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
+def _advance_state_stepper_func(rhs, timestepper, state, t_final, context, dt=0,
                                 t=0.0, istep=0, pre_step_callback=None,
                                 post_step_callback=None, force_eval=None,
                                 local_dt=False, max_steps=None, compile_rhs=True):
@@ -94,10 +94,12 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         will be advanced by this stepper
     t_final: float
         Simulated time at which to stop
-    t: float
-        Time at which to start
+    context: dict[str, Any]
+        collection of variable names (str) to variable values.
     dt: float
         Initial timestep size to use, optional if dt is adaptive
+    t: float
+        Time at which to start
     istep: int
         Step number from which to start
     max_steps: int
@@ -161,7 +163,7 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
         if force_eval:
             state = force_evaluation(actx, state)
 
-        state = timestepper(state=state, t=t, dt=dt, rhs=maybe_compiled_rhs)
+        state = timestepper(state=state, t=t, dt=dt, rhs=maybe_compiled_rhs, context=context)
 
         if force_eval is None:
             if _is_unevaluated(actx, state):
@@ -195,7 +197,7 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
     return istep, t, state
 
 
-def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
+def _advance_state_leap(rhs, timestepper, state, t_final, context, dt=0,
                         component_id="state", t=0.0, istep=0,
                         pre_step_callback=None, post_step_callback=None,
                         force_eval=None, compile_rhs=True):
@@ -214,6 +216,8 @@ def _advance_state_leap(rhs, timestepper, state, t_final, dt=0,
         will be advanced by this stepper
     t_final: float
         Simulated time at which to stop
+    context: dict[str, Any]
+        collection of variable names (str) to variable values.
     component_id
         State id (required input for leap method generation)
     t: float
@@ -347,7 +351,7 @@ def generate_singlerate_leap_advancer(timestepper, component_id, rhs, t, dt,
     return stepper_cls
 
 
-def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
+def advance_state(rhs, timestepper, state, t_final, context, t=0, istep=0, dt=0,
                   max_steps=None, component_id="state", pre_step_callback=None,
                   post_step_callback=None, force_eval=None, local_dt=False,
                   compile_rhs=True):
@@ -374,6 +378,8 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
         will be advanced by this stepper
     t_final: float
         Simulated time at which to stop
+    context: dict[str, Any]
+        collection of variable names (str) to variable values.
     t: float
         Time at which to start
     dt: float
@@ -427,7 +433,7 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
         (current_step, current_t, current_state) = \
             _advance_state_leap(
                 rhs=rhs, timestepper=timestepper,
-                state=state, t=t, t_final=t_final, dt=dt, istep=istep,
+                state=state, t=t, t_final=t_final, context=context, dt=dt, istep=istep,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 component_id=component_id,
@@ -438,7 +444,7 @@ def advance_state(rhs, timestepper, state, t_final, t=0, istep=0, dt=0,
         (current_step, current_t, current_state) = \
             _advance_state_stepper_func(
                 rhs=rhs, timestepper=timestepper,
-                state=state, t=t, t_final=t_final, dt=dt,
+                state=state, t=t, t_final=t_final, context=context, dt=dt,
                 pre_step_callback=pre_step_callback,
                 post_step_callback=post_step_callback,
                 istep=istep, force_eval=force_eval,

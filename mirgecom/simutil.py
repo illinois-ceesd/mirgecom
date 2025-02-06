@@ -361,7 +361,6 @@ def write_visfile(dcoll, io_fields, visualizer, vizname,
 
     rank_fn = make_rank_fname(basename=vizname, rank=rank, step=step, t=t)
 
-    breakpoint()
     if rank == 0:
         import os
         viz_dir = os.path.dirname(rank_fn)

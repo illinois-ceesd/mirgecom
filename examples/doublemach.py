@@ -64,6 +64,7 @@ from mirgecom.logging_quantities import (
 )
 from pytato.transform.parameter_study import ParameterStudyAxisTag
 from arraycontext.parameter_study import pack_for_parameter_study, unpack_parameter_study
+from immutabledict import immutabledict
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ def main(actx_class, use_esdg=False,
 
     # Some i/o frequencies
     nstatus = 10
-    nviz = 1
+    nviz = -1
     nrestart = -100
     nhealth = -1
 
@@ -423,18 +424,29 @@ def main(actx_class, use_esdg=False,
         #    logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
-        fluid_state = make_fluid_state(state, gas_model)
+    context = immutabledict({"gas_model": gas_model,
+               "boundaries": boundaries,
+                "quadrature_tag": quadrature_tag,
+               "use_esdg": use_esdg,
+               "dcoll": dcoll,
+               "alpha": alpha,
+               "s0": s0,
+               "kappa": kappa
+               })
+    breakpoint()
+
+    def my_rhs(t, state, context):
+        fluid_state = make_fluid_state(state, context["gas_model"])
         return (
             euler_operator(dcoll, state=fluid_state, time=t,
-                           boundaries=boundaries,
-                           gas_model=gas_model, quadrature_tag=quadrature_tag,
+                           boundaries=context["boundaries"],
+                           gas_model=context["gas_model"], quadrature_tag=context["quadrature_tag"],
                            use_esdg=use_esdg)
-            + av_laplacian_operator(dcoll, fluid_state=fluid_state,
-                                    boundaries=boundaries,
-                                    time=t, gas_model=gas_model,
-                                    alpha=alpha, s0=s0, kappa=kappa,
-                                    quadrature_tag=quadrature_tag)
+            + av_laplacian_operator(context["dcoll"], fluid_state=fluid_state,
+                                    boundaries=context["boundaries"],
+                                    time=t, gas_model=context["gas_model"],
+                                    alpha=context["alpha"], s0=context["s0"], kappa=context["kappa"],
+                                    quadrature_tag=context["quadrature_tag"])
         )
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
@@ -446,7 +458,7 @@ def main(actx_class, use_esdg=False,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state.cv, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final, context=context)
     end_clock = time.monotonic_ns()
 
 

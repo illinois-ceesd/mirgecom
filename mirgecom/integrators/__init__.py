@@ -34,9 +34,9 @@ __doc__ = """
 """
 
 
-def lsrk4_step(state, t, dt, rhs):
+def lsrk4_step(state, t, dt, rhs, context):
     """Call lsrk54_step with backwards-compatible interface."""
     from warnings import warn
     warn("Do not call lsrk4; it is now callled lsrk54_step. This function will "
          "disappear August 1, 2021", DeprecationWarning, stacklevel=2)
-    return lsrk54_step(state, t, dt, rhs)
+    return lsrk54_step(state, t, dt, rhs, context)
