@@ -167,13 +167,13 @@ class SimpleTransport(TransportModel):
                        dv: Optional[GasDependentVars] = None,
                        eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
-        return self._mu_bulk*(0*cv.mass + 1.0)  # type: ignore
+        return self._mu_bulk*(0*cv.mass + 1.0)
 
     def viscosity(self, cv: ConservedVars,
                   dv: Optional[GasDependentVars] = None,
                   eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas dynamic viscosity, $\mu$."""
-        return self._mu*(0*cv.mass + 1.0)  # type: ignore
+        return self._mu*(0*cv.mass + 1.0)
 
     def volume_viscosity(self, cv: ConservedVars,
                          dv: Optional[GasDependentVars] = None,
@@ -187,19 +187,19 @@ class SimpleTransport(TransportModel):
             \lambda = \left(\mu_{B} - \frac{2\mu}{3}\right)
 
         """
-        return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)  # type: ignore
+        return (self._mu_bulk - 2 * self._mu / 3)*(0*cv.mass + 1.0)
 
     def thermal_conductivity(self, cv: ConservedVars,
                              dv: Optional[GasDependentVars] = None,
                              eos: Optional[GasEOS] = None) -> DOFArray:
         r"""Get the gas thermal_conductivity, $\kappa$."""
-        return self._kappa*(0*cv.mass + 1.0)  # type: ignore
+        return self._kappa*(0*cv.mass + 1.0)
 
     def species_diffusivity(self, cv: ConservedVars,
                             dv: Optional[GasDependentVars] = None,
                             eos: Optional[GasEOS] = None) -> np.ndarray:
         r"""Get the vector of species diffusivities, ${d}_{\alpha}$."""
-        return self._d_alpha*(0*cv.mass + 1.0)  # type: ignore
+        return self._d_alpha*(0*cv.mass + 1.0)
 
 
 class PowerLawTransport(TransportModel):
@@ -318,7 +318,7 @@ class PowerLawTransport(TransportModel):
             return (self._sigma * self.viscosity(cv, dv)/(
                 cv.mass*self._lewis*eos.gamma(cv, dv.temperature))
             )
-        return self._d_alpha*(0*cv.mass + 1.)  # type: ignore
+        return self._d_alpha*(0*cv.mass + 1.)
 
 
 class MixtureAveragedTransport(TransportModel):

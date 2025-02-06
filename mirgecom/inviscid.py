@@ -467,11 +467,11 @@ def entropy_conserving_flux_chandrashekar(gas_model, state_ll, state_rr):
     gamma_rr = gas_model.eos.gamma(state_rr.cv, state_rr.temperature)
 
     def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
-        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # type: ignore
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
         return actx.np.where(
             actx.np.less(f2, epsilon),
-            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),  # type: ignore
-            (y - x) / actx.np.log(y / x)  # type: ignore
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
+            (y - x) / actx.np.log(y / x)
         )
 
     # Primitive variables for left and right states
@@ -548,11 +548,11 @@ def entropy_conserving_flux_renac(gas_model, state_ll, state_rr):
     pot_avg = 0.5*(pot_ll + pot_rr)
 
     def ln_mean(x: DOFArray, y: DOFArray, epsilon=1e-4):
-        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)  # type: ignore
+        f2 = (x * (x - 2 * y) + y * y) / (x * (x + 2 * y) + y * y)
         return actx.np.where(
             actx.np.less(f2, epsilon),
-            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),  # type: ignore
-            (y - x) / actx.np.log(y / x)  # type: ignore
+            (x + y) / (2 + f2*2/3 + f2*f2*2/5 + f2*f2*f2*2/7),
+            (y - x) / actx.np.log(y / x)
         )
 
     theta_mean = ln_mean(theta_ll, theta_rr)
