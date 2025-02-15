@@ -104,6 +104,29 @@ jobs:
             python -m pip install pytest
             python -m pytest --durations=0 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw . ../doc/*.rst ../doc/*/*.rst
 
+    pytest_intel:
+        name: Pytest Linux Intel CL
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v2
+        - name: Install
+          run: |
+            curl -L -O https://raw.githubusercontent.com/illinois-scicomp/machine-shop-maintenance/main/install-intel-icd.sh
+            sudo bash ./install-intel-icd.sh
+            echo "- ocl-icd-system" >> conda-env.yml
+            sed -i "/pocl/ d" conda-env.yml
+            export PYOPENCL_TEST=intel
+            source /opt/enable-intel-cl.sh
+
+            . .ci-support/install.sh
+
+        - name: Run tests
+          run: |
+            MINIFORGE_INSTALL_DIR=.miniforge3
+            . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            cd test
+            python -m pytest --durations=10 --tb=native --junitxml=pytest.xml --doctest-modules -rxsw .
+
     examples:
         name: Examples
         runs-on: ${{ matrix.os }}
