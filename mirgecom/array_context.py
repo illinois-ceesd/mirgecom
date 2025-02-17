@@ -326,14 +326,14 @@ def initialize_actx(
 
         if actx_class_is_lazy(actx_class):
             assert issubclass(actx_class, PytatoPyOpenCLArrayContext)
-            actx_kwargs["use_tp_transforms"] = \
-                use_tp_transforms
 
             if actx_class_has_fallback_args(actx_class):
                 actx_kwargs["use_axis_tag_inference_fallback"] = \
                     use_axis_tag_inference_fallback
                 actx_kwargs["use_einsum_inference_fallback"] = \
                     use_einsum_inference_fallback
+                actx_kwargs["use_tp_transforms"] = \
+                    use_tp_transforms
             if comm:
                 assert issubclass(actx_class, MPIPytatoArrayContext)
                 actx_kwargs["mpi_base_tag"] = 12000
