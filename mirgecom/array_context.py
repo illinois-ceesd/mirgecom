@@ -116,6 +116,15 @@ def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     )
 
 
+def actx_class_supports_tp_transforms(actx_class: Type[ArrayContext]) -> bool:
+    import inspect
+    spec = inspect.getfullargspec(actx_class.__init__)
+    return (
+        "use_tp_transforms" in spec.args or
+        "use_tp_transforms" in spec.kwonlyargs
+    )
+
+
 def _check_cache_dirs_node(actx: ArrayContext) -> None:
     """Check whether multiple ranks share cache directories on the same node."""
     if not actx_class_is_distributed(type(actx)):
@@ -332,6 +341,7 @@ def initialize_actx(
                     use_axis_tag_inference_fallback
                 actx_kwargs["use_einsum_inference_fallback"] = \
                     use_einsum_inference_fallback
+            if actx_class_supports_tp_transforms(actx_class):
                 actx_kwargs["use_tp_transforms"] = \
                     use_tp_transforms
             if comm:
