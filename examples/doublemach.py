@@ -24,11 +24,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import time
 import logging
 import numpy as np
 from functools import partial
 
+from mirgecom.fluid import (
+    make_conserved
+)
 from meshmode.mesh import BTAG_ALL, BTAG_NONE  # noqa
+from meshmode.dof_array import DOFArray
 from grudge.dof_desc import BoundaryDomainTag
 from grudge.shortcuts import make_visualizer
 
@@ -57,6 +62,9 @@ from mirgecom.logging_quantities import (
     logmgr_add_device_memory_usage,
     set_sim_state
 )
+from pytato.transform.parameter_study import ParameterStudyAxisTag
+from arraycontext.parameter_study import pack_for_parameter_study, unpack_parameter_study
+from immutabledict import immutabledict
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +72,10 @@ logger = logging.getLogger(__name__)
 class MyRuntimeError(RuntimeError):
     """Simple exception to kill the simulation."""
 
+    pass
+
+class DoubleMachParameterStudy(ParameterStudyAxisTag):
+    """ Parameter study altering the shock initial conditions. """
     pass
 
 
@@ -116,8 +128,9 @@ def get_doublemach_mesh():
 
 @mpi_entry_point
 def main(actx_class, use_esdg=False,
-         use_leap=False, use_overintegration=False,
-         casename=None, rst_filename=None):
+         use_overintegration=False, use_leap=False,
+         casename=None, rst_filename=None, nel_1d:int = 16, order:int=1,
+         num_uq=None):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -140,15 +153,15 @@ def main(actx_class, use_esdg=False,
     timestepper = rk4_step
     t_final = 1.0e-3
     current_cfl = 0.1
-    current_dt = 1.0e-4
+    current_dt = 1.0e-5
     current_t = 0
     constant_cfl = False
 
     # Some i/o frequencies
     nstatus = 10
-    nviz = 100
-    nrestart = 100
-    nhealth = 1
+    nviz = -1
+    nrestart = -100
+    nhealth = -1
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -173,7 +186,6 @@ def main(actx_class, use_esdg=False,
     global_reduce = partial(_global_reduce, comm=comm)
 
     from mirgecom.discretization import create_discretization_collection
-    order = 3
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
 
@@ -210,48 +222,57 @@ def main(actx_class, use_esdg=False,
     sigma_v = 1e-5
     # }}}
 
-    initializer = DoubleMachReflection()
-
     from mirgecom.gas_model import GasModel, make_fluid_state
+    cvs = []
+    source_locs = np.random.random(num_uq) # U [0, 1]
+    shock_speed = np.random.random(num_uq)*4 + 4 # U [4, 8]
+    shock_sigma = np.random.random(num_uq)*0.05 + 0.025 # U [0.025, 0.075]
+    visualizer = make_visualizer(dcoll)
     transport_model = SimpleTransport(viscosity=sigma_v,
-                                      thermal_conductivity=kappa_t)
+                                  thermal_conductivity=kappa_t)
     eos = IdealSingleGas()
     gas_model = GasModel(eos=eos, transport=transport_model)
+    bounds = []
+    for uq in range(num_uq):
+        initializer = None
+        if uq == 0:
+            initializer = DoubleMachReflection()
+        else:
+            initializer = DoubleMachReflection(shock_location=source_locs[uq],
+                                           shock_speed=shock_speed[uq],
+                                           shock_sigma=shock_sigma[uq])
 
-    def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
-        actx = state_minus.array_context
-        bnd_discr = dcoll.discr_from_dd(dd_bdry)
-        nodes = actx.thaw(bnd_discr.nodes())
-        return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
+
+        def _boundary_state(dcoll, dd_bdry, gas_model, state_minus, **kwargs):
+            actx = state_minus.array_context
+            bnd_discr = dcoll.discr_from_dd(dd_bdry)
+            nodes = actx.thaw(bnd_discr.nodes())
+            return make_fluid_state(initializer(x_vec=nodes, eos=gas_model.eos,
                                             **kwargs), gas_model)
 
-    boundaries = {
-        BoundaryDomainTag("ic1"):
-            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
-        BoundaryDomainTag("ic2"):
-            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
-        BoundaryDomainTag("ic3"):
-            PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
-        BoundaryDomainTag("wall"): AdiabaticNoSlipWallAV(),
-        BoundaryDomainTag("out"): AdiabaticNoSlipWallAV(),
-    }
-
-    if rst_filename:
-        current_t = restart_data["t"]
-        current_step = restart_data["step"]
-        current_cv = restart_data["cv"]
-        if logmgr:
-            from mirgecom.logging_quantities import logmgr_set_time
-            logmgr_set_time(logmgr, current_step, current_t)
-    else:
+        boundaries = {
+            BoundaryDomainTag("ic1"):
+                PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
+            BoundaryDomainTag("ic2"):
+                PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
+            BoundaryDomainTag("ic3"):
+                PrescribedFluidBoundaryAV(boundary_state_func=_boundary_state),
+            BoundaryDomainTag("wall"): AdiabaticNoSlipWallAV(),
+            BoundaryDomainTag("out"): AdiabaticNoSlipWallAV(),
+        }
+        bounds.append(boundaries)
         # Set the current state from time 0
         current_cv = initializer(nodes)
-    current_state = make_fluid_state(cv=current_cv, gas_model=gas_model)
+        cvs.append(current_cv)
+    
+    current_cv = pack_for_parameter_study(actx, DoubleMachParameterStudy, *[cv for cv in cvs])
+    single_states = [make_fluid_state(cv, gas_model=gas_model) for cv in cvs]
+    current_state = make_fluid_state(current_cv, gas_model=gas_model)
 
-    visualizer = make_visualizer(dcoll)
 
     initname = initializer.__class__.__name__
     eosname = eos.__class__.__name__
+    """
     init_message = make_init_message(
         dim=dim,
         order=order,
@@ -269,15 +290,37 @@ def main(actx_class, use_esdg=False,
     )
     if rank == 0:
         logger.info(init_message)
+    """
 
+    UNCERTAIN = True
     def my_write_viz(step, t, state, dv, tagged_cells):
-        viz_fields = [("cv", state),
-                      ("dv", dv),
-                      ("tagged_cells", tagged_cells)]
         from mirgecom.simutil import write_visfile
-        write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
-                      step=step, t=t, overwrite=True,
-                      comm=comm)
+        from pytato import unify_axes_tags
+        if UNCERTAIN:
+            mass_vals = unpack_parameter_study(unify_axes_tags(state.mass[0]), DoubleMachParameterStudy)
+            energy_vals = unpack_parameter_study(unify_axes_tags(state.energy[0]), DoubleMachParameterStudy)
+            momentum_x_vals = unpack_parameter_study(unify_axes_tags(state.momentum[0][0]), DoubleMachParameterStudy)
+            momentum_y_vals = unpack_parameter_study(unify_axes_tags(state.momentum[1][0]), DoubleMachParameterStudy)
+            actx = state.array_context
+            for i in range(num_uq):
+                q = np.empty(2 + state.dim, dtype="O")
+                if len(mass_vals) < num_uq:
+                    breakpoint()
+                q[0] = DOFArray(actx, (mass_vals[i],))
+                q[1] = DOFArray(actx, (energy_vals[i],))
+                q[2] = DOFArray(actx, (momentum_x_vals[i],))
+                q[3] = DOFArray(actx, (momentum_y_vals[i],))
+
+                tmp_state = make_conserved(dim=state.dim, q=q)
+                dv = eos.dependent_vars(tmp_state)
+                tagged_cells = smoothness_indicator(dcoll, tmp_state.mass, s0=s0,
+                                                    kappa=kappa)
+                viz_fields = [("cv", tmp_state),
+                              ("dv", eos.dependent_vars(tmp_state)),
+                              ("tagged_cells", tagged_cells)]
+                write_visfile(dcoll, viz_fields, visualizer, vizname=casename + "_uq_" + str(i),
+                              step=step, t=t, overwrite=True,
+                              comm=comm)
 
     def my_write_restart(step, t, state):
         rst_fname = rst_pattern.format(cname=casename, step=step, rank=rank)
@@ -354,10 +397,8 @@ def main(actx_class, use_esdg=False,
                 my_write_restart(step=step, t=t, state=state)
 
             if do_viz:
-                tagged_cells = smoothness_indicator(dcoll, state.mass, s0=s0,
-                                                    kappa=kappa)
                 my_write_viz(step=step, t=t, state=state, dv=dv,
-                             tagged_cells=tagged_cells)
+                             tagged_cells=None)
 
         except MyRuntimeError:
             if rank == 0:
@@ -377,44 +418,130 @@ def main(actx_class, use_esdg=False,
     def my_post_step(step, t, dt, state):
         # Logmgr needs to know about EOS, dt, dim?
         # imo this is a design/scope flaw
-        if logmgr:
-            set_dt(logmgr, dt)
-            set_sim_state(logmgr, dim, state, eos)
-            logmgr.tick_after()
+        #if logmgr:
+        #    set_dt(logmgr, dt)
+        #    set_sim_state(logmgr, dim, state, eos)
+        #    logmgr.tick_after()
         return state, dt
 
-    def my_rhs(t, state):
-        fluid_state = make_fluid_state(state, gas_model)
+    context = immutabledict({"gas_model": gas_model,
+               "boundaries": boundaries,
+                "quadrature_tag": quadrature_tag,
+               "use_esdg": use_esdg,
+               "dcoll": dcoll,
+               "alpha": alpha,
+               "s0": s0,
+               "kappa": kappa
+               })
+    breakpoint()
+
+    def my_rhs(t, state, context):
+        fluid_state = make_fluid_state(state, context["gas_model"])
         return (
             euler_operator(dcoll, state=fluid_state, time=t,
-                           boundaries=boundaries,
-                           gas_model=gas_model, quadrature_tag=quadrature_tag,
+                           boundaries=context["boundaries"],
+                           gas_model=context["gas_model"], quadrature_tag=context["quadrature_tag"],
                            use_esdg=use_esdg)
-            + av_laplacian_operator(dcoll, fluid_state=fluid_state,
-                                    boundaries=boundaries,
-                                    time=t, gas_model=gas_model,
-                                    alpha=alpha, s0=s0, kappa=kappa,
-                                    quadrature_tag=quadrature_tag)
+            + av_laplacian_operator(context["dcoll"], fluid_state=fluid_state,
+                                    boundaries=context["boundaries"],
+                                    time=t, gas_model=context["gas_model"],
+                                    alpha=context["alpha"], s0=context["s0"], kappa=context["kappa"],
+                                    quadrature_tag=context["quadrature_tag"])
         )
 
     current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
                                   current_cfl, t_final, constant_cfl)
 
+    start_clock = time.monotonic_ns()
+    # State needs to be the current_cv so that we can build the fluid state from it.
     current_step, current_t, current_cv = \
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_state.cv, t=current_t, t_final=t_final)
+                      state=current_state.cv, t=current_t, t_final=t_final, context=context)
+    end_clock = time.monotonic_ns()
+
+
+    print(f"Completed the parallel execution in {end_clock - start_clock} (ns)")
+    packed_final_time = current_t
+    packed_final_cv = current_cv
+    packed_final_step = current_step
+
+    def assert_arrays_close(arr1, arr2):
+
+        mask1 = np.isfinite(arr1)
+        mask2 = np.isfinite(arr2)
+
+        assert np.allclose(mask1, mask2) # Both NANs in the same locations.
+        assert np.allclose(arr1[mask1], arr2[mask2])
+
+    time_data = []
+    for i in range(num_uq):
+        current_step = 0
+        timestepper = rk4_step
+        t_final = 1.0e-3
+        current_cfl = 0.1
+        current_dt = 1.0e-5
+        current_t = 0
+        constant_cfl = False
+        current_state=single_states[i]
+
+        UNCERTAIN=False # turn off splitting. 
+        current_dt = get_sim_timestep(dcoll, current_state, current_t, current_dt,
+                                      current_cfl, t_final, constant_cfl)
+
+        start_single = time.monotonic_ns()
+        current_step, current_t, current_cv = \
+            advance_state(rhs=my_rhs, timestepper=timestepper,
+                          pre_step_callback=my_pre_step,
+                          post_step_callback=my_post_step, dt=current_dt,
+                          state=current_state.cv, t=current_t, t_final=t_final)
+        end_single = time.monotonic_ns()
+        time_data.append(end_single - start_single)
+        if rank == 0:
+            print(f"Advancing state 1 by 1 took: {end_single - start_single} (ns) for {i+1} of {num_uq} states.")
+
+        assert current_step == packed_final_step
+        assert current_t == packed_final_time
+
+        for j in range(dim):
+            saved_momentum = actx.to_numpy(packed_final_cv.momentum[j][0][...,i])
+            correct_momentum = actx.to_numpy(current_cv.momentum[j][0])
+            assert_arrays_close(saved_momentum, correct_momentum)
+        assert np.allclose(actx.to_numpy(packed_final_cv.nspecies),
+                     actx.to_numpy(current_cv.nspecies))
+        # Index into the DoFArray
+        saved_mass = actx.to_numpy(packed_final_cv.mass[0])[..., i]
+        correct_mass = actx.to_numpy(current_cv.mass[0])
+        assert_arrays_close(saved_mass, correct_mass)
+        
+        saved_energy = actx.to_numpy(packed_final_cv.energy[0])[...,i]
+        correct_energy = actx.to_numpy(current_cv.energy[0])
+        assert_arrays_close(saved_energy, correct_energy)
+        
+        saved_speed = actx.to_numpy(packed_final_cv.speed[0])[..., i]
+        correct_speed = actx.to_numpy(current_cv.speed[0])
+        assert_arrays_close(saved_speed, correct_speed)
+
 
     # Dump the final data
     if rank == 0:
+        print(f"Advancing the states together took: {end_clock - start_clock} (ns)")
+        print(f"Average cost for 1 by 1: {np.mean(time_data)} (ns)")
         logger.info("Checkpointing final state ...")
-    current_state = make_fluid_state(current_cv, gas_model)
+
+    current_state = make_fluid_state(packed_final_cv, gas_model)
     final_dv = current_state.dv
-    tagged_cells = smoothness_indicator(dcoll, current_cv.mass, s0=s0, kappa=kappa)
+    """
+    def my_smooth_indicator(mass, s0, kappa):
+        return smoothness_indicator(dcoll, mass, s0=s0, kappa=kappa)
+
+    smooth_out = actx.compile(my_smooth_indicator)
+    tagged_cells = smooth_out(current_cv.mass, s0=s0, kappa=kappa)
     my_write_viz(step=current_step, t=current_t, state=current_cv, dv=final_dv,
                  tagged_cells=tagged_cells)
     my_write_restart(step=current_step, t=current_t, state=current_cv)
+    """
 
     if logmgr:
         logmgr.close()
@@ -423,6 +550,26 @@ def main(actx_class, use_esdg=False,
 
     finish_tol = 1e-16
     assert np.abs(current_t - t_final) < finish_tol
+
+    if rank == 0:
+        nicks_timing_data_file = "doublemach_timing_data_file.txt"
+        # Then, we know we can just add the next data line.
+        # Num 1d elem, Order, Num Uq, Num Timesteps, All Together time (ns),
+        # Avg 1-by-1 time (ns)
+        with open(nicks_timing_data_file, "a+") as my_file:
+            my_file.write(str(nel_1d))
+            my_file.write(",")
+            my_file.write(str(order))
+            my_file.write(",")
+            my_file.write(str(num_uq))
+            my_file.write(",")
+            my_file.write(str(current_step))
+            my_file.write(",")
+            my_file.write(str(end_clock - start_clock))
+            my_file.write(",")
+            my_file.write(str(np.mean(time_data)))
+            my_file.write("\r\n")
+
 
 
 if __name__ == "__main__":
@@ -443,6 +590,9 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--elms",type=int, help="Number of 1d elements.")
+    parser.add_argument("--order",type=int, help="Order of the elements.")
+    parser.add_argument("--uncertain",type=int, help="Number of uncertain trails.")
     args = parser.parse_args()
 
     from warnings import warn
@@ -464,8 +614,9 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_leap=args.leap, use_esdg=args.esdg,
+    main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
-         casename=casename, rst_filename=rst_filename)
-
+         use_leap=args.leap,
+         casename=casename, rst_filename=rst_filename,
+         nel_1d=args.elms, order=args.order, num_uq=args.uncertain)
 # vim: foldmethod=marker
