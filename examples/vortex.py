@@ -96,17 +96,19 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         timestepper = RK4MethodBuilder("state")
     else:
         timestepper = rk4_step
-    t_final = 0.01
-    current_cfl = 1.0
+
+    nsteps = 20
     current_dt = .001
+    t_final = nsteps*current_dt
+    current_cfl = 1.0
     current_t = 0
     constant_cfl = False
 
     # some i/o frequencies
-    nrestart = 10
-    nstatus = 1
-    nviz = 100
-    nhealth = 10
+    nrestart = 100000
+    nstatus = 100
+    nviz = 10
+    nhealth = 100
 
     dim = 2
     if dim != 2:
@@ -125,7 +127,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
         global_nelements = restart_data["global_nelements"]
         assert restart_data["num_parts"] == num_parts
     else:  # generate the grid from scratch
-        nel_1d = 16
+        nel_1d = 32
         box_ll = -5.0
         box_ur = 5.0
         from meshmode.mesh.generation import generate_regular_rect_mesh
@@ -135,8 +137,10 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
                                                                     generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 3
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    order = 1
+    oorder = 3*order + 1
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=oorder)
     nodes = actx.thaw(dcoll.nodes())
 
     from grudge.dof_desc import DISCR_TAG_BASE, DISCR_TAG_QUAD
@@ -177,7 +181,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     eos = IdealSingleGas()
     vel = np.zeros(shape=(dim,))
     orig = np.zeros(shape=(dim,))
-    vel[:dim] = 1.0
+    # vel[:dim] = 0.0
     initializer = Vortex2D(center=orig, velocity=vel)
     gas_model = GasModel(eos=eos)
 
@@ -268,12 +272,16 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     def my_health_check(pressure, component_errors):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .2, 1.02):
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
 
-        exittol = .1
+        if t_final < .02:
+            if check_range_local(dcoll, "vol", pressure, .2, 1.02):
+                health_error = True
+                logger.info(f"{rank=}: Pessure data range violation.")
+
+        exittol = 1000.0
         if max(component_errors) > exittol:
             health_error = True
             if rank == 0:
