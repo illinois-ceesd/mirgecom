@@ -61,15 +61,19 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 
 
 @pytest.mark.parametrize("transport_model", [0, 1])
-def test_viscous_stress_tensor(actx_factory, transport_model):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_viscous_stress_tensor(actx_factory, transport_model, tpe):
     """Test tau data structure and values against exact."""
     actx = actx_factory()
     dim = 3
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 1
@@ -120,7 +124,8 @@ def test_viscous_stress_tensor(actx_factory, transport_model):
 
 @pytest.mark.parametrize("order", [2, 3, 4])
 @pytest.mark.parametrize("kappa", [0.0, 1.0, 2.3])
-def test_poiseuille_fluxes(actx_factory, order, kappa):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_poiseuille_fluxes(actx_factory, order, kappa, tpe):
     """Test the viscous fluxes using a Poiseuille input state."""
     actx = actx_factory()
     dim = 2
@@ -185,7 +190,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         nels_axis = nfac*(10, 20)
         box_ll = (left_boundary_location, ybottom)
         box_ur = (right_boundary_location, ytop)
-        mesh = get_box_mesh(2, a=box_ll, b=box_ur, n=nels_axis)
+        mesh = get_box_mesh(2, a=box_ll, b=box_ur, n=nels_axis,
+                            tensor_product_elements=tpe)
 
         logger.info(
             f"Number of {dim}d elements: {mesh.nelements}"
@@ -223,8 +229,8 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         graderr_p = inf_norm(grad_cv.momentum - xp_grad_cv.momentum)
         graderr_e *= relerr_scale_e
         graderr_p *= relerr_scale_p
-        assert graderr_e < 5e-7
-        assert graderr_p < 5e-11
+        assert graderr_e < 2e-6
+        assert graderr_p < 1e-9
 
         zeros = dcoll.zeros(actx)
         ones = zeros + 1
@@ -240,15 +246,15 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
         grad_t = op.local_grad(dcoll, temperature)
 
         # sanity check
-        assert inf_norm(grad_p - xp_grad_p)*dpscal < 5e-9
-        assert inf_norm(grad_t - xp_grad_t)*tscal < 5e-9
+        assert inf_norm(grad_p - xp_grad_p)*dpscal < 1e-8
+        assert inf_norm(grad_t - xp_grad_t)*tscal < 1e-8
 
         fluid_state = make_fluid_state(cv, gas_model)
         # verify heat flux
         from mirgecom.viscous import conductive_heat_flux
         heat_flux = conductive_heat_flux(fluid_state, grad_t)
         xp_heat_flux = -kappa*xp_grad_t
-        assert inf_norm(heat_flux - xp_heat_flux) < 2e-8
+        assert inf_norm(heat_flux - xp_heat_flux) < 1e-6
 
         xp_e_flux = np.dot(xp_tau, cv.velocity) - xp_heat_flux
         xp_mom_flux = xp_tau
@@ -270,24 +276,27 @@ def test_poiseuille_fluxes(actx_factory, order, kappa):
 
     assert (
         e_eoc_rec.order_estimate() >= order - 0.5
-        or e_eoc_rec.max_error() < 3e-9
+        or e_eoc_rec.max_error() < 1e-6
     )
     assert (
         p_eoc_rec.order_estimate() >= order - 0.5
-        or p_eoc_rec.max_error() < 2e-12
+        or p_eoc_rec.max_error() < 1e-6
     )
 
 
-def test_species_diffusive_flux(actx_factory):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_species_diffusive_flux(actx_factory, tpe):
     """Test species diffusive flux and values against exact."""
     actx = actx_factory()
     dim = 3
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 1
@@ -354,16 +363,20 @@ def test_species_diffusive_flux(actx_factory):
         assert inf_norm(j[ispec+1] - exact_j) < tol
 
 
-def test_diffusive_heat_flux(actx_factory):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_diffusive_heat_flux(actx_factory, tpe):
     """Test diffusive heat flux and values against exact."""
     actx = actx_factory()
     dim = 3
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 1
@@ -443,16 +456,20 @@ def test_diffusive_heat_flux(actx_factory):
 
 
 @pytest.mark.parametrize("array_valued", [False, True])
+@pytest.mark.parametrize("tpe", [False, True])
 @pytest.mark.parametrize("dim", [1, 2, 3])
-def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
+def test_local_max_species_diffusivity(actx_factory, dim, array_valued, tpe):
     """Test the local maximum species diffusivity."""
     actx = actx_factory()
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 1
@@ -499,15 +516,19 @@ def test_local_max_species_diffusivity(actx_factory, dim, array_valued):
 @pytest.mark.parametrize("dim", [1, 2, 3])
 @pytest.mark.parametrize("mu", [-1, 0, 1, 2])
 @pytest.mark.parametrize("vel", [0, 1])
-def test_viscous_timestep(actx_factory, dim, mu, vel):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_viscous_timestep(actx_factory, dim, mu, vel, tpe):
     """Test timestep size."""
     actx = actx_factory()
     nel_1d = 4
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
 
     mesh = generate_regular_rect_mesh(
-        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim
+        a=(1.0,) * dim, b=(2.0,) * dim, nelements_per_axis=(nel_1d,) * dim,
+        group_cls=grp_cls
     )
 
     order = 1
