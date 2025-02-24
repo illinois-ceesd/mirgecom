@@ -100,7 +100,11 @@ def _check_mpi4py_version() -> None:
 
     mpi_ver = MPI.Get_version()
 
-    logger.info(f"mpi4py is using '{MPI.Get_library_version()}' "
+    mpi_ver_descr = MPI.Get_library_version()
+    # Get_library_version returns a null-terminated string
+    mpi_ver_descr = mpi_ver_descr.split("\x00")[0]
+
+    logger.info(f"mpi4py is using '{mpi_ver_descr}' "
                 f"with MPI v{mpi_ver[0]}.{mpi_ver[1]}.")
 
 
