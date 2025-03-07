@@ -250,6 +250,7 @@ def test_spectral_filter(actx_factory, element_order, dim):
     print("Filtered expansions:")
     print(f"{filtered_element_spectrum=}")
     print(f"{tot_pow_filtered=}")
+
     nfilt = element_order - mid_cutoff
     ckfn = partial(xmrfunc, alpha=alpha, cutoff=mid_cutoff,
                    filter_order=filter_order, nfilt=nfilt)
