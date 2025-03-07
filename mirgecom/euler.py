@@ -381,6 +381,7 @@ def euler_operator(dcoll, state, gas_model, boundaries, time=0.0,
                  "state is being created for this operator. For mixtures, "
                  "one should pass the operator_states_quad argument with "
                  "limited states or pass a limiter_func to this operator.")
+        breakpoint()
         operator_states_quad = make_operator_fluid_states(
             dcoll, state, gas_model, boundaries, quadrature_tag,
             dd=dd_vol, comm_tag=comm_tag, limiter_func=limiter_func,

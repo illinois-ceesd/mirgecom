@@ -73,7 +73,6 @@ from mirgecom.utils import (
     force_evaluation
 )
 
-from pytato import unify_axes_tags
 
 logger = logging.getLogger(__name__)
 
@@ -84,8 +83,6 @@ class MyRuntimeError(RuntimeError):
     pass
 
 from pytato.transform.parameter_study import ParameterStudyAxisTag
-from dataclasses import dataclass
-#dataclass(init=True, frozen=True, eq=True, repr=True)
 class NicksVelocityStudy(ParameterStudyAxisTag):
     pass
 
@@ -93,7 +90,8 @@ class NicksVelocityStudy(ParameterStudyAxisTag):
 @mpi_entry_point
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None):
+         casename=None, rst_filename=None, nel_1d:int = 16, order:int=1,
+         num_uq=None):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -134,17 +132,19 @@ def main(actx_class, use_esdg=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = -5
-    nviz = 1 
+    nviz = -1 
     nhealth = -1
 
     dim = 2
     rst_path = "restart_data/"
-    rst_pattern = (
-            rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
-#            rst_path + "{cname}-{step:04d}-{rank:04d}-{uq:04d}.pkl"
-    )
+    rst_pattern = None
+    if num_uq is not None:
+        rst_pattern = rst_path + "{cname}-{step:04d}-{rank:04d}.pkl"
+    else:
+        rst_path + "{cname}-{step:04d}-{rank:04d}-{num_uq:04d}.pkl"
+    
     if rst_filename:  # read the grid from restart data
-        rst_filename = f"{rst_filename}-{rank:04d}-{uq:04d}.pkl"
+        rst_filename = f"{rst_filename}-{rank:04d}-{num_uq:04d}.pkl"
         from mirgecom.restart import read_restart_data
         restart_data = read_restart_data(actx, rst_filename)
         local_mesh = restart_data["local_mesh"]
@@ -155,7 +155,8 @@ def main(actx_class, use_esdg=False,
         from meshmode.mesh.generation import generate_regular_rect_mesh
         box_ll = -1
         box_ur = 1
-        nel_1d = 16 
+        if nel_1d is None:
+            nel_1d = 16
         generate_mesh = partial(generate_regular_rect_mesh,
             a=(box_ll,)*dim, b=(box_ur,)*dim,
             nelements_per_axis=(nel_1d,)*dim,
@@ -165,7 +166,8 @@ def main(actx_class, use_esdg=False,
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1 
+    if order is None:
+        order = 1
     dcoll = create_discretization_collection(actx, local_mesh, order=order)
     nodes = actx.thaw(dcoll.nodes())
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
@@ -194,16 +196,20 @@ def main(actx_class, use_esdg=False,
     gas_model = GasModel(eos=eos)
 
     velocity = np.zeros(shape=(4,dim,))
-    velocity[0] = np.zeros(shape=(dim,))
-    velocity[1] = np.ones(shape=(dim,))
-    velocity[2] = -np.ones(shape=(dim,))
-    velocity[3] = np.array([np.sqrt(3)/2, 1/2])
+    if num_uq is None:
+        velocity[0] = np.zeros(shape=(dim,))
+        velocity[1] = np.ones(shape=(dim,))
+        velocity[2] = -np.ones(shape=(dim,))
+        velocity[3] = np.array([np.sqrt(3)/2, 1/2])
+    else:
+        velocity = np.random.random(size=(num_uq, dim,))
+
     uncertain_velocity = pack_for_parameter_study(actx, NicksVelocityStudy,
                               *[actx.from_numpy(velocity[i]) for i in range(len(velocity))])
 
 
     assert uncertain_velocity.shape == velocity.shape[::-1]
-    assert uncertain_velocity[:,3].shape == velocity[3].shape
+    assert uncertain_velocity[:,-1].shape == velocity[-1].shape
     def compiled_setup(nodes_used, pressure, rho, velocity):
         initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
         # Pass eos through context but not the func args.
@@ -257,19 +263,18 @@ def main(actx_class, use_esdg=False,
         if UNCERTAIN:
             # Evaluate first.
             # We need to rebuild the state and then write out the visualization file UQ times.
-            mass_vals = unpack_parameter_study(unify_axes_tags(state.mass[0]), NicksVelocityStudy)
-            energy_vals = unpack_parameter_study(unify_axes_tags(state.energy[0]), NicksVelocityStudy)
-            momentum_x_vals = unpack_parameter_study(unify_axes_tags(state.momentum[0][0]), NicksVelocityStudy)
-            momentum_y_vals = unpack_parameter_study(unify_axes_tags(state.momentum[1][0]), NicksVelocityStudy)
+            mass_vals = unpack_parameter_study(state.mass, NicksVelocityStudy)
+            energy_vals = unpack_parameter_study(state.energy, NicksVelocityStudy)
+            momentum_vals = unpack_parameter_study(state.momentum, NicksVelocityStudy)
 
-            num_uq = len(mass_vals) # Index in to avoid the DoFArray.
+            num_uq = len(mass_vals[0]) # Index in to avoid the DoFArray.
             actx = state.array_context
             for i in range(num_uq):
                 q = np.empty(2+state.dim, dtype="O")
-                q[0] = DOFArray(actx, (mass_vals[i],))
-                q[1] = DOFArray(actx, (energy_vals[i],))
-                q[2] = DOFArray(actx, (momentum_x_vals[i],))
-                q[3] = DOFArray(actx, (momentum_y_vals[i],))
+                q[0] = DOFArray(actx, (mass_vals[0][i],))
+                q[1] = DOFArray(actx, (energy_vals[0][i],))
+                for k in range(state.dim):
+                    q[2+k] = DOFArray(actx, (momentum_vals[k][0][i],))
 
                 # Build the system as a q list.
                 tmp_state = make_conserved(dim=state.dim, q=q)
@@ -277,16 +282,10 @@ def main(actx_class, use_esdg=False,
                 viz_fields = [("cv", tmp_state),
                               ("dv", dv)]
 
-                breakpoint()
                 write_visfile(dcoll, viz_fields, visualizer, vizname=casename + "_uq_" + str(i),
                       step=step, t=t, overwrite=True, vis_timer=vis_timer,
                       comm=comm)
         else:
-            return
-            if dv is None:
-                dv = eos.dependent_vars(state)
-            viz_fields = [("cv", state),
-                          ("dv", dv)]
             write_visfile(dcoll, viz_fields, visualizer, vizname=casename,
                   step=step, t=t, overwrite=True, vis_timer=vis_timer,
                   comm=comm)
@@ -404,7 +403,7 @@ def main(actx_class, use_esdg=False,
         advance_state(rhs=my_rhs, timestepper=timestepper,
                       pre_step_callback=my_pre_step,
                       post_step_callback=my_post_step, dt=current_dt,
-                      state=current_cv, t=current_t, t_final=t_final, force_eval=True)
+                      state=current_cv, t=current_t, t_final=t_final)
     end_clock = time.monotonic_ns()
 
     def assert_arrays_close(arr1, arr2):
@@ -438,8 +437,6 @@ def main(actx_class, use_esdg=False,
             print(f"Advancing the state 1 by 1 took: {end_single - start_single} (ns) for {i+1} of {len(velocity)} states.")
 
         assert single_step == current_step # We made the same number of steps.
-        if rank == 0:
-            print(f"The number of steps is {current_step}")
         assert np.abs(single_t - t_final) < finish_tol
 
         for j in range(dim):
@@ -483,7 +480,7 @@ def main(actx_class, use_esdg=False,
     if rank == 0:
         nicks_timing_data_file = "nicks_timing_data_file.txt"
         import os
-        if os.path.isfile(nicks_timing_data_file) and False:
+        if os.path.isfile(nicks_timing_data_file):
             # Then, we know we can just add the next data line.
             # Num 1d elem, Order, Num Uq, Num Timesteps, All Together time (ns),
             # Avg 1-by-1 time (ns)
@@ -520,6 +517,9 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--elms",type=int, help="Number of 1d elements.")
+    parser.add_argument("--order",type=int, help="Order of the elements.")
+    parser.add_argument("--uncertain",type=int, help="Number of uncertain trails.")
     args = parser.parse_args()
 
     from warnings import warn
@@ -544,6 +544,7 @@ if __name__ == "__main__":
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename)
+         casename=casename, rst_filename=rst_filename,
+         nel_1d=args.elms, order=args.order, num_uq=args.uncertain)
 
 # vim: foldmethod=marker
