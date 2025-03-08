@@ -136,6 +136,47 @@ def force_compile(actx, f, *args):
     return f_compiled
 
 
+def force_materialize(actx, x):
+    from mirgecom.array_context import actx_class_is_lazy
+    if not actx_class_is_lazy(type(actx)):
+        return x
+
+    dict_of_named_arrays = {}
+
+    def unpack(keys, subary):
+        dict_of_named_arrays[keys] = subary
+        return subary
+
+    from arraycontext.container.traversal import rec_keyed_map_array_container
+    rec_keyed_map_array_container(unpack, x)
+
+    call_cache = {}
+
+    # Technically we should traverse the DAG and replace all instances of these
+    # arrays, but this could be inefficient to do at DAG creation time. Instead we
+    # will unify them later at DAG transformation time
+    for keys, subary in dict_of_named_arrays.items():
+        from pytato.array import Placeholder, DataWrapper
+        from pytato.function import NamedCallResult
+        from pytato.tags import ImplStored
+        if not isinstance(subary, (Placeholder, DataWrapper, NamedCallResult)):
+            if not subary.tags_of_type(ImplStored):
+                dict_of_named_arrays[keys] = subary.tagged(ImplStored())
+        elif isinstance(subary, NamedCallResult):
+            if not subary._container.tags_of_type(ImplStored):
+                call = subary._container.tagged(ImplStored())
+                try:
+                    call = call_cache[call]
+                except KeyError:
+                    call_cache[call] = call
+                dict_of_named_arrays[keys] = call[subary.name]
+
+    def pack(keys, subary):
+        return dict_of_named_arrays[keys]
+
+    return rec_keyed_map_array_container(pack, x)
+
+
 def normalize_boundaries(boundaries):
     """
     Normalize the keys of *boundaries*.

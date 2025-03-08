@@ -1133,7 +1133,7 @@ def main(actx_class, rst_filename=None, use_tpe=False,
                     dcoll, state=fluid_state, time=t, boundaries=boundaries,
                     gas_model=gas_model, quadrature_tag=quadrature_tag,
                     inviscid_numerical_flux_func=inv_num_flux_func,
-                    operator_states_quad=fluid_operator_states,
+                    operator_states_quad=fluid_operator_states, grad_cv=grad_cv,
                     use_esdg=use_esdg)
 
         if not inert_only:

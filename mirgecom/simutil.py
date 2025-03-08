@@ -187,6 +187,8 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None,
     dim_names = ["x", "y", "z"]
     bttf = {}
     for i in range(dim):
+        if periodic[i]:
+            continue
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
 

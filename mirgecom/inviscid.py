@@ -144,10 +144,16 @@ def inviscid_facial_flux_rusanov(state_pair, gas_model, normal):
         are being computed.
     """
     actx = state_pair.int.array_context
+
     lam = actx.np.maximum(state_pair.int.wavespeed, state_pair.ext.wavespeed)
+
+    @actx.outline
+    def outlined_inviscid_facial_flux(state):
+        return inviscid_flux(state) @ normal
+
     from mirgecom.flux import num_flux_lfr
-    return num_flux_lfr(f_minus_normal=inviscid_flux(state_pair.int)@normal,
-                        f_plus_normal=inviscid_flux(state_pair.ext)@normal,
+    return num_flux_lfr(f_minus_normal=outlined_inviscid_facial_flux(state_pair.int),
+                        f_plus_normal=outlined_inviscid_facial_flux(state_pair.ext),
                         q_minus=state_pair.int.cv,
                         q_plus=state_pair.ext.cv, lam=lam)
 

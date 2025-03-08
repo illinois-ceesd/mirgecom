@@ -107,13 +107,12 @@ class _NSGradTemperatureTag:
     pass
 
 
-class _ESFluidCVTag():
+class _ESFluidCVTag:
     pass
 
 
-class _ESFluidTemperatureTag():
+class _ESFluidTemperatureTag:
     pass
-
 
 def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
     """Compute interior face flux for gradient operator."""
@@ -122,8 +121,12 @@ def _gradient_flux_interior(dcoll, numerical_flux_func, tpair):
     dd_trace = tpair.dd
     dd_allfaces = dd_trace.with_boundary_tag(FACE_RESTR_ALL)
     normal = geo.normal(actx, dcoll, dd_trace)
-    flux = outer(numerical_flux_func(tpair.int, tpair.ext), normal)
-    return op.project(dcoll, dd_trace, dd_allfaces, flux)
+
+    # @actx.outline
+    def outlined_ns_grad_num_flux(tpair, normal):
+        return outer(numerical_flux_func(tpair.int, tpair.ext), normal)
+
+    return op.project(dcoll, dd_trace, dd_allfaces, outlined_ns_grad_num_flux(tpair, normal))
 
 
 def grad_cv_operator(
@@ -460,6 +463,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     dd_vol = dd
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
+    actx = state.array_context
 
     # Make model-consistent fluid state data (i.e. CV *and* DV) for:
     # - Volume: vol_state_quad
@@ -485,7 +489,9 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
     # {{{ Local utilities
 
     # transfer trace pairs to quad grid, update pair dd
-    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
+    # @actx.outline
+    def interp_to_surf_quad(tpair):
+        return tracepair_with_discr_tag(dcoll, quadrature_tag, tpair)
 
     # }}}
 

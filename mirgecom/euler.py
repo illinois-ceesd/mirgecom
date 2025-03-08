@@ -97,11 +97,11 @@ from grudge.trace_pair import (
 import grudge.op as op
 
 
-class _ESFluidCVTag():
+class _ESFluidCVTag:
     pass
 
 
-class _ESFluidTemperatureTag():
+class _ESFluidTemperatureTag:
     pass
 
 

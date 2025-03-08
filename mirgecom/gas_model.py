@@ -53,6 +53,7 @@ from functools import partial
 from dataclasses import dataclass
 from typing import Optional
 import numpy as np  # noqa
+from pytools.obj_array import make_obj_array
 from arraycontext import dataclass_array_container
 from grudge.dof_desc import (
     DD_VOLUME_ALL,
@@ -307,7 +308,9 @@ def make_fluid_state(cv, gas_model,
                      smoothness_beta=None,
                      entropy_min=None,
                      material_densities=None,
-                     limiter_func=None, limiter_dd=None):
+                     limiter_func=None, limiter_dd=None,
+                     outline=False,
+                     outline_id=None):
     """Create a fluid state from the conserved vars and physical gas model.
 
     Parameters
@@ -360,6 +363,14 @@ def make_fluid_state(cv, gas_model,
         Optional array containing the minimum entropy in an element,
         used by some limiters.
 
+    outline: bool
+
+        Outline the body of this function in the array context.
+
+    outline_id: Hashable
+
+        Identifier to use when outlining.
+
     Returns
     -------
     :class:`~mirgecom.gas_model.FluidState`
@@ -367,6 +378,42 @@ def make_fluid_state(cv, gas_model,
         Thermally consistent fluid state
     """
     actx = cv.array_context
+
+    if outline:
+        def _make_fluid_state(
+                cv,
+                temperature_seed,
+                smoothness_mu,
+                smoothness_kappa,
+                smoothness_d,
+                smoothness_beta,
+                material_densities,
+                entropy_min):
+            return make_fluid_state(
+                cv, gas_model,
+                temperature_seed=temperature_seed,
+                smoothness_mu=smoothness_mu,
+                smoothness_kappa=smoothness_kappa,
+                smoothness_d=smoothness_d,
+                smoothness_beta=smoothness_beta,
+                material_densities=material_densities,
+                limiter_func=limiter_func,
+                limiter_dd=limiter_dd,
+                entropy_min=entropy_min,
+                outline=False)
+
+        outlined_make_fluid_state = actx.outline(
+            _make_fluid_state, id=outline_id)
+
+        return outlined_make_fluid_state(
+            cv,
+            temperature_seed=temperature_seed,
+            smoothness_mu=smoothness_mu,
+            smoothness_kappa=smoothness_kappa,
+            smoothness_d=smoothness_d,
+            smoothness_beta=smoothness_beta,
+            material_densities=material_densities,
+            entropy_min=entropy_min)
 
     if isinstance(gas_model, GasModel):
         pressure = None
@@ -491,8 +538,9 @@ def make_fluid_state(cv, gas_model,
         raise TypeError("Invalid type for gas_model")
 
 
-def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
-                        entropy_min=None, entropy_stable=False):
+def project_fluid_state(
+        dcoll, src, tgt, state, gas_model, make_fluid_state_func=None,
+        limiter_func=None, entropy_min=None, entropy_stable=False):
     """Project a fluid state onto a boundary consistent with the gas model.
 
     If required by the gas model, (e.g. gas is a mixture), this routine will
@@ -524,6 +572,10 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
 
         The physical model constructs for the gas_model
 
+    make_fluid_state_func:
+
+        Callable function to create the fluid state.
+
     limiter_func:
 
         Callable function to limit the fluid conserved quantities to physically
@@ -540,6 +592,9 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
 
         Thermally consistent fluid state
     """
+    if make_fluid_state_func is None:
+        make_fluid_state_func = partial(make_fluid_state, outline=True)
+
     cv_sd = op.project(dcoll, src, tgt, state.cv)
     if entropy_min is not None:
         entropy_min = op.project(dcoll, src, tgt, entropy_min)
@@ -549,10 +604,9 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
         temperature_seed = op.project(dcoll, src, tgt, state.dv.temperature)
 
     if entropy_stable:
-        temp_state = make_fluid_state(cv=cv_sd, gas_model=gas_model,
-                                      temperature_seed=temperature_seed,
-                                      limiter_func=limiter_func,
-                                      entropy_min=entropy_min, limiter_dd=tgt)
+        temp_state = make_fluid_state_func(
+            cv=cv_sd, gas_model=gas_model, temperature_seed=temperature_seed,
+            limiter_func=limiter_func, entropy_min=entropy_min, limiter_dd=tgt)
         gamma = gas_model.eos.gamma(temp_state.cv, temp_state.temperature)
         ev_sd = conservative_to_entropy_vars(gamma, temp_state)
         cv_sd = entropy_to_conservative_vars(gamma, ev_sd)
@@ -577,15 +631,16 @@ def project_fluid_state(dcoll, src, tgt, state, gas_model, limiter_func=None,
     if isinstance(gas_model, PorousFlowModel):
         material_densities = op.project(dcoll, src, tgt, state.wv.material_densities)
 
-    return make_fluid_state(cv=cv_sd, gas_model=gas_model,
-                            temperature_seed=temperature_seed,
-                            smoothness_mu=smoothness_mu,
-                            smoothness_kappa=smoothness_kappa,
-                            smoothness_d=smoothness_d,
-                            smoothness_beta=smoothness_beta,
-                            entropy_min=entropy_min,
-                            material_densities=material_densities,
-                            limiter_func=limiter_func, limiter_dd=tgt)
+    return make_fluid_state_func(
+        cv=cv_sd, gas_model=gas_model,
+        temperature_seed=temperature_seed,
+        smoothness_mu=smoothness_mu,
+        smoothness_kappa=smoothness_kappa,
+        smoothness_d=smoothness_d,
+        smoothness_beta=smoothness_beta,
+        entropy_min=entropy_min,
+        material_densities=material_densities,
+        limiter_func=limiter_func, limiter_dd=tgt)
 
 
 def _getattr_ish(obj, name):
@@ -603,6 +658,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
                                  smoothness_beta_pairs=None,
                                  entropy_min_pairs=None,
                                  material_densities_pairs=None,
+                                 make_fluid_state_func=None,
                                  limiter_func=None):
     """Create a fluid state from the conserved vars and equation of state.
 
@@ -631,6 +687,10 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
         List of tracepairs of :class:`~meshmode.dof_array.DOFArray` with the
         entropy minimum used in some limiters.
 
+    make_fluid_state_func:
+
+        Callable function to create the fluid state.
+
     limiter_func:
 
         Callable function to limit the fluid conserved quantities to physically
@@ -658,9 +718,13 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
         entropy_min_pairs = [None] * len(cv_pairs)
     if material_densities_pairs is None:
         material_densities_pairs = [None] * len(cv_pairs)
+
+    if make_fluid_state_func is None:
+        make_fluid_state_func = partial(make_fluid_state, outline=True)
+
     return [TracePair(
         cv_pair.dd,
-        interior=make_fluid_state(
+        interior=make_fluid_state_func(
             cv_pair.int, gas_model,
             temperature_seed=_getattr_ish(tseed_pair, "int"),
             smoothness_mu=_getattr_ish(smoothness_mu_pair, "int"),
@@ -670,7 +734,7 @@ def make_fluid_state_trace_pairs(cv_pairs, gas_model,
             entropy_min=_getattr_ish(entropy_min_pair, "int"),
             material_densities=_getattr_ish(material_densities_pair, "int"),
             limiter_func=limiter_func, limiter_dd=cv_pair.dd),
-        exterior=make_fluid_state(
+        exterior=make_fluid_state_func(
             cv_pair.ext, gas_model,
             temperature_seed=_getattr_ish(tseed_pair, "ext"),
             smoothness_mu=_getattr_ish(smoothness_mu_pair, "ext"),
@@ -796,15 +860,21 @@ def make_operator_fluid_states(
 
     dd_vol = dd
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
+    actx = volume_state.array_context
 
     # project pair to the quadrature discretization and update dd to quad
-    interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
+    # @actx.outline
+    def interp_to_surf_quad(tpair):
+        return tracepair_with_discr_tag(dcoll, quadrature_tag, tpair)
 
     domain_boundary_states_quad = {
         bdtag: project_fluid_state(
             dcoll, dd_vol, dd_vol_quad.with_domain_tag(bdtag),
             volume_state, gas_model, limiter_func=limiter_func,
             entropy_min=entropy_min,
+            make_fluid_state_func=partial(
+                make_fluid_state,
+                outline=True),
             entropy_stable=entropy_stable)
         for bdtag in boundaries
     }
@@ -891,12 +961,17 @@ def make_operator_fluid_states(
         smoothness_beta_pairs=smoothness_beta_interior_pairs,
         entropy_min_pairs=entropy_min_interior_pairs,
         material_densities_pairs=material_densities_interior_pairs,
+        make_fluid_state_func=partial(
+            make_fluid_state,
+            outline=True),
         limiter_func=limiter_func)
 
     # Interpolate the fluid state to the volume quadrature grid
     # (this includes the conserved and dependent quantities)
     volume_state_quad = project_fluid_state(
         dcoll, dd_vol, dd_vol_quad, volume_state, gas_model,
+        # FIXME: This shouldn't be necessary
+        make_fluid_state_func=partial(make_fluid_state, outline=False),
         limiter_func=limiter_func, entropy_min=entropy_min,
         entropy_stable=entropy_stable)
 
@@ -907,7 +982,7 @@ def make_operator_fluid_states(
 def replace_fluid_state(
         state, gas_model, *, mass=None, energy=None, momentum=None,
         species_mass=None, temperature_seed=None, limiter_func=None,
-        entropy_min=None, limiter_dd=None):
+        entropy_min=None, limiter_dd=None, outline=False, outline_id=None):
     """Create a new fluid state from an existing one with modified data.
 
     Parameters
@@ -961,6 +1036,14 @@ def replace_fluid_state(
         Callable function to limit the fluid conserved quantities to physically
         valid and realizable values.
 
+    outline: bool
+
+        Outline the body of this function in the array context.
+
+    outline_id: Hashable
+
+        Identifier to use when outlining.
+
     Returns
     -------
     :class:`~mirgecom.gas_model.FluidState`
@@ -994,11 +1077,14 @@ def replace_fluid_state(
         entropy_min=entropy_min,
         material_densities=material_densities,
         limiter_func=limiter_func,
-        limiter_dd=limiter_dd)
+        limiter_dd=limiter_dd,
+        outline=outline,
+        outline_id=outline_id)
 
 
 def make_entropy_projected_fluid_state(
-        discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model):
+        discr, dd_vol, dd_faces, state, entropy_vars, gamma, gas_model,
+        make_fluid_state_func=make_fluid_state):
     """Projects the entropy vars to target manifold, computes the CV from that."""
     from grudge.interpolation import volume_and_surface_quadrature_interpolation  \
         # pylint: disable=no-name-in-module
@@ -1018,9 +1104,9 @@ def make_entropy_projected_fluid_state(
     # Convert back to conserved varaibles and use to make the new fluid state
     cv_modified = entropy_to_conservative_vars(gamma, ev_quad)
 
-    return make_fluid_state(cv=cv_modified,
-                            gas_model=gas_model,
-                            temperature_seed=temperature_seed)
+    return make_fluid_state_func(cv=cv_modified,
+                                 gas_model=gas_model,
+                                 temperature_seed=temperature_seed)
 
 
 def conservative_to_entropy_vars(gamma, state):
