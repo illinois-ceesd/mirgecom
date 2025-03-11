@@ -678,8 +678,9 @@ def compute_volume_partitions(volume_to_elements, npart, imbalance_tolerance,
         print("Initial total elements:", total_nelements)
         print("Initial pbar (target elements per partition):", pbar)
         print("\nProcessing Volumes:\n")
-
-    for vol_id, elements in volume_to_elements.items():
+    # Let's process them smallest to largest, to make sure everyone gets a part
+    sorted_vols = sorted(volume_to_elements.items(), key=lambda v: len(v[1]))
+    for vol_id, elements in sorted_vols:
         nelements = len(elements)
 
         if nelements <= (1 + imbalance_tolerance) * pbar:
@@ -687,23 +688,26 @@ def compute_volume_partitions(volume_to_elements, npart, imbalance_tolerance,
         else:
             npart_vol = min(remaining_partitions,
                             max(1, int(np.ceil(nelements / pbar))))
+        nepp = int(nelements / npart_vol)
+        if debug:
+            print(f"Volume {vol_id}: {nelements} elements, {npart_vol} "
+                  f"partitions, ~{nepp}/part")
 
         volume_partition_counts[vol_id] = npart_vol
-
         remaining_elements -= nelements
         remaining_partitions -= npart_vol
 
-        if remaining_partitions <= 0 and vol_id != "_Vol_0":
-            raise ValueError("Ran out of partitions before reaching _Vol_0!")
+        if remaining_partitions <= 0 and remaining_elements > 0:
+            raise ValueError("Ran out of partitions before processing all vols!")
 
         if remaining_partitions > 0:
+            if remaining_elements <= 0:
+                raise ValueError("Ran out of elements to partition!")
             pbar = remaining_elements / remaining_partitions
-
-        if debug:
-            print(f"Volume {vol_id}: {nelements} elements, {npart_vol} partitions")
-            print(f"  New remaining elements: {remaining_elements}")
-            print(f"  New remaining partitions: {remaining_partitions}")
-            print(f"  Updated pbar: {pbar}\n")
+            if debug:
+                print(f"  New remaining elements: {remaining_elements}")
+                print(f"  New remaining partitions: {remaining_partitions}")
+                print(f"  Updated pbar: {pbar}\n")
 
     if debug:
         print("\nFinal Partitioning Summary:")
@@ -917,7 +921,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                         while nelem_vpart[adv_part] == 0:
                             adv_part = adv_part + 1
                             if adv_part >= npart_vol:
-                                raise PartitioningError("Ran out of elems to partition.")
+                                raise PartitioningError("Ran out of elems to "
+                                                        "partition!")
 
                     if debug:
                         print(f"-{nelem_vpart[r]=}, adv_part({adv_part}),"
