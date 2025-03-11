@@ -88,6 +88,7 @@ def main(mesh_filename=None, output_path=None):
     print("Number of rank neighbors (min, max, mean): "
           f"({min_rank_nbrs}, {max_rank_nbrs}, {mean_nnbrs})")
     print(f"Distribution of num nbrs: {num_nbr_dist=}")
+    print(f"Rank Nbrs: {rank_rank_nbrs}")
 
     # print(f"{intradecomp_map=}")
     with open(f"intradecomp_map_np{nranks}.pkl", "wb") as pkl_file:

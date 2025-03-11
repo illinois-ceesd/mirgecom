@@ -717,6 +717,7 @@ def compute_volume_partitions(volume_to_elements, npart, imbalance_tolerance,
 
 def get_longest_axis(vol_bounds):
     axes = {"X": (0, 1), "Y": (2, 3), "Z": (4, 5)}
+    # return "X"  # hardcode to X
     return max(axes, key=lambda a: vol_bounds[axes[a][1]]
                - vol_bounds[axes[a][0]])
 
@@ -805,7 +806,7 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         total_volume_els += nelements_vol
 
     assert total_volume_els == global_nelements
-    nparts_used = 0
+    # nparts_used = 0
     vparts_to_elements = {}
     for vol_id, elements in part_vols.items():
         nelements_vol = len(elements)
@@ -840,37 +841,30 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         # elem_to_vrank = ((x_vol-x_min) / part_interval).astype(int)
         # Initialize with invalid rank
         elem_to_vrank = np.full(global_nelements, -1, dtype=int)
-
         for e in elements:
             rank = int((elem_to_centroid[e] - x_min) / part_interval)
-            if not rank == 0:
-                print(f"{rank=}")
             elem_to_vrank[e] = rank
 
         # elem_to_vrank = {e: int((elem_to_centroid[e] - x_min) / part_interval)
         #                 for e in elements}
-        # Ensure no element gets an invalid partition
+        # Check the initial partitioning for sanity
         invalid_elems = set()
         for e in elements:
             if elem_to_vrank[e] < 0 or elem_to_vrank[e] >= npart_vol:
                 invalid_elems.add(e)
         if len(invalid_elems) > 0:
             raise PartitioningError(
-                f"Auto-Balance Error: Some elements in {vol_id} "
+                f"Initial Partitioning Error: Some elements in {vol_id} "
                 "received invalid ranks!\n"
                 f"Expected range: [0, {npart_vol-1}], "
                 "but got out-of-bounds values.\n"
                 f"Problematic elements: {invalid_elems}"
             )
-        # f"Element values: {elem_to_centroid[invalid_elems]}"
 
         if debug:
             print(f"Validated ranks for {vol_id}: All elements assigned correctly.")
-            print(f"{elem_to_vrank=}")
 
         # map partition id to list of elements in that partition
-        # vpart_to_elements = {r: set(elements[np.where(elem_to_vrank == r)[0]])
-        #             for r in range(npart_vol)}
         vpart_to_elements = {r: set(np.where(elem_to_vrank == r)[0])
                              for r in range(npart_vol)}
 
@@ -895,18 +889,17 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
             )
 
         if debug:
-            print(f"Initial: {nelem_vpart=}")
+            print(f"Initial partitioning for {vol_id}: {nelem_vpart=}")
 
         # Automatic load-balancing
         if auto_balance:
 
             for r in range(npart_vol-1):
-                global_part = nparts_used + r
                 num_elem_needed = aver_part_nelem - nelem_vpart[r]
                 part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
                 if debug:
-                    print(f"Processing part(global,local)=({global_part},{r})")
+                    print(f"Processing {vol_id} part({r})")
                     print(f"{part_loc[r]=}")
                     print(f"{num_elem_needed=}, {part_imbalance=}")
                     print(f"{nelem_vpart=}")
@@ -920,10 +913,11 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                     # specified imbalance tolerance, or gives up trying
 
                     # seek out the element reservoir
-                    while nelem_vpart[adv_part] == 0:
-                        adv_part = adv_part + 1
-                        if adv_part >= npart_vol:
-                            raise PartitioningError("Ran out of elems to partition.")
+                    if num_elem_needed > 0:
+                        while nelem_vpart[adv_part] == 0:
+                            adv_part = adv_part + 1
+                            if adv_part >= npart_vol:
+                                raise PartitioningError("Ran out of elems to partition.")
 
                     if debug:
                         print(f"-{nelem_vpart[r]=}, adv_part({adv_part}),"
@@ -1087,7 +1081,10 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                 if debug:
                     print(f"-Vol Part({r}): {total_change=}")
                     print(f"-Vol Part({r}): {nelem_vpart[r]=}, {part_imbalance=}")
-                    print(f"-Vol Part({adv_part}): {nelem_vpart[adv_part]=}")
+                    print(f"-Vol Part({adv_part})[Resv]: {nelem_vpart[adv_part]=}")
+                    print(f"-Vol Part({r}) Box: ({part_loc[r]},{part_loc[r+1]})")
+                    print(f"-Vol Part({adv_part})[Resv] Box: ({part_loc[r+1]},"
+                          f"{part_loc[adv_part]})")
 
                 # loop over volume ranks scope
             # autobalance
@@ -1113,15 +1110,18 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     sorted_vol_ids = ["_Vol_0"] + [v for v in vparts_to_elements if v != "_Vol_0"]
     for vol_id in sorted_vol_ids:
         vpart_map = vparts_to_elements[vol_id]
-        for vrank, elements in vpart_map.items():  # Iterate over volume-local ranks
-            global_rank = current_global_rank + vrank  # Compute global rank
+        if debug:
+            print(f"Adding Volume({vol_id}) to global partitioning.")
+        for vrank, elements in vpart_map.items():
+            global_rank = current_global_rank + vrank
             elem_to_rank[np.array(list(elements))] = global_rank
             part_to_elements[global_rank] = elements
             nelem_part[global_rank] = len(elements)
-        # Move offset by the number of ranks in this volume
+            if debug:
+                print(f"{vol_id}({vrank}) with {nelem_part[global_rank]} "
+                      f"elements to global rank ({global_rank}).")
         current_global_rank += len(vpart_map)
 
-    # Function scope
     # Validate the partitioning before returning
     total_partitioned_elements = sum([len(part_to_elements[r])
                                       for r in range(num_ranks)])
@@ -1152,6 +1152,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     if total_partitioned_elements != global_nelements:
         raise PartitioningError("Validator: global element counts dont match."
                                 f"{total_partitioned_elements=},{global_nelements=}")
+
+    if debug:
+        print(f"Final partitioning: {nelem_part}")
 
     return elem_to_rank
 
