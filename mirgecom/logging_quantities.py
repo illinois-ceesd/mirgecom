@@ -255,7 +255,7 @@ def logmgr_set_time(mgr: LogManager, steps: int, time: float) -> None:
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
-            if isinstance(gd.quantity, TimestepCounter):
+            if isinstance(gd.quantity, TimestepCounter | TimeStepProfile):
                 gd.quantity.steps = steps
             if isinstance(gd.quantity, SimulationTime):
                 gd.quantity.t = time
@@ -544,13 +544,20 @@ class TimeStepProfile(MultiPostLogQuantity):
 
         super().__init__(names, units, descriptions)
 
-        self.timesteps = frozenset(timesteps)
+        self.steps = 0
+        self.timesteps_to_profile = frozenset(timesteps)
         self.profiler = pyinstrument.Profiler()
 
     def prepare_for_tick(self) -> None:
-        self.profiler.start()
+        step = self.steps
+        if step in self.timesteps_to_profile:
+            self.profiler.start()
+        self.steps += 1
 
     def __call__(self):
+        if self.steps-1 not in self.timesteps_to_profile:
+            return None
+
         self.profiler.stop()
         s = self.profiler.output_html()
         self.profiler.reset()
