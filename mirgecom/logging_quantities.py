@@ -42,6 +42,7 @@ __doc__ = """
 .. autofunction:: logmgr_set_time
 """
 
+from collections.abc import Collection
 import logging
 
 from logpyle import (LogQuantity, PostLogQuantity, LogManager,
@@ -531,5 +532,29 @@ class PythonInitTime(PostLogQuantity):
 
         self.done = True
         return self.python_init_time
+
+
+class TimeStepProfile(MultiPostLogQuantity):
+    def __init__(self, timesteps: Collection[int]) -> None:
+        # Could add support for MPI profile, kernel profile, etc. in the future
+        import pyinstrument
+        names = ["pyinstrument_profile"]
+        units = ["1"]
+        descriptions = ["Pyinstrument profile"]
+
+        super().__init__(names, units, descriptions)
+
+        self.timesteps = frozenset(timesteps)
+        self.profiler = pyinstrument.Profiler()
+
+    def prepare_for_tick(self) -> None:
+        self.profiler.start()
+
+    def __call__(self):
+        self.profiler.stop()
+        s = self.profiler.output_html()
+        self.profiler.reset()
+        return s
+
 
 # }}}
