@@ -728,7 +728,7 @@ def get_longest_axis(vol_bounds):
 
 def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                auto_balance=False, imbalance_tolerance=.01,
-                               volumes=None, debug=False):
+                               volumes=None, debug=False, part_axis=None):
     """Partition a mesh uniformly along the X coordinate axis.
 
     The intent is to partition the mesh uniformly along user-specified
@@ -816,9 +816,10 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         nelements_vol = len(elements)
         bounds_vol = volumes[vol_id]
         npart_vol = nparts_vol[vol_id]
-        vpax_name = get_longest_axis(bounds_vol)
+        if part_axis is None:
+            part_axis = get_longest_axis(bounds_vol)
         target_part = nelements_vol / npart_vol
-        vpax = {"X": 0, "Y": 1, "Z": 2}[vpax_name]
+        vpax = {"X": 0, "Y": 1, "Z": 2}[part_axis]
 
         if debug:
             print(f"Partitioning volume: {vol_id}")
