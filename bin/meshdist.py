@@ -188,11 +188,14 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
                 "wall_interface")
         return mesh, tag_to_elements, volume_to_tags
 
+    part_volumes = {"injector": [.6305, .651, -0.014, -0.009, -.02, .02],
+                    "nozzle": [.27, .32, -.03, .03, -.02, .02]}
+
     def my_partitioner(mesh, tag_to_elements, num_ranks):
         from mirgecom.simutil import geometric_mesh_partitioner
         return geometric_mesh_partitioner(
             mesh, num_ranks, auto_balance=True, debug=True,
-            imbalance_tolerance=imba_tol)
+            volumes=part_volumes, imbalance_tolerance=imba_tol)
 
     part_func = my_partitioner if use_1d_part else None
 

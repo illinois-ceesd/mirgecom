@@ -623,6 +623,7 @@ def assign_elements_to_volumes(mesh, volumes, debug=False):
             volume_to_elements["_Vol_0"].append(e_idx)
             assigned_mask[e_idx] = True
 
+    print("All elements found.")
     # Convert lists to NumPy arrays
     for vol_id in volume_to_elements:
         volume_to_elements[vol_id] = np.array(volume_to_elements[vol_id], dtype=int)
@@ -970,7 +971,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                             # distributed uniformly in space.
                             fine_tuned = False
                             trial_portion_needed = portion_needed
-                            while not fine_tuned:
+                            nit = 0
+                            nit_max = 100
+                            while not fine_tuned and (nit < nit_max):
                                 pos_update = trial_portion_needed*reserv_interval
                                 new_loc = part_loc[r+1] + pos_update
 
@@ -991,7 +994,9 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                             trial_portion_needed/2.0
                                     else:
                                         fine_tuned = True
-
+                                nit = nit + 1
+                                if debug:
+                                    print(f"Iteration({nit}): {len(moved_elements)} elements moved.")
                             portion_needed = trial_portion_needed
                             new_loc = part_loc[r+1] + pos_update
                             if debug:
