@@ -48,7 +48,7 @@ jobs:
             run: |
                 MINIFORGE_INSTALL_DIR=.miniforge3
                 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-                python -m pip install types-psutil types-PyYAML
+                python -m pip install types-psutil types-PyYAML pyinstrument
                 ./run-mypy.sh
 
     pylint:
@@ -68,6 +68,7 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            python -m pip install pyinstrument
             ./run-pylint.sh
 
     pydocstyle:

@@ -535,6 +535,8 @@ class PythonInitTime(PostLogQuantity):
 
 
 class TimeStepProfile(MultiPostLogQuantity):
+    """Logging support for time step profiling."""
+
     def __init__(self, timesteps: Collection[int]) -> None:
         # Could add support for MPI profile, kernel profile, etc. in the future
         import pyinstrument
@@ -549,19 +551,21 @@ class TimeStepProfile(MultiPostLogQuantity):
         self.profiler = pyinstrument.Profiler()
 
     def prepare_for_tick(self) -> None:
+        """Start the profiler if the current time step is to be profiled."""
         step = self.steps
         if step in self.timesteps_to_profile:
             self.profiler.start()
         self.steps += 1
 
     def __call__(self):
+        """Return the time step profile."""
         if self.steps-1 not in self.timesteps_to_profile:
             return None
 
         self.profiler.stop()
         s = self.profiler.output_html()
         self.profiler.reset()
-        return s
+        return [s]
 
 
 # }}}
