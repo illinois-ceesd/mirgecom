@@ -76,7 +76,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None):
+         casename=None, rst_filename=None, profile_steps=None):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -91,6 +91,10 @@ def main(actx_class, use_esdg=False,
 
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
+
+    if profile_steps:
+        from mirgecom.logging_quantities import TimeStepProfile
+        logmgr.add_quantity(TimeStepProfile(profile_steps))
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
@@ -342,6 +346,8 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--profile-steps", type=int, nargs="+",
+                        help="enable profiling specific time step(s) [OFF]")
     args = parser.parse_args()
 
     from warnings import warn
@@ -366,6 +372,7 @@ if __name__ == "__main__":
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename)
+         casename=casename, rst_filename=rst_filename,
+         profile_steps=args.profile_steps)
 
 # vim: foldmethod=marker

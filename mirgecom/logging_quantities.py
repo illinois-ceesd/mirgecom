@@ -555,13 +555,15 @@ class TimeStepProfile(MultiPostLogQuantity):
         step = self.steps
         if step in self.timesteps_to_profile:
             self.profiler.start()
+            logger.info("start profiling timestep %s", step)
         self.steps += 1
 
     def __call__(self):
         """Return the time step profile."""
         if self.steps-1 not in self.timesteps_to_profile:
-            return None
+            return [None]
 
+        logger.info("end profiling timestep %s", self.steps-1)
         self.profiler.stop()
         s = self.profiler.output_html()
         self.profiler.reset()
