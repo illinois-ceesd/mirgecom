@@ -759,6 +759,10 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     elem_to_rank: numpy.ndarray
         Array indicating the MPI rank for each element
     """
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Partitioning mesh: {now}")
+
     mesh_dimension = mesh.dim
     if nranks_per_axis is None or num_ranks is not None:
         from warnings import warn
@@ -820,9 +824,11 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
             part_axis = get_longest_axis(bounds_vol)
         target_part = nelements_vol / npart_vol
         vpax = {"X": 0, "Y": 1, "Z": 2}[part_axis]
+        
 
         if debug:
-            print(f"Partitioning volume: {vol_id}")
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"{now} Partitioning volume: {vol_id}")
             print(f"Volume bounding box: {bounds_vol}")
             print(f"Partitioning along axis: {vpax}")
             print(f"Number of elements in volume: {nelements_vol}")
@@ -904,7 +910,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                 part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
                 if debug:
-                    print(f"Processing {vol_id} part({r})")
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{now}: Processing {vol_id} part({r})")
                     print(f"{part_loc[r]=}")
                     print(f"{num_elem_needed=}, {part_imbalance=}")
                     print(f"{nelem_vpart=}")
@@ -1085,6 +1092,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                 # Summarize the total change and state of the partition
                 # and reservoir
                 if debug:
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{now} ---------")
                     print(f"-Vol Part({r}): {total_change=}")
                     print(f"-Vol Part({r}): {nelem_vpart[r]=}, {part_imbalance=}")
                     print(f"-Vol Part({adv_part})[Resv]: {nelem_vpart[adv_part]=}")
@@ -1107,6 +1116,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         vparts_to_elements[vol_id] = vpart_to_elements
         # Loop over volumes
 
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{now} Making global element-to-rank array.")
     # Initialize the global element-to-rank array
     elem_to_rank = np.full(global_nelements, -1, dtype=int)  # -1 means unassigned
     nelem_part = np.full(num_ranks, 0, dtype=int)
@@ -1134,7 +1145,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
 
     if debug:
-        print("Validating mesh parts.")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print("{now}: Validating mesh parts.")
 
     if total_partitioned_elements != total_nelem_part:
         raise PartitioningError("Validator: parted element counts dont match")
@@ -1160,7 +1172,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                 f"{total_partitioned_elements=},{global_nelements=}")
 
     if debug:
-        print(f"Final partitioning: {nelem_part}")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{now}: Final partitioning: {nelem_part}")
 
     return elem_to_rank
 
