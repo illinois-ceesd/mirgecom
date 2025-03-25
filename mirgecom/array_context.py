@@ -208,7 +208,12 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
         slot_id = hex(dev.pci_slot_id_nv)
         dev_id: Tuple[Any, ...] = (domain_id, bus_id, slot_id)
 
-    elif dev.platform.vendor.startswith("Advanced Micro"):
+    elif dev.platform.vendor.startswith("Advanced Micro") \
+            and "MI300A" not in dev.board_name_amd:
+        # FIXME: Can't detect GPU ID on MI300A (and perhaps other AMD GPUs), since
+        # the values for dev.topology_amd are identical on the APUs, and pyopencl
+        # does not support the cl_amd_copy_buffer_p2p extension, which is
+        # the only way to distinguish APUs from each other.
         dev_id = (dev.topology_amd.bus,)
     else:
         from warnings import warn
