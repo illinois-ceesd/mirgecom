@@ -176,11 +176,17 @@ def test_mesh_to_mesh_xfer(actx_factory, dim):
         group_cls=group_cls
     )
 
+    mesh_3 = generate_regular_rect_mesh(
+        a=(1.0,) * 3, b=(2.0,) * 3, nelements_per_axis=(nel_1d_1,) * dim,
+        group_cls=group_cls)
+
     dcoll_1 = create_discretization_collection(actx, mesh_1, order=1)
     dcoll_2 = create_discretization_collection(actx, mesh_2, order=1)
+    dcoll_3 = create_discretization_collection(actx, mesh_3, order=1)
 
     nodes_1 = actx.thaw(dcoll_1.nodes())
     nodes_2 = actx.thaw(dcoll_2.nodes())
+    nodes_3 = actx.thaw(dcoll_3.nodes())
 
     src_x = nodes_1[0]
 
@@ -360,3 +366,35 @@ def test_mesh_to_mesh_xfer(actx_factory, dim):
 
     assert rst_msh2["string"] == "hello"
     assert rst_msh2["numba"] == 5
+
+    if dim == 2:
+        def target_point_map(target_point):
+            return np.array([target_point[0], target_point[1]])
+
+        # Test building interp wghts for xfer mesh1-->mesh3
+        interp_info_13 = build_elemental_interpolation_info(
+            mesh_1, mesh_3, target_point_map=target_point_map)
+
+        # map 2d --> 3d
+        rst_msh3 = remap_dofarrays_in_structure(
+            actx, restart_data, mesh_1, mesh_3, interp_info=interp_info_13)
+
+        intrp_tol = 1e-15
+        assert np.max(np.abs(
+            actx.to_numpy(nodes_3[0] - rst_msh3["x"])[0])) < intrp_tol
+
+        for idim in range(dim):
+            assert np.max(np.abs(actx.to_numpy(
+                nodes_3[idim] - rst_msh3["nodes"][idim])[0])) < intrp_tol
+
+        cv3 = rst_msh3["cv"]
+        assert np.max(np.abs(actx.to_numpy(
+            nodes_3[0] - cv3.mass)[0])) < intrp_tol
+        for idim in range(dim):
+            assert np.max(np.abs(actx.to_numpy(
+                nodes_3[idim] - cv3.momentum[idim])[0])) < intrp_tol
+            assert np.max(np.abs(
+                actx.to_numpy(nodes_3[1] - cv3.energy)[0])) < intrp_tol
+
+        assert rst_msh3["string"] == "hello"
+        assert rst_msh3["numba"] == 5
