@@ -629,6 +629,61 @@ class ElementalInterpolationInfo:
     fallback_indices: list[int]  # indices of points that failed
 
 
+def recover_interp_fallbacks(interp_info, mesh1, mesh2,
+                             target_point_map=None, inverse_map_fn=None):
+    """
+    Re-attempt point location for fallback points using
+    Gauss-Newton instead of Newton.
+
+    Parameters:
+        interp_info: ElementalInterpolationInfo
+        mesh1: source mesh (meshmode mesh)
+        mesh2: target mesh (meshmode mesh)
+        inverse_map_gauss_newton_fn: optional function to override solver
+
+    Returns:
+        Updated ElementalInterpolationInfo with fallbacks resolved where possible.
+    """
+    src_vertices = mesh1.vertices.T
+    tgt_vertices = mesh2.vertices.T
+    src_elements = mesh1.groups[0].vertex_indices
+
+    dim = src_vertices.shape[1]
+    fallback_indices = interp_info.fallback_indices
+    updated_src_element_ids = interp_info.src_element_ids.copy()
+    updated_ref_coords = interp_info.ref_coords.copy()
+    updated_fallback_mask = interp_info.fallback_mask.copy()
+    eltype = "quad" if dim == 2 else "hex"
+    # Pick solver based on dimension
+    if inverse_map_fn is None:
+        inverse_map_fn = (
+            inverse_map_quad_gn if dim == 2 else inverse_map_hex_gn
+        )
+
+    from tqdm import tqdm
+    for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
+        x_tgt = tgt_vertices[i]
+        if target_point_map is not None:
+            x_tgt = target_point_map(x_tgt)
+        for el_id, conn in enumerate(src_elements):
+            el_nodes = src_vertices[conn]
+            ref = inverse_map_fn(el_nodes, x_tgt)
+            if ref is not None and point_in_reference_coords(ref, eltype):
+                updated_src_element_ids[i] = el_id
+                updated_ref_coords[i] = ref
+                updated_fallback_mask[i] = False
+                break  # stop at first match
+
+    new_fallbacks = [i for i in fallback_indices if updated_fallback_mask[i]]
+
+    return ElementalInterpolationInfo(
+        src_element_ids=updated_src_element_ids,
+        ref_coords=updated_ref_coords,
+        fallback_mask=updated_fallback_mask,
+        fallback_indices=new_fallbacks
+    )
+
+
 def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     """
     Construct interpolation metadata mapping the vertices of mesh2 to
@@ -692,67 +747,14 @@ def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
             fallback_mask[i] = True
             fallback_indices.append(i)
 
-    return ElementalInterpolationInfo(
+    interp_info = ElementalInterpolationInfo(
         src_element_ids=src_element_ids,
         ref_coords=ref_coords,
         fallback_mask=fallback_mask,
         fallback_indices=fallback_indices
     )
 
-
-def recover_interp_fallbacks(interp_info, mesh1, mesh2,
-                             target_point_map=None, inverse_map_fn=None):
-    """
-    Re-attempt point location for fallback points using
-    Gauss-Newton instead of Newton.
-
-    Parameters:
-        interp_info: ElementalInterpolationInfo
-        mesh1: source mesh (meshmode mesh)
-        mesh2: target mesh (meshmode mesh)
-        inverse_map_gauss_newton_fn: optional function to override solver
-
-    Returns:
-        Updated ElementalInterpolationInfo with fallbacks resolved where possible.
-    """
-    src_vertices = mesh1.vertices.T
-    tgt_vertices = mesh2.vertices.T
-    src_elements = mesh1.groups[0].vertex_indices
-
-    dim = src_vertices.shape[1]
-    fallback_indices = interp_info.fallback_indices
-    updated_src_element_ids = interp_info.src_element_ids.copy()
-    updated_ref_coords = interp_info.ref_coords.copy()
-    updated_fallback_mask = interp_info.fallback_mask.copy()
-    eltype = "quad" if dim == 2 else "hex"
-    # Pick solver based on dimension
-    if inverse_map_fn is None:
-        inverse_map_fn = (
-            inverse_map_quad_gn if dim == 2 else inverse_map_hex_gn
-        )
-
-    from tqdm import tqdm
-    for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
-        x_tgt = tgt_vertices[i]
-        if target_point_map is not None:
-            x_tgt = target_point_map(x_tgt)
-        for el_id, conn in enumerate(src_elements):
-            el_nodes = src_vertices[conn]
-            ref = inverse_map_fn(el_nodes, x_tgt)
-            if ref is not None and point_in_reference_coords(ref, eltype):
-                updated_src_element_ids[i] = el_id
-                updated_ref_coords[i] = ref
-                updated_fallback_mask[i] = False
-                break  # stop at first match
-
-    new_fallbacks = [i for i in fallback_indices if updated_fallback_mask[i]]
-
-    return ElementalInterpolationInfo(
-        src_element_ids=updated_src_element_ids,
-        ref_coords=updated_ref_coords,
-        fallback_mask=updated_fallback_mask,
-        fallback_indices=new_fallbacks
-    )
+    return interp_info
 
 
 def apply_elemental_interpolation(src_field, interp_info):
@@ -790,7 +792,7 @@ def apply_elemental_interpolation(src_field, interp_info):
 
 
 def remap_dofarrays_in_structure(actx, struct, mesh1, mesh2,
-                                 interp_info=None):
+                                 interp_info=None, target_point_map=None):
     """
     Recursively remap all DOFArrays in a nested data structure from mesh1 to mesh2.
 
@@ -831,9 +833,11 @@ def remap_dofarrays_in_structure(actx, struct, mesh1, mesh2,
 
     # Precompute interpolation info once
     if interp_info is None:
-        interp_info = build_elemental_interpolation_info(mesh1, mesh2)
+        interp_info = build_elemental_interpolation_info(
+            mesh1, mesh2, target_point_map=target_point_map)
         if np.any(interp_info.fallback_mask):
-            interp_info = recover_interp_fallbacks(interp_info, mesh1, mesh2)
+            interp_info = recover_interp_fallbacks(
+                interp_info, mesh1, mesh2, target_point_map=target_point_map)
         if np.any(interp_info.fallback_mask):
             raise RuntimeError("Could not find some mesh2 vertices in mesh1 elems.")
 
