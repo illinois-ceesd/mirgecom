@@ -629,7 +629,7 @@ class ElementalInterpolationInfo:
     fallback_indices: list[int]  # indices of points that failed
 
 
-def build_elemental_interpolation_info(mesh1, mesh2):
+def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     """
     Construct interpolation metadata mapping the vertices of mesh2 to
     reference coordinates in elements of mesh1.
@@ -667,7 +667,8 @@ def build_elemental_interpolation_info(mesh1, mesh2):
     from tqdm import tqdm
     for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
         x_tgt = tgt_vertices[i]
-
+        if target_point_map is not None:
+            x_tgt = target_point_map(x_tgt)
         found = False
         for el_id, conn in enumerate(src_elements):
             el_nodes = src_vertices[conn]  # shape: (nvert_el, dim)
@@ -699,7 +700,8 @@ def build_elemental_interpolation_info(mesh1, mesh2):
     )
 
 
-def recover_interp_fallbacks(interp_info, mesh1, mesh2, inverse_map_fn=None):
+def recover_interp_fallbacks(interp_info, mesh1, mesh2,
+                             target_point_map=None, inverse_map_fn=None):
     """
     Re-attempt point location for fallback points using
     Gauss-Newton instead of Newton.
@@ -732,6 +734,8 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2, inverse_map_fn=None):
     from tqdm import tqdm
     for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
         x_tgt = tgt_vertices[i]
+        if target_point_map is not None:
+            x_tgt = target_point_map(x_tgt)
         for el_id, conn in enumerate(src_elements):
             el_nodes = src_vertices[conn]
             ref = inverse_map_fn(el_nodes, x_tgt)
