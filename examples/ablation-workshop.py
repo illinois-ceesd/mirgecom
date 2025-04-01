@@ -934,7 +934,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         # using spline for temperature interpolation
         # while using "nearest neighbor" for the "B" parameter
-        h_w_comps = make_obj_array([actx.zeros((), dtype=np.float64)]*24*15)
+        h_w_comps = make_obj_array([actx.np.zeros((), dtype=np.float64)]*24*15)
         i = 0
         for j in range(0, 24):
             for k in range(0, 15):
