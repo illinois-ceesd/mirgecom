@@ -110,7 +110,9 @@ def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* has fallback arguments."""
     import inspect
     spec = inspect.getfullargspec(actx_class.__init__)
-    return "use_axis_tag_inference_fallback" in spec.args
+
+    return ("use_axis_tag_inference_fallback" in spec.args
+            or "use_axis_tag_inference_fallback" in spec.kwonlyargs)
 
 
 def _check_cache_dirs_node(actx: ArrayContext) -> None:
