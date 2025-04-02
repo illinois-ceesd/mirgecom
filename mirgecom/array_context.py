@@ -296,8 +296,8 @@ def log_disk_cache_config(actx: ArrayContext) -> None:
 def initialize_actx(
         actx_class: Type[ArrayContext],
         comm=None, *,
-        use_axis_tag_inference_fallback: bool = False,
-        use_einsum_inference_fallback: bool = False) -> ArrayContext:
+        use_axis_tag_inference_fallback: bool = True,
+        use_einsum_inference_fallback: bool = True) -> ArrayContext:
     """Initialize a new :class:`~arraycontext.ArrayContext` based on *actx_class*."""
     from grudge.array_context import (MPIPyOpenCLArrayContext,
                                       MPIPytatoArrayContext
@@ -335,6 +335,7 @@ def initialize_actx(
                     use_axis_tag_inference_fallback
                 actx_kwargs["use_einsum_inference_fallback"] = \
                     use_einsum_inference_fallback
+
             if comm:
                 assert issubclass(actx_class, MPIPytatoArrayContext)
                 actx_kwargs["mpi_base_tag"] = 12000
