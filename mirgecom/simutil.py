@@ -630,6 +630,13 @@ class ElementalInterpolationInfo:
     fallback_indices: list[int]  # indices of points that failed
 
 
+def build_element_centroid_kdtree(src_vertices, src_elements):
+    el_centroids = np.array([
+        np.mean(src_vertices[conn], axis=0) for conn in src_elements
+    ])
+    return cKDTree(el_centroids), el_centroids
+
+
 def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                              target_point_map=None, inverse_map_fn=None):
     """
@@ -661,11 +668,13 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
         inverse_map_fn = (
             inverse_map_quad_gn if dim == 2 else inverse_map_hex_gn
         )
+
+    tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
     print(f"GN: Finding {n_tgt_nodes} target points in {nsrc_els} source elements.")
     # from tqdm import tqdm
     # for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
     for cnt, i in enumerate(fallback_indices):
-        pct = float(cnt / n_tgt_nodes)
+        pct = 100.*float(cnt / n_tgt_nodes)
         cur_meter = 0
         if pct >= cur_meter:
             print(f"{pct}% target points searched.")
@@ -673,7 +682,14 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
         x_tgt = tgt_vertices[i]
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
-        for el_id, conn in enumerate(src_elements):
+
+        # Query k nearest neighbors
+        k = 30
+        _, candidate_ids = tree.query(x_tgt, k=k)
+
+        # for el_id, conn in enumerate(src_elements):
+        for el_id in candidate_ids:
+            conn = src_elements[el_id]
             el_nodes = src_vertices[conn]
             ref = inverse_map_fn(el_nodes, x_tgt)
             if ref is not None and point_in_reference_coords(ref, eltype):
@@ -690,13 +706,6 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
         fallback_mask=updated_fallback_mask,
         fallback_indices=new_fallbacks
     )
-
-
-def build_element_centroid_kdtree(src_vertices, src_elements):
-    el_centroids = np.array([
-        np.mean(src_vertices[conn], axis=0) for conn in src_elements
-    ])
-    return cKDTree(el_centroids), el_centroids
 
 
 def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
