@@ -719,8 +719,9 @@ def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     fallback_mask = np.zeros(n_tgt_nodes, dtype=bool)
     fallback_indices = []
 
-    from tqdm import tqdm
-    for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
+    # from tqdm import tqdm
+    # for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
+    for i in range(n_tgt_nodes):
         x_tgt = tgt_vertices[i]
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
@@ -791,8 +792,9 @@ def apply_elemental_interpolation(src_field, interp_info):
     return result
 
 
-def remap_dofarrays_in_structure(actx, struct, mesh1, mesh2,
-                                 interp_info=None, target_point_map=None):
+def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
+                                 interp_info=None, target_point_map=None,
+                                 volume_id=None):
     """
     Recursively remap all DOFArrays in a nested data structure from mesh1 to mesh2.
 
@@ -808,9 +810,9 @@ def remap_dofarrays_in_structure(actx, struct, mesh1, mesh2,
     struct: Any
         The input structure containing DOFArrays to be remapped. May be a nested
         combination of dicts, lists, tuples, dataclasses, or numpy object arrays.
-    mesh1: meshmode.mesh.Mesh
+    source_mesh: meshmode.mesh.Mesh
         The source mesh from which the DOFArrays were defined.
-    mesh2: meshmode.mesh.Mesh
+    target_mesh: meshmode.mesh.Mesh
         The target mesh to which the DOFArrays will be remapped.
     interp_info: ElementInterpolationInfo, optional
         Precomputed interpolation metadata. If not provided, it will be constructed
@@ -826,18 +828,35 @@ def remap_dofarrays_in_structure(actx, struct, mesh1, mesh2,
     from grudge import discretization as grudge_discr
     from mirgecom.simutil import inverse_element_connectivity
 
+    if isinstance(source_mesh, dict):
+        if volume_id is None:
+            raise ValueError("Data transfer for multivolume must specify volume_id.") 
+        source_mesh = source_mesh[volume_id]
+
     # Set up target discretization and template
-    dcoll_2 = grudge_discr.DiscretizationCollection(actx, mesh2, order=1)
-    template_dofs = actx.thaw(dcoll_2.nodes()[0])
-    iconn_2 = inverse_element_connectivity(mesh2)
+    if isinstance(target_mesh, dict):
+        if volume_id is None:
+            raise ValueError("Data transfer for multivolume must specify volume_id.")
+        multivol_dcoll = \
+            grudge_discr.DiscretizationCollection(
+                actx, volume_meshes=target_mesh, order=1)
+        dd = DOFDesc(VolumeDomainTag(volume_id), DISCR_TAG_BASE)
+        # grabs the x-component of the nodes for an example dof_array
+        template_dofs = actx.thaw(multivol_dcoll.nodes(dd)[0])
+        target_mesh = target_mesh[volume_id]
+    else:
+        dcoll_2 = grudge_discr.DiscretizationCollection(actx, target_mesh, order=1)
+        template_dofs = actx.thaw(dcoll_2.nodes()[0])
+    iconn_2 = inverse_element_connectivity(target_mesh)
 
     # Precompute interpolation info once
     if interp_info is None:
         interp_info = build_elemental_interpolation_info(
-            mesh1, mesh2, target_point_map=target_point_map)
+            source_mesh, target_mesh, target_point_map=target_point_map)
         if np.any(interp_info.fallback_mask):
             interp_info = recover_interp_fallbacks(
-                interp_info, mesh1, mesh2, target_point_map=target_point_map)
+                interp_info, source_mesh, target_mesh,
+                target_point_map=target_point_map)
         if np.any(interp_info.fallback_mask):
             raise RuntimeError("Could not find some mesh2 vertices in mesh1 elems.")
 
