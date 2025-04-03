@@ -820,11 +820,17 @@ def apply_elemental_interpolation(src_field, interp_info):
     Returns:
         numpy array of shape (n_target_vertices,)
     """
+    from warnings import warn
     result = np.empty(len(interp_info.src_element_ids))
 
     dim = interp_info.ref_coords.shape[1]
     for i, (el_id, ref) in enumerate(zip(interp_info.src_element_ids,
                                          interp_info.ref_coords)):
+
+        if el_id < 0:
+            warn("Setting unfound point solution to 0.")
+            result[i] = 0.0
+            continue
 
         if dim == 2:
             # going to permute the dofs to canonical order
@@ -916,8 +922,13 @@ def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
                 interp_info, source_mesh, target_mesh,
                 target_point_map=target_point_map,
                 meter_level=meter_level)
-        if np.any(interp_info.fallback_mask):
-            raise RuntimeError("Could not find some mesh2 vertices in mesh1 elems.")
+        n_fallback = np.count_nonzero(interp_info.fallback_mask)
+        # if np.any(interp_info.fallback_mask):
+        if n_fallback > 0:
+            # raise RuntimeError
+            # ("Could not find some mesh2 vertices in mesh1 elems.")
+            from warnings import warn
+            warn(f"Could not find {n_fallback} target vertices in source mesh.")
 
     def _map(obj):
         if isinstance(obj, DOFArray):
