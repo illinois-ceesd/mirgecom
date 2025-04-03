@@ -647,9 +647,10 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
     src_vertices = mesh1.vertices.T
     tgt_vertices = mesh2.vertices.T
     src_elements = mesh1.groups[0].vertex_indices
-
+    nsrc_els = len(src_elements)
     dim = src_vertices.shape[1]
     fallback_indices = interp_info.fallback_indices
+    n_tgt_nodes = len(fallback_indices)
     updated_src_element_ids = interp_info.src_element_ids.copy()
     updated_ref_coords = interp_info.ref_coords.copy()
     updated_fallback_mask = interp_info.fallback_mask.copy()
@@ -659,9 +660,15 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
         inverse_map_fn = (
             inverse_map_quad_gn if dim == 2 else inverse_map_hex_gn
         )
-
-    from tqdm import tqdm
-    for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
+    print(f"GN: Finding {n_tgt_nodes} target points in {nsrc_els} source elements.")
+    # from tqdm import tqdm
+    # for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
+    for cnt, i in enumerate(fallback_indices):
+        pct = float(cnt / n_tgt_nodes)
+        cur_meter = 0
+        if pct >= cur_meter:
+            print(f"{pct}% target points searched.")
+            cur_meter += 10
         x_tgt = tgt_vertices[i]
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
@@ -710,6 +717,7 @@ def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     tgt_vertices = mesh2.vertices.T  # (nverts, dim)
     # assuming single group for now
     src_elements = mesh1.groups[0].vertex_indices  # (nelements, nvertices_per_el)
+    nsrc_els = len(src_elements)
 
     dim = src_vertices.shape[1]
     n_tgt_nodes = tgt_vertices.shape[0]
@@ -719,9 +727,16 @@ def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     fallback_mask = np.zeros(n_tgt_nodes, dtype=bool)
     fallback_indices = []
 
+    print(f"N: Finding {n_tgt_nodes} target points in {nsrc_els} source elements.")
     # from tqdm import tqdm
     # for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
     for i in range(n_tgt_nodes):
+        pct = float(i / n_tgt_nodes)
+        cur_meter = 0
+        if pct >= cur_meter:
+            print(f"{pct}% target points searched.")
+            cur_meter += 10
+
         x_tgt = tgt_vertices[i]
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
@@ -836,7 +851,7 @@ def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
 
     if isinstance(source_mesh, dict):
         if volume_id is None:
-            raise ValueError("Data transfer for multivolume must specify volume_id.") 
+            raise ValueError("Data transfer for multivolume must specify volume_id.")
         source_mesh = source_mesh[volume_id]
 
     # Set up target discretization and template
