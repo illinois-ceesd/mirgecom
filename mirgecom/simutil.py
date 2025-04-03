@@ -826,7 +826,13 @@ def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
     """
 
     from grudge import discretization as grudge_discr
-    from mirgecom.simutil import inverse_element_connectivity
+    # from mirgecom.simutil import inverse_element_connectivity
+    from mirgecom.discretization import create_discretization_collection
+    from grudge.dof_desc import (
+        DOFDesc,
+        VolumeDomainTag,
+        DISCR_TAG_BASE,
+    )
 
     if isinstance(source_mesh, dict):
         if volume_id is None:
@@ -838,13 +844,14 @@ def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
         if volume_id is None:
             raise ValueError("Data transfer for multivolume must specify volume_id.")
         multivol_dcoll = \
-            grudge_discr.DiscretizationCollection(
+            create_discretization_collection(
                 actx, volume_meshes=target_mesh, order=1)
         dd = DOFDesc(VolumeDomainTag(volume_id), DISCR_TAG_BASE)
         # grabs the x-component of the nodes for an example dof_array
         template_dofs = actx.thaw(multivol_dcoll.nodes(dd)[0])
         target_mesh = target_mesh[volume_id]
     else:
+        # dcoll_2 = grudge_discr.DiscretizationCollection(actx, target_mesh, order=1)
         dcoll_2 = grudge_discr.DiscretizationCollection(actx, target_mesh, order=1)
         template_dofs = actx.thaw(dcoll_2.nodes()[0])
     iconn_2 = inverse_element_connectivity(target_mesh)
