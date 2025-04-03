@@ -638,7 +638,8 @@ def build_element_centroid_kdtree(src_vertices, src_elements):
 
 
 def recover_interp_fallbacks(interp_info, mesh1, mesh2,
-                             target_point_map=None, inverse_map_fn=None):
+                             target_point_map=None, inverse_map_fn=None,
+                             meter_level=100.):
     """
     Re-attempt point location for fallback points using
     Gauss-Newton instead of Newton.
@@ -670,15 +671,18 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
         )
 
     tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
-    print(f"GN: Finding {n_tgt_nodes} target points in {nsrc_els} source elements.")
+    if meter_level < 100:
+        print(f"GN: Finding {n_tgt_nodes} target points "
+              f"in {nsrc_els} source elements.")
+
     # from tqdm import tqdm
     # for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
     for cnt, i in enumerate(fallback_indices):
         pct = 100.*float(cnt / n_tgt_nodes)
-        cur_meter = 0
+        cur_meter = meter_level
         if pct >= cur_meter:
             print(f"{pct}% target points searched.")
-            cur_meter += 10
+            cur_meter = pct + meter_level
         x_tgt = tgt_vertices[i]
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
@@ -708,7 +712,8 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
     )
 
 
-def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
+def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None,
+                                       meter_level=100.0):
     """
     Construct interpolation metadata mapping the vertices of mesh2 to
     reference coordinates in elements of mesh1.
@@ -745,15 +750,18 @@ def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     fallback_indices = []
     tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
 
-    print(f"N: Finding {n_tgt_nodes} target points in {nsrc_els} source elements.")
+    if meter_level < 100:
+        print(f"N: Finding {n_tgt_nodes} target points in "
+              f"{nsrc_els} source elements.")
+
     # from tqdm import tqdm
     # for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
     for i in range(n_tgt_nodes):
         pct = 100.*float(i / n_tgt_nodes)
-        cur_meter = 0
+        cur_meter = meter_level
         if pct >= cur_meter:
             print(f"{pct}% target points searched.")
-            cur_meter += 10
+            cur_meter = pct + meter_level
 
         x_tgt = tgt_vertices[i]
         if target_point_map is not None:
