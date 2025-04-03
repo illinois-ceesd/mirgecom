@@ -111,6 +111,7 @@ from pytools.obj_array import make_obj_array
 from collections import defaultdict, OrderedDict
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
+from scipy.spatial import cKDTree
 
 
 logger = logging.getLogger(__name__)
@@ -691,6 +692,13 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
     )
 
 
+def build_element_centroid_kdtree(src_vertices, src_elements):
+    el_centroids = np.array([
+        np.mean(src_vertices[conn], axis=0) for conn in src_elements
+    ])
+    return cKDTree(el_centroids), el_centroids
+
+
 def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     """
     Construct interpolation metadata mapping the vertices of mesh2 to
@@ -726,12 +734,13 @@ def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
     ref_coords = np.full((n_tgt_nodes, dim), np.nan, dtype=np.float64)
     fallback_mask = np.zeros(n_tgt_nodes, dtype=bool)
     fallback_indices = []
+    tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
 
     print(f"N: Finding {n_tgt_nodes} target points in {nsrc_els} source elements.")
     # from tqdm import tqdm
     # for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
     for i in range(n_tgt_nodes):
-        pct = float(i / n_tgt_nodes)
+        pct = 100.*float(i / n_tgt_nodes)
         cur_meter = 0
         if pct >= cur_meter:
             print(f"{pct}% target points searched.")
@@ -740,8 +749,17 @@ def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None):
         x_tgt = tgt_vertices[i]
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
+
+        # Query k nearest neighbors
+        k = 20
+        _, candidate_ids = tree.query(x_tgt, k=k)
+
         found = False
-        for el_id, conn in enumerate(src_elements):
+        # for el_id, conn in enumerate(src_elements):
+        for el_id in candidate_ids:
+            # el_nodes = src_vertices[conn]  # shape: (nvert_el, dim)
+            conn = src_elements[el_id]
+            # print(f"{conn=}")
             el_nodes = src_vertices[conn]  # shape: (nvert_el, dim)
 
             if dim == 2:
