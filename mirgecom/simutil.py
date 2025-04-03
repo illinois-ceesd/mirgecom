@@ -844,7 +844,7 @@ def apply_elemental_interpolation(src_field, interp_info):
 
 def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
                                  interp_info=None, target_point_map=None,
-                                 volume_id=None):
+                                 volume_id=None, meter_level=100.):
     """
     Recursively remap all DOFArrays in a nested data structure from mesh1 to mesh2.
 
@@ -909,11 +909,13 @@ def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
     # Precompute interpolation info once
     if interp_info is None:
         interp_info = build_elemental_interpolation_info(
-            source_mesh, target_mesh, target_point_map=target_point_map)
+            source_mesh, target_mesh, target_point_map=target_point_map,
+            meter_level=meter_level)
         if np.any(interp_info.fallback_mask):
             interp_info = recover_interp_fallbacks(
                 interp_info, source_mesh, target_mesh,
-                target_point_map=target_point_map)
+                target_point_map=target_point_map,
+                meter_level=meter_level)
         if np.any(interp_info.fallback_mask):
             raise RuntimeError("Could not find some mesh2 vertices in mesh1 elems.")
 
