@@ -639,7 +639,7 @@ def build_element_centroid_kdtree(src_vertices, src_elements):
 
 def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                              target_point_map=None, inverse_map_fn=None,
-                             meter_level=100.):
+                             meter_level=100., snap_tol=1e-4, snap_eps=1e-7):
     """
     Re-attempt point location for fallback points using
     Gauss-Newton instead of Newton.
@@ -663,6 +663,7 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
     updated_src_element_ids = interp_info.src_element_ids.copy()
     updated_ref_coords = interp_info.ref_coords.copy()
     updated_fallback_mask = interp_info.fallback_mask.copy()
+
     eltype = "quad" if dim == 2 else "hex"
     # Pick solver based on dimension
     if inverse_map_fn is None:
@@ -678,6 +679,9 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
     # from tqdm import tqdm
     # for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
     for cnt, i in enumerate(fallback_indices):
+        best_resid = np.inf
+        best_ref = None
+        best_el_id = None
         pct = 100.*float(cnt / n_tgt_nodes)
         cur_meter = meter_level
         if pct >= cur_meter:
@@ -696,11 +700,27 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
             conn = src_elements[el_id]
             el_nodes = src_vertices[conn]
             ref = inverse_map_fn(el_nodes, x_tgt)
-            if ref is not None and point_in_reference_coords(ref, eltype):
+            # if ref is not None and point_in_reference_coords(ref, eltype):
+            if ref is not None:
+                shape_vals = el_shape_functions(ref)
+                x_phys = np.dot(shape_vals, el_nodes)
+                resid = np.linalg.norm(x_phys - x_tgt)
+                if resid < best_resid:
+                    best_resid = resid
+                    best_el_id = el_id
+                    best_ref = ref
+            if point_in_reference_coords(ref, eltype):
                 updated_src_element_ids[i] = el_id
                 updated_ref_coords[i] = ref
                 updated_fallback_mask[i] = False
                 break  # stop at first match
+
+        if updated_fallback_mask[i]:
+            if best_ref is not None and best_resid < snap_tol:
+                clamped_ref = np.clip(best_ref, -1 + snap_eps, 1 - snap_eps)
+                updated_src_element_ids[i] = best_el_id
+                updated_ref_coords[i] = clamped_ref
+                updated_fallback_mask[i] = False
 
     new_fallbacks = [i for i in fallback_indices if updated_fallback_mask[i]]
 
