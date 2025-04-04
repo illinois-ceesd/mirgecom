@@ -26,7 +26,7 @@ dependencies:
 - pylint
 - pydocstyle
 # See https://github.com/conda-forge/cantera-feedstock/issues/46 why we need 3.0.0:
-- cantera=3.0.1
+- cantera=3.1.0
 - h5py * nompi_*  # Make sure cantera does not pull in MPI through h5py
 - gmsh
 - vtk
