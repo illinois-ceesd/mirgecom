@@ -709,11 +709,11 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                     best_resid = resid
                     best_el_id = el_id
                     best_ref = ref
-            if point_in_reference_coords(ref, eltype):
-                updated_src_element_ids[i] = el_id
-                updated_ref_coords[i] = ref
-                updated_fallback_mask[i] = False
-                break  # stop at first match
+                if point_in_reference_coords(ref, eltype):
+                    updated_src_element_ids[i] = el_id
+                    updated_ref_coords[i] = ref
+                    updated_fallback_mask[i] = False
+                    break  # stop at first match
 
         if updated_fallback_mask[i]:
             if best_ref is not None and best_resid < snap_tol:
