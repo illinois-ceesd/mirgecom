@@ -31,6 +31,9 @@ Mesh and element utilities
 .. autofunction:: invert_decomp
 .. autofunction:: multivolume_interdecomposition_overlap
 .. autofunction:: copy_mapped_dof_array_data
+.. autofunction:: inverse_element_connectivity
+.. autofunction:: apply_elemental_interpolation
+.. autofunction:: remap_dofarrays_in_structure
 
 Simulation support utilities
 ----------------------------
@@ -81,12 +84,17 @@ import pickle
 from functools import partial
 from typing import Dict, List, Optional
 from contextlib import contextmanager
+from dataclasses import (
+    dataclass, fields,
+    is_dataclass
+)
 
 from logpyle import IntervalTimer
 
 import grudge.op as op
 import numpy as np
 import pyopencl as cl
+
 from arraycontext import tag_axes
 from meshmode.transform_metadata import (
     DiscretizationElementAxisTag,
@@ -100,9 +108,11 @@ from grudge.discretization import (
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
 from collections import defaultdict, OrderedDict
-
+from pytools.obj_array import make_obj_array
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
+from scipy.spatial import cKDTree
+
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +145,838 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     if include_faces:
         nnodes = nnodes + (dim+1)*get_number_of_tetrahedron_nodes(dim-1, order)
     return nnodes
+
+
+def inverse_element_connectivity(mesh):
+    """
+    Invert the element connectivity of a mesh to map global vertex IDs
+    to the elements and local indices that reference them.
+
+    Parameters
+    ----------
+    mesh: meshmode.mesh.Mesh
+        The mesh containing element groups and their vertex indices.
+
+    Returns
+    -------
+    dict
+        A mapping from global vertex ID to a list of (grp_id, el_id, local_vertex_id)
+        tuples indicating all locations in the mesh where the vertex is used.
+    """
+    from collections import defaultdict
+
+    inverted = defaultdict(list)
+    for grp_id, grp in enumerate(mesh.groups):
+        # shape: (nelements, nvertices_per_element)
+        vertex_indices = grp.vertex_indices
+        for el_id, element_vertices in enumerate(vertex_indices):
+            for local_vertex_id, global_vertex_id in enumerate(element_vertices):
+                inverted[global_vertex_id].append((grp_id, el_id, local_vertex_id))
+
+    return dict(inverted)
+
+
+def compute_vertex_averages(actx, dofarray, inverted_conn):
+    """
+    Compute average values at each global vertex from DOFArray data.
+
+    Parameters
+    ----------
+        actx: ArrayContext
+            The array context for accessing DOFArray data.
+        dofarray: DOFArray
+            The data to average.
+        inverted_conn: dict[int, list[tuple[int, int, int]]]
+            Maps global vertex IDs to (group_id, element_id, local_vertex_id).
+
+    Returns
+    -------
+        np.ndarray:
+            Averaged values per global vertex.
+            Indexed by global vertex ID.
+    """
+    # N-Tuple of numpy arrays where N = ngroups
+    arrays_by_group = actx.to_numpy(dofarray)
+
+    nvertices = len(inverted_conn)
+    sum_per_vertex = np.zeros(nvertices)
+    count_per_vertex = np.zeros(nvertices, dtype=int)
+
+    for global_vertex, locations in inverted_conn.items():
+        for (grp_id, el_id, local_id) in locations:
+            sum_per_vertex[global_vertex] += arrays_by_group[grp_id][el_id, local_id]
+            count_per_vertex[global_vertex] += 1
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        avg = np.zeros_like(sum_per_vertex)
+        mask = count_per_vertex > 0
+        avg[mask] = sum_per_vertex[mask] / count_per_vertex[mask]
+
+    return avg
+
+
+def scatter_vertex_values_to_dofarray(actx, template_dofarray,
+                                      inverted_conn, vertex_vals):
+    """
+    Scatter global vertex values into a new DOFArray.
+
+    Parameters
+    ----------
+        actx: ArrayContext
+            The array context for building new DOFArrays.
+        template_dofarray: DOFArray
+            Used to get the shape and group structure for the new DOFArray.
+        inverted_conn: dict[int, list[tuple[int, int, int]]]
+            Maps global vertex IDs to (group_id, element_id, local_vertex_id).
+        vertex_vals: np.ndarray
+            Values at each global vertex, indexed by global vertex ID.
+
+    Returns
+    -------
+        DOFArray:
+            New DOFArray with each el node filled with its vertex value.
+    """
+    arrays_by_group = actx.to_numpy(template_dofarray)
+    new_arrays = []
+
+    # Allocate empty arrays matching shape of each group
+    for group_array in arrays_by_group:
+        new_arrays.append(0.*group_array)
+
+    # Scatter the vertex average to every occurrence of that vertex
+    for global_vertex_id, locations in inverted_conn.items():
+        value = vertex_vals[global_vertex_id]
+        for (grp_id, el_id, local_id) in locations:
+            new_arrays[grp_id][el_id, local_id] = value
+
+    # Convert numpy arrays to dofarrays
+    group_arrays = tuple(new_arrays)
+    dary = actx.from_numpy(DOFArray(actx, group_arrays))
+
+    return dary
+
+
+def quad_shape_functions(xi, eta):
+    """
+    Compute bilinear shape functions for a 4-node quad at (xi, eta).
+    Reference coordinates are in [-1, 1]².
+    """
+    n_quad = np.zeros(4)
+    n_quad[0] = 0.25 * (1 - xi) * (1 - eta)
+    n_quad[1] = 0.25 * (1 + xi) * (1 - eta)
+    n_quad[2] = 0.25 * (1 + xi) * (1 + eta)
+    n_quad[3] = 0.25 * (1 - xi) * (1 + eta)
+    return n_quad
+
+
+def quad_shape_deriv(xi, eta):
+    """
+    Compute bilinear shape functions derivs
+    for a 4-node quad at (xi, eta).
+    Reference coordinates are in [-1, 1]^2.
+    """
+    # Shape function derivatives
+    dn_dxi = np.array([
+        [-0.25 * (1 - eta), -0.25 * (1 - xi)],
+        [0.25 * (1 - eta), -0.25 * (1 + xi)],
+        [0.25 * (1 + eta),  0.25 * (1 + xi)],
+        [-0.25 * (1 + eta),  0.25 * (1 - xi)],
+    ])
+    return dn_dxi
+
+
+def hex_shape_functions(xi, eta, zeta):
+    """
+    Trilinear shape functions for hexahedra
+    Reference coords: xi, eta, zeta in [-1, 1]^3
+    """
+    node_signs = [
+        (-1, -1, -1),
+        (1, -1, -1),
+        (1,  1, -1),
+        (-1,  1, -1),
+        (-1, -1,  1),
+        (1, -1,  1),
+        (1,  1,  1),
+        (-1,  1,  1)
+    ]
+    n_hex = np.array([
+        0.125 * (1 + sx * xi) * (1 + sy * eta) * (1 + sz * zeta)
+        for sx, sy, sz in node_signs
+    ])
+    return n_hex
+
+
+def hex_shape_deriv(xi, eta, zeta):
+    """
+    Trilinear shape derivs (8-node hexahedron).
+    Reference coords: xi, eta, zeta in [-1, 1]^3
+    """
+    node_signs = [
+        (-1, -1, -1),
+        (1, -1, -1),
+        (1,  1, -1),
+        (-1,  1, -1),
+        (-1, -1,  1),
+        (1, -1,  1),
+        (1,  1,  1),
+        (-1,  1,  1)
+    ]
+    dn_hex = np.zeros((8, 3))
+    for i, (sx, sy, sz) in enumerate(node_signs):
+        dn_hex[i, 0] = 0.125 * sx * (1 + sy * eta) * (1 + sz * zeta)
+        dn_hex[i, 1] = 0.125 * (1 + sx * xi) * sy * (1 + sz * zeta)
+        dn_hex[i, 2] = 0.125 * (1 + sx * xi) * (1 + sy * eta) * sz
+    return dn_hex
+
+
+def el_shape_functions(el_coords):
+    """Wrap shape functions."""
+    dim = len(el_coords)
+    if dim == 3:
+        return hex_shape_functions(el_coords[0], el_coords[1], el_coords[2])
+    elif dim == 2:
+        return quad_shape_functions(el_coords[0], el_coords[1])
+    else:
+        raise ValueError("Invalid dimension.")
+    return None
+
+
+def el_shape_deriv(el_coords):
+
+    dim = len(el_coords)
+    if dim == 3:
+        return hex_shape_deriv(el_coords[0], el_coords[1], el_coords[2])
+    elif dim == 2:
+        return quad_shape_deriv(el_coords[0], el_coords[1])
+    else:
+        raise ValueError("Invalid dimension.")
+    return None
+
+
+def inverse_map_quad_gn(el_nodes, target_point, tol=1e-10,
+                        max_iter=15, retries=10):
+    """
+    Perform Gauss-Newton minimization to map a physical point
+    to reference (xi, eta) coordinates inside a quad element.
+
+    Parameters
+    ----------
+        el_nodes: (4, 2) array of the physical quad vertices
+        target_point: (2,) array, physical location
+        tol: convergence threshold on residual norm
+        max_iter: max number of Gauss-Newton iterations
+        retries: number of random initial guesses
+
+    Returns
+    -------
+        (xi, eta) if successful, or None if all retries failed
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2]]
+    for attempt in range(retries):  # noqa
+        # Start at random-ish location inside reference element
+        xi, eta = np.random.uniform(-0.3, 0.3), np.random.uniform(-0.3, 0.3)
+        # print(f"initial guess{attempt=}: xi={xi}, eta={eta}")
+
+        for _ in range(max_iter):
+            # Shape functions
+            n_el = el_shape_functions([xi, eta])
+            # Shape function derivatives
+            dn_dxi = el_shape_deriv([xi, eta])
+
+            # Mapped physical point at (xi, eta)
+            x = np.dot(n_el, el_nodes)  # shape (2,)
+            f_resid = x - target_point  # resid shape (2,)
+
+            # build
+            jac = np.zeros((2, 2))
+            for i in range(4):
+                jac[0, 0] += dn_dxi[i, 0] * el_nodes[i, 0]
+                jac[1, 0] += dn_dxi[i, 0] * el_nodes[i, 1]
+                jac[0, 1] += dn_dxi[i, 1] * el_nodes[i, 0]
+                jac[1, 1] += dn_dxi[i, 1] * el_nodes[i, 1]
+
+            j_t_j = jac.T @ jac
+            j_t_f = jac.T @ f_resid
+
+            try:
+                delta = np.linalg.solve(j_t_j, -j_t_f)
+            except np.linalg.LinAlgError:
+                # unlucky: singular matrix, try another guess
+                break
+
+            xi += delta[0]
+            eta += delta[1]
+
+            if np.linalg.norm(f_resid) < tol:
+                return xi, eta
+
+    return None
+
+
+def inverse_map_hex_gn(el_nodes, target_point, tol=1e-10,
+                       max_iter=20, retries=10):
+    """
+    Perform Gauss-Newton minimization to map a physical point to reference
+    coordinates (xi, eta, zeta) inside a hex element.
+
+    Parameters
+    ----------
+        el_nodes: (8, 3) array of the physical HEX8 node coordinates
+        target_point: (3,) array of the physical location
+        tol: convergence threshold on residual norm
+        max_iter: max number of Gauss-Newton iterations
+        retries: number of random initial guesses
+
+    Returns
+    -------
+        (xi, eta, zeta) if successful, or None if all retries failed
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2, 4, 5, 7, 6]]
+
+    for attempt in range(retries):  # noqa
+        xi, eta, zeta = np.random.uniform(-0.3, 0.3, size=3)
+
+        for _ in range(max_iter):
+            # Shape functions N_i(xi, eta, zeta)
+            n_el = el_shape_functions([xi, eta, zeta])
+
+            # Residual: x(xi, eta, zeta) - target
+            x = np.dot(n_el, el_nodes)
+            f_resid = x - target_point
+
+            # Shape function derivatives
+            dn_dref = el_shape_deriv([xi, eta, zeta])
+
+            # Build 3x3 Jacobian
+            jac = np.zeros((3, 3))
+            for i in range(8):
+                for j in range(3):
+                    for k in range(3):
+                        jac[k, j] += dn_dref[i, j] * el_nodes[i, k]
+
+            j_t_j = jac.T @ jac
+            j_t_f = jac.T @ f_resid
+
+            try:
+                delta = np.linalg.solve(j_t_j, -j_t_f)
+            except np.linalg.LinAlgError:
+                # unlucky: try another initial guess
+                break
+
+            xi += delta[0]
+            eta += delta[1]
+            zeta += delta[2]
+
+            if np.linalg.norm(f_resid) < tol:
+                return xi, eta, zeta
+
+    return None
+
+
+def inverse_map_quad(el_nodes, target_point, tol=1e-13, max_iter=15, retries=10):
+    """
+    Newton iteration to map physical point to reference coordinates (xi, eta).
+    Tries multiple initial guesses if needed.
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2]]
+    for attempts in range(retries):  # noqa
+        xi = np.random.uniform(-0.3, 0.3)
+        eta = np.random.uniform(-0.3, 0.3)
+
+        for _ in range(max_iter):
+            n_el = el_shape_functions([xi, eta])
+            dn_dxi = el_shape_deriv([xi, eta])
+
+            x = np.dot(n_el, el_nodes)
+            f_resid = x - target_point
+
+            jac = np.zeros((2, 2))
+            for i in range(4):
+                jac[0, 0] += dn_dxi[i, 0] * el_nodes[i, 0]
+                jac[1, 0] += dn_dxi[i, 0] * el_nodes[i, 1]
+                jac[0, 1] += dn_dxi[i, 1] * el_nodes[i, 0]
+                jac[1, 1] += dn_dxi[i, 1] * el_nodes[i, 1]
+
+            try:
+                delta = np.linalg.solve(jac, -f_resid)
+            except np.linalg.LinAlgError:
+                break  # try next random initial guess
+
+            xi += delta[0]
+            eta += delta[1]
+
+            if np.linalg.norm(delta) < tol:
+                return xi, eta
+
+    return None  # all attempts failed
+
+
+def inverse_map_hex(el_nodes, target_point, tol=1e-13, max_iter=15, retries=10):
+    """
+    Newton iteration to map physical point to reference coordinates (xi, eta, zeta).
+    Tries multiple random starting points if needed.
+
+    Parameters
+    ----------
+        el_nodes: ndarray (8, 3)
+            Physical coordinates of the 8 hexahedron nodes.
+        target_point: ndarray (3,)
+            Physical coordinates of the point to map.
+
+    Returns
+    -------
+        (xi, eta, zeta) tuple if successful, otherwise None.
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2, 4, 5, 7, 6]]
+
+    for attempt in range(retries):  # noqa
+        xi, eta, zeta = np.random.uniform(-0.3, 0.3, size=3)
+
+        for _ in range(max_iter):
+            # Shape functions
+            n_el = el_shape_functions([xi, eta, zeta])
+
+            # Physical point at current (xi, eta, zeta)
+            x = np.dot(n_el, el_nodes)
+            f_resid = x - target_point
+
+            # Derivatives: dN_i/dxi, deta, dzeta
+            dn_dref = el_shape_deriv([xi, eta, zeta])
+
+            # Build 3x3 Jacobian
+            jac = np.zeros((3, 3))
+            for i in range(8):
+                for j in range(3):      # ref-space direction (xi, eta, zeta)
+                    for k in range(3):  # physical direction (x, y, z)
+                        jac[k, j] += dn_dref[i, j] * el_nodes[i, k]
+
+            try:
+                delta = np.linalg.solve(jac, -f_resid)
+            except np.linalg.LinAlgError:
+                break  # try another random initial guess
+
+            xi += delta[0]
+            eta += delta[1]
+            zeta += delta[2]
+
+            if np.linalg.norm(delta) < tol:
+                return xi, eta, zeta
+
+    return None
+
+
+def point_in_quad_reference(xi, eta, tol=1e-8):
+    """
+    Check if reference coords (xi, eta) are inside the reference square [-1, 1]².
+    """
+    return -1 - tol <= xi <= 1 + tol and -1 - tol <= eta <= 1 + tol
+
+
+def point_in_reference_coords(ref_coords, element_type, tol=1e-8):
+    """
+    Check if the given reference coordinates are inside the canonical reference el.
+
+    Parameters
+    ----------
+        ref_coords: ndarray-like
+            Reference coordinates (e.g., [xi, eta] or [xi, eta, zeta])
+        element_type: str
+            One of: "quad", "hex", "tri", "tet"
+        tol: float
+            Tolerance for bounds checking.
+
+    Returns
+    -------
+        bool
+    """
+    ref_coords = np.asarray(ref_coords)
+
+    if element_type == "quad" or element_type == "hex":
+        return np.all((-1 - tol <= ref_coords) & (ref_coords <= 1 + tol))
+    if element_type == "tpe":
+        return np.all((-1 - tol <= ref_coords) & (ref_coords <= 1 + tol))
+
+    elif element_type == "tri":
+        r, s = ref_coords
+        return (
+            -tol <= r <= 1 + tol
+            and -tol <= s <= 1 + tol
+            and r + s <= 1 + tol
+        )
+
+    elif element_type == "tet":
+        r, s, t = ref_coords
+        return (
+            -tol <= r <= 1 + tol
+            and -tol <= s <= 1 + tol
+            and -tol <= t <= 1 + tol
+            and r + s + t <= 1 + tol
+        )
+
+    else:
+        raise ValueError(f"Unknown element type '{element_type}'")
+
+
+@dataclass
+class ElementalInterpolationInfo:
+    src_element_ids: np.ndarray  # shape: (ntgt_nodes,)
+    ref_coords: np.ndarray  # shape: (ntgt_nodes, dim)
+    fallback_mask: np.ndarray  # shape: (ntgt_nodes,), bool
+    fallback_indices: list[int]  # indices of points that failed
+
+
+def build_element_centroid_kdtree(src_vertices, src_elements):
+    el_centroids = np.array([
+        np.mean(src_vertices[conn], axis=0) for conn in src_elements
+    ])
+    return cKDTree(el_centroids), el_centroids
+
+
+def recover_interp_fallbacks(interp_info, mesh1, mesh2,
+                             target_point_map=None, inverse_map_fn=None,
+                             meter_level=100., snap_tol=1e-4, snap_eps=1e-7):
+    """
+    Re-attempt point location for fallback points using
+    Gauss-Newton instead of Newton.
+
+    Parameters:
+        interp_info: ElementalInterpolationInfo
+        mesh1: source mesh (meshmode mesh)
+        mesh2: target mesh (meshmode mesh)
+        inverse_map_gauss_newton_fn: optional function to override solver
+
+    Returns:
+        Updated ElementalInterpolationInfo with fallbacks resolved where possible.
+    """
+    src_vertices = mesh1.vertices.T
+    tgt_vertices = mesh2.vertices.T
+    src_elements = mesh1.groups[0].vertex_indices
+    nsrc_els = len(src_elements)
+    dim = src_vertices.shape[1]
+    fallback_indices = interp_info.fallback_indices
+    n_tgt_nodes = len(fallback_indices)
+    updated_src_element_ids = interp_info.src_element_ids.copy()
+    updated_ref_coords = interp_info.ref_coords.copy()
+    updated_fallback_mask = interp_info.fallback_mask.copy()
+
+    eltype = "quad" if dim == 2 else "hex"
+    # Pick solver based on dimension
+    if inverse_map_fn is None:
+        inverse_map_fn = (
+            inverse_map_quad_gn if dim == 2 else inverse_map_hex_gn
+        )
+
+    tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
+    if meter_level < 100:
+        print(f"GN: Finding {n_tgt_nodes} target points "
+              f"in {nsrc_els} source elements.")
+
+    # from tqdm import tqdm
+    # for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
+    for cnt, i in enumerate(fallback_indices):
+        best_resid = np.inf
+        best_ref = None
+        best_el_id = None
+        pct = 100.*float(cnt / n_tgt_nodes)
+        cur_meter = meter_level
+        if pct >= cur_meter:
+            print(f"{pct}% target points searched.")
+            cur_meter = pct + meter_level
+        x_tgt = tgt_vertices[i]
+        if target_point_map is not None:
+            x_tgt = target_point_map(x_tgt)
+
+        # Query k nearest neighbors
+        k = 30
+        _, candidate_ids = tree.query(x_tgt, k=k)
+
+        # for el_id, conn in enumerate(src_elements):
+        for el_id in candidate_ids:
+            conn = src_elements[el_id]
+            el_nodes = src_vertices[conn]
+            ref = inverse_map_fn(el_nodes, x_tgt)
+            # if ref is not None and point_in_reference_coords(ref, eltype):
+            if ref is not None:
+                shape_vals = el_shape_functions(ref)
+                x_phys = np.dot(shape_vals, el_nodes)
+                resid = np.linalg.norm(x_phys - x_tgt)
+                if resid < best_resid:
+                    best_resid = resid
+                    best_el_id = el_id
+                    best_ref = ref
+                if point_in_reference_coords(ref, eltype):
+                    updated_src_element_ids[i] = el_id
+                    updated_ref_coords[i] = ref
+                    updated_fallback_mask[i] = False
+                    break  # stop at first match
+
+        if updated_fallback_mask[i]:
+            if best_ref is not None and best_resid < snap_tol:
+                clamped_ref = np.clip(best_ref, -1 + snap_eps, 1 - snap_eps)
+                updated_src_element_ids[i] = best_el_id
+                updated_ref_coords[i] = clamped_ref
+                updated_fallback_mask[i] = False
+
+    new_fallbacks = [i for i in fallback_indices if updated_fallback_mask[i]]
+
+    return ElementalInterpolationInfo(
+        src_element_ids=updated_src_element_ids,
+        ref_coords=updated_ref_coords,
+        fallback_mask=updated_fallback_mask,
+        fallback_indices=new_fallbacks
+    )
+
+
+def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None,
+                                       meter_level=100.0):
+    """
+    Construct interpolation metadata mapping the vertices of mesh2 to
+    reference coordinates in elements of mesh1.
+
+    This routine locates each vertex of mesh2 within an element of mesh1,
+    computing the element ID and corresponding element-local reference
+    coordinates for use in later interpolation.
+
+    Parameters
+    ----------
+    mesh1: meshmode.mesh.Mesh
+        The source mesh from which field data will be interpolated.
+    mesh2: meshmode.mesh.Mesh
+        The target mesh whose vertex locations are used for interpolation.
+
+    Returns
+    -------
+    interp_info: ElementInterpolationInfo
+        A structure containing element IDs, reference coordinates,
+        and fallback indicators for each vertex of the target mesh.
+    """
+    src_vertices = mesh1.vertices.T  # (nverts, dim)
+    tgt_vertices = mesh2.vertices.T  # (nverts, dim)
+    # assuming single group for now
+    src_elements = mesh1.groups[0].vertex_indices  # (nelements, nvertices_per_el)
+    nsrc_els = len(src_elements)
+
+    dim = src_vertices.shape[1]
+    n_tgt_nodes = tgt_vertices.shape[0]
+
+    src_element_ids = np.full(n_tgt_nodes, -1, dtype=np.int32)
+    ref_coords = np.full((n_tgt_nodes, dim), np.nan, dtype=np.float64)
+    fallback_mask = np.zeros(n_tgt_nodes, dtype=bool)
+    fallback_indices = []
+    tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
+
+    if meter_level < 100:
+        print(f"N: Finding {n_tgt_nodes} target points in "
+              f"{nsrc_els} source elements.")
+
+    # from tqdm import tqdm
+    # for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
+    for i in range(n_tgt_nodes):
+        pct = 100.*float(i / n_tgt_nodes)
+        cur_meter = meter_level
+        if pct >= cur_meter:
+            print(f"{pct}% target points searched.")
+            cur_meter = pct + meter_level
+
+        x_tgt = tgt_vertices[i]
+        if target_point_map is not None:
+            x_tgt = target_point_map(x_tgt)
+
+        # Query k nearest neighbors
+        k = 20
+        _, candidate_ids = tree.query(x_tgt, k=k)
+
+        found = False
+        # for el_id, conn in enumerate(src_elements):
+        for el_id in candidate_ids:
+            # el_nodes = src_vertices[conn]  # shape: (nvert_el, dim)
+            conn = src_elements[el_id]
+            # print(f"{conn=}")
+            el_nodes = src_vertices[conn]  # shape: (nvert_el, dim)
+
+            if dim == 2:
+                ref = inverse_map_quad(el_nodes, x_tgt)
+                if ref is None or not point_in_reference_coords(ref, "quad"):
+                    continue
+            else:
+                ref = inverse_map_hex(el_nodes, x_tgt)
+                if ref is None or not point_in_reference_coords(ref, "hex"):
+                    continue
+
+            # Point found
+            src_element_ids[i] = el_id
+            ref_coords[i] = ref
+            found = True
+            break
+
+        if not found:
+            fallback_mask[i] = True
+            fallback_indices.append(i)
+
+    interp_info = ElementalInterpolationInfo(
+        src_element_ids=src_element_ids,
+        ref_coords=ref_coords,
+        fallback_mask=fallback_mask,
+        fallback_indices=fallback_indices
+    )
+
+    return interp_info
+
+
+def apply_elemental_interpolation(src_field, interp_info):
+    """
+    Evaluate the source field at target points using interpolation info.
+
+    Parameters:
+        src_field: DOFArray from mesh1
+        interp_info: ElementalInterpolationInfo
+        shape_function: function (xi, eta[, zeta]) -> shape values
+
+    Returns:
+        numpy array of shape (n_target_vertices,)
+    """
+    from warnings import warn
+    result = np.empty(len(interp_info.src_element_ids))
+
+    dim = interp_info.ref_coords.shape[1]
+    for i, (el_id, ref) in enumerate(zip(interp_info.src_element_ids,
+                                         interp_info.ref_coords)):
+
+        if el_id < 0:
+            warn("Setting unfound point solution to 0.")
+            result[i] = 0.0
+            continue
+
+        if dim == 2:
+            # going to permute the dofs to canonical order
+            shape_vals = el_shape_functions(ref)
+            perm = [0, 1, 3, 2]
+        elif dim == 3:
+            shape_vals = el_shape_functions(ref)
+            perm = [0, 1, 3, 2, 4, 5, 7, 6]
+        else:
+            raise ValueError(f"Unsupported dim={dim}")
+
+        el_dofs = src_field[el_id][perm]
+        result[i] = np.dot(shape_vals, el_dofs)
+
+    return result
+
+
+def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
+                                 interp_info=None, target_point_map=None,
+                                 volume_id=None, meter_level=100.):
+    """
+    Recursively remap all DOFArrays in a nested data structure from mesh1 to mesh2.
+
+    Traverses the given data structure and applies mesh-to-mesh interpolation
+    to any DOFArray it contains. Handles scalar DOFArrays, object arrays of
+    DOFArrays, and dataclasses containing DOFArrays. Non-field data (e.g., ints,
+    floats, strings) are passed through unchanged.
+
+    Parameters
+    ----------
+    actx: arraycontext.ArrayContext
+        The array context used for all array operations.
+    struct: Any
+        The input structure containing DOFArrays to be remapped. May be a nested
+        combination of dicts, lists, tuples, dataclasses, or numpy object arrays.
+    source_mesh: meshmode.mesh.Mesh
+        The source mesh from which the DOFArrays were defined.
+    target_mesh: meshmode.mesh.Mesh
+        The target mesh to which the DOFArrays will be remapped.
+    interp_info: ElementInterpolationInfo, optional
+        Precomputed interpolation metadata. If not provided, it will be constructed
+        internally using `build_elemental_interpolation_info`.
+
+    Returns
+    -------
+    struct_mapped: Any
+        A new structure with the same layout as the input, but with all
+        DOFArrays remapped to mesh2.
+    """
+
+    from grudge import discretization as grudge_discr
+    # from mirgecom.simutil import inverse_element_connectivity
+    from mirgecom.discretization import create_discretization_collection
+    from grudge.dof_desc import (
+        DOFDesc,
+        VolumeDomainTag,
+        DISCR_TAG_BASE,
+    )
+
+    if isinstance(source_mesh, dict):
+        if volume_id is None:
+            raise ValueError("Data transfer for multivolume must specify volume_id.")
+        source_mesh = source_mesh[volume_id]
+
+    # Set up target discretization and template
+    if isinstance(target_mesh, dict):
+        if volume_id is None:
+            raise ValueError("Data transfer for multivolume must specify volume_id.")
+        multivol_dcoll = \
+            create_discretization_collection(
+                actx, volume_meshes=target_mesh, order=1)
+        dd = DOFDesc(VolumeDomainTag(volume_id), DISCR_TAG_BASE)
+        # grabs the x-component of the nodes for an example dof_array
+        template_dofs = actx.thaw(multivol_dcoll.nodes(dd)[0])
+        target_mesh = target_mesh[volume_id]
+    else:
+        # dcoll_2 = grudge_discr.DiscretizationCollection(actx, target_mesh, order=1)
+        dcoll_2 = grudge_discr.DiscretizationCollection(actx, target_mesh, order=1)
+        template_dofs = actx.thaw(dcoll_2.nodes()[0])
+    iconn_2 = inverse_element_connectivity(target_mesh)
+
+    # Precompute interpolation info once
+    if interp_info is None:
+        interp_info = build_elemental_interpolation_info(
+            source_mesh, target_mesh, target_point_map=target_point_map,
+            meter_level=meter_level)
+        if np.any(interp_info.fallback_mask):
+            interp_info = recover_interp_fallbacks(
+                interp_info, source_mesh, target_mesh,
+                target_point_map=target_point_map,
+                meter_level=meter_level)
+        n_fallback = np.count_nonzero(interp_info.fallback_mask)
+        # if np.any(interp_info.fallback_mask):
+        if n_fallback > 0:
+            # raise RuntimeError
+            # ("Could not find some mesh2 vertices in mesh1 elems.")
+            from warnings import warn
+            warn(f"Could not find {n_fallback} target vertices in source mesh.")
+
+    def _map(obj):
+        if isinstance(obj, DOFArray):
+            src_np = actx.to_numpy(obj)[0]
+            mapped_vals = apply_elemental_interpolation(src_np, interp_info)
+            return scatter_vertex_values_to_dofarray(actx, template_dofs,
+                                                     iconn_2, mapped_vals)
+
+        elif (isinstance(obj, np.ndarray) and obj.dtype == object
+              and all(isinstance(x, DOFArray) for x in obj.flat)):
+            # Object array of DOFArrays → use make_obj_array
+            return make_obj_array([_map(x) for x in obj])
+
+        elif isinstance(obj, (list, tuple)):
+            return type(obj)(_map(o) for o in obj)
+
+        elif isinstance(obj, dict):
+            return {k: _map(v) for k, v in obj.items()}
+
+        elif is_dataclass(obj):
+            return type(obj)(**{
+                f.name: _map(getattr(obj, f.name)) for f in fields(obj)
+            })
+
+        else:
+            return obj  # Pass through anything else unchanged
+
+    return _map(struct)
 
 
 def get_box_mesh(dim, a, b, n, t=None, periodic=None,
@@ -761,6 +1603,10 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     elem_to_rank: numpy.ndarray
         Array indicating the MPI rank for each element
     """
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Partitioning mesh: {now}")
+
     mesh_dimension = mesh.dim
     if nranks_per_axis is None or num_ranks is not None:
         from warnings import warn
@@ -824,7 +1670,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         vpax = {"X": 0, "Y": 1, "Z": 2}[part_axis]
 
         if debug:
-            print(f"Partitioning volume: {vol_id}")
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"{now} Partitioning volume: {vol_id}")
             print(f"Volume bounding box: {bounds_vol}")
             print(f"Partitioning along axis: {vpax}")
             print(f"Number of elements in volume: {nelements_vol}")
@@ -906,7 +1753,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                 part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
                 if debug:
-                    print(f"Processing {vol_id} part({r})")
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{now}: Processing {vol_id} part({r})")
                     print(f"{part_loc[r]=}")
                     print(f"{num_elem_needed=}, {part_imbalance=}")
                     print(f"{nelem_vpart=}")
@@ -1006,7 +1854,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                             print(f"--Adding {num_elements_added} to part({r}).")
 
                     else:
-
                         # Partition is LARGER than it should be
                         # Grab the spatial size of the current partition
                         # to estimate the portion we need to shave off
@@ -1087,6 +1934,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                 # Summarize the total change and state of the partition
                 # and reservoir
                 if debug:
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{now} ---------")
                     print(f"-Vol Part({r}): {total_change=}")
                     print(f"-Vol Part({r}): {nelem_vpart[r]=}, {part_imbalance=}")
                     print(f"-Vol Part({adv_part})[Resv]: {nelem_vpart[adv_part]=}")
@@ -1109,6 +1958,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         vparts_to_elements[vol_id] = vpart_to_elements
         # Loop over volumes
 
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{now} Making global element-to-rank array.")
     # Initialize the global element-to-rank array
     elem_to_rank = np.full(global_nelements, -1, dtype=int)  # -1 means unassigned
     nelem_part = np.full(num_ranks, 0, dtype=int)
@@ -1136,7 +1987,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
 
     if debug:
-        print("Validating mesh parts.")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print("{now}: Validating mesh parts.")
 
     if total_partitioned_elements != total_nelem_part:
         raise PartitioningError("Validator: parted element counts dont match")
@@ -1162,7 +2014,8 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                 f"{total_partitioned_elements=},{global_nelements=}")
 
     if debug:
-        print(f"Final partitioning: {nelem_part}")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{now}: Final partitioning: {nelem_part}")
 
     return elem_to_rank
 

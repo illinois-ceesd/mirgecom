@@ -4,9 +4,7 @@
 
 MIRGE_CACHE_ROOT=${MIRGE_CACHE_ROOT:-"$(pwd)/.mirge-cache/"}
 XDG_CACHE_ROOT=${XDG_CACHE_ROOT:-"${MIRGE_CACHE_ROOT}/xdg-cache"}
-
 XDG_CACHE_HOME=${XDG_CACHE_HOME:-"${XDG_CACHE_ROOT}/rank$FLUX_TASK_RANK"}
-
 export XDG_CACHE_HOME
 # Check if MIRGE_CACHE_DISABLE is set to 1
 if [ "${MIRGE_CACHE_DISABLE:-0}" == "1" ]; then
