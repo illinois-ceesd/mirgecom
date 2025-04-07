@@ -639,7 +639,7 @@ def build_element_centroid_kdtree(src_vertices, src_elements):
 
 def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                              target_point_map=None, inverse_map_fn=None,
-                             meter_level=100., snap_tol=1e-4, snap_eps=1e-7):
+                             meter_level=100., snap_tol=1e-3, snap_eps=1e-4):
     """
     Re-attempt point location for fallback points using
     Gauss-Newton instead of Newton.
@@ -682,12 +682,15 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
         best_resid = np.inf
         best_ref = None
         best_el_id = None
+        best_xphys = None
+        best_elnodes = None
         pct = 100.*float(cnt / n_tgt_nodes)
         cur_meter = meter_level
         if pct >= cur_meter:
             print(f"{pct}% target points searched.")
             cur_meter = pct + meter_level
         x_tgt = tgt_vertices[i]
+        tgt_save = 1.*x_tgt
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
 
@@ -709,6 +712,8 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                     best_resid = resid
                     best_el_id = el_id
                     best_ref = ref
+                    best_xphys = x_phys
+                    best_elnodes = el_nodes
                 if point_in_reference_coords(ref, eltype):
                     updated_src_element_ids[i] = el_id
                     updated_ref_coords[i] = ref
@@ -720,6 +725,43 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                 clamped_ref = np.clip(best_ref, -1 + snap_eps, 1 - snap_eps)
                 updated_src_element_ids[i] = best_el_id
                 updated_ref_coords[i] = clamped_ref
+                updated_fallback_mask[i] = False
+            else:
+                print(f"Snapping point({i}) failed: {best_ref=}, {best_resid=}")
+                print(f"PointInfo: {tgt_save=}, {x_tgt=}")
+                print(f"SourceInfo: {el_id=}, {best_xphys=}, {best_elnodes=}")
+                print("Resorting to closest point in element!")
+                conn = src_elements[best_el_id]
+                el_nodes = src_vertices[conn]
+                distances = np.linalg.norm(el_nodes - x_tgt, axis=1)
+                closest_local_id = np.argmin(distances)
+
+                # I know there's a more pythonic way to do this hrm
+                # Just hardcode the canonical element corner coords
+                if eltype == "quad":
+                    ref_corners = [
+                        (-1.0, -1.0),
+                        ( 1.0, -1.0),
+                        ( 1.0,  1.0),
+                        (-1.0,  1.0)
+                    ]
+                elif eltype == "hex":
+                    ref_corners = [
+                        (-1.0, -1.0, -1.0),
+                        ( 1.0, -1.0, -1.0),
+                        ( 1.0,  1.0, -1.0),
+                        (-1.0,  1.0, -1.0),
+                        (-1.0, -1.0,  1.0),
+                        ( 1.0, -1.0,  1.0),
+                        ( 1.0,  1.0,  1.0),
+                        (-1.0,  1.0,  1.0)
+                    ]
+                else:
+                    raise ValueError(f"Unsupported fallback for eltype {eltype}")
+
+                fallback_ref = np.array(ref_corners[closest_local_id])
+                updated_src_element_ids[i] = best_el_id
+                updated_ref_coords[i] = fallback_ref
                 updated_fallback_mask[i] = False
 
     new_fallbacks = [i for i in fallback_indices if updated_fallback_mask[i]]
