@@ -107,8 +107,8 @@ from grudge.discretization import (
 )
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
-from pytools.obj_array import make_obj_array
 from collections import defaultdict, OrderedDict
+from pytools.obj_array import make_obj_array
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
 from scipy.spatial import cKDTree
@@ -639,7 +639,7 @@ def build_element_centroid_kdtree(src_vertices, src_elements):
 
 def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                              target_point_map=None, inverse_map_fn=None,
-                             meter_level=100.):
+                             meter_level=100., snap_tol=1e-3, snap_eps=1e-4):
     """
     Re-attempt point location for fallback points using
     Gauss-Newton instead of Newton.
@@ -663,6 +663,7 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
     updated_src_element_ids = interp_info.src_element_ids.copy()
     updated_ref_coords = interp_info.ref_coords.copy()
     updated_fallback_mask = interp_info.fallback_mask.copy()
+
     eltype = "quad" if dim == 2 else "hex"
     # Pick solver based on dimension
     if inverse_map_fn is None:
@@ -678,12 +679,18 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
     # from tqdm import tqdm
     # for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
     for cnt, i in enumerate(fallback_indices):
+        best_resid = np.inf
+        best_ref = None
+        best_el_id = None
+        best_xphys = None
+        best_elnodes = None
         pct = 100.*float(cnt / n_tgt_nodes)
         cur_meter = meter_level
         if pct >= cur_meter:
             print(f"{pct}% target points searched.")
             cur_meter = pct + meter_level
         x_tgt = tgt_vertices[i]
+        tgt_save = 1.*x_tgt
         if target_point_map is not None:
             x_tgt = target_point_map(x_tgt)
 
@@ -696,11 +703,66 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
             conn = src_elements[el_id]
             el_nodes = src_vertices[conn]
             ref = inverse_map_fn(el_nodes, x_tgt)
-            if ref is not None and point_in_reference_coords(ref, eltype):
-                updated_src_element_ids[i] = el_id
-                updated_ref_coords[i] = ref
+            # if ref is not None and point_in_reference_coords(ref, eltype):
+            if ref is not None:
+                shape_vals = el_shape_functions(ref)
+                x_phys = np.dot(shape_vals, el_nodes)
+                resid = np.linalg.norm(x_phys - x_tgt)
+                if resid < best_resid:
+                    best_resid = resid
+                    best_el_id = el_id
+                    best_ref = ref
+                    best_xphys = x_phys
+                    best_elnodes = el_nodes
+                if point_in_reference_coords(ref, eltype):
+                    updated_src_element_ids[i] = el_id
+                    updated_ref_coords[i] = ref
+                    updated_fallback_mask[i] = False
+                    break  # stop at first match
+
+        if updated_fallback_mask[i]:
+            if best_ref is not None and best_resid < snap_tol:
+                clamped_ref = np.clip(best_ref, -1 + snap_eps, 1 - snap_eps)
+                updated_src_element_ids[i] = best_el_id
+                updated_ref_coords[i] = clamped_ref
                 updated_fallback_mask[i] = False
-                break  # stop at first match
+            else:
+                print(f"Snapping point({i}) failed: {best_ref=}, {best_resid=}")
+                print(f"PointInfo: {tgt_save=}, {x_tgt=}")
+                print(f"SourceInfo: {el_id=}, {best_xphys=}, {best_elnodes=}")
+                print("Resorting to closest point in element!")
+                conn = src_elements[best_el_id]
+                el_nodes = src_vertices[conn]
+                distances = np.linalg.norm(el_nodes - x_tgt, axis=1)
+                closest_local_id = np.argmin(distances)
+
+                # I know there's a more pythonic way to do this hrm
+                # Just hardcode the canonical element corner coords
+                if eltype == "quad":
+                    ref_corners = [
+                        (-1.0, -1.0),
+                        ( 1.0, -1.0),
+                        ( 1.0,  1.0),
+                        (-1.0,  1.0)
+                    ]
+                elif eltype == "hex":
+                    ref_corners = [
+                        (-1.0, -1.0, -1.0),
+                        ( 1.0, -1.0, -1.0),
+                        ( 1.0,  1.0, -1.0),
+                        (-1.0,  1.0, -1.0),
+                        (-1.0, -1.0,  1.0),
+                        ( 1.0, -1.0,  1.0),
+                        ( 1.0,  1.0,  1.0),
+                        (-1.0,  1.0,  1.0)
+                    ]
+                else:
+                    raise ValueError(f"Unsupported fallback for eltype {eltype}")
+
+                fallback_ref = np.array(ref_corners[closest_local_id])
+                updated_src_element_ids[i] = best_el_id
+                updated_ref_coords[i] = fallback_ref
+                updated_fallback_mask[i] = False
 
     new_fallbacks = [i for i in fallback_indices if updated_fallback_mask[i]]
 
@@ -1009,6 +1071,8 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None,
     dim_names = ["x", "y", "z"]
     bttf = {}
     for i in range(dim):
+        if periodic[i]:
+            continue
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
 
@@ -1832,7 +1896,6 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                             print(f"--Adding {num_elements_added} to part({r}).")
 
                     else:
-
                         # Partition is LARGER than it should be
                         # Grab the spatial size of the current partition
                         # to estimate the portion we need to shave off
