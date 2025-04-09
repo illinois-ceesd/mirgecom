@@ -27,6 +27,7 @@ import logging
 import argparse
 import sys
 import os
+import numpy as np
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import (
@@ -64,16 +65,20 @@ class MyRuntimeError(RuntimeError):
 
 @mpi_entry_point
 def main(actx_class, mesh_source=None, ndist=None, dim=None,
-         output_path=None, log_path=None,
-         casename=None, use_1d_part=None, use_wall=False,
-         imba_tol=None):
+         output_path=None, log_path=None, periodic=False,
+         use_quads=True, geom_scale=1., casename=None,
+         use_1d_part=None, use_wall=False,
+         imba_tol=None, use_meshmode=False):
     """The main function."""
-    if mesh_source is None:
-        raise ApplicationOptionsError("Missing mesh source file.")
+    if mesh_source is None and not use_meshmode:
+        raise ApplicationOptionsError("Missing mesh source file or "
+                                      "meshmode option")
+
     if imba_tol is None:
         imba_tol = .01
 
-    mesh_source.strip("'")
+    if mesh_source is not None:
+        mesh_source.strip("'")
 
     if dim is None:
         dim = 3
@@ -123,7 +128,10 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
     if rank == 0:
         print(f"Distributing on {nparts} ranks into {ndist} parts.")
         print(f"Casename: {casename}")
-        print(f"Mesh source file: {mesh_source}")
+        if use_meshmode:
+            print("Generating mesh with meshmode.")
+        else:
+            print(f"Gmsh mesh source file: {mesh_source}")
 
     # logging and profiling
     logname = log_path + "/" + casename + ".sqlite"
@@ -168,11 +176,110 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
             ("memory_usage_hwm.max",
              "| \t memory hwm: {value:7g} Mb\n")])
 
+    part_axis = "Y" if use_meshmode else None
+
     if rank == 0:
         print(f"Reading mesh from {mesh_source}.")
         print(f"Writing {ndist} mesh pkl files to {output_path}.")
 
-    def get_mesh_data():
+    def get_mesh_mm():
+
+        """Generate a grid using `gmsh`."""
+        size = .001
+        angle = 0.
+        height = 0.02*geom_scale
+        fluid_length = 0.1
+        wall_length = 0.05
+        bottom_inflow = np.zeros(shape=(dim,))
+        top_inflow = np.zeros(shape=(dim,))
+        bottom_interface = np.zeros(shape=(dim,))
+        top_interface = np.zeros(shape=(dim,))
+        bottom_wall = np.zeros(shape=(dim,))
+        top_wall = np.zeros(shape=(dim,))
+
+        # rotate the mesh around the bottom-left corner
+        theta = angle/180.*np.pi
+        bottom_inflow[0] = 0.0
+        bottom_inflow[1] = -0.01*geom_scale
+        top_inflow[0] = bottom_inflow[0] - height*np.sin(theta)
+        top_inflow[1] = bottom_inflow[1] + height*np.cos(theta)
+
+        bottom_interface[0] = bottom_inflow[0] + fluid_length*np.cos(theta)
+        bottom_interface[1] = bottom_inflow[1] + fluid_length*np.sin(theta)
+        top_interface[0] = top_inflow[0] + fluid_length*np.cos(theta)
+        top_interface[1] = top_inflow[1] + fluid_length*np.sin(theta)
+
+        bottom_wall[0] = bottom_interface[0] + wall_length*np.cos(theta)
+        bottom_wall[1] = bottom_interface[1] + wall_length*np.sin(theta)
+        top_wall[0] = top_interface[0] + wall_length*np.cos(theta)
+        top_wall[1] = top_interface[1] + wall_length*np.sin(theta)
+        from meshmode.mesh.generation import generate_regular_rect_mesh
+
+        # this only works for non-slanty meshes
+        def get_meshmode_mesh(a, b, nelements_per_axis, boundary_tag_to_face):
+
+            from meshmode.mesh import TensorProductElementGroup
+            dim = len(a)
+            group_cls = TensorProductElementGroup if use_quads else None
+
+            if dim == 2:
+                peri = (False, periodic)
+            else:
+                peri = (False, True, periodic)
+
+            mesh = generate_regular_rect_mesh(
+                a=a, b=b, nelements_per_axis=nelements_per_axis,
+                group_cls=group_cls, periodic=peri,
+                boundary_tag_to_face=boundary_tag_to_face
+                )
+
+            mgrp = mesh.groups[0]
+            x = mgrp.nodes[0, :, :]
+            x_avg = np.sum(x, axis=1)/x.shape[1]
+            tag_to_elements = {
+                "fluid": np.where(x_avg < fluid_length)[0],
+                "wall_insert": np.where(x_avg > fluid_length)[0]}
+
+            return mesh, tag_to_elements
+
+        boundary_tag_to_face = {
+            "inflow": ["-x"],
+            "outflow": ["+x"],
+            "flow": ["-x", "+x"]
+        }
+
+        if periodic:
+            boundary_tag_to_face["wall_farfield"] = ["+x"]
+        if dim == 2:
+            a = (bottom_inflow[0], bottom_inflow[1])
+            b = (top_wall[0], top_wall[1])
+            if not periodic:
+                boundary_tag_to_face["wall_farfield"] = \
+                    ["+x", "-y", "+y"]
+                boundary_tag_to_face["isothermal_wall"] = \
+                    ["-y", "+y"]
+            nelements_per_axis = (int(fluid_length/size) + int(wall_length/size),
+                                  int(height/size))
+        else:
+            a = (bottom_inflow[0], bottom_inflow[1], 0.)
+            b = (top_wall[0], top_wall[1], 0.02)
+            if not periodic:  # For 3D meshmode Y is *always* periodic
+                boundary_tag_to_face["wall_farfield"] = \
+                    ["+x", "-z", "+z"]
+                boundary_tag_to_face["isothermal_wall"] = \
+                    ["-z", "+z"]
+            nelements_per_axis = (int((fluid_length+wall_length)/size),
+                                  int(height/size), int(.02/size))
+        volume_to_tags = {"fluid": ["fluid"]}
+        if use_wall:
+            volume_to_tags["wall"] = ["wall_insert"]
+
+        mesh, tag_to_elements = get_meshmode_mesh(
+                       a=a, b=b, boundary_tag_to_face=boundary_tag_to_face,
+                       nelements_per_axis=nelements_per_axis)
+        return mesh, tag_to_elements, volume_to_tags
+
+    def get_mesh_gmsh():
         from meshmode.mesh.io import read_gmsh
         mesh, tag_to_elements = read_gmsh(
             mesh_source, force_ambient_dim=dim,
@@ -192,7 +299,7 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
         from mirgecom.simutil import geometric_mesh_partitioner
         return geometric_mesh_partitioner(
             mesh, num_ranks, auto_balance=True, debug=True,
-            imbalance_tolerance=imba_tol)
+            imbalance_tolerance=imba_tol, part_axis=part_axis)
 
     part_func = my_partitioner if use_1d_part else None
 
@@ -210,11 +317,13 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
 
     if rank == 0:
         print(f"Writing mesh pkl files to {mesh_filename}.")
+    mesh_func = get_mesh_mm if use_meshmode else get_mesh_gmsh
 
     distribute_mesh_pkl(
-        comm, get_mesh_data, filename=mesh_filename,
+        comm, mesh_func, filename=mesh_filename,
         num_target_ranks=ndist,
-        partition_generator_func=part_func, logmgr=logmgr)
+        partition_generator_func=part_func, logmgr=logmgr,
+        write_mesh_to_file=True)
 
     comm.Barrier()
 
@@ -234,26 +343,32 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description="MIRGE-Com Mesh Distribution")
-    parser.add_argument("-w", "--wall", dest="use_wall",
-                        action="store_true", help="Include wall domain in mesh.")
     parser.add_argument("-1", "--1dpart", dest="one_d_part",
                         action="store_true", help="Use 1D partitioner.")
-    parser.add_argument("-d", "--dimen", type=int, dest="dim",
-                        nargs="?", action="store",
-                        help="Number dimensions")
-    parser.add_argument("-n", "--ndist", type=int, dest="ndist",
-                        nargs="?", action="store",
-                        help="Number of distributed parts")
-    parser.add_argument("-s", "--source", type=str, dest="source",
-                        nargs="?", action="store", help="Gmsh mesh source file")
-    parser.add_argument("-o", "--ouput-path", type=str, dest="output_path",
-                        nargs="?", action="store",
-                        help="Output path for distributed mesh pkl files")
     parser.add_argument("-c", "--casename", type=str, dest="casename", nargs="?",
                         action="store",
                         help="Root name of distributed mesh pkl files.")
+    parser.add_argument("-d", "--dimen", type=int, dest="dim",
+                        nargs="?", action="store",
+                        help="Number dimensions")
     parser.add_argument("-g", "--logpath", type=str, dest="log_path", nargs="?",
                         action="store", help="simulation case name")
+    parser.add_argument("-m", "--meshmode", dest="meshmode",
+                        action="store_true", help="Use meshmode mesh gen.")
+    parser.add_argument("-n", "--ndist", type=int, dest="ndist",
+                        nargs="?", action="store",
+                        help="Number of distributed parts")
+    parser.add_argument("-o", "--ouput-path", type=str, dest="output_path",
+                        nargs="?", action="store",
+                        help="Output path for distributed mesh pkl files")
+    parser.add_argument("-p", "--periodic", dest="periodic",
+                        action="store_true", help="Generate periodic mesh.")
+    parser.add_argument("-s", "--source", type=str, dest="source",
+                        nargs="?", action="store", help="Gmsh mesh source file")
+    parser.add_argument("--geom-scale", type=float, default=1.,
+                        help="Scale the geometry in the Y by this factor.")
+    parser.add_argument("-w", "--wall", dest="use_wall",
+                        action="store_true", help="Include wall domain in mesh.")
     parser.add_argument("-z", "--imbatol", type=float, dest="imbalance_tolerance",
                         nargs="?", action="store",
                         help="1d partioner imabalance tolerance")
@@ -268,4 +383,5 @@ if __name__ == "__main__":
          output_path=args.output_path, ndist=args.ndist,
          log_path=args.log_path, casename=args.casename,
          use_1d_part=args.one_d_part, use_wall=args.use_wall,
-         imba_tol=args.imbalance_tolerance)
+         imba_tol=args.imbalance_tolerance, periodic=args.periodic,
+         use_meshmode=args.meshmode, geom_scale=args.geom_scale)

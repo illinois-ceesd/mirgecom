@@ -2402,7 +2402,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
 
 def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                         num_target_ranks=0, num_reader_ranks=0,
-                        partition_generator_func=None, logmgr=None):
+                        partition_generator_func=None, logmgr=None,
+                        write_mesh_to_file=False):
     r"""Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -2491,7 +2492,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                     global_data = get_mesh_data()
             else:
                 global_data = get_mesh_data()
-            print(f"{datetime.now()}: Done reading source mesh from file. "
+            print(f"{datetime.now()}: Done reading or generating source mesh. "
                   "Broadcasting...")
             global_data = reader_comm_wrapper.bcast(global_data, root=0)
         else:
@@ -2511,6 +2512,13 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             mesh, tag_to_elements, volume_to_tags = global_data
         else:
             raise TypeError("Unexpected result from get_mesh_data")
+
+        if write_mesh_to_file and reader_rank == 0:
+            print(f"{datetime.now()}: Writing serial mesh to file.")
+            mesh_fname = filename + "_serial_mesh_np{num_target_ranks}.pkl"
+            with open(mesh_fname, "wb") as pkl_file:
+                pickle.dump(mesh, pkl_file)
+            print(f"{datetime.now()}: Done writing serial mesh file.")
 
         if logmgr:
             logmgr.add_quantity(t_mesh_part)
@@ -2533,13 +2541,17 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             with open(part_table_fname, "wb") as pkl_file:
                 pickle.dump(rank_to_elems, pkl_file)
 
+        print(f"{datetime.now()} {reader_rank==} Ready to split up mesh.")
         reader_comm.Barrier()
+
         if reader_rank == 0:
             print(f"{datetime.now()}: Done with global partitioning. Splitting...")
 
         if tag_to_elements is None:
             part_id_to_elements = None
         else:
+            if reader_rank == 0:
+                print(f"{datetime.now()}: Multivolume Splitting.... ")
             part_id_to_elements = _get_multi_volume_partitions(
                 mesh, num_target_ranks, rank_per_element, tag_to_elements,
                 volume_to_tags)
@@ -2553,6 +2565,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                 with open(mv_part_table_fname, "wb") as pkl_file:
                     pickle.dump(part_id_to_elements, pkl_file)
 
+        print(f"{datetime.now()} {reader_rank==} Ready to split into meshmode data.")
         reader_comm.Barrier()
         if reader_rank == 0:
             print(f"{datetime.now()}: - Got PartID-to-elements. "
@@ -2570,6 +2583,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             return rank_to_mesh_data
 
         reader_comm.Barrier()
+
         if logmgr:
             logmgr.add_quantity(t_mesh_split)
             with t_mesh_split.get_sub_timer():
@@ -2577,7 +2591,9 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             rank_to_mesh_data = get_rank_to_mesh_data()
 
+        print(f"{datetime.now()} {reader_rank==} Got rank to mesh data. Ready to write!")
         reader_comm.Barrier()
+
         if reader_rank == 0:
             print(f"{datetime.now()}: Done splitting mesh. Writing...")
 
@@ -2601,6 +2617,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                 with open(pkl_filename, "wb") as pkl_file:
                     pickle.dump(mesh_data_to_pickle, pkl_file)
 
+        print(f"{datetime.now()} {reader_rank==} Writing done!")
         reader_comm.Barrier()
         if reader_rank == 0:
             print(f"{datetime.now()}: Done writing partitioned mesh.")
