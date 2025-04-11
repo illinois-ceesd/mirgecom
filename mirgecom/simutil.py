@@ -1488,6 +1488,9 @@ def assign_elements_to_tagged_volumes(mesh, tag_to_elements, tags_to_partition,
     volumes = OrderedDict()
     assigned_elements = set()
 
+    if tags_to_partition is None:
+        tags_to_partition = tag_to_elements.keys()
+
     for tag in tags_to_partition:
         elem_indices = tag_to_elements[tag]
         part_vols[tag] = np.array(elem_indices, dtype=int)
