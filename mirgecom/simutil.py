@@ -741,19 +741,19 @@ def recover_interp_fallbacks(interp_info, mesh1, mesh2,
                 if eltype == "quad":
                     ref_corners = [
                         (-1.0, -1.0),
-                        ( 1.0, -1.0),
-                        ( 1.0,  1.0),
+                        (1.0, -1.0),
+                        (1.0,  1.0),
                         (-1.0,  1.0)
                     ]
                 elif eltype == "hex":
                     ref_corners = [
                         (-1.0, -1.0, -1.0),
-                        ( 1.0, -1.0, -1.0),
-                        ( 1.0,  1.0, -1.0),
+                        (1.0, -1.0, -1.0),
+                        (1.0,  1.0, -1.0),
                         (-1.0,  1.0, -1.0),
                         (-1.0, -1.0,  1.0),
-                        ( 1.0, -1.0,  1.0),
-                        ( 1.0,  1.0,  1.0),
+                        (1.0, -1.0,  1.0),
+                        (1.0,  1.0,  1.0),
                         (-1.0,  1.0,  1.0)
                     ]
                 else:
@@ -1448,6 +1448,106 @@ class PartitioningError(Exception):
     pass
 
 
+def assign_elements_to_tagged_volumes(mesh, tag_to_elements, tags_to_partition,
+                                      debug=False):
+    """
+    Assigns elements to volumes based on user-defined tags.
+
+    Parameters
+    ----------
+    mesh: meshmode.mesh.Mesh
+        The mesh object containing element data.
+    tag_to_elements: dict
+        Mapping from tag to list of element indices.
+    tags_to_partition: list
+        List of tags to partition (each becomes a volume).
+    debug: bool
+        Print debug information.
+
+    Returns
+    -------
+    part_vols: dict
+        Mapping from volume (tag) name to list of element indices.
+    volumes: dict
+        Maps vol (tag) name to box (xmin, xmax, ymin, ymax, zmin, zmax).
+    """
+    dim = mesh.dim
+    mesh_verts = mesh.vertices
+
+    # Compute all element centroids
+    all_elem_group_centroids = []
+    for group in mesh.groups:
+        coords = mesh_verts[:, group.vertex_indices]  # shape (dim, nelements, nodes)
+        centroids = np.mean(coords, axis=2)  # shape (dim, nelements)
+        all_elem_group_centroids.append(centroids.T)  # shape (nelements, dim)
+
+    elem_centroids = np.concatenate(all_elem_group_centroids)
+    total_nelements = len(elem_centroids)
+
+    part_vols = OrderedDict()
+    volumes = OrderedDict()
+    assigned_elements = set()
+
+    for tag in tags_to_partition:
+        elem_indices = tag_to_elements[tag]
+        part_vols[tag] = np.array(elem_indices, dtype=int)
+        assigned_elements.update(elem_indices)
+
+        # Get all vertex indices for the tagged elements
+        tag_vertex_indices = []
+        for group in mesh.groups:
+            for _, eidx in enumerate(tag_to_elements[tag]):
+                if eidx < group.nelements:
+                    tag_vertex_indices.extend(group.vertex_indices[eidx])
+        # Remove duplicates and index into mesh.vertices
+        tag_vertex_indices = np.unique(tag_vertex_indices)
+        # shape (nverts, dim)
+        tag_vertex_coords = mesh_verts[:, tag_vertex_indices].T
+
+        if dim == 2:
+            x0, y0 = np.min(tag_vertex_coords, axis=0)
+            x1, y1 = np.max(tag_vertex_coords, axis=0)
+            volumes[tag] = (x0, x1, y0, y1, 0.0, 0.0)
+        else:
+            x0, y0, z0 = np.min(tag_vertex_coords, axis=0)
+            x1, y1, z1 = np.max(tag_vertex_coords, axis=0)
+            volumes[tag] = (x0, x1, y0, y1, z0, z1)
+
+        if debug:
+            print(f"[Tag {tag}] {len(elem_indices)} elements")
+            print(f"  Bounding Box: {volumes[tag]}")
+
+    # Assign untagged elements to _Vol_0
+    all_elements = set(range(total_nelements))
+    unassigned = sorted(all_elements - assigned_elements)
+
+    if unassigned:
+        from warning import warn
+        warn("Some elements were found tagless.")
+
+        x0, y0 = np.min(mesh_verts[:2], axis=1)
+        x1, y1 = np.max(mesh_verts[:2], axis=1)
+        z0 = 0.
+        z1 = 0.
+        if dim == 3:
+            z0, z1 = np.min(mesh_verts[2]), np.max(mesh_verts[2])
+        vol_0_bounds = (x0, x1, y0, y1, z0, z1)
+        part_vols["_Vol_0"] = np.array(unassigned, dtype=int)
+        volumes["_Vol_0"] = vol_0_bounds
+
+        if debug:
+            print(f"[Fallback _Vol_0] {len(unassigned)} elements")
+            print(f"  Bounding Box: {volumes['_Vol_0']}")
+
+    # Final validation
+    total_assigned = sum(len(elems) for elems in part_vols.values())
+    if total_assigned != total_nelements:
+        raise ValueError(f"Element count mismatch: assigned {total_assigned} "
+                         f"vs mesh total {total_nelements}")
+
+    return part_vols, volumes
+
+
 def assign_elements_to_volumes(mesh, volumes, debug=False):
     """
     Assigns elements in a mesh to user-defined volumes in precedence order,
@@ -1614,7 +1714,8 @@ def get_longest_axis(vol_bounds):
 
 def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                auto_balance=False, imbalance_tolerance=.01,
-                               volumes=None, debug=False, part_axis=None):
+                               volumes=None, debug=False, part_axis=None,
+                               tag_to_elements=None, tags_to_partition=None):
     """Partition a mesh uniformly along the X coordinate axis.
 
     The intent is to partition the mesh uniformly along user-specified
@@ -1665,25 +1766,30 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                 "(only nranks_per_axis[0] should be > 1).")
 
     mesh_verts = mesh.vertices
-    x0, y0 = np.min(mesh_verts[:2], axis=1)
-    x1, y1 = np.max(mesh_verts[:2], axis=1)
-    z0 = 0.
-    z1 = 0.
-    if mesh_dimension == 3:
-        z0, z1 = np.min(mesh_verts[2]), np.max(mesh_verts[2])
 
-    vol_0_bounds = (x0, x1, y0, y1, z0, z1)
-    if volumes is not None:
-        volumes = OrderedDict(volumes)
-        volumes["_Vol_0"] = vol_0_bounds
+    if tag_to_elements is not None:
+        part_vols, volumes = assign_elements_to_tagged_volumes(
+            mesh, tag_to_elements, tags_to_partition, debug)
     else:
-        volumes = OrderedDict({"_Vol_0": vol_0_bounds})
+        x0, y0 = np.min(mesh_verts[:2], axis=1)
+        x1, y1 = np.max(mesh_verts[:2], axis=1)
+        z0 = 0.
+        z1 = 0.
+        if mesh_dimension == 3:
+            z0, z1 = np.min(mesh_verts[2]), np.max(mesh_verts[2])
 
-    part_vols = assign_elements_to_volumes(mesh=mesh, volumes=volumes,
-                                           debug=debug)
+        vol_0_bounds = (x0, x1, y0, y1, z0, z1)
+        if volumes is not None:
+            volumes = OrderedDict(volumes)
+            volumes["_Vol_0"] = vol_0_bounds
+        else:
+            volumes = OrderedDict({"_Vol_0": vol_0_bounds})
 
-    nparts_vol = compute_volume_partitions(part_vols, num_ranks,
-                                           imbalance_tolerance, debug)
+            part_vols = assign_elements_to_volumes(
+                mesh=mesh, volumes=volumes, debug=debug)
+
+            nparts_vol = compute_volume_partitions(
+                part_vols, num_ranks, imbalance_tolerance, debug)
 
     all_elem_group_centroids = []
     for group in mesh.groups:
@@ -2403,7 +2509,7 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
 def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                         num_target_ranks=0, num_reader_ranks=0,
                         partition_generator_func=None, logmgr=None,
-                        write_mesh_to_file=False):
+                        write_mesh_to_file=False, gen_only=False):
     r"""Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -2515,10 +2621,13 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
 
         if write_mesh_to_file and reader_rank == 0:
             print(f"{datetime.now()}: Writing serial mesh to file.")
-            mesh_fname = filename + "_serial_mesh_np{num_target_ranks}.pkl"
+            mesh_fname = filename + f"_serial_mesh_np{num_target_ranks}.pkl"
             with open(mesh_fname, "wb") as pkl_file:
-                pickle.dump(mesh, pkl_file)
+                pickle.dump(global_data, pkl_file)
             print(f"{datetime.now()}: Done writing serial mesh file.")
+
+        reader_comm.Barrier()
+        print(f"{datetime.now()} {reader_rank=} Calling partitioner...")
 
         if logmgr:
             logmgr.add_quantity(t_mesh_part)
@@ -2528,6 +2637,8 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             rank_per_element = partition_generator_func(mesh, tag_to_elements,
                                                         num_target_ranks)
+
+        print(f"{datetime.now()} {reader_rank=} Partitioner done.")
 
         # Save this little puppy for later (m-to-n restart support)
         if reader_rank == 0:
@@ -2540,8 +2651,8 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
             part_table_fname = filename + f"_idecomp_np{num_target_ranks}.pkl"
             with open(part_table_fname, "wb") as pkl_file:
                 pickle.dump(rank_to_elems, pkl_file)
+            print(f"{datetime.now()} Wrote partition tables.")
 
-        print(f"{datetime.now()} {reader_rank==} Ready to split up mesh.")
         reader_comm.Barrier()
 
         if reader_rank == 0:
@@ -2564,9 +2675,15 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                     os.remove(mv_part_table_fname)
                 with open(mv_part_table_fname, "wb") as pkl_file:
                     pickle.dump(part_id_to_elements, pkl_file)
+                print(f"{datetime.now()}: Wrote multivolume part table to pkl.")
 
-        print(f"{datetime.now()} {reader_rank==} Ready to split into meshmode data.")
+        if gen_only:
+            return
+        else:
+            print(f"{datetime.now()} {reader_rank=} Rdy to make meshmode part mesh.")
+
         reader_comm.Barrier()
+
         if reader_rank == 0:
             print(f"{datetime.now()}: - Got PartID-to-elements. "
                   "Making mesh data structures...")
@@ -2591,7 +2708,8 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             rank_to_mesh_data = get_rank_to_mesh_data()
 
-        print(f"{datetime.now()} {reader_rank==} Got rank to mesh data. Ready to write!")
+        print(f"{datetime.now()} {reader_rank=} Got rank to mesh data. "
+              "Ready to write!")
         reader_comm.Barrier()
 
         if reader_rank == 0:
@@ -2617,7 +2735,7 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                 with open(pkl_filename, "wb") as pkl_file:
                     pickle.dump(mesh_data_to_pickle, pkl_file)
 
-        print(f"{datetime.now()} {reader_rank==} Writing done!")
+        print(f"{datetime.now()} {reader_rank=} Writing done!")
         reader_comm.Barrier()
         if reader_rank == 0:
             print(f"{datetime.now()}: Done writing partitioned mesh.")

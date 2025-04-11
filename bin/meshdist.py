@@ -28,6 +28,7 @@ import argparse
 import sys
 import os
 import numpy as np
+import pickle
 
 from logpyle import set_dt
 from mirgecom.logging_quantities import (
@@ -67,8 +68,9 @@ class MyRuntimeError(RuntimeError):
 def main(actx_class, mesh_source=None, ndist=None, dim=None,
          output_path=None, log_path=None, periodic=False,
          use_quads=True, geom_scale=1., casename=None,
-         use_1d_part=None, use_wall=False,
-         imba_tol=None, use_meshmode=False):
+         use_1d_part=None, use_wall=False, part_axis=None,
+         imba_tol=None, use_meshmode=False, gen_only=False,
+         nowrite=False):
     """The main function."""
     if mesh_source is None and not use_meshmode:
         raise ApplicationOptionsError("Missing mesh source file or "
@@ -176,8 +178,6 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
             ("memory_usage_hwm.max",
              "| \t memory hwm: {value:7g} Mb\n")])
 
-    part_axis = "Y" if use_meshmode else None
-
     if rank == 0:
         print(f"Reading mesh from {mesh_source}.")
         print(f"Writing {ndist} mesh pkl files to {output_path}.")
@@ -275,8 +275,8 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
             volume_to_tags["wall"] = ["wall_insert"]
 
         mesh, tag_to_elements = get_meshmode_mesh(
-                       a=a, b=b, boundary_tag_to_face=boundary_tag_to_face,
-                       nelements_per_axis=nelements_per_axis)
+            a=a, b=b, boundary_tag_to_face=boundary_tag_to_face,
+            nelements_per_axis=nelements_per_axis)
         return mesh, tag_to_elements, volume_to_tags
 
     def get_mesh_gmsh():
@@ -294,6 +294,15 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
                 mesh, tag_to_elements, volume_to_tags["fluid"],
                 "wall_interface")
         return mesh, tag_to_elements, volume_to_tags
+
+    read_mesh_pkl = False
+    if mesh_source is not None:
+        read_mesh_pkl = mesh_source.endswith(".pkl")
+
+    def get_mesh_pkl():
+        with open(mesh_source, "rb") as pkl_file:
+            global_data = pickle.load(pkl_file)
+        return global_data
 
     def my_partitioner(mesh, tag_to_elements, num_ranks):
         from mirgecom.simutil import geometric_mesh_partitioner
@@ -317,13 +326,15 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
 
     if rank == 0:
         print(f"Writing mesh pkl files to {mesh_filename}.")
-    mesh_func = get_mesh_mm if use_meshmode else get_mesh_gmsh
 
+    mesh_func = get_mesh_mm if use_meshmode else \
+        get_mesh_pkl if read_mesh_pkl else get_mesh_gmsh
+    write_serial_mesh = not nowrite
     distribute_mesh_pkl(
         comm, mesh_func, filename=mesh_filename,
         num_target_ranks=ndist,
         partition_generator_func=part_func, logmgr=logmgr,
-        write_mesh_to_file=True)
+        write_mesh_to_file=write_serial_mesh, gen_only=gen_only)
 
     comm.Barrier()
 
@@ -345,12 +356,15 @@ if __name__ == "__main__":
         description="MIRGE-Com Mesh Distribution")
     parser.add_argument("-1", "--1dpart", dest="one_d_part",
                         action="store_true", help="Use 1D partitioner.")
+    parser.add_argument("-a", "--axis", type=str, dest="part_axis", nargs="?",
+                        action="store", help="Partitioning axis for 1dpart")
     parser.add_argument("-c", "--casename", type=str, dest="casename", nargs="?",
                         action="store",
                         help="Root name of distributed mesh pkl files.")
     parser.add_argument("-d", "--dimen", type=int, dest="dim",
-                        nargs="?", action="store",
-                        help="Number dimensions")
+                        nargs="?", action="store", help="Number dimensions")
+    parser.add_argument("--gen-only", dest="gen_only",
+                        action="store_true", help="generate mesh only")
     parser.add_argument("-g", "--logpath", type=str, dest="log_path", nargs="?",
                         action="store", help="simulation case name")
     parser.add_argument("-m", "--meshmode", dest="meshmode",
@@ -358,6 +372,8 @@ if __name__ == "__main__":
     parser.add_argument("-n", "--ndist", type=int, dest="ndist",
                         nargs="?", action="store",
                         help="Number of distributed parts")
+    parser.add_argument("--nowrite", action="store_true", dest="nowrite",
+                        help="Do not write serial mesh pkl file.")
     parser.add_argument("-o", "--ouput-path", type=str, dest="output_path",
                         nargs="?", action="store",
                         help="Output path for distributed mesh pkl files")
@@ -384,4 +400,6 @@ if __name__ == "__main__":
          log_path=args.log_path, casename=args.casename,
          use_1d_part=args.one_d_part, use_wall=args.use_wall,
          imba_tol=args.imbalance_tolerance, periodic=args.periodic,
-         use_meshmode=args.meshmode, geom_scale=args.geom_scale)
+         use_meshmode=args.meshmode, geom_scale=args.geom_scale,
+         part_axis=args.part_axis, gen_only=args.gen_only,
+         nowrite=args.nowrite)
