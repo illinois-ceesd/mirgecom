@@ -279,6 +279,9 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
             nelements_per_axis=nelements_per_axis)
         return mesh, tag_to_elements, volume_to_tags
 
+    tags_to_partition = ["nozzle_partition",
+                         "exterior_partition",
+                         "scramjet_partition"]
     def get_mesh_gmsh():
         from meshmode.mesh.io import read_gmsh
         mesh, tag_to_elements = read_gmsh(
@@ -308,6 +311,8 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
         from mirgecom.simutil import geometric_mesh_partitioner
         return geometric_mesh_partitioner(
             mesh, num_ranks, auto_balance=True, debug=True,
+            tags_to_partition=tags_to_partition,
+            tag_to_elements=tag_to_elements,
             imbalance_tolerance=imba_tol, part_axis=part_axis)
 
     part_func = my_partitioner if use_1d_part else None
@@ -332,7 +337,7 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
     write_serial_mesh = not nowrite
     distribute_mesh_pkl(
         comm, mesh_func, filename=mesh_filename,
-        num_target_ranks=ndist,
+        num_target_ranks=ndist, tags_to_partition=tags_to_partition,
         partition_generator_func=part_func, logmgr=logmgr,
         write_mesh_to_file=write_serial_mesh, gen_only=gen_only)
 
