@@ -2512,7 +2512,8 @@ def distribute_mesh(comm, get_mesh_data, partition_generator_func=None, logmgr=N
 def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
                         num_target_ranks=0, num_reader_ranks=0,
                         partition_generator_func=None, logmgr=None,
-                        write_mesh_to_file=False, gen_only=False):
+                        write_mesh_to_file=False, gen_only=False,
+                        tags_to_partition=None):
     r"""Distribute a mesh among all ranks in *comm*.
 
     Retrieve the global mesh data with the user-supplied function *get_mesh_data*,
@@ -2666,6 +2667,9 @@ def distribute_mesh_pkl(comm, get_mesh_data, filename="mesh",
         else:
             if reader_rank == 0:
                 print(f"{datetime.now()}: Multivolume Splitting.... ")
+            if tags_to_partition is not None:
+                for tag in tags_to_partition:
+                    del tag_to_elements[tag]
             part_id_to_elements = _get_multi_volume_partitions(
                 mesh, num_target_ranks, rank_per_element, tag_to_elements,
                 volume_to_tags)
