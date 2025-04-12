@@ -1788,11 +1788,11 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         else:
             volumes = OrderedDict({"_Vol_0": vol_0_bounds})
 
-            part_vols = assign_elements_to_volumes(
-                mesh=mesh, volumes=volumes, debug=debug)
+        part_vols = assign_elements_to_volumes(
+            mesh=mesh, volumes=volumes, debug=debug)
 
-            nparts_vol = compute_volume_partitions(
-                part_vols, num_ranks, imbalance_tolerance, debug)
+    nparts_vol = compute_volume_partitions(
+        part_vols, num_ranks, imbalance_tolerance, debug)
 
     all_elem_group_centroids = []
     for group in mesh.groups:
@@ -2116,8 +2116,13 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     nelem_part = np.full(num_ranks, 0, dtype=int)
     part_to_elements = {}
     current_global_rank = 0
-    # Ensure _Vol_0 is processed first
-    sorted_vol_ids = ["_Vol_0"] + [v for v in vparts_to_elements if v != "_Vol_0"]
+    # Ensure _Vol_0 is processed first (if it exists)
+    if "_Vol_0" in vparts_to_elements:
+        sorted_vol_ids = ["_Vol_0"] + [v for v in vparts_to_elements
+                                       if v != "_Vol_0"]
+    else:
+        sorted_vol_ids = list(vparts_to_elements.keys())
+
     for vol_id in sorted_vol_ids:
         vpart_map = vparts_to_elements[vol_id]
         if debug:

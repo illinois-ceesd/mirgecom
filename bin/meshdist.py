@@ -298,6 +298,8 @@ def main(actx_class, mesh_source=None, ndist=None, dim=None,
     read_mesh_pkl = False
     if mesh_source is not None:
         read_mesh_pkl = mesh_source.endswith(".pkl")
+        if read_mesh_pkl:
+            nowrite = True
 
     def get_mesh_pkl():
         with open(mesh_source, "rb") as pkl_file:
