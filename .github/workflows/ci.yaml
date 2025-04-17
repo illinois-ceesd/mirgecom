@@ -109,7 +109,7 @@ jobs:
         runs-on: ${{ matrix.os }}
         strategy:
           matrix:
-            os: [ubuntu-latest, porter]
+            os: [ubuntu-latest]
 
         steps:
         - uses: actions/checkout@v4
@@ -194,7 +194,7 @@ jobs:
         runs-on: ${{ matrix.os }}
         strategy:
           matrix:
-            os: [ubuntu-latest, macos-latest, porter]
+            os: [ubuntu-latest, macos-latest]
 
         steps:
         - uses: actions/checkout@v4
