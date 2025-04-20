@@ -60,6 +60,7 @@ THE SOFTWARE.
 from functools import partial
 from warnings import warn
 
+from pytools.obj_array import make_obj_array
 from meshmode.discretization.connection import FACE_RESTR_ALL
 
 from grudge.trace_pair import (
@@ -495,7 +496,7 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
 
     # }}}
 
-    # {{{ === Compute grad(CV) ===
+    # {{{ === Compute grad(CV) and grad(temperature) ===
 
     if grad_cv is None:
         grad_cv = grad_cv_operator(
@@ -505,19 +506,6 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             operator_states_quad=operator_states_quad, comm_tag=comm_tag,
             use_esdg=use_esdg, limiter_func=limiter_func, entropy_min=entropy_min)
 
-    # Communicate grad(CV) and put it on the quadrature domain
-    grad_cv_interior_pairs = [
-        # Get the interior trace pairs onto the surface quadrature
-        # discretization (if any)
-        interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(
-            dcoll, grad_cv, volume_dd=dd_vol, comm_tag=(_NSGradCVTag, comm_tag))
-    ]
-
-    # }}} Compute grad(CV)
-
-    # {{{ === Compute grad(temperature) ===
-
     if grad_t is None:
         grad_t = grad_t_operator(
             dcoll, gas_model, boundaries, state, time=time,
@@ -526,17 +514,37 @@ def ns_operator(dcoll, gas_model, state, boundaries, *, time=0.0,
             operator_states_quad=operator_states_quad, comm_tag=comm_tag,
             use_esdg=use_esdg, limiter_func=limiter_func, entropy_min=entropy_min)
 
-    # Create the interior face trace pairs, perform MPI exchange, interp to quad
+    grad_cv_and_grad_t = make_obj_array([grad_cv, grad_t])
+
+    # Communicate grad(CV) and grad(temperature) and make interior face trace pairs
+    grad_cv_and_grad_t_interior_pairs = interior_trace_pairs(
+            dcoll, grad_cv_and_grad_t, volume_dd=dd_vol,
+            # FIXME: Rename tag
+            comm_tag=(_NSGradCVTag, comm_tag))
+
+    # Extract the corresponding trace pairs, interp to quad
+    grad_cv_interior_pairs = [
+        # Get the interior trace pairs onto the surface quadrature
+        # discretization (if any)
+        interp_to_surf_quad(
+            TracePair(
+                dd=tpair.dd,
+                interior=tpair.interior[0],
+                exterior=tpair.exterior[0]))
+        for tpair in grad_cv_and_grad_t_interior_pairs]
+
+    # Extract the corresponding trace pairs, interp to quad
     grad_t_interior_pairs = [
         # Get the interior trace pairs onto the surface quadrature
         # discretization (if any)
-        interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(
-            dcoll, grad_t, volume_dd=dd_vol,
-            comm_tag=(_NSGradTemperatureTag, comm_tag))
-    ]
+        interp_to_surf_quad(
+            TracePair(
+                dd=tpair.dd,
+                interior=tpair.interior[1],
+                exterior=tpair.exterior[1]))
+        for tpair in grad_cv_and_grad_t_interior_pairs]
 
-    # }}} compute grad(temperature)
+    # }}} Compute grad(CV) and grad(temperature)
 
     # {{{ === Navier-Stokes RHS ===
 

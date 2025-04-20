@@ -836,11 +836,26 @@ def diffusion_operator(
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
     dd_allfaces_quad = dd_vol_quad.trace(FACE_RESTR_ALL)
 
-    kappa_tpairs = interior_trace_pairs(
-        dcoll, kappa, volume_dd=dd_vol, comm_tag=(_DiffusionKappaTag, comm_tag))
+    kappa_and_u = make_obj_array([kappa, u])
 
-    u_tpairs = interior_trace_pairs(
-        dcoll, u, volume_dd=dd_vol, comm_tag=(_DiffusionStateTag, comm_tag))
+    kappa_and_u_tpairs = interior_trace_pairs(
+        dcoll, kappa_and_u, volume_dd=dd_vol,
+        # FIXME: Rename tag
+        comm_tag=(_DiffusionKappaTag, comm_tag))
+
+    kappa_tpairs = [
+        TracePair(
+            dd=tpair.dd,
+            interior=tpair.interior[0],
+            exterior=tpair.exterior[0])
+        for tpair in kappa_and_u_tpairs]
+
+    u_tpairs = [
+        TracePair(
+            dd=tpair.dd,
+            interior=tpair.interior[1],
+            exterior=tpair.exterior[1])
+        for tpair in kappa_and_u_tpairs]
 
     if grad_u is None:
         grad_u = grad_operator(
@@ -849,19 +864,32 @@ def diffusion_operator(
             quadrature_tag=quadrature_tag, dd=dd_vol, comm_tag=comm_tag,
             kappa_tpairs=kappa_tpairs, u_tpairs=u_tpairs)
 
-    grad_u_tpairs = interior_trace_pairs(
-        dcoll, grad_u, volume_dd=dd_vol,
-        comm_tag=(_DiffusionGradTag, comm_tag))
-
-    kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
-    grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
-
     from grudge.dt_utils import characteristic_lengthscales
     lengthscales = characteristic_lengthscales(actx, dcoll, dd=dd_vol)*(0*u+1)
 
-    lengthscales_tpairs = interior_trace_pairs(
-        dcoll, lengthscales, volume_dd=dd_vol,
-        comm_tag=(_DiffusionLengthscalesTag, comm_tag))
+    grad_u_and_lengthscales = make_obj_array([grad_u, lengthscales])
+
+    grad_u_and_lengthscales_tpairs = interior_trace_pairs(
+        dcoll, grad_u_and_lengthscales, volume_dd=dd_vol,
+        # FIXME: Rename tag
+        comm_tag=(_DiffusionGradTag, comm_tag))
+
+    grad_u_tpairs = [
+        TracePair(
+            dd=tpair.dd,
+            interior=tpair.interior[0],
+            exterior=tpair.exterior[0])
+        for tpair in grad_u_and_lengthscales_tpairs]
+
+    lengthscales_tpairs = [
+        TracePair(
+            dd=tpair.dd,
+            interior=tpair.interior[1],
+            exterior=tpair.exterior[1])
+        for tpair in grad_u_and_lengthscales_tpairs]
+
+    kappa_quad = op.project(dcoll, dd_vol, dd_vol_quad, kappa)
+    grad_u_quad = op.project(dcoll, dd_vol, dd_vol_quad, grad_u)
 
     interp_to_surf_quad = partial(tracepair_with_discr_tag, dcoll, quadrature_tag)
 

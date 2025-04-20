@@ -62,6 +62,7 @@ from grudge.dof_desc import (
 )
 import grudge.op as op
 from grudge.trace_pair import (
+    TracePair,
     interior_trace_pairs,
     tracepair_with_discr_tag
 )
@@ -879,77 +880,89 @@ def make_operator_fluid_states(
         for bdtag in boundaries
     }
 
-    # performs MPI communication of CV if needed
-    cv_interior_pairs = [
-        # Get the interior trace pairs onto the surface quadrature
-        # discretization (if any)
-        interp_to_surf_quad(tpair=tpair)
-        for tpair in interior_trace_pairs(
-            dcoll, volume_state.cv, volume_dd=dd_vol,
-            comm_tag=(_FluidCVTag, comm_tag))
-    ]
+    name_to_local_data = {"cv": volume_state.cv}
 
-    tseed_interior_pairs = None
     if volume_state.is_mixture:
         # If this is a mixture, we need to exchange the temperature field because
         # mixture pressure (used in the inviscid flux calculations) depends on
         # temperature and we need to seed the temperature calculation for the
         # (+) part of the partition boundary with the remote temperature data.
-        tseed_interior_pairs = [
-            # Get the interior trace pairs onto the surface quadrature
-            # discretization (if any)
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.temperature, volume_dd=dd_vol,
-                comm_tag=(_FluidTemperatureTag, comm_tag))]
+        name_to_local_data["tseed"] = volume_state.temperature
 
-    smoothness_mu_interior_pairs = None
     if volume_state.smoothness_mu is not None:
-        smoothness_mu_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.smoothness_mu, volume_dd=dd_vol,
-                comm_tag=(_FluidSmoothnessMuTag, comm_tag))]
-
-    smoothness_kappa_interior_pairs = None
+        name_to_local_data["smoothness_mu"] = volume_state.smoothness_mu
     if volume_state.smoothness_kappa is not None:
-        smoothness_kappa_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.smoothness_kappa, volume_dd=dd_vol,
-                comm_tag=(_FluidSmoothnessKappaTag, comm_tag))]
-
-    smoothness_d_interior_pairs = None
+        name_to_local_data["smoothness_kappa"] = volume_state.smoothness_kappa
     if volume_state.smoothness_d is not None:
-        smoothness_d_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.smoothness_d, volume_dd=dd_vol,
-                comm_tag=(_FluidSmoothnessDiffTag, comm_tag))]
-
-    smoothness_beta_interior_pairs = None
+        name_to_local_data["smoothness_d"] = volume_state.smoothness_d
     if volume_state.smoothness_beta is not None:
-        smoothness_beta_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.smoothness_beta, volume_dd=dd_vol,
-                comm_tag=(_FluidSmoothnessBetaTag, comm_tag))]
+        name_to_local_data["smoothness_beta"] = volume_state.smoothness_beta
 
-    entropy_min_interior_pairs = None
     if entropy_min is not None:
-        entropy_min_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, entropy_min, volume_dd=dd_vol,
-                comm_tag=(_FluidEntropyMinTag, comm_tag))]
+        name_to_local_data["entropy_min"] = entropy_min
 
-    material_densities_interior_pairs = None
     if isinstance(gas_model, PorousFlowModel):
-        material_densities_interior_pairs = [
-            interp_to_surf_quad(tpair=tpair)
-            for tpair in interior_trace_pairs(
-                dcoll, volume_state.wv.material_densities, volume_dd=dd_vol,
-                comm_tag=(_WallDensityTag, comm_tag))]
+        name_to_local_data["material_densities"] = \
+            volume_state.wv.material_densities
+
+    name_to_agglomerated_index = {
+        name: i
+        for i, name in enumerate(name_to_local_data.keys())}
+
+    agglomerated_local_data = make_obj_array([
+        value for value in name_to_local_data.values()])
+
+    agglomerated_trace_pairs = interior_trace_pairs(
+        dcoll, agglomerated_local_data, volume_dd=dd_vol,
+        # FIXME: Rename tag
+        comm_tag=(_FluidCVTag, comm_tag))
+
+    name_to_trace_pairs = {
+        name: [
+            interp_to_surf_quad(
+                TracePair(
+                    tpair.dd,
+                    interior=tpair.interior[name_to_agglomerated_index[name]],
+                    exterior=tpair.exterior[name_to_agglomerated_index[name]]))
+            for tpair in agglomerated_trace_pairs]
+        for name in name_to_local_data.keys()}
+
+    cv_interior_pairs = name_to_trace_pairs["cv"]
+
+    try:
+        tseed_interior_pairs = name_to_trace_pairs["tseed"]
+    except KeyError:
+        tseed_interior_pairs = None
+
+    try:
+        smoothness_mu_interior_pairs = name_to_trace_pairs["smoothness_mu"]
+    except KeyError:
+        smoothness_mu_interior_pairs = None
+
+    try:
+        smoothness_kappa_interior_pairs = name_to_trace_pairs["smoothness_kappa"]
+    except KeyError:
+        smoothness_kappa_interior_pairs = None
+
+    try:
+        smoothness_d_interior_pairs = name_to_trace_pairs["smoothness_d"]
+    except KeyError:
+        smoothness_d_interior_pairs = None
+
+    try:
+        smoothness_beta_interior_pairs = name_to_trace_pairs["smoothness_beta"]
+    except KeyError:
+        smoothness_beta_interior_pairs = None
+
+    try:
+        entropy_min_interior_pairs = name_to_trace_pairs["entropy_min"]
+    except KeyError:
+        entropy_min_interior_pairs = None
+
+    try:
+        material_densities_interior_pairs = name_to_trace_pairs["material_densities"]
+    except KeyError:
+        material_densities_interior_pairs = None
 
     interior_boundary_states_quad = make_fluid_state_trace_pairs(
         cv_pairs=cv_interior_pairs,
