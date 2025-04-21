@@ -565,6 +565,7 @@ def profile_timestep_stop(logmgr: LogManager, step: int,
         return
 
     if step-1 in steps_to_profile:
+        assert time_step_profiler is not None
         logger.info("end profiling step %s", step-1)
         time_step_profiler.stop()
         s = time_step_profiler.output_html()
