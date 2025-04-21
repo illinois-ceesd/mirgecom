@@ -61,6 +61,8 @@ from mirgecom.logging_quantities import (
     logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
+    profile_timestep_start,
+    profile_timestep_stop,
     set_sim_state
 )
 
@@ -91,10 +93,6 @@ def main(actx_class, use_esdg=False,
 
     logmgr = initialize_logmgr(True,
         filename=f"{casename}.sqlite", mode="wu", mpi_comm=comm)
-
-    if profile_steps:
-        from mirgecom.logging_quantities import TimeStepProfile
-        logmgr.add_quantity(TimeStepProfile(profile_steps))
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm)
@@ -248,14 +246,15 @@ def main(actx_class, use_esdg=False,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        if logmgr:
+            logmgr.tick_before()
+
+        profile_timestep_start(logmgr, step, profile_steps)
+
         fluid_state = make_fluid_state(state, gas_model)
         dv = fluid_state.dv
 
         try:
-
-            if logmgr:
-                logmgr.tick_before()
-
             from mirgecom.simutil import check_step
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
@@ -286,12 +285,14 @@ def main(actx_class, use_esdg=False,
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
+            # Logmgr needs to know about EOS, dt, dim?
+            # imo this is a design/scope flaw
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
+            profile_timestep_stop(logmgr, step, profile_steps)
             logmgr.tick_after()
+
         return state, dt
 
     def my_rhs(t, state):

@@ -40,6 +40,8 @@ __doc__ = """
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
 .. autofunction:: logmgr_set_time
+.. autofunction:: profile_timestep_start
+.. autofunction:: profile_timestep_stop
 """
 
 from collections.abc import Collection
@@ -255,7 +257,7 @@ def logmgr_set_time(mgr: LogManager, steps: int, time: float) -> None:
     for gd_lst in [mgr.before_gather_descriptors,
             mgr.after_gather_descriptors]:
         for gd in gd_lst:
-            if isinstance(gd.quantity, TimestepCounter | TimeStepProfile):
+            if isinstance(gd.quantity, TimestepCounter):
                 gd.quantity.steps = steps
             if isinstance(gd.quantity, SimulationTime):
                 gd.quantity.t = time
@@ -534,40 +536,39 @@ class PythonInitTime(PostLogQuantity):
         return self.python_init_time
 
 
-class TimeStepProfile(MultiPostLogQuantity):
-    """Logging support for time step profiling."""
+time_step_profiler = None
 
-    def __init__(self, timesteps: Collection[int]) -> None:
-        # Could add support for MPI profile, kernel profile, etc. in the future
+
+def profile_timestep_start(logmgr: LogManager, step: int,
+                           steps_to_profile: Collection[int]) -> None:
+    """Start logging the time step profile if *step* is in *steps_to_profile*."""
+    global time_step_profiler
+
+    assert time_step_profiler is None
+    if not logmgr:
+        return
+
+    if step in steps_to_profile:
         import pyinstrument
-        names = ["pyinstrument_profile"]
-        units = ["1"]
-        descriptions = ["Pyinstrument profile"]
+        time_step_profiler = pyinstrument.Profiler()
+        time_step_profiler.start()
+        logger.info("start profiling step %s", step)
+        return
 
-        super().__init__(names, units, descriptions)
 
-        self.steps = 0
-        self.timesteps_to_profile = frozenset(timesteps)
-        self.profiler = pyinstrument.Profiler()
+def profile_timestep_stop(logmgr: LogManager, step: int,
+                          steps_to_profile: Collection[int]) -> None:
+    """Stop logging the time step profile if *step* is in *steps_to_profile*."""
+    global time_step_profiler
 
-    def prepare_for_tick(self) -> None:
-        """Start the profiler if the current time step is to be profiled."""
-        step = self.steps
-        if step in self.timesteps_to_profile:
-            self.profiler.start()
-            logger.info("start profiling timestep %s", step)
-        self.steps += 1
+    if not logmgr:
+        return
 
-    def __call__(self):
-        """Return the time step profile."""
-        if self.steps-1 not in self.timesteps_to_profile:
-            return [None]
-
-        logger.info("end profiling timestep %s", self.steps-1)
-        self.profiler.stop()
-        s = self.profiler.output_html()
-        self.profiler.reset()
-        return [s]
-
+    if step-1 in steps_to_profile:
+        logger.info("end profiling step %s", step-1)
+        time_step_profiler.stop()
+        s = time_step_profiler.output_html()
+        logmgr.set_constant(f"pyinstrument_profile_step_{step-1}", s)
+        time_step_profiler = None
 
 # }}}
