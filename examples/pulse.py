@@ -290,7 +290,9 @@ def main(actx_class, use_esdg=False,
             # imo this is a design/scope flaw
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
-            profile_timestep_stop(logmgr, step, profile_steps)
+
+            # Note: in my_post_step, 'step' is already the next step
+            profile_timestep_stop(logmgr, step-1, profile_steps)
             logmgr.tick_after()
 
         return state, dt

@@ -564,12 +564,12 @@ def profile_timestep_stop(logmgr: LogManager, step: int,
     if not logmgr:
         return
 
-    if step-1 in steps_to_profile:
+    if step in steps_to_profile:
         assert time_step_profiler is not None
-        logger.info("end profiling step %s", step-1)
+        logger.info("end profiling step %s", step)
         time_step_profiler.stop()
         s = time_step_profiler.output_html()
-        logmgr.set_constant(f"pyinstrument_profile_step_{step-1}", s)
+        logmgr.set_constant(f"pyinstrument_profile_step_{step}", s)
         time_step_profiler = None
 
 # }}}
