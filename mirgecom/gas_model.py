@@ -861,7 +861,7 @@ def make_operator_fluid_states(
 
     dd_vol = dd
     dd_vol_quad = dd_vol.with_discr_tag(quadrature_tag)
-    actx = volume_state.array_context
+    # actx = volume_state.array_context
 
     # project pair to the quadrature discretization and update dd to quad
     # @actx.outline
@@ -909,8 +909,7 @@ def make_operator_fluid_states(
         name: i
         for i, name in enumerate(name_to_local_data.keys())}
 
-    agglomerated_local_data = make_obj_array([
-        value for value in name_to_local_data.values()])
+    agglomerated_local_data = make_obj_array(list(name_to_local_data.values()))
 
     agglomerated_trace_pairs = interior_trace_pairs(
         dcoll, agglomerated_local_data, volume_dd=dd_vol,
