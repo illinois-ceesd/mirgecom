@@ -87,9 +87,10 @@ class Initializer:
         pressure = 1.0 + zeros
         mass = pressure / (eos.gas_const()*temperature)
         velocity = self._velocity
+        mom = mass * velocity
         energy = pressure/(eos.gamma() - 1.0) + 0.5*mass*np.dot(velocity, velocity)
         return make_conserved(dim=self._dim, mass=mass, energy=energy,
-                              momentum=mass*velocity)
+                              momentum=mom)
 
 
 class MyRuntimeError(RuntimeError):
@@ -112,7 +113,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm,
-                           use_axis_tag_inference_fallback=True)
+                           use_axis_tag_inference_fallback=False)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -136,7 +137,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     integrator = "compiled_lsrk45"
 
     use_overintegration = False
-    local_dt = True
+    local_dt = False
     constant_cfl = True
 
     niter = 10
@@ -159,7 +160,6 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     timestepper = None
     if integrator == "compiled_lsrk45":
         timestepper = _compiled_stepper_wrapper
-        # force_eval = False
 
     if rank == 0:
         print("\n#### Simulation control data: ####")

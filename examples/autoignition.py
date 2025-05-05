@@ -114,7 +114,7 @@ def main(actx_class, use_leap=False, use_overintegration=False,
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
     actx = initialize_actx(actx_class, comm,
-                           use_axis_tag_inference_fallback=True)
+                           use_axis_tag_inference_fallback=False)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
