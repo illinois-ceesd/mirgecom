@@ -540,7 +540,8 @@ time_step_profiler = None
 
 
 def profile_timestep_start(logmgr: LogManager, step: int,
-                           steps_to_profile: Collection[int]) -> None:
+                           steps_to_profile: Collection[int],
+                           profiler: str = "cProfile") -> None:
     """Start logging the time step profile if *step* is in *steps_to_profile*."""
     global time_step_profiler
 
@@ -550,26 +551,51 @@ def profile_timestep_start(logmgr: LogManager, step: int,
 
     if step in steps_to_profile:
         import pyinstrument
-        time_step_profiler = pyinstrument.Profiler()
-        time_step_profiler.start()
-        logger.info("start profiling step %s", step)
-        return
+        actx._wait_and_transfer_profile_events()
+        actx._reset_profiling_data()
+        if profiler == "pyinstrument":
+            time_step_profiler = pyinstrument.Profiler()
+            time_step_profiler.start()
+        elif profiler == "cProfile":
+            import cProfile
+            time_step_profiler = cProfile.Profile()
+            time_step_profiler.enable()
+        logger.info("start profiling step %s with %s", step, profiler)
 
 
 def profile_timestep_stop(logmgr: LogManager, step: int,
                           steps_to_profile: Collection[int]) -> None:
     """Stop logging the time step profile if *step* is in *steps_to_profile*."""
     global time_step_profiler
+    import pyinstrument
+    import cProfile
 
     if not logmgr:
         return
 
     if step in steps_to_profile:
         assert time_step_profiler is not None
-        logger.info("end profiling step %s", step)
-        time_step_profiler.stop()
-        s = time_step_profiler.output_html()
-        logmgr.set_constant(f"pyinstrument_profile_step_{step}", s)
+        logger.info("end profiling step %s with %s", step, type(time_step_profiler))
+        actx._wait_and_transfer_profile_events()
+
+        if isinstance(time_step_profiler, pyinstrument.Profiler):
+            time_step_profiler.stop()
+            html_str = time_step_profiler.output_html()
+            time_step_profiler.write_html(f"pyinstrument_profile_step_{step}.html")
+            logmgr.set_constant(f"pyinstrument_profile_step_{step}", html_str)
+        elif isinstance(time_step_profiler, cProfile.Profile):
+            time_step_profiler.disable()
+
+            import contextlib
+            from io import StringIO
+            string_io = StringIO()
+
+            with contextlib.redirect_stdout(string_io):
+                time_step_profiler.print_stats(sort="tottime")
+
+            s = string_io.getvalue()
+            print(s)
+            logmgr.set_constant(f"cProfile_step_{step}", s)
         time_step_profiler = None
 
 # }}}
