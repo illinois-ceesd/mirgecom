@@ -126,7 +126,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     order = 2
 
     # default i/o frequencies
-    nviz = 1
+    nviz = 10
     nrestart = 1000
     nhealth = 1
     nstatus = 100
@@ -135,7 +135,7 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     integrator = "compiled_lsrk45"
 
     use_overintegration = False
-    local_dt = True
+    local_dt = False
     constant_cfl = True
 
     niter = 10

@@ -144,7 +144,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 100
-    nviz = 1
+    nviz = 10
     nhealth = 1
 
     rst_path = "restart_data/"
