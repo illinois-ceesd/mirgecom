@@ -103,7 +103,7 @@ def main(actx_class, use_overintegration=False, use_esdg=False,
     # some i/o frequencies
     nstatus = 1
     nrestart = 1000
-    nviz = 1
+    nviz = 50
     nhealth = 1
 
     dim = 1

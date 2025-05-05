@@ -179,7 +179,8 @@ def main(actx_class,
     # some i/o frequencies
     nstatus = 1
     nrestart = 10000
-    nviz = nsteps_period/4
+    # nviz = nsteps_period/4
+    nviz = nsteps_period  # for CI
     nhealth = 1
 
     # Mengaldo test case setup stuff
