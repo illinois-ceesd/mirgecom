@@ -176,7 +176,7 @@ def logmgr_verify_steptime(logmgr: LogManager, tolerance: float = 1.1) -> None:
 
     Call this function after :meth:`logpyle.LogManager.tick_after`.
 
-    :arg tolerance: tolerance factor for the step time.
+    :arg tolerance: tolerance factor for the step time. Should be >=1.
     """
     t_step = logmgr.last_values.get("t_step", 0.0)
     t_2step = logmgr.last_values.get("t_2step", 0.0)
