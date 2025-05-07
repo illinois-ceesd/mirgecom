@@ -566,8 +566,6 @@ def profile_timestep_stop(logmgr: LogManager, step: int,
                           steps_to_profile: Collection[int] | None) -> None:
     """Stop logging the time step profile if *step* is in *steps_to_profile*."""
     global time_step_profiler
-    import pyinstrument
-    import cProfile
 
     if not logmgr:
         return
@@ -575,6 +573,9 @@ def profile_timestep_stop(logmgr: LogManager, step: int,
     if steps_to_profile and step in steps_to_profile:
         assert time_step_profiler is not None
         logger.info("end profiling step %s with %s", step, type(time_step_profiler))
+
+        import cProfile
+        import pyinstrument
 
         if isinstance(time_step_profiler, pyinstrument.Profiler):
             time_step_profiler.stop()
