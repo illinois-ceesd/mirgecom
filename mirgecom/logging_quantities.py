@@ -550,16 +550,15 @@ def profile_timestep_start(logmgr: LogManager, step: int,
         return
 
     if step in steps_to_profile:
-        import pyinstrument
-        actx._wait_and_transfer_profile_events()
-        actx._reset_profiling_data()
         if profiler == "pyinstrument":
+            import pyinstrument
             time_step_profiler = pyinstrument.Profiler()
             time_step_profiler.start()
         elif profiler == "cProfile":
             import cProfile
             time_step_profiler = cProfile.Profile()
             time_step_profiler.enable()
+
         logger.info("start profiling step %s with %s", step, profiler)
 
 
@@ -576,13 +575,13 @@ def profile_timestep_stop(logmgr: LogManager, step: int,
     if step in steps_to_profile:
         assert time_step_profiler is not None
         logger.info("end profiling step %s with %s", step, type(time_step_profiler))
-        actx._wait_and_transfer_profile_events()
 
         if isinstance(time_step_profiler, pyinstrument.Profiler):
             time_step_profiler.stop()
             html_str = time_step_profiler.output_html()
             time_step_profiler.write_html(f"pyinstrument_profile_step_{step}.html")
             logmgr.set_constant(f"pyinstrument_profile_step_{step}", html_str)
+
         elif isinstance(time_step_profiler, cProfile.Profile):
             time_step_profiler.disable()
 
