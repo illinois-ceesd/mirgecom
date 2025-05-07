@@ -536,20 +536,20 @@ class PythonInitTime(PostLogQuantity):
         return self.python_init_time
 
 
-time_step_profiler = None
+time_step_profiler: Any = None
 
 
 def profile_timestep_start(logmgr: LogManager, step: int,
-                           steps_to_profile: Collection[int],
+                           steps_to_profile: Collection[int] | None,
                            profiler: str = "cProfile") -> None:
     """Start logging the time step profile if *step* is in *steps_to_profile*."""
     global time_step_profiler
 
-    assert time_step_profiler is None
     if not logmgr:
         return
 
-    if step in steps_to_profile:
+    if steps_to_profile and step in steps_to_profile:
+        assert time_step_profiler is None
         if profiler == "pyinstrument":
             import pyinstrument
             time_step_profiler = pyinstrument.Profiler()
@@ -563,7 +563,7 @@ def profile_timestep_start(logmgr: LogManager, step: int,
 
 
 def profile_timestep_stop(logmgr: LogManager, step: int,
-                          steps_to_profile: Collection[int]) -> None:
+                          steps_to_profile: Collection[int] | None) -> None:
     """Stop logging the time step profile if *step* is in *steps_to_profile*."""
     global time_step_profiler
     import pyinstrument
@@ -572,7 +572,7 @@ def profile_timestep_stop(logmgr: LogManager, step: int,
     if not logmgr:
         return
 
-    if step in steps_to_profile:
+    if steps_to_profile and step in steps_to_profile:
         assert time_step_profiler is not None
         logger.info("end profiling step %s with %s", step, type(time_step_profiler))
 
