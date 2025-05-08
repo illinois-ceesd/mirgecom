@@ -11,7 +11,7 @@ if [[ "$(uname)" = "Darwin" ]]; then
     brew install octave
 else
     if ! command -v mpicc &> /dev/null ;then
-        # sudo apt-get update
+        sudo apt-get update
         sudo apt-get -y install openmpi-bin libopenmpi-dev
     fi
     if ! command -v octave &> /dev/null ;then
