@@ -11,8 +11,8 @@ if [[ "$(uname)" = "Darwin" ]]; then
     brew install octave
 else
     if ! command -v mpicc &> /dev/null ;then
-        sudo apt-get update
-        sudo apt-get -y install mpich libmpich-dev
+        # sudo apt-get update
+        sudo apt-get -y install openmpi-bin libopenmpi-dev
     fi
     if ! command -v octave &> /dev/null ;then
         sudo apt-get -y install octave
@@ -35,7 +35,7 @@ $MINIFORGE_INSTALL_DIR/bin/mamba env create --file conda-env.yml --name testing
 conda list
 
 # See https://github.com/conda-forge/qt-feedstock/issues/208
-rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
+# rm -rf $MINIFORGE_INSTALL_DIR/envs/testing/x86_64-conda-linux-gnu/sysroot
 
 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
 pip install -r requirements.txt
