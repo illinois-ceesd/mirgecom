@@ -12,7 +12,7 @@ if [[ "$(uname)" = "Darwin" ]]; then
 else
     if ! command -v mpicc &> /dev/null ;then
         sudo apt-get update
-        sudo apt-get -y install libopenmpi-dev openmpi-bin
+        sudo apt-get -y install mpich
     fi
     if ! command -v octave &> /dev/null ;then
         sudo apt-get -y install octave
