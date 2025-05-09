@@ -8,6 +8,7 @@ General utilities
 .. autofunction:: write_visfile
 .. autofunction:: global_reduce
 .. autofunction:: get_reasonable_memory_pool
+.. autofunction:: queue_finish
 
 Diagnostic utilities
 --------------------
@@ -1887,6 +1888,12 @@ def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
                  f"returning a CL buffer-based memory pool on {queue.device}. "
                  "Please update your PyOpenCL version.")
         return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
+
+
+def queue_finish(queue: cl.CommandQueue | None) -> None:
+    """Finish the CL command queue if it is not None."""
+    if queue is not None:
+        queue.finish()
 
 
 def configurate(config_key, config_object=None, default_value=None):
