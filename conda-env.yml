@@ -12,7 +12,7 @@ dependencies:
 - mypy
 - conda-forge::numpy
 # See https://github.com/illinois-ceesd/mirgecom/pull/1055:
-- pocl=5.0=*_6
+- pocl
 - nvtop
 - clinfo
 - pudb
