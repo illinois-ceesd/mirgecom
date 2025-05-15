@@ -78,7 +78,7 @@ def initialize_logmgr(enable_logmgr: bool,
     logmgr.enable_save_on_sigterm()
 
     add_run_info(logmgr)
-    add_package_versions(logmgr)
+    # add_package_versions(logmgr)
     add_general_quantities(logmgr)
     add_simulation_quantities(logmgr)
 
