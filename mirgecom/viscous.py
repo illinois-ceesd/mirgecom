@@ -45,8 +45,8 @@ THE SOFTWARE.
 """
 
 import numpy as np
-from arraycontext import outer
 from grudge.trace_pair import TracePair
+from arraycontext import outer
 from meshmode.dof_array import DOFArray
 from meshmode.discretization.connection import FACE_RESTR_ALL
 from grudge.dof_desc import (

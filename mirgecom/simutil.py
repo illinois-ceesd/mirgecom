@@ -93,6 +93,7 @@ from meshmode.transform_metadata import (
     DiscretizationDOFAxisTag
 )
 from arraycontext import flatten, map_array_container
+from arraycontext.parameter_study import ParameterStudyAxisTag 
 from grudge.discretization import (
     DiscretizationCollection,
     PartID
@@ -1889,15 +1890,29 @@ def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
         return cl_tools.MemoryPool(cl_tools.ImmediateAllocator(queue))
 
 
-def configurate(config_key, config_object=None, default_value=None):
+def configurate(actx, studyT: ParameterStudyAxisTag, config_key, config_object=None, default_value=None):
     """Return a configured item from a configuration object."""
     if config_object is not None:
         d = config_object if isinstance(config_object, dict) else\
-            config_object.__dict__
+        config_object.__dict__
+
         if config_key in d:
             value = d[config_key]
             if default_value is not None:
-                return type(default_value)(value)
+                try:
+                    output = type(default_value)(value)
+                    return output
+                except TypeError as err:
+                    from typing import Sequence
+                    if isinstance(value, Sequence):
+                        # Lets try to pack it for study.
+                        from arraycontext.parameter_study import pack_for_parameter_study 
+                        output = pack_for_parameter_study(actx,
+                                            studyT,
+                                           *[actx.from_numpy(np.array(type(default_value)(v))) for v in value])
+
+                        return output
+
             return value
     return default_value
 

@@ -29,7 +29,9 @@ THE SOFTWARE.
 
 
 def rk4_step(state, t, dt, rhs):
-    """Take one step using the fourth-order Classical Runge-Kutta method."""
+    """Take one step using the fourth-order Classical Runge-Kutta method.
+    Context is a dictionary of any variables that affect future state but
+    not the initial state necessarilly."""
     k1 = rhs(t, state)
     k2 = rhs(t+dt/2, state + dt/2*k1)
     k3 = rhs(t+dt/2, state + dt/2*k2)

@@ -92,6 +92,8 @@ def initialize_flow_solution(actx, coords, gas_model=None, eos=None,
         species_mass = make_obj_array([density*species_mass_fractions[i] + zeros
                                        for i in range(nspecies)])
 
+    if not isinstance(momentum, np.generic):
+        momentum = np.array(momentum)
     return make_conserved(dim=dim, mass=density + zeros,
                           energy=energy + zeros,
                           momentum=momentum + zeros,
@@ -1035,7 +1037,7 @@ class Uniform:
             self._nspecies = nspecies
             self._mass_fracs = np.zeros(shape=(nspecies,))
 
-        if self._velocity.shape != (dim,):
+        if self._velocity.shape[0] != dim:
             raise ValueError(f"Expected {dim}-dimensional inputs.")
 
         self._temp = temperature
