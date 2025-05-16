@@ -48,7 +48,7 @@ jobs:
             run: |
                 MINIFORGE_INSTALL_DIR=.miniforge3
                 . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
-                python -m pip install types-psutil types-PyYAML
+                python -m pip install types-psutil types-PyYAML pyinstrument
                 ./run-mypy.sh
 
     pylint:
@@ -68,6 +68,7 @@ jobs:
           run: |
             MINIFORGE_INSTALL_DIR=.miniforge3
             . "$MINIFORGE_INSTALL_DIR/bin/activate" testing
+            python -m pip install pyinstrument
             ./run-pylint.sh
 
     pydocstyle:
@@ -131,6 +132,10 @@ jobs:
             [[ $(hostname) == "porter" ]] && rm -rf /tmp/githubrunner/pocl-scratch /tmp/githubrunner/xdg-scratch
 
             scripts/run-integrated-tests.sh --examples
+
+            pip install pyinstrument
+
+            python -m mpi4py examples/pulse.py --profile-steps 5
 
     doc:
         name: Documentation
