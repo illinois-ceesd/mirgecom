@@ -133,6 +133,8 @@ jobs:
 
             scripts/run-integrated-tests.sh --examples
 
+            pip install pyinstrument
+
             python -m mpi4py examples/pulse.py --profile-steps 5
 
     doc:
