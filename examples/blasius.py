@@ -135,7 +135,10 @@ def main(actx_class, use_overintegration, casename, rst_filename, use_esdg):
     integrator = "compiled_lsrk45"
 
     use_overintegration = False
-    local_dt = True
+
+    # Disabled 05/2025:
+    local_dt = False
+
     constant_cfl = True
 
     niter = 10
