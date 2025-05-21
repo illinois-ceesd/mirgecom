@@ -37,6 +37,7 @@ __doc__ = """
 .. autofunction:: logmgr_add_device_memory_usage
 .. autofunction:: logmgr_add_many_discretization_quantities
 .. autofunction:: logmgr_add_mempool_usage
+.. autofunction:: logmgr_verify_steptime
 .. autofunction:: add_package_versions
 .. autofunction:: set_sim_state
 .. autofunction:: logmgr_set_time
@@ -168,6 +169,23 @@ def logmgr_add_many_discretization_quantities(logmgr: LogManager, dcoll, dim,
             logmgr.add_quantity(DiscretizationBasedQuantity(
                 dcoll, "momentum"+suffix, reduction_op, extract_vars_for_logging,
                 units_for_logging, axis=d, dd=dd))
+
+
+def logmgr_verify_steptime(logmgr: LogManager, tolerance: float = 1.1) -> None:
+    """Verify that the step time is within *tolerance* of t_2step.
+
+    Call this function after :meth:`logpyle.LogManager.tick_after`.
+
+    :arg tolerance: tolerance factor for the step time. Should be >=1.
+    """
+    t_step = logmgr.last_values.get("t_step", 0.0)
+    t_2step = logmgr.last_values.get("t_2step", 0.0)
+    t_log = logmgr.last_values.get("t_log", 0.0)
+
+    if (t_step + t_log) * tolerance < t_2step:
+        from warnings import warn
+        warn("warning: (t_step + t_log) * tolerance is less than t_2step: "
+            f"{t_step=}, {t_log=}, {t_2step=}", stacklevel=2)
 
 
 # {{{ Package versions
