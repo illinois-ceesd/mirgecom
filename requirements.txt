@@ -7,20 +7,23 @@ pymetis
 importlib-resources
 psutil
 pyyaml
+meson-python
+ninja
 sympy
 git+https://github.com/pythological/kanren.git#egg=miniKanren
 
 # The following packages will be git cloned by emirge:
 --editable git+https://github.com/inducer/pymbolic.git#egg=pymbolic
 #--editable git+https://github.com/inducer/pyopencl.git#egg=pyopencl
---editable git+https://github.com/illinois-ceesd/loopy.git@production#egg=loopy
+--editable git+https://github.com/illinois-ceesd/loopy.git@production-pilot#egg=loopy
 --editable git+https://github.com/inducer/dagrt.git#egg=dagrt
 --editable git+https://github.com/inducer/leap.git#egg=leap
 --editable git+https://github.com/inducer/modepy.git#egg=modepy
---editable git+https://github.com/illinois-ceesd/arraycontext.git@production#egg=arraycontext
---editable git+https://github.com/illinois-ceesd/meshmode.git@production#egg=meshmode
---editable git+https://github.com/illinois-ceesd/grudge.git@production#egg=grudge
---editable git+https://github.com/illinois-ceesd/pytato.git@production#egg=pytato
+--editable git+https://github.com/inducer/pytools.git#egg=pytools
+--editable git+https://github.com/illinois-ceesd/arraycontext.git@production-pilot#egg=arraycontext
+--editable git+https://github.com/illinois-ceesd/meshmode.git@production-pilot#egg=meshmode
+--editable git+https://github.com/illinois-ceesd/grudge.git@production-pilot#egg=grudge
+--editable git+https://github.com/illinois-ceesd/pytato.git@production-pilot#egg=pytato
 --editable git+https://github.com/pyrometheus/pyrometheus.git@tulio/entropy#egg=pyrometheus
 --editable git+https://github.com/illinois-ceesd/logpyle.git#egg=logpyle
 --editable git+https://github.com/kaushikcfd/feinsum.git#egg=feinsum
