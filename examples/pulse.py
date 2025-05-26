@@ -61,6 +61,8 @@ from mirgecom.logging_quantities import (
     logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
     logmgr_add_device_memory_usage,
+    profile_timestep_start,
+    profile_timestep_stop,
     set_sim_state
 )
 
@@ -76,7 +78,7 @@ class MyRuntimeError(RuntimeError):
 @mpi_entry_point
 def main(actx_class, use_esdg=False,
          use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None):
+         casename=None, rst_filename=None, profile_steps=None):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
@@ -244,14 +246,15 @@ def main(actx_class, use_esdg=False,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        if logmgr:
+            logmgr.tick_before()
+
+        profile_timestep_start(logmgr, step, profile_steps)
+
         fluid_state = make_fluid_state(state, gas_model)
         dv = fluid_state.dv
 
         try:
-
-            if logmgr:
-                logmgr.tick_before()
-
             from mirgecom.simutil import check_step
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
@@ -282,12 +285,16 @@ def main(actx_class, use_esdg=False,
         return state, dt
 
     def my_post_step(step, t, dt, state):
-        # Logmgr needs to know about EOS, dt, dim?
-        # imo this is a design/scope flaw
         if logmgr:
+            # Logmgr needs to know about EOS, dt, dim?
+            # imo this is a design/scope flaw
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
+
+            # Note: in my_post_step, 'step' is already the next step
+            profile_timestep_stop(logmgr, step-1, profile_steps)
             logmgr.tick_after()
+
         return state, dt
 
     def my_rhs(t, state):
@@ -342,6 +349,8 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--profile-steps", type=int, nargs="+",
+                        help="enable profiling specific time step(s) [OFF]")
     args = parser.parse_args()
 
     from warnings import warn
@@ -366,6 +375,7 @@ if __name__ == "__main__":
     main(actx_class, use_esdg=args.esdg,
          use_overintegration=args.overintegration or args.esdg,
          use_leap=args.leap,
-         casename=casename, rst_filename=rst_filename)
+         casename=casename, rst_filename=rst_filename,
+         profile_steps=args.profile_steps)
 
 # vim: foldmethod=marker
