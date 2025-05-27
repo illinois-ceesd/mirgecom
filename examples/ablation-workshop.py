@@ -600,8 +600,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
         filename="ablation.sqlite", mode="wo", mpi_comm=comm)
 
     from mirgecom.array_context import initialize_actx, actx_class_is_profiling
-    actx = initialize_actx(actx_class, comm,
-                           use_axis_tag_inference_fallback=False)
+    actx = initialize_actx(actx_class, comm)
     queue = getattr(actx, "queue", None)
     use_profiling = actx_class_is_profiling(actx_class)
 
@@ -935,7 +934,7 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
         # using spline for temperature interpolation
         # while using "nearest neighbor" for the "B" parameter
-        h_w_comps = make_obj_array([actx.np.zeros((), dtype=np.float64)]*24*15)
+        h_w_comps = make_obj_array([actx.zeros((), dtype=np.float64)]*24*15)
         i = 0
         for j in range(0, 24):
             for k in range(0, 15):
@@ -1195,7 +1194,6 @@ def main(actx_class=None, use_logmgr=True, casename=None, restart_file=None):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format="%(message)s", level=logging.INFO)
 
     import argparse
     casename = "ablation"
@@ -1215,11 +1213,14 @@ if __name__ == "__main__":
                         help="simulation restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
+    from warnings import warn
+    warn("Automatically turning off DV logging. MIRGE-Com Issue(578)")
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
         lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
 
+    logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
         casename = args.casename
 

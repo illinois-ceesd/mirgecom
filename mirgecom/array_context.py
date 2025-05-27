@@ -110,9 +110,7 @@ def actx_class_has_fallback_args(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* has fallback arguments."""
     import inspect
     spec = inspect.getfullargspec(actx_class.__init__)
-
-    return ("use_axis_tag_inference_fallback" in spec.args
-            or "use_axis_tag_inference_fallback" in spec.kwonlyargs)
+    return "use_axis_tag_inference_fallback" in spec.args
 
 
 def _check_cache_dirs_node(actx: ArrayContext) -> None:
@@ -335,7 +333,6 @@ def initialize_actx(
                     use_axis_tag_inference_fallback
                 actx_kwargs["use_einsum_inference_fallback"] = \
                     use_einsum_inference_fallback
-
             if comm:
                 assert issubclass(actx_class, MPIPytatoArrayContext)
                 actx_kwargs["mpi_base_tag"] = 12000
