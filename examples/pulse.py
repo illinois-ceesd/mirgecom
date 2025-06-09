@@ -244,14 +244,13 @@ def main(actx_class, use_esdg=False,
         return health_error
 
     def my_pre_step(step, t, dt, state):
+        if logmgr:
+            logmgr.tick_before()
+
         fluid_state = make_fluid_state(state, gas_model)
         dv = fluid_state.dv
 
         try:
-
-            if logmgr:
-                logmgr.tick_before()
-
             from mirgecom.simutil import check_step
             do_viz = check_step(step=step, interval=nviz)
             do_restart = check_step(step=step, interval=nrestart)
@@ -288,6 +287,10 @@ def main(actx_class, use_esdg=False,
             set_dt(logmgr, dt)
             set_sim_state(logmgr, dim, state, eos)
             logmgr.tick_after()
+
+            from mirgecom.logging_quantities import logmgr_verify_steptime
+            logmgr_verify_steptime(logmgr)
+
         return state, dt
 
     def my_rhs(t, state):
