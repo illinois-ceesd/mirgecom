@@ -626,7 +626,8 @@ def test_diffusion_compare_to_nodal_dg(actx_factory, problem, order,
             diffusion_u_ndg = ndgctx.pull_dof_array(actx, "rhs")
 
             def inf_norm(f):
-                return actx.np.linalg.norm(f, np.inf)
+                from meshmode.dof_array import flat_norm
+                return flat_norm(f, np.inf)
 
             err = (inf_norm(diffusion_u_mirgecom-diffusion_u_ndg)
                         / inf_norm(diffusion_u_ndg))
