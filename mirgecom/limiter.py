@@ -93,18 +93,16 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         dd = DD_VOLUME_ALL
 
     cell_vols = abs(op.elementwise_integral(
-        # type: ignore[arg-type, assignment]
         dcoll, dd, actx.np.zeros_like(field) + 1.0))
     cell_int = op.elementwise_integral(dcoll, dd, field)
-    cell_avgs = cell_int / cell_vols
+    cell_avgs = actx.np.divide(cell_int, cell_vols)
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:
         cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
 
     # Compute elementwise max/mins of the field
-    mmin_i: DOFArray = op.elementwise_min(dcoll, dd, field)\
-        # type: ignore[assignment]
+    mmin_i = op.elementwise_min(dcoll, dd, field)
 
     # Linear scaling of polynomial coefficients
     _theta = actx.np.minimum(
