@@ -85,7 +85,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
             the mass fraction of oxygen
         """
         from arraycontext import ArrayContext
-        actx: ArrayContext = temperature.array_context
+        actx: ArrayContext = temperature.array_context  # type: ignore[assignment]
         assert actx is not None
 
         mw_o = 15.999
@@ -95,7 +95,9 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
 
         eff_surf_area = self._get_wall_effective_surface_area_fiber(tau)
         alpha = (
+            # type: ignore[attr-defined]
             (0.00143+0.01*actx.np.exp(-1450.0/temperature))
+            # type: ignore[attr-defined]
             / (1.0+0.0002*actx.np.exp(13000.0/temperature)))
         k = alpha*actx.np.sqrt(
             (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
@@ -223,7 +225,7 @@ class FiberEOS(PorousWallEOS):
         assert actx is not None
         permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
                                        for _ in range(0, self._dim)])
-        # type: ignore[index]
+        # type: ignore[index, assignment]
         permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
         return permeability
 

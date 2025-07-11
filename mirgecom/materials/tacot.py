@@ -196,6 +196,7 @@ class TacotEOS(PorousWallEOS):
         actx = temperature.array_context
         assert actx is not None
 
+        # type: ignore[assignment]
         virgin: DOFArray = actx.np.where(
             actx.np.less(temperature, 2222.0),
             4.122658916891e-14*temperature**5
