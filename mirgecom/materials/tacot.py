@@ -187,6 +187,7 @@ class TacotEOS(PorousWallEOS):
             - 3.441837408320e+01*temperature
             - 1.235438104496e+05)
 
+        assert tau is not None
         return virgin*tau + char*(1.0 - tau)
 
     def heat_capacity(self, temperature: DOFArray,
@@ -194,6 +195,7 @@ class TacotEOS(PorousWallEOS):
         r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
         assert actx is not None
+        assert tau is not None
 
         virgin = actx.np.where(
             actx.np.less(temperature, 2222.0),
@@ -232,6 +234,7 @@ class TacotEOS(PorousWallEOS):
             + 3.668624886569e-04*temperature
             + 3.120898814888e-01)
 
+        assert tau is not None
         return virgin*tau + char*(1.0 - tau)
 
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
@@ -251,6 +254,7 @@ class TacotEOS(PorousWallEOS):
         """Emissivity for energy radiation."""
         virgin = 0.8
         char = 0.9
+        assert tau is not None
         return virgin*tau + char*(1.0 - tau)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
