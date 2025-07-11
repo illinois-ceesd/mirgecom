@@ -66,7 +66,7 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         # Rescale by x==0 value and rearrange
         progress = 1.0-tau
         return 1.1794e5*(1.0 - 0.0547736137*progress
-                         - 0.9336950992*progress**2)  # type: ignore[operator]
+                         - 0.9336950992*progress**2)
 
     def _get_wall_effective_surface_area_fiber(self, tau: DOFArray) -> DOFArray:
         """Evaluate the effective surface of the fibers."""
@@ -159,11 +159,11 @@ class FiberEOS(PorousWallEOS):
                  tau: Optional[DOFArray] = None) -> DOFArray:
         r"""Evaluate the solid enthalpy $h_s$ of the fibers."""
         return (
-            - 3.37112113e-11*temperature**5  # type: ignore[operator]
-            + 3.13156695e-07*temperature**4  # type: ignore[operator]
-            - 1.17026962e-03*temperature**3  # type: ignore[operator]
-            + 2.29194901e+00*temperature**2  # type: ignore[operator]
-            - 3.62422269e+02*temperature**1  # type: ignore[operator]
+            -3.37112113e-11*temperature**5
+            + 3.13156695e-07*temperature**4
+            - 1.17026962e-03*temperature**3
+            + 2.29194901e+00*temperature**2
+            - 3.62422269e+02*temperature**1
             - 5.96993843e+04)
 
     def heat_capacity(self, temperature: DOFArray,
@@ -174,10 +174,10 @@ class FiberEOS(PorousWallEOS):
         enthalpy fit.
         """
         return (
-            - 1.68556056e-10*temperature**4  # type: ignore[operator]
-            + 1.25262678e-06*temperature**3  # type: ignore[operator]
-            - 3.51080885e-03*temperature**2  # type: ignore[operator]
-            + 4.58389802e+00*temperature**1  # type: ignore[operator]
+            -1.68556056e-10*temperature**4
+            + 1.25262678e-06*temperature**3
+            - 3.51080885e-03*temperature**2
+            + 4.58389802e+00*temperature**1
             - 3.62422269e+02)
 
     # ~~~~~~~~ fiber conductivity
@@ -187,14 +187,14 @@ class FiberEOS(PorousWallEOS):
         It accounts for anisotropy and oxidation progress.
         """
         kappa_ij = (
-            + 2.86518890e-24*temperature**5
+            2.86518890e-24*temperature**5
             - 2.13976832e-20*temperature**4
             + 3.36320767e-10*temperature**3
             - 6.14199551e-07*temperature**2
             + 7.92469194e-04*temperature**1 + 1.18270446e-01)
 
         kappa_k = (
-            - 1.89693642e-24*temperature**5
+            -1.89693642e-24*temperature**5
             + 1.43737973e-20*temperature**4
             + 1.93072961e-10*temperature**3
             - 3.52595953e-07*temperature**2
@@ -218,6 +218,7 @@ class FiberEOS(PorousWallEOS):
         # FIXME find a relation to make it change as a function of "tau"
         # TODO: the relation depends on the coupling model. Postpone it for now.
         actx = tau.array_context
+        assert actx is not None
         permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
                                        for _ in range(0, self._dim)])
         permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
@@ -227,11 +228,11 @@ class FiberEOS(PorousWallEOS):
                    tau: Optional[DOFArray] = None) -> DOFArray:
         """Emissivity for energy radiation."""
         return (
-            + 2.26413679e-18*temperature**5  # type: ignore[operator]
-            - 2.03008004e-14*temperature**4  # type: ignore[operator]
-            + 7.05300324e-11*temperature**3  # type: ignore[operator]
-            - 1.22131715e-07*temperature**2  # type: ignore[operator]
-            + 1.21137817e-04*temperature**1  # type: ignore[operator]
+            2.26413679e-18*temperature**5
+            - 2.03008004e-14*temperature**4
+            + 7.05300324e-11*temperature**3
+            - 1.22131715e-07*temperature**2
+            + 1.21137817e-04*temperature**1
             + 8.66656964e-01)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:

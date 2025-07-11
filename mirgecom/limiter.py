@@ -86,12 +86,15 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     meshmode.dof_array.DOFArray or numpy.ndarray
         An array container containing the limited field(s).
     """
+    from meshmode.dof_array import DOFArray
+
     actx = field.array_context
     if dd is None:
         dd = DD_VOLUME_ALL
 
-    cell_vols = abs(op.elementwise_integral(  # type: ignore[arg-type, var-annotated]
-                    dcoll, dd, actx.np.zeros_like(field) + 1.0))
+    cell_vols: DOFArray = abs(op.elementwise_integral(  # type: ignore[arg-type]
+        dcoll, dd, actx.np.zeros_like(field) + 1.0))
+    # type: ignore[arg-type]
     cell_avgs = op.elementwise_integral(dcoll, dd, field)/cell_vols
 
     # Bound cell average in case it doesn't respect the realizability
