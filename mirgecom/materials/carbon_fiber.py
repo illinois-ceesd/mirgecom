@@ -84,7 +84,9 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         rhoY_o2:
             the mass fraction of oxygen
         """
-        actx = temperature.array_context
+        from arraycontext import ArrayContext
+        actx: ArrayContext = temperature.array_context
+        assert actx is not None
 
         mw_o = 15.999
         mw_o2 = mw_o*2
@@ -203,7 +205,7 @@ class FiberEOS(PorousWallEOS):
         # initialize with the in-plane value
         kappa = make_obj_array([kappa_ij for _ in range(self._dim)])
         # modify only the normal direction
-        kappa[self._anisotropic_dir] = kappa_k
+        kappa[self._anisotropic_dir] = kappa_k  # type: ignore[index]
 
         # account for fiber shrinkage via "tau"
         return kappa*tau
@@ -221,6 +223,7 @@ class FiberEOS(PorousWallEOS):
         assert actx is not None
         permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
                                        for _ in range(0, self._dim)])
+        # type: ignore[index]
         permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)
         return permeability
 

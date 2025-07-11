@@ -195,9 +195,8 @@ class TacotEOS(PorousWallEOS):
         r"""Solid heat capacity $C_{p_s}$ as a function of pyrolysis progress."""
         actx = temperature.array_context
         assert actx is not None
-        assert tau is not None
 
-        virgin = actx.np.where(
+        virgin: DOFArray = actx.np.where(
             actx.np.less(temperature, 2222.0),
             4.122658916891e-14*temperature**5
             - 4.430937180604e-10*temperature**4
@@ -213,6 +212,7 @@ class TacotEOS(PorousWallEOS):
             - 2.599755262540e-03*temperature**2
             + 3.667295510844e+00*temperature - 7.816218435655e+01)
 
+        assert tau is not None
         return virgin*tau + char*(1.0 - tau)
 
     def thermal_conductivity(self, temperature: DOFArray,
