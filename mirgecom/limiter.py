@@ -92,7 +92,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     if dd is None:
         dd = DD_VOLUME_ALL
 
-    cell_vols = abs(op.elementwise_integral(
+    cell_vols = actx.np.abs(op.elementwise_integral(
         dcoll, dd, actx.np.zeros_like(field) + 1.0))
     cell_int = op.elementwise_integral(dcoll, dd, field)
     cell_avgs = actx.np.divide(cell_int, cell_vols)
