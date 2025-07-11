@@ -95,7 +95,7 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     cell_vols: DOFArray = abs(op.elementwise_integral(
         # type: ignore[arg-type, assignment]
         dcoll, dd, actx.np.zeros_like(field) + 1.0))
-    cell_int: DOFArray = op.elementsize_integral(dcoll, dd, field)
+    cell_int: DOFArray = op.elementwise_integral(dcoll, dd, field)
     cell_avgs = cell_int / cell_vols
 
     # Bound cell average in case it doesn't respect the realizability
