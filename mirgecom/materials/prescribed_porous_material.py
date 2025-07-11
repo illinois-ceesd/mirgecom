@@ -87,21 +87,25 @@ class PrescribedMaterialEOS(PorousWallEOS):
     def volume_fraction(self, tau: DOFArray) -> DOFArray:
         r"""Fraction $\phi$ occupied by the solid."""
         actx = tau.array_context
+        assert actx is not None
         return self._volume_fraction_func(tau) + actx.np.zeros_like(tau)
 
     def permeability(self, tau: DOFArray) -> DOFArray:
         r"""Permeability $K$ of the porous material."""
         actx = tau.array_context
+        assert actx is not None
         return self._permeability_func(tau) + actx.np.zeros_like(tau)
 
     def emissivity(self, temperature=None, tau=None) -> DOFArray:
         """Emissivity for energy radiation."""
         actx = tau.array_context
+        assert actx is not None
         return self._emissivity_func(tau) + actx.np.zeros_like(tau)
 
     def tortuosity(self, tau: DOFArray) -> DOFArray:
         r"""Tortuosity $\eta$ affects the species diffusivity."""
         actx = tau.array_context
+        assert actx is not None
         return self._tortuosity_func(tau) + actx.np.zeros_like(tau)
 
     def decomposition_progress(self, mass: DOFArray) -> DOFArray:
