@@ -226,7 +226,7 @@ class FiberEOS(PorousWallEOS):
         permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
                                        for _ in range(0, self._dim)])
         val = 2.62e-11 + actx.np.zeros_like(tau)
-        permeability[self._anisotropic_dir] = val  # type: ignore[index, assignment]
+        permeability[self._anisotropic_dir] = val  # type: ignore[index]
 
         return permeability  # type: ignore[return-value]
 
