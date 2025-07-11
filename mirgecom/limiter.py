@@ -92,8 +92,8 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     if dd is None:
         dd = DD_VOLUME_ALL
 
-    # type: ignore[arg-type, assignment]
     cell_vols: DOFArray = abs(op.elementwise_integral(
+        # type: ignore[arg-type, assignment]
         dcoll, dd, actx.np.zeros_like(field) + 1.0))
     cell_int: DOFArray = op.elementsize_integral(dcoll, dd, field)
     cell_avgs = cell_int / cell_vols
@@ -103,13 +103,14 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         cell_avgs = actx.np.where(actx.np.greater(cell_avgs, mmin), cell_avgs, mmin)
 
     # Compute elementwise max/mins of the field
-    mmin_i: DOFArray = op.elementwise_min(dcoll, dd, field)
+    mmin_i: DOFArray = op.elementwise_min(dcoll, dd, field)\
+        # type: ignore[assignment]
 
     # Linear scaling of polynomial coefficients
     _theta = actx.np.minimum(
         1.0, actx.np.where(actx.np.less(mmin_i, mmin),
+                           abs((mmin-cell_avgs)/(mmin_i-cell_avgs+1e-13)), \
                            # type: ignore[operator]
-                           abs((mmin-cell_avgs)/(mmin_i-cell_avgs+1e-13)),
                            1.0)
         )
 
@@ -121,8 +122,8 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
         mmax_i = op.elementwise_max(dcoll, dd, field)
         _theta = actx.np.minimum(
             _theta, actx.np.where(actx.np.greater(mmax_i, mmax),
+                                  abs((mmax-cell_avgs)/(mmax_i-cell_avgs+1e-13)), \
                                   # type: ignore[operator]
-                                  abs((mmax-cell_avgs)/(mmax_i-cell_avgs+1e-13)),
                                   1.0)
         )
 

@@ -1,5 +1,5 @@
 - arg: extension-pkg-whitelist
-  val: numpy
+  val: numpy,mpi4py
 - arg: disable
   val: all
 - arg: enable
