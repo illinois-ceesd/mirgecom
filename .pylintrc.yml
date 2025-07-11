@@ -2,6 +2,8 @@
   val: numpy,mpi4py
 - arg: disable
   val: all
+- arg: disable
+  val: no-name-in-module
 - arg: enable
   val: E
 - arg: ignore
