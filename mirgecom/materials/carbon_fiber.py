@@ -94,11 +94,11 @@ class Y2_Oxidation_Model(Oxidation):  # noqa N801
         univ_gas_const = 8314.46261815324
 
         eff_surf_area = self._get_wall_effective_surface_area_fiber(tau)
-        alpha = (
-            (0.00143+0.01*actx.np.exp(-1450.0/temperature))\
-            # type: ignore[attr-defined]
-            / (1.0+0.0002*actx.np.exp(13000.0/temperature)))\
-            # type: ignore[attr-defined]
+        al1 = actx.np.exp(-1450.0/temperature)  # type: ignore[attr-defined]
+        al1 = 0.00143+0.01*al1
+        al2 = actx.np.exp(13000.0/temperature)  # type: ignore[attr-defined]
+        al2 = 1.0+0.0002*al2
+        alpha = al1 / al2
         k = alpha*actx.np.sqrt(
             (univ_gas_const*temperature)/(2.0*np.pi*mw_o2))
         return (mw_co/mw_o2 + mw_o/mw_o2 - 1)*rhoY_o2*k*eff_surf_area
@@ -225,8 +225,8 @@ class FiberEOS(PorousWallEOS):
         assert actx is not None
         permeability = make_obj_array([5.57e-11 + actx.np.zeros_like(tau)
                                        for _ in range(0, self._dim)])
-        permeability[self._anisotropic_dir] = 2.62e-11 + actx.np.zeros_like(tau)\
-            # type: ignore[index, assignment]
+        val = 2.62e-11 + actx.np.zeros_like(tau)
+        permeability[self._anisotropic_dir] = val  # type: ignore[index, assignment]
 
         return permeability  # type: ignore[return-value]
 
