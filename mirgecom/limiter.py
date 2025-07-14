@@ -93,7 +93,8 @@ def bound_preserving_limiter(dcoll: DiscretizationCollection, field,
     cell_vols = actx.np.abs(op.elementwise_integral(
         dcoll, dd, actx.np.zeros_like(field) + 1.0))
     cell_int = op.elementwise_integral(dcoll, dd, field)
-    cell_avgs = actx.np.divide(cell_int, cell_vols)
+    cell_avgs = cell_int / cell_vol
+    # cell_avgs = actx.np.divide(cell_int, cell_vols)
 
     # Bound cell average in case it doesn't respect the realizability
     if modify_average:
