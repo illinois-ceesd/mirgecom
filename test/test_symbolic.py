@@ -244,7 +244,7 @@ def test_symbolic_grad():
         2*sym_x**1*sym_y,
         sym_x**2,
         0])
-    from sympy import srepr  # type: ignore[import-untyped]
+    from sympy import srepr
     for idir in range(3):
         assert srepr(sym_grad_f[idir]) == srepr(expected_sym_grad_f[idir])
 
