@@ -50,7 +50,7 @@ def _const_deriv_pair():
 def _poly_deriv_pair():
     """Return a polynomial ($x^2$) and its derivative ($2x$)."""
     sym_x = pmbl.var("x")
-    return sym_x**2, 2*sym_x**1
+    return sym_x**2, 2*sym_x**1*1
 
 
 def _cos_deriv_pair():
@@ -193,10 +193,12 @@ def test_symbolic_div():
 
     sym_div_f = sym.div(3, sym_f)
     expected_sym_div_f = make_obj_array([
-        sym_x + sym_x + sym_x + sym_x,
+        0 + sym_x + sym_x + sym_x + sym_x,
         0 + sym_y + sym_y + sym_y + sym_y,
         0 + sym_z + sym_z + sym_z + sym_z])
-    assert (sym_div_f == expected_sym_div_f).all()
+    from sympy import srepr
+    for idir in range(3):
+        assert srepr(sym_div_f[idir]) == srepr(expected_sym_div_f[idir])
 
     # Array container
     from mirgecom.fluid import make_conserved
@@ -212,14 +214,16 @@ def test_symbolic_div():
         dim=3,
         mass=1 + sym_x + 0,
         momentum=make_obj_array([
-            sym_x + sym_x + sym_x + sym_x,
+            0 + sym_x + sym_x + sym_x + sym_x,
             0 + sym_y + sym_y + sym_y + sym_y,
             0 + sym_z + sym_z + sym_z + sym_z]),
         energy=0 + sym_z + 1)
-    assert sym_div_f.mass == expected_sym_div_f.mass
-    assert (sym_div_f.momentum == expected_sym_div_f.momentum).all()
-    assert sym_div_f.energy == expected_sym_div_f.energy
+    assert srepr(sym_div_f.mass) == srepr(expected_sym_div_f.mass)
+    assert srepr(sym_div_f.energy) == srepr(expected_sym_div_f.energy)
     assert sym_div_f.species_mass.shape == expected_sym_div_f.species_mass.shape
+    for idir in range(3):
+        assert srepr(sym_div_f.momentum[idir]) == \
+            srepr(expected_sym_div_f.momentum[idir])
 
 
 def test_symbolic_grad():
@@ -237,10 +241,12 @@ def test_symbolic_grad():
 
     sym_grad_f = sym.grad(3, sym_f)
     expected_sym_grad_f = make_obj_array([
-        sym_y * 2*sym_x**1,
+        2*sym_x**1*sym_y,
         sym_x**2,
         0])
-    assert (sym_grad_f == expected_sym_grad_f).all()
+    from sympy import srepr
+    for idir in range(3):
+        assert srepr(sym_grad_f[idir]) == srepr(expected_sym_grad_f[idir])
 
     # Vector (nested)
     sym_f = make_obj_array([
