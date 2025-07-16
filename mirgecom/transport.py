@@ -485,6 +485,7 @@ class MixtureAveragedTransport(TransportModel):
             )
 
         actx = cv.mass.array_context
+        assert actx is not None
 
         diffusivity = self._pyro_mech.get_species_mass_diffusivities_mixavg(
             dv.pressure, dv.temperature, cv.species_mass_fractions)
