@@ -340,6 +340,8 @@ if __name__ == "__main__":
         help="use entropy-stable dg for inviscid terms.")
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
+    parser.add_argument("--jax", action="store_true",
+        help="use jax-based eager actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()
@@ -354,7 +356,8 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+        lazy=args.lazy, distributed=True, profiling=args.profiling,
+        numpy=args.numpy, jax=args.jax)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:
