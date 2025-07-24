@@ -32,6 +32,9 @@ Mesh and element utilities
 .. autofunction:: invert_decomp
 .. autofunction:: multivolume_interdecomposition_overlap
 .. autofunction:: copy_mapped_dof_array_data
+.. autofunction:: inverse_element_connectivity
+.. autofunction:: apply_elemental_interpolation
+.. autofunction:: remap_dofarrays_in_structure
 
 Simulation support utilities
 ----------------------------
@@ -82,12 +85,17 @@ import pickle
 from functools import partial
 from typing import Dict, List, Optional
 from contextlib import contextmanager
+from dataclasses import (
+    dataclass, fields,
+    is_dataclass
+)
 
 from logpyle import IntervalTimer
 
 import grudge.op as op
 import numpy as np
 import pyopencl as cl
+
 from arraycontext import tag_axes
 from meshmode.transform_metadata import (
     DiscretizationElementAxisTag,
@@ -100,10 +108,12 @@ from grudge.discretization import (
 )
 from grudge.dof_desc import DD_VOLUME_ALL
 from meshmode.dof_array import DOFArray
-from collections import defaultdict
-
+from collections import defaultdict, OrderedDict
+from pytools.obj_array import make_obj_array
 from mirgecom.utils import normalize_boundaries
 from mirgecom.viscous import get_viscous_timestep
+from scipy.spatial import cKDTree
+
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +146,880 @@ def get_number_of_tetrahedron_nodes(dim, order, include_faces=False):
     if include_faces:
         nnodes = nnodes + (dim+1)*get_number_of_tetrahedron_nodes(dim-1, order)
     return nnodes
+
+
+def inverse_element_connectivity(mesh):
+    """
+    Invert the element connectivity of a mesh to map global vertex IDs
+    to the elements and local indices that reference them.
+
+    Parameters
+    ----------
+    mesh: meshmode.mesh.Mesh
+        The mesh containing element groups and their vertex indices.
+
+    Returns
+    -------
+    dict
+        A mapping from global vertex ID to a list of (grp_id, el_id, local_vertex_id)
+        tuples indicating all locations in the mesh where the vertex is used.
+    """
+    from collections import defaultdict
+
+    inverted = defaultdict(list)
+    for grp_id, grp in enumerate(mesh.groups):
+        # shape: (nelements, nvertices_per_element)
+        vertex_indices = grp.vertex_indices
+        for el_id, element_vertices in enumerate(vertex_indices):
+            for local_vertex_id, global_vertex_id in enumerate(element_vertices):
+                inverted[global_vertex_id].append((grp_id, el_id, local_vertex_id))
+
+    return dict(inverted)
+
+
+def compute_vertex_averages(actx, dofarray, inverted_conn):
+    """
+    Compute average values at each global vertex from DOFArray data.
+
+    Parameters
+    ----------
+        actx: ArrayContext
+            The array context for accessing DOFArray data.
+        dofarray: DOFArray
+            The data to average.
+        inverted_conn: dict[int, list[tuple[int, int, int]]]
+            Maps global vertex IDs to (group_id, element_id, local_vertex_id).
+
+    Returns
+    -------
+        np.ndarray:
+            Averaged values per global vertex.
+            Indexed by global vertex ID.
+    """
+    # N-Tuple of numpy arrays where N = ngroups
+    arrays_by_group = actx.to_numpy(dofarray)
+
+    nvertices = len(inverted_conn)
+    sum_per_vertex = np.zeros(nvertices)
+    count_per_vertex = np.zeros(nvertices, dtype=int)
+
+    for global_vertex, locations in inverted_conn.items():
+        for (grp_id, el_id, local_id) in locations:
+            sum_per_vertex[global_vertex] += arrays_by_group[grp_id][el_id, local_id]
+            count_per_vertex[global_vertex] += 1
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        avg = np.zeros_like(sum_per_vertex)
+        mask = count_per_vertex > 0
+        avg[mask] = sum_per_vertex[mask] / count_per_vertex[mask]
+
+    return avg
+
+
+def scatter_vertex_values_to_dofarray(actx, template_dofarray,
+                                      inverted_conn, vertex_vals):
+    """
+    Scatter global vertex values into a new DOFArray.
+
+    Parameters
+    ----------
+        actx: ArrayContext
+            The array context for building new DOFArrays.
+        template_dofarray: DOFArray
+            Used to get the shape and group structure for the new DOFArray.
+        inverted_conn: dict[int, list[tuple[int, int, int]]]
+            Maps global vertex IDs to (group_id, element_id, local_vertex_id).
+        vertex_vals: np.ndarray
+            Values at each global vertex, indexed by global vertex ID.
+
+    Returns
+    -------
+        DOFArray:
+            New DOFArray with each el node filled with its vertex value.
+    """
+    arrays_by_group = actx.to_numpy(template_dofarray)
+    new_arrays = []
+
+    # Allocate empty arrays matching shape of each group
+    for group_array in arrays_by_group:
+        new_arrays.append(0.*group_array)
+
+    # Scatter the vertex average to every occurrence of that vertex
+    for global_vertex_id, locations in inverted_conn.items():
+        value = vertex_vals[global_vertex_id]
+        for (grp_id, el_id, local_id) in locations:
+            new_arrays[grp_id][el_id, local_id] = value
+
+    # Convert numpy arrays to dofarrays
+    group_arrays = tuple(new_arrays)
+    dary = actx.from_numpy(DOFArray(actx, group_arrays))
+
+    return dary
+
+
+def quad_shape_functions(xi, eta):
+    """
+    Compute bilinear shape functions for a 4-node quad at (xi, eta).
+    Reference coordinates are in [-1, 1]².
+    """
+    n_quad = np.zeros(4)
+    n_quad[0] = 0.25 * (1 - xi) * (1 - eta)
+    n_quad[1] = 0.25 * (1 + xi) * (1 - eta)
+    n_quad[2] = 0.25 * (1 + xi) * (1 + eta)
+    n_quad[3] = 0.25 * (1 - xi) * (1 + eta)
+    return n_quad
+
+
+def quad_shape_deriv(xi, eta):
+    """
+    Compute bilinear shape functions derivs
+    for a 4-node quad at (xi, eta).
+    Reference coordinates are in [-1, 1]^2.
+    """
+    # Shape function derivatives
+    dn_dxi = np.array([
+        [-0.25 * (1 - eta), -0.25 * (1 - xi)],
+        [0.25 * (1 - eta), -0.25 * (1 + xi)],
+        [0.25 * (1 + eta),  0.25 * (1 + xi)],
+        [-0.25 * (1 + eta),  0.25 * (1 - xi)],
+    ])
+    return dn_dxi
+
+
+def hex_shape_functions(xi, eta, zeta):
+    """
+    Trilinear shape functions for hexahedra
+    Reference coords: xi, eta, zeta in [-1, 1]^3
+    """
+    node_signs = [
+        (-1, -1, -1),
+        (1, -1, -1),
+        (1,  1, -1),
+        (-1,  1, -1),
+        (-1, -1,  1),
+        (1, -1,  1),
+        (1,  1,  1),
+        (-1,  1,  1)
+    ]
+    n_hex = np.array([
+        0.125 * (1 + sx * xi) * (1 + sy * eta) * (1 + sz * zeta)
+        for sx, sy, sz in node_signs
+    ])
+    return n_hex
+
+
+def hex_shape_deriv(xi, eta, zeta):
+    """
+    Trilinear shape derivs (8-node hexahedron).
+    Reference coords: xi, eta, zeta in [-1, 1]^3
+    """
+    node_signs = [
+        (-1, -1, -1),
+        (1, -1, -1),
+        (1,  1, -1),
+        (-1,  1, -1),
+        (-1, -1,  1),
+        (1, -1,  1),
+        (1,  1,  1),
+        (-1,  1,  1)
+    ]
+    dn_hex = np.zeros((8, 3))
+    for i, (sx, sy, sz) in enumerate(node_signs):
+        dn_hex[i, 0] = 0.125 * sx * (1 + sy * eta) * (1 + sz * zeta)
+        dn_hex[i, 1] = 0.125 * (1 + sx * xi) * sy * (1 + sz * zeta)
+        dn_hex[i, 2] = 0.125 * (1 + sx * xi) * (1 + sy * eta) * sz
+    return dn_hex
+
+
+def el_shape_functions(el_coords):
+    """Wrap shape functions."""
+    dim = len(el_coords)
+    if dim == 3:
+        return hex_shape_functions(el_coords[0], el_coords[1], el_coords[2])
+    elif dim == 2:
+        return quad_shape_functions(el_coords[0], el_coords[1])
+    else:
+        raise ValueError("Invalid dimension.")
+    return None
+
+
+def el_shape_deriv(el_coords):
+
+    dim = len(el_coords)
+    if dim == 3:
+        return hex_shape_deriv(el_coords[0], el_coords[1], el_coords[2])
+    elif dim == 2:
+        return quad_shape_deriv(el_coords[0], el_coords[1])
+    else:
+        raise ValueError("Invalid dimension.")
+    return None
+
+
+def inverse_map_quad_gn(el_nodes, target_point, tol=1e-10,
+                        max_iter=15, retries=10):
+    """
+    Perform Gauss-Newton minimization to map a physical point
+    to reference (xi, eta) coordinates inside a quad element.
+
+    Parameters
+    ----------
+        el_nodes: (4, 2) array of the physical quad vertices
+        target_point: (2,) array, physical location
+        tol: convergence threshold on residual norm
+        max_iter: max number of Gauss-Newton iterations
+        retries: number of random initial guesses
+
+    Returns
+    -------
+        (xi, eta) if successful, or None if all retries failed
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2]]
+    for attempt in range(retries):  # noqa
+        # Start at random-ish location inside reference element
+        xi, eta = np.random.uniform(-0.3, 0.3), np.random.uniform(-0.3, 0.3)
+        # print(f"initial guess{attempt=}: xi={xi}, eta={eta}")
+
+        for _ in range(max_iter):
+            # Shape functions
+            n_el = el_shape_functions([xi, eta])
+            # Shape function derivatives
+            dn_dxi = el_shape_deriv([xi, eta])
+
+            # Mapped physical point at (xi, eta)
+            x = np.dot(n_el, el_nodes)  # shape (2,)
+            f_resid = x - target_point  # resid shape (2,)
+
+            # build
+            jac = np.zeros((2, 2))
+            for i in range(4):
+                jac[0, 0] += dn_dxi[i, 0] * el_nodes[i, 0]
+                jac[1, 0] += dn_dxi[i, 0] * el_nodes[i, 1]
+                jac[0, 1] += dn_dxi[i, 1] * el_nodes[i, 0]
+                jac[1, 1] += dn_dxi[i, 1] * el_nodes[i, 1]
+
+            j_t_j = jac.T @ jac
+            j_t_f = jac.T @ f_resid
+
+            try:
+                delta = np.linalg.solve(j_t_j, -j_t_f)
+            except np.linalg.LinAlgError:
+                # unlucky: singular matrix, try another guess
+                break
+
+            xi += delta[0]
+            eta += delta[1]
+
+            if np.linalg.norm(f_resid) < tol:
+                return xi, eta
+
+    return None
+
+
+def inverse_map_hex_gn(el_nodes, target_point, tol=1e-10,
+                       max_iter=20, retries=10):
+    """
+    Perform Gauss-Newton minimization to map a physical point to reference
+    coordinates (xi, eta, zeta) inside a hex element.
+
+    Parameters
+    ----------
+        el_nodes: (8, 3) array of the physical HEX8 node coordinates
+        target_point: (3,) array of the physical location
+        tol: convergence threshold on residual norm
+        max_iter: max number of Gauss-Newton iterations
+        retries: number of random initial guesses
+
+    Returns
+    -------
+        (xi, eta, zeta) if successful, or None if all retries failed
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2, 4, 5, 7, 6]]
+
+    for attempt in range(retries):  # noqa
+        xi, eta, zeta = np.random.uniform(-0.3, 0.3, size=3)
+
+        for _ in range(max_iter):
+            # Shape functions N_i(xi, eta, zeta)
+            n_el = el_shape_functions([xi, eta, zeta])
+
+            # Residual: x(xi, eta, zeta) - target
+            x = np.dot(n_el, el_nodes)
+            f_resid = x - target_point
+
+            # Shape function derivatives
+            dn_dref = el_shape_deriv([xi, eta, zeta])
+
+            # Build 3x3 Jacobian
+            jac = np.zeros((3, 3))
+            for i in range(8):
+                for j in range(3):
+                    for k in range(3):
+                        jac[k, j] += dn_dref[i, j] * el_nodes[i, k]
+
+            j_t_j = jac.T @ jac
+            j_t_f = jac.T @ f_resid
+
+            try:
+                delta = np.linalg.solve(j_t_j, -j_t_f)
+            except np.linalg.LinAlgError:
+                # unlucky: try another initial guess
+                break
+
+            xi += delta[0]
+            eta += delta[1]
+            zeta += delta[2]
+
+            if np.linalg.norm(f_resid) < tol:
+                return xi, eta, zeta
+
+    return None
+
+
+def inverse_map_quad(el_nodes, target_point, tol=1e-13, max_iter=15, retries=10):
+    """
+    Newton iteration to map physical point to reference coordinates (xi, eta).
+    Tries multiple initial guesses if needed.
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2]]
+    for attempts in range(retries):  # noqa
+        xi = np.random.uniform(-0.3, 0.3)
+        eta = np.random.uniform(-0.3, 0.3)
+
+        for _ in range(max_iter):
+            n_el = el_shape_functions([xi, eta])
+            dn_dxi = el_shape_deriv([xi, eta])
+
+            x = np.dot(n_el, el_nodes)
+            f_resid = x - target_point
+
+            jac = np.zeros((2, 2))
+            for i in range(4):
+                jac[0, 0] += dn_dxi[i, 0] * el_nodes[i, 0]
+                jac[1, 0] += dn_dxi[i, 0] * el_nodes[i, 1]
+                jac[0, 1] += dn_dxi[i, 1] * el_nodes[i, 0]
+                jac[1, 1] += dn_dxi[i, 1] * el_nodes[i, 1]
+
+            try:
+                delta = np.linalg.solve(jac, -f_resid)
+            except np.linalg.LinAlgError:
+                break  # try next random initial guess
+
+            xi += delta[0]
+            eta += delta[1]
+
+            if np.linalg.norm(delta) < tol:
+                return xi, eta
+
+    return None  # all attempts failed
+
+
+def inverse_map_hex(el_nodes, target_point, tol=1e-13, max_iter=15, retries=10):
+    """
+    Newton iteration to map physical point to reference coordinates (xi, eta, zeta).
+    Tries multiple random starting points if needed.
+
+    Parameters
+    ----------
+        el_nodes: ndarray (8, 3)
+            Physical coordinates of the 8 hexahedron nodes.
+        target_point: ndarray (3,)
+            Physical coordinates of the point to map.
+
+    Returns
+    -------
+        (xi, eta, zeta) tuple if successful, otherwise None.
+    """
+    # Permuting the node ordering to the canonical element
+    el_nodes = el_nodes[[0, 1, 3, 2, 4, 5, 7, 6]]
+
+    for attempt in range(retries):  # noqa
+        xi, eta, zeta = np.random.uniform(-0.3, 0.3, size=3)
+
+        for _ in range(max_iter):
+            # Shape functions
+            n_el = el_shape_functions([xi, eta, zeta])
+
+            # Physical point at current (xi, eta, zeta)
+            x = np.dot(n_el, el_nodes)
+            f_resid = x - target_point
+
+            # Derivatives: dN_i/dxi, deta, dzeta
+            dn_dref = el_shape_deriv([xi, eta, zeta])
+
+            # Build 3x3 Jacobian
+            jac = np.zeros((3, 3))
+            for i in range(8):
+                for j in range(3):      # ref-space direction (xi, eta, zeta)
+                    for k in range(3):  # physical direction (x, y, z)
+                        jac[k, j] += dn_dref[i, j] * el_nodes[i, k]
+
+            try:
+                delta = np.linalg.solve(jac, -f_resid)
+            except np.linalg.LinAlgError:
+                break  # try another random initial guess
+
+            xi += delta[0]
+            eta += delta[1]
+            zeta += delta[2]
+
+            if np.linalg.norm(delta) < tol:
+                return xi, eta, zeta
+
+    return None
+
+
+def point_in_quad_reference(xi, eta, tol=1e-8):
+    """
+    Check if reference coords (xi, eta) are inside the reference square [-1, 1]².
+    """
+    return -1 - tol <= xi <= 1 + tol and -1 - tol <= eta <= 1 + tol
+
+
+def point_in_reference_coords(ref_coords, element_type, tol=1e-8):
+    """
+    Check if the given reference coordinates are inside the canonical reference el.
+
+    Parameters
+    ----------
+        ref_coords: ndarray-like
+            Reference coordinates (e.g., [xi, eta] or [xi, eta, zeta])
+        element_type: str
+            One of: "quad", "hex", "tri", "tet"
+        tol: float
+            Tolerance for bounds checking.
+
+    Returns
+    -------
+        bool
+    """
+    ref_coords = np.asarray(ref_coords)
+
+    if element_type == "quad" or element_type == "hex":
+        return np.all((-1 - tol <= ref_coords) & (ref_coords <= 1 + tol))
+    if element_type == "tpe":
+        return np.all((-1 - tol <= ref_coords) & (ref_coords <= 1 + tol))
+
+    elif element_type == "tri":
+        r, s = ref_coords
+        return (
+            -tol <= r <= 1 + tol
+            and -tol <= s <= 1 + tol
+            and r + s <= 1 + tol
+        )
+
+    elif element_type == "tet":
+        r, s, t = ref_coords
+        return (
+            -tol <= r <= 1 + tol
+            and -tol <= s <= 1 + tol
+            and -tol <= t <= 1 + tol
+            and r + s + t <= 1 + tol
+        )
+
+    else:
+        raise ValueError(f"Unknown element type '{element_type}'")
+
+
+@dataclass
+class ElementalInterpolationInfo:
+    src_element_ids: np.ndarray  # shape: (ntgt_nodes,)
+    ref_coords: np.ndarray  # shape: (ntgt_nodes, dim)
+    fallback_mask: np.ndarray  # shape: (ntgt_nodes,), bool
+    fallback_indices: list[int]  # indices of points that failed
+
+
+def build_element_centroid_kdtree(src_vertices, src_elements):
+    el_centroids = np.array([
+        np.mean(src_vertices[conn], axis=0) for conn in src_elements
+    ])
+    return cKDTree(el_centroids), el_centroids
+
+
+def recover_interp_fallbacks(interp_info, mesh1, mesh2,
+                             target_point_map=None, inverse_map_fn=None,
+                             meter_level=100., snap_tol=1e-3, snap_eps=1e-4):
+    """
+    Re-attempt point location for fallback points using
+    Gauss-Newton instead of Newton.
+
+    Parameters:
+        interp_info: ElementalInterpolationInfo
+        mesh1: source mesh (meshmode mesh)
+        mesh2: target mesh (meshmode mesh)
+        inverse_map_gauss_newton_fn: optional function to override solver
+
+    Returns:
+        Updated ElementalInterpolationInfo with fallbacks resolved where possible.
+    """
+    src_vertices = mesh1.vertices.T
+    tgt_vertices = mesh2.vertices.T
+    src_elements = mesh1.groups[0].vertex_indices
+    nsrc_els = len(src_elements)
+    dim = src_vertices.shape[1]
+    fallback_indices = interp_info.fallback_indices
+    n_tgt_nodes = len(fallback_indices)
+    updated_src_element_ids = interp_info.src_element_ids.copy()
+    updated_ref_coords = interp_info.ref_coords.copy()
+    updated_fallback_mask = interp_info.fallback_mask.copy()
+
+    eltype = "quad" if dim == 2 else "hex"
+    # Pick solver based on dimension
+    if inverse_map_fn is None:
+        inverse_map_fn = (
+            inverse_map_quad_gn if dim == 2 else inverse_map_hex_gn
+        )
+
+    tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
+    if meter_level < 100:
+        print(f"GN: Finding {n_tgt_nodes} target points "
+              f"in {nsrc_els} source elements.")
+
+    # from tqdm import tqdm
+    # for i in tqdm(fallback_indices, desc="Recovering fallbacks with Gauss-Newton"):
+    for cnt, i in enumerate(fallback_indices):
+        best_resid = np.inf
+        best_ref = None
+        best_el_id = None
+        best_xphys = None
+        best_elnodes = None
+        pct = 100.*float(cnt / n_tgt_nodes)
+        cur_meter = meter_level
+        if pct >= cur_meter:
+            print(f"{pct}% target points searched.")
+            cur_meter = pct + meter_level
+        x_tgt = tgt_vertices[i]
+        tgt_save = 1.*x_tgt
+        if target_point_map is not None:
+            x_tgt = target_point_map(x_tgt)
+
+        # Query k nearest neighbors
+        k = 30
+        _, candidate_ids = tree.query(x_tgt, k=k)
+
+        # for el_id, conn in enumerate(src_elements):
+        for el_id in candidate_ids:
+            conn = src_elements[el_id]
+            el_nodes = src_vertices[conn]
+            ref = inverse_map_fn(el_nodes, x_tgt)
+            # if ref is not None and point_in_reference_coords(ref, eltype):
+            if ref is not None:
+                shape_vals = el_shape_functions(ref)
+                x_phys = np.dot(shape_vals, el_nodes)
+                resid = np.linalg.norm(x_phys - x_tgt)
+                if resid < best_resid:
+                    best_resid = resid
+                    best_el_id = el_id
+                    best_ref = ref
+                    best_xphys = x_phys
+                    best_elnodes = el_nodes
+                if point_in_reference_coords(ref, eltype):
+                    updated_src_element_ids[i] = el_id
+                    updated_ref_coords[i] = ref
+                    updated_fallback_mask[i] = False
+                    break  # stop at first match
+
+        if updated_fallback_mask[i]:
+            if best_ref is not None and best_resid < snap_tol:
+                clamped_ref = np.clip(best_ref, -1 + snap_eps, 1 - snap_eps)
+                updated_src_element_ids[i] = best_el_id
+                updated_ref_coords[i] = clamped_ref
+                updated_fallback_mask[i] = False
+            else:
+                print(f"Snapping point({i}) failed: {best_ref=}, {best_resid=}")
+                print(f"PointInfo: {tgt_save=}, {x_tgt=}")
+                print(f"SourceInfo: {el_id=}, {best_xphys=}, {best_elnodes=}")
+                print("Resorting to closest point in element!")
+                conn = src_elements[best_el_id]
+                el_nodes = src_vertices[conn]
+                distances = np.linalg.norm(el_nodes - x_tgt, axis=1)
+                closest_local_id = np.argmin(distances)
+
+                # I know there's a more pythonic way to do this hrm
+                # Just hardcode the canonical element corner coords
+                if eltype == "quad":
+                    ref_corners = [
+                        (-1.0, -1.0),
+                        ( 1.0, -1.0),
+                        ( 1.0,  1.0),
+                        (-1.0,  1.0)
+                    ]
+                elif eltype == "hex":
+                    ref_corners = [
+                        (-1.0, -1.0, -1.0),
+                        ( 1.0, -1.0, -1.0),
+                        ( 1.0,  1.0, -1.0),
+                        (-1.0,  1.0, -1.0),
+                        (-1.0, -1.0,  1.0),
+                        ( 1.0, -1.0,  1.0),
+                        ( 1.0,  1.0,  1.0),
+                        (-1.0,  1.0,  1.0)
+                    ]
+                else:
+                    raise ValueError(f"Unsupported fallback for eltype {eltype}")
+
+                fallback_ref = np.array(ref_corners[closest_local_id])
+                updated_src_element_ids[i] = best_el_id
+                updated_ref_coords[i] = fallback_ref
+                updated_fallback_mask[i] = False
+
+    new_fallbacks = [i for i in fallback_indices if updated_fallback_mask[i]]
+
+    return ElementalInterpolationInfo(
+        src_element_ids=updated_src_element_ids,
+        ref_coords=updated_ref_coords,
+        fallback_mask=updated_fallback_mask,
+        fallback_indices=new_fallbacks
+    )
+
+
+def build_elemental_interpolation_info(mesh1, mesh2, target_point_map=None,
+                                       meter_level=100.0):
+    """
+    Construct interpolation metadata mapping the vertices of mesh2 to
+    reference coordinates in elements of mesh1.
+
+    This routine locates each vertex of mesh2 within an element of mesh1,
+    computing the element ID and corresponding element-local reference
+    coordinates for use in later interpolation.
+
+    Parameters
+    ----------
+    mesh1: meshmode.mesh.Mesh
+        The source mesh from which field data will be interpolated.
+    mesh2: meshmode.mesh.Mesh
+        The target mesh whose vertex locations are used for interpolation.
+
+    Returns
+    -------
+    interp_info: ElementInterpolationInfo
+        A structure containing element IDs, reference coordinates,
+        and fallback indicators for each vertex of the target mesh.
+    """
+    src_vertices = mesh1.vertices.T  # (nverts, dim)
+    tgt_vertices = mesh2.vertices.T  # (nverts, dim)
+    # assuming single group for now
+    src_elements = mesh1.groups[0].vertex_indices  # (nelements, nvertices_per_el)
+    nsrc_els = len(src_elements)
+
+    dim = src_vertices.shape[1]
+    n_tgt_nodes = tgt_vertices.shape[0]
+
+    src_element_ids = np.full(n_tgt_nodes, -1, dtype=np.int32)
+    ref_coords = np.full((n_tgt_nodes, dim), np.nan, dtype=np.float64)
+    fallback_mask = np.zeros(n_tgt_nodes, dtype=bool)
+    fallback_indices = []
+    tree, centroids = build_element_centroid_kdtree(src_vertices, src_elements)
+
+    if meter_level < 100:
+        print(f"N: Finding {n_tgt_nodes} target points in "
+              f"{nsrc_els} source elements.")
+
+    # from tqdm import tqdm
+    # for i in tqdm(range(n_tgt_nodes), desc="Locating target verts in source mesh"):
+    for i in range(n_tgt_nodes):
+        pct = 100.*float(i / n_tgt_nodes)
+        cur_meter = meter_level
+        if pct >= cur_meter:
+            print(f"{pct}% target points searched.")
+            cur_meter = pct + meter_level
+
+        x_tgt = tgt_vertices[i]
+        if target_point_map is not None:
+            x_tgt = target_point_map(x_tgt)
+
+        # Query k nearest neighbors
+        k = 20
+        _, candidate_ids = tree.query(x_tgt, k=k)
+
+        found = False
+        # for el_id, conn in enumerate(src_elements):
+        for el_id in candidate_ids:
+            # el_nodes = src_vertices[conn]  # shape: (nvert_el, dim)
+            conn = src_elements[el_id]
+            # print(f"{conn=}")
+            el_nodes = src_vertices[conn]  # shape: (nvert_el, dim)
+
+            if dim == 2:
+                ref = inverse_map_quad(el_nodes, x_tgt)
+                if ref is None or not point_in_reference_coords(ref, "quad"):
+                    continue
+            else:
+                ref = inverse_map_hex(el_nodes, x_tgt)
+                if ref is None or not point_in_reference_coords(ref, "hex"):
+                    continue
+
+            # Point found
+            src_element_ids[i] = el_id
+            ref_coords[i] = ref
+            found = True
+            break
+
+        if not found:
+            fallback_mask[i] = True
+            fallback_indices.append(i)
+
+    interp_info = ElementalInterpolationInfo(
+        src_element_ids=src_element_ids,
+        ref_coords=ref_coords,
+        fallback_mask=fallback_mask,
+        fallback_indices=fallback_indices
+    )
+
+    return interp_info
+
+
+def apply_elemental_interpolation(src_field, interp_info):
+    """
+    Evaluate the source field at target points using interpolation info.
+
+    Parameters:
+        src_field: DOFArray from mesh1
+        interp_info: ElementalInterpolationInfo
+        shape_function: function (xi, eta[, zeta]) -> shape values
+
+    Returns:
+        numpy array of shape (n_target_vertices,)
+    """
+    from warnings import warn
+    result = np.empty(len(interp_info.src_element_ids))
+
+    dim = interp_info.ref_coords.shape[1]
+    for i, (el_id, ref) in enumerate(zip(interp_info.src_element_ids,
+                                         interp_info.ref_coords)):
+
+        if el_id < 0:
+            warn("Setting unfound point solution to 0.")
+            result[i] = 0.0
+            continue
+
+        if dim == 2:
+            # going to permute the dofs to canonical order
+            shape_vals = el_shape_functions(ref)
+            perm = [0, 1, 3, 2]
+        elif dim == 3:
+            shape_vals = el_shape_functions(ref)
+            perm = [0, 1, 3, 2, 4, 5, 7, 6]
+        else:
+            raise ValueError(f"Unsupported dim={dim}")
+
+        el_dofs = src_field[el_id][perm]
+        result[i] = np.dot(shape_vals, el_dofs)
+
+    return result
+
+
+def remap_dofarrays_in_structure(actx, struct, source_mesh, target_mesh,
+                                 interp_info=None, target_point_map=None,
+                                 volume_id=None, meter_level=100.):
+    """
+    Recursively remap all DOFArrays in a nested data structure from mesh1 to mesh2.
+
+    Traverses the given data structure and applies mesh-to-mesh interpolation
+    to any DOFArray it contains. Handles scalar DOFArrays, object arrays of
+    DOFArrays, and dataclasses containing DOFArrays. Non-field data (e.g., ints,
+    floats, strings) are passed through unchanged.
+
+    Parameters
+    ----------
+    actx: arraycontext.ArrayContext
+        The array context used for all array operations.
+    struct: Any
+        The input structure containing DOFArrays to be remapped. May be a nested
+        combination of dicts, lists, tuples, dataclasses, or numpy object arrays.
+    source_mesh: meshmode.mesh.Mesh
+        The source mesh from which the DOFArrays were defined.
+    target_mesh: meshmode.mesh.Mesh
+        The target mesh to which the DOFArrays will be remapped.
+    interp_info: ElementInterpolationInfo, optional
+        Precomputed interpolation metadata. If not provided, it will be constructed
+        internally using `build_elemental_interpolation_info`.
+
+    Returns
+    -------
+    struct_mapped: Any
+        A new structure with the same layout as the input, but with all
+        DOFArrays remapped to mesh2.
+    """
+
+    from grudge import discretization as grudge_discr
+    # from mirgecom.simutil import inverse_element_connectivity
+    from mirgecom.discretization import create_discretization_collection
+    from grudge.dof_desc import (
+        DOFDesc,
+        VolumeDomainTag,
+        DISCR_TAG_BASE,
+    )
+
+    if isinstance(source_mesh, dict):
+        if volume_id is None:
+            raise ValueError("Data transfer for multivolume must specify volume_id.")
+        source_mesh = source_mesh[volume_id]
+
+    # Set up target discretization and template
+    if isinstance(target_mesh, dict):
+        if volume_id is None:
+            raise ValueError("Data transfer for multivolume must specify volume_id.")
+        multivol_dcoll = \
+            create_discretization_collection(
+                actx, volume_meshes=target_mesh, order=1)
+        dd = DOFDesc(VolumeDomainTag(volume_id), DISCR_TAG_BASE)
+        # grabs the x-component of the nodes for an example dof_array
+        template_dofs = actx.thaw(multivol_dcoll.nodes(dd)[0])
+        target_mesh = target_mesh[volume_id]
+    else:
+        # dcoll_2 = grudge_discr.DiscretizationCollection(actx, target_mesh, order=1)
+        dcoll_2 = grudge_discr.DiscretizationCollection(actx, target_mesh, order=1)
+        template_dofs = actx.thaw(dcoll_2.nodes()[0])
+    iconn_2 = inverse_element_connectivity(target_mesh)
+
+    # Precompute interpolation info once
+    if interp_info is None:
+        interp_info = build_elemental_interpolation_info(
+            source_mesh, target_mesh, target_point_map=target_point_map,
+            meter_level=meter_level)
+        if np.any(interp_info.fallback_mask):
+            interp_info = recover_interp_fallbacks(
+                interp_info, source_mesh, target_mesh,
+                target_point_map=target_point_map,
+                meter_level=meter_level)
+        n_fallback = np.count_nonzero(interp_info.fallback_mask)
+        # if np.any(interp_info.fallback_mask):
+        if n_fallback > 0:
+            # raise RuntimeError
+            # ("Could not find some mesh2 vertices in mesh1 elems.")
+            from warnings import warn
+            warn(f"Could not find {n_fallback} target vertices in source mesh.")
+
+    def _map(obj):
+        if isinstance(obj, DOFArray):
+            src_np = actx.to_numpy(obj)[0]
+            mapped_vals = apply_elemental_interpolation(src_np, interp_info)
+            return scatter_vertex_values_to_dofarray(actx, template_dofs,
+                                                     iconn_2, mapped_vals)
+
+        elif (isinstance(obj, np.ndarray) and obj.dtype == object
+              and all(isinstance(x, DOFArray) for x in obj.flat)):
+            # Object array of DOFArrays → use make_obj_array
+            return make_obj_array([_map(x) for x in obj])
+
+        elif isinstance(obj, (list, tuple)):
+            return type(obj)(_map(o) for o in obj)
+
+        elif isinstance(obj, dict):
+            return {k: _map(v) for k, v in obj.items()}
+
+        elif is_dataclass(obj):
+            return type(obj)(**{
+                f.name: _map(getattr(obj, f.name)) for f in fields(obj)
+            })
+
+        else:
+            return obj  # Pass through anything else unchanged
+
+    return _map(struct)
 
 
 def get_box_mesh(dim, a, b, n, t=None, periodic=None,
@@ -188,6 +1072,8 @@ def get_box_mesh(dim, a, b, n, t=None, periodic=None,
     dim_names = ["x", "y", "z"]
     bttf = {}
     for i in range(dim):
+        if periodic[i]:
+            continue
         bttf["-"+str(i+1)] = ["-"+dim_names[i]]
         bttf["+"+str(i+1)] = ["+"+dim_names[i]]
 
@@ -564,9 +1450,173 @@ class PartitioningError(Exception):
     pass
 
 
+def assign_elements_to_volumes(mesh, volumes, debug=False):
+    """
+    Assigns elements in a mesh to user-defined volumes in precedence order,
+    with a final fallback to the bounding box of the entire mesh (Bm).
+
+    Parameters
+    ----------
+    mesh: meshmode.mesh.Mesh
+        The unstructured mesh.
+    volumes: dict
+        A dictionary mapping volume IDs to bounding boxes of the form:
+        {vol_id: (xmin, xmax, ymin, ymax, zmin, zmax), ...}
+        The order in which they appear dictates precedence.
+    debug: bool
+        If True, prints debugging information.
+
+    Returns
+    -------
+    volume_to_elements: dict
+        A mapping from volume ID to a NumPy array of element indices.
+    """
+    # Extract element centroids
+    mesh_verts = mesh.vertices
+    dim = mesh.dim
+
+    all_elem_group_centroids = []
+    for group in mesh.groups:
+        # (dim, nelements, nnodes_per_element)
+        elem_group_coords = mesh_verts[:, group.vertex_indices]
+        # (dim, nelements)
+        elem_group_centroids = np.mean(elem_group_coords, axis=2)
+        # (nelements, dim)
+        all_elem_group_centroids.append(elem_group_centroids.T)
+
+    # (total_nelements, dim)
+    elem_centroids = np.concatenate(all_elem_group_centroids)
+    total_nelements = len(elem_centroids)
+
+    # Track assigned elements
+    assigned_mask = np.zeros(total_nelements, dtype=bool)
+    volume_to_elements = {vol_id: [] for vol_id in volumes}
+
+    # Assign elements to volumes in order of precedence
+    for vol_id, (vxn, vxx, vyn, vyx, vzn, vzx) in volumes.items():
+        print(f"Finding elements in {vol_id}: {volumes[vol_id]=}")
+        for e_idx, centroid in enumerate(elem_centroids):
+            if assigned_mask[e_idx]:
+                continue  # Skip already assigned elements
+
+            x, y, z = centroid if dim == 3 else (*centroid, 0)  # Handle 2D case
+            if ((vxn <= x <= vxx) and (vyn <= y <= vyx) and (vzn <= z <= vzx)):
+                volume_to_elements[vol_id].append(e_idx)
+                assigned_mask[e_idx] = True
+
+    # Assign remaining elements to bb
+    for e_idx in range(total_nelements):
+        if not assigned_mask[e_idx]:
+            print("Yikes! Unassigned element!")
+            volume_to_elements["_Vol_0"].append(e_idx)
+            assigned_mask[e_idx] = True
+
+    # Convert lists to NumPy arrays
+    for vol_id in volume_to_elements:
+        volume_to_elements[vol_id] = np.array(volume_to_elements[vol_id], dtype=int)
+
+    # Validation: Ensure all elements are assigned exactly once
+    total_assigned = sum(len(elems) for elems in volume_to_elements.values())
+    if total_assigned != total_nelements:
+        raise ValueError("Mismatch in element count: Not all elements "
+                         "were assigned!")
+
+    # Debugging output
+    if debug:
+        print("Volume Assignment Order:")
+        for vol_id in volumes:
+            print(f"  {vol_id}")
+        print("\nVolume Stats:")
+        for vol_id, elems in volume_to_elements.items():
+            bounds = volumes[vol_id]
+            print(f"- Volume {vol_id}: {len(elems)} elements in {bounds}")
+
+    return volume_to_elements
+
+
+def compute_volume_partitions(volume_to_elements, npart, imbalance_tolerance,
+                              debug=False):
+    """
+    Computes the number of partitions assigned to each volume while ensuring
+    imbalance tolerance constraints and proper partition distribution.
+
+    Parameters
+    ----------
+    volume_to_elements: dict
+        A dictionary mapping volume IDs to lists of element indices.
+    npart: int
+        The total number of partitions available.
+    imbalance_tolerance: float
+        The maximum allowed imbalance beyond the ideal partition size.
+    debug: bool
+        Enables debugging output.
+
+    Returns
+    -------
+    volume_partition_counts: dict
+        A mapping of volume IDs to the number of partitions assigned to them.
+    """
+    total_nelements = sum(len(elems) for elems in volume_to_elements.values())
+    pbar = total_nelements / npart  # Initial average partition size
+    remaining_elements = total_nelements
+    remaining_partitions = npart
+    volume_partition_counts = {}
+
+    if debug:
+        print("Initial total elements:", total_nelements)
+        print("Initial pbar (target elements per partition):", pbar)
+        print("\nProcessing Volumes:\n")
+    # Let's process them smallest to largest, to make sure everyone gets a part
+    sorted_vols = sorted(volume_to_elements.items(), key=lambda v: len(v[1]))
+    for vol_id, elements in sorted_vols:
+        nelements = len(elements)
+
+        if nelements <= (1 + imbalance_tolerance) * pbar:
+            npart_vol = 1  # Assign a single partition if within imbalance tolerance
+        else:
+            npart_vol = min(remaining_partitions,
+                            max(1, int(np.ceil(nelements / pbar))))
+        nepp = int(nelements / npart_vol)
+        if debug:
+            print(f"Volume {vol_id}: {nelements} elements, {npart_vol} "
+                  f"partitions, ~{nepp}/part")
+
+        volume_partition_counts[vol_id] = npart_vol
+        remaining_elements -= nelements
+        remaining_partitions -= npart_vol
+
+        if remaining_partitions <= 0 and remaining_elements > 0:
+            raise ValueError("Ran out of partitions before processing all vols!")
+
+        if remaining_partitions > 0:
+            if remaining_elements <= 0:
+                raise ValueError("Ran out of elements to partition!")
+            pbar = remaining_elements / remaining_partitions
+            if debug:
+                print(f"  New remaining elements: {remaining_elements}")
+                print(f"  New remaining partitions: {remaining_partitions}")
+                print(f"  Updated pbar: {pbar}\n")
+
+    if debug:
+        print("\nFinal Partitioning Summary:")
+        for vol_id, nparts in volume_partition_counts.items():
+            nels = len(volume_to_elements[vol_id])
+            pbar = nels / nparts
+            print(f"  {vol_id}: {nparts} partitions {pbar=}")
+
+    return volume_partition_counts
+
+
+def get_longest_axis(vol_bounds):
+    axes = {"X": (0, 1), "Y": (2, 3), "Z": (4, 5)}
+    # return "X"  # hardcode to X
+    return max(axes, key=lambda a: vol_bounds[axes[a][1]]
+               - vol_bounds[axes[a][0]])
+
+
 def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
                                auto_balance=False, imbalance_tolerance=.01,
-                               debug=False):
+                               volumes=None, debug=False, part_axis=None):
     """Partition a mesh uniformly along the X coordinate axis.
 
     The intent is to partition the mesh uniformly along user-specified
@@ -597,6 +1647,10 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     elem_to_rank: numpy.ndarray
         Array indicating the MPI rank for each element
     """
+    from datetime import datetime
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Partitioning mesh: {now}")
+
     mesh_dimension = mesh.dim
     if nranks_per_axis is None or num_ranks is not None:
         from warnings import warn
@@ -611,239 +1665,365 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
         raise NotImplementedError("geometric_mesh_partitioner currently only "
                                 "supports partitioning in the X-dimension."
                                 "(only nranks_per_axis[0] should be > 1).")
+
     mesh_verts = mesh.vertices
-    mesh_x = mesh_verts[0]
+    x0, y0 = np.min(mesh_verts[:2], axis=1)
+    x1, y1 = np.max(mesh_verts[:2], axis=1)
+    z0 = 0.
+    z1 = 0.
+    if mesh_dimension == 3:
+        z0, z1 = np.min(mesh_verts[2]), np.max(mesh_verts[2])
 
-    x_min = np.min(mesh_x)
-    x_max = np.max(mesh_x)
-    x_interval = x_max - x_min
-    part_loc = np.linspace(x_min, x_max, num_ranks+1)
+    vol_0_bounds = (x0, x1, y0, y1, z0, z1)
+    if volumes is not None:
+        volumes = OrderedDict(volumes)
+        volumes["_Vol_0"] = vol_0_bounds
+    else:
+        volumes = OrderedDict({"_Vol_0": vol_0_bounds})
 
-    part_interval = x_interval / nranks_per_axis[0]
+    part_vols = assign_elements_to_volumes(mesh=mesh, volumes=volumes,
+                                           debug=debug)
+
+    nparts_vol = compute_volume_partitions(part_vols, num_ranks,
+                                           imbalance_tolerance, debug)
 
     all_elem_group_centroids = []
     for group in mesh.groups:
-        elem_group_x = mesh_verts[0, group.vertex_indices]
-        elem_group_centroids = np.sum(elem_group_x, axis=1)/elem_group_x.shape[1]
-        all_elem_group_centroids.append(elem_group_centroids)
+        elem_group_coords = mesh_verts[:, group.vertex_indices]
+        elem_group_centroids = np.mean(elem_group_coords, axis=2)
+        all_elem_group_centroids.append(elem_group_centroids.T)
+
     elem_centroids = np.concatenate(all_elem_group_centroids)
     global_nelements = len(elem_centroids)
 
-    aver_part_nelem = global_nelements / num_ranks
+    total_volume_els = 0
+    for elements in part_vols.values():
+        nelements_vol = len(elements)
+        total_volume_els += nelements_vol
 
-    if debug:
-        print(f"Partitioning {global_nelements} elements in"
-              f" [{x_min},{x_max}]/{num_ranks}")
-        print(f"Average nelem/part: {aver_part_nelem}")
-        print(f"Initial part locs: {part_loc=}")
+    assert total_volume_els == global_nelements
+    # nparts_used = 0
+    vparts_to_elements = {}
+    for vol_id, elements in part_vols.items():
+        nelements_vol = len(elements)
+        bounds_vol = volumes[vol_id]
+        npart_vol = nparts_vol[vol_id]
+        if part_axis is None:
+            part_axis = get_longest_axis(bounds_vol)
+        target_part = nelements_vol / npart_vol
+        vpax = {"X": 0, "Y": 1, "Z": 2}[part_axis]
 
-    # Create geometrically even partitions
-    elem_to_rank = ((elem_centroids-x_min) / part_interval).astype(int)
+        if debug:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"{now} Partitioning volume: {vol_id}")
+            print(f"Volume bounding box: {bounds_vol}")
+            print(f"Partitioning along axis: {vpax}")
+            print(f"Number of elements in volume: {nelements_vol}")
+            print(f"Number of partitions: {npart_vol}")
+            print(f"Target partition size: {target_part}")
 
-    if debug:
-        print(f"{elem_to_rank=}")
+        # x_vol = elem_centroids[elements, vpax]
+        elem_to_centroid = {e: elem_centroids[e, vpax] for e in elements}
+        x_min = bounds_vol[2*vpax]
+        x_max = bounds_vol[2*vpax+1]
+        x_interval = x_max - x_min
+        part_loc = np.linspace(x_min, x_max, npart_vol+1)
 
-    # map partition id to list of elements in that partition
-    part_to_elements = {r: set(np.where(elem_to_rank == r)[0])
-                        for r in range(num_ranks)}
-    # make an array of the geometrically even partition sizes
-    # avoids calling "len" over and over on the element sets
-    nelem_part = [len(part_to_elements[r]) for r in range(num_ranks)]
+        part_interval = x_interval / npart_vol
+        aver_part_nelem = target_part
 
-    if debug:
-        print(f"Initial: {nelem_part=}")
+        if debug:
+            print(f"Initial part locs along volume axis: {part_loc=}")
 
-    # Automatic load-balancing
-    if auto_balance:
+        # Create geometrically even partitions
+        # elem_to_vrank = ((x_vol-x_min) / part_interval).astype(int)
+        # Initialize with invalid rank
+        elem_to_vrank = np.full(global_nelements, -1, dtype=int)
+        for e in elements:
+            rank = int((elem_to_centroid[e] - x_min) / part_interval)
+            elem_to_vrank[e] = rank
 
-        for r in range(num_ranks-1):
+        # elem_to_vrank = {e: int((elem_to_centroid[e] - x_min) / part_interval)
+        #                 for e in elements}
+        # Check the initial partitioning for sanity
+        invalid_elems = set()
+        for e in elements:
+            if elem_to_vrank[e] < 0 or elem_to_vrank[e] >= npart_vol:
+                invalid_elems.add(e)
+        if len(invalid_elems) > 0:
+            raise PartitioningError(
+                f"Initial Partitioning Error: Some elements in {vol_id} "
+                "received invalid ranks!\n"
+                f"Expected range: [0, {npart_vol-1}], "
+                "but got out-of-bounds values.\n"
+                f"Problematic elements: {invalid_elems}"
+            )
 
-            num_elem_needed = aver_part_nelem - nelem_part[r]
-            part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
+        if debug:
+            print(f"Validated ranks for {vol_id}: All elements assigned correctly.")
 
-            if debug:
-                print(f"Processing part({r=})")
-                print(f"{part_loc[r]=}")
-                print(f"{num_elem_needed=}, {part_imbalance=}")
-                print(f"{nelem_part=}")
+        # map partition id to list of elements in that partition
+        vpart_to_elements = {r: set(np.where(elem_to_vrank == r)[0])
+                             for r in range(npart_vol)}
 
-            niter = 0
-            total_change = 0
-            moved_elements = set()
+        # make an array of the geometrically even partition sizes
+        # avoids calling "len" over and over on the element sets
+        nelem_vpart = [len(vpart_to_elements[r])
+                      for r in range(npart_vol)]
 
-            adv_part = r + 1
-            while part_imbalance > imbalance_tolerance:
-                # This partition needs to keep changing in size until it meets the
-                # specified imbalance tolerance, or gives up trying
+        # Check if any elements were not assigned a partition
+        assigned_elements = np.concatenate([list(vpart_to_elements[r])
+                                            for r in range(npart_vol)])
 
-                # seek out the element reservoir
-                while nelem_part[adv_part] == 0:
-                    adv_part = adv_part + 1
-                    if adv_part >= num_ranks:
-                        raise PartitioningError("Ran out of elements to partition.")
+        orphaned_elements = set(elements) - set(assigned_elements)
+
+        if orphaned_elements:
+            raise PartitioningError(
+                f"Orphaned Elements Detected in {vol_id}: "
+                f"{len(orphaned_elements)} elements "
+                f"were not assigned to any partition!\n"
+                f"Orphaned element indices: {list(orphaned_elements)[:10]} "
+                "(showing first 10)"
+            )
+
+        if debug:
+            print(f"Initial partitioning for {vol_id}: {nelem_vpart=}")
+
+        # Automatic load-balancing
+        if auto_balance:
+
+            for r in range(npart_vol-1):
+                num_elem_needed = aver_part_nelem - nelem_vpart[r]
+                part_imbalance = np.abs(num_elem_needed) / float(aver_part_nelem)
 
                 if debug:
-                    print(f"-{nelem_part[r]=}, adv_part({adv_part}),"
-                          f" {nelem_part[adv_part]=}")
-                    print(f"-{part_loc[r+1]=},{part_loc[adv_part+1]=}")
-                    print(f"-{num_elem_needed=},{part_imbalance=}")
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{now}: Processing {vol_id} part({r})")
+                    print(f"{part_loc[r]=}")
+                    print(f"{num_elem_needed=}, {part_imbalance=}")
+                    print(f"{nelem_vpart=}")
 
-                if niter > 100:
-                    raise PartitioningError("Detected too many iterations in"
-                                            " partitioning.")
-
-                # The purpose of the next block is to populate the "moved_elements"
-                # data structure. Then those elements will be moved between the
-                # current partition being processed and the "reservoir,"
-                # *and* to adjust the position of the "right" side of the current
-                # partition boundary.
+                niter = 0
+                total_change = 0
                 moved_elements = set()
-                num_elements_added = 0
+                adv_part = r + 1
+                while part_imbalance > imbalance_tolerance:
+                    # This partition needs to keep changing in size until it meets
+                    # specified imbalance tolerance, or gives up trying
 
-                if num_elem_needed > 0:
+                    # seek out the element reservoir
+                    if num_elem_needed > 0:
+                        while nelem_vpart[adv_part] == 0:
+                            adv_part = adv_part + 1
+                            if adv_part >= npart_vol:
+                                raise PartitioningError("Ran out of elems to "
+                                                        "partition!")
 
-                    # Partition is SMALLER than it should be, grab elements from
-                    # the reservoir
                     if debug:
-                        print(f"-Grabbing elements from reservoir({adv_part})"
-                              f", {nelem_part[adv_part]=}")
+                        print(f"-{nelem_vpart[r]=}, adv_part({adv_part}),"
+                              f" {nelem_vpart[adv_part]=}")
+                        print(f"-{part_loc[r+1]=},{part_loc[adv_part+1]=}")
+                        print(f"-{num_elem_needed=},{part_imbalance=}")
 
-                    portion_needed = (float(abs(num_elem_needed))
-                                      / float(nelem_part[adv_part]))
-                    portion_needed = min(portion_needed, 1.0)
+                    if niter > 100:
+                        raise PartitioningError("Detected too many iterations in"
+                                                " partitioning.")
 
-                    if debug:
-                        print(f"--Chomping {portion_needed*100}% of"
-                              f" reservoir({adv_part}) [by nelem].")
+                    # The purpose of the next block is to populate "moved_elements"
+                    # data structure. Then those elements will be moved between the
+                    # current partition being processed and the "reservoir,"
+                    # *and* to adjust the position of the "right" side of the current
+                    # partition boundary.
+                    moved_elements = set()
+                    num_elements_added = 0
 
-                    if portion_needed == 1.0:  # Chomp
-                        new_loc = part_loc[adv_part+1]
-                        moved_elements.update(part_to_elements[adv_part])
+                    if num_elem_needed > 0:
 
-                    else:  # Bite
-                        # This is the spatial size of the reservoir
-                        reserv_interval = part_loc[adv_part+1] - part_loc[r+1]
+                        # Partition is SMALLER than it should be, grab elements from
+                        # the reservoir
+                        if debug:
+                            print(f"-Grabn elements from vol reservoir({adv_part})"
+                                  f", {nelem_vpart[adv_part]=}")
 
-                        # Find what portion of the reservoir to grab spatially
-                        # This part is needed because the elements are not
-                        # distributed uniformly in space.
-                        fine_tuned = False
-                        trial_portion_needed = portion_needed
-                        while not fine_tuned:
-                            pos_update = trial_portion_needed*reserv_interval
+                        portion_needed = (float(abs(num_elem_needed))
+                                          / float(nelem_vpart[adv_part]))
+                        portion_needed = min(portion_needed, 1.0)
+
+                        if debug:
+                            print(f"--Chomping {portion_needed*100}% of"
+                                  f" reservoir({adv_part}) [by nelem].")
+
+                        if portion_needed == 1.0:  # Chomp
+                            new_loc = part_loc[adv_part+1]
+                            moved_elements.update(vpart_to_elements[adv_part])
+                        else:  # Bite
+                            # This is the spatial size of the reservoir
+                            reserv_interval = part_loc[adv_part+1] - part_loc[r+1]
+
+                            # Find what portion of the reservoir to grab spatially
+                            # This part is needed because the elements are not
+                            # distributed uniformly in space.
+                            fine_tuned = False
+                            trial_portion_needed = portion_needed
+                            while not fine_tuned:
+                                pos_update = trial_portion_needed*reserv_interval
+                                new_loc = part_loc[r+1] + pos_update
+
+                                moved_elements = set()
+                                num_elem_mv = 0
+                                for e in vpart_to_elements[adv_part]:
+                                    if elem_to_centroid[e] <= new_loc:
+                                        moved_elements.add(e)
+                                        num_elem_mv = num_elem_mv + 1
+                                if num_elem_mv < num_elem_needed:
+                                    fine_tuned = True
+                                else:
+                                    ovrsht = (num_elem_mv - num_elem_needed)
+                                    rel_ovrsht = ovrsht/float(num_elem_needed)
+                                    if rel_ovrsht > 0.8:
+                                        # bisect the space grabbed and try again
+                                        trial_portion_needed = \
+                                            trial_portion_needed/2.0
+                                    else:
+                                        fine_tuned = True
+
+                            portion_needed = trial_portion_needed
                             new_loc = part_loc[r+1] + pos_update
+                            if debug:
+                                print(f"--Tuned: {portion_needed=} [spatial]")
+                                print(f"--Advancing part({r}) by +{pos_update}")
 
+                        num_elements_added = len(moved_elements)
+                        if debug:
+                            print(f"--Adding {num_elements_added} to part({r}).")
+
+                    else:
+                        # Partition is LARGER than it should be
+                        # Grab the spatial size of the current partition
+                        # to estimate the portion we need to shave off
+                        # assuming uniform element density
+                        part_interval = part_loc[r+1] - part_loc[r]
+                        num_to_move = -num_elem_needed
+                        portion_needed = num_to_move/float(nelem_vpart[r])
+
+                        if debug:
+                            print(f"--Shaving off {portion_needed*100}% of"
+                                  f" partition({r}) [by nelem].")
+
+                        # Tune the shaved portion to account for
+                        # non-uniform element density
+                        fine_tuned = False
+                        while not fine_tuned:
+                            pos_update = portion_needed*part_interval
+                            new_pos = part_loc[r+1] - pos_update
                             moved_elements = set()
                             num_elem_mv = 0
-                            for e in part_to_elements[adv_part]:
-                                if elem_centroids[e] <= new_loc:
+                            for e in vpart_to_elements[r]:
+                                if elem_to_centroid[e] > new_pos:
                                     moved_elements.add(e)
                                     num_elem_mv = num_elem_mv + 1
-                            if num_elem_mv < num_elem_needed:
+                            if num_elem_mv < num_to_move:
                                 fine_tuned = True
                             else:
-                                ovrsht = (num_elem_mv - num_elem_needed)
-                                rel_ovrsht = ovrsht/float(num_elem_needed)
+                                ovrsht = (num_elem_mv - num_to_move)
+                                rel_ovrsht = ovrsht/float(num_to_move)
                                 if rel_ovrsht > 0.8:
-                                    # bisect the space grabbed and try again
-                                    trial_portion_needed = trial_portion_needed/2.0
+                                    # bisect and try again
+                                    portion_needed = portion_needed/2.0
                                 else:
                                     fine_tuned = True
 
-                        portion_needed = trial_portion_needed
-                        new_loc = part_loc[r+1] + pos_update
+                        # new "right" wall location of shranken part
+                        # and negative num_elements_added for removal
+                        new_loc = new_pos
+                        num_elements_added = -len(moved_elements)
                         if debug:
-                            print(f"--Tuned: {portion_needed=} [by spatial volume]")
-                            print(f"--Advancing part({r}) by +{pos_update}")
+                            print(f"--Reducing part size by {portion_needed*100}%"
+                                  " [by nelem].")
+                            print(f"--Remv {-num_elements_added} from part({r}).")
 
-                    num_elements_added = len(moved_elements)
+                    # Now "moved_elements", "num_elements_added", and "new_loc"
+                    # are computed.  Update the partition, and reservoir.
                     if debug:
-                        print(f"--Adding {num_elements_added} to part({r}).")
+                        print(f"--Number of elements to ADD: {num_elements_added}.")
 
-                else:
+                    if num_elements_added > 0:
+                        vpart_to_elements[r].update(moved_elements)
+                        vpart_to_elements[adv_part].difference_update(
+                            moved_elements)
+                        for e in moved_elements:
+                            elem_to_vrank[e] = r
+                    else:
+                        vpart_to_elements[r].difference_update(moved_elements)
+                        vpart_to_elements[adv_part].update(moved_elements)
+                        for e in moved_elements:
+                            elem_to_vrank[e] = adv_part
 
-                    # Partition is LARGER than it should be
-                    # Grab the spatial size of the current partition
-                    # to estimate the portion we need to shave off
-                    # assuming uniform element density
-                    part_interval = part_loc[r+1] - part_loc[r]
-                    num_to_move = -num_elem_needed
-                    portion_needed = num_to_move/float(nelem_part[r])
-
+                    total_change = total_change + num_elements_added
+                    part_loc[r+1] = new_loc
                     if debug:
-                        print(f"--Shaving off {portion_needed*100}% of"
-                              f" partition({r}) [by nelem].")
-
-                    # Tune the shaved portion to account for
-                    # non-uniform element density
-                    fine_tuned = False
-                    while not fine_tuned:
-                        pos_update = portion_needed*part_interval
-                        new_pos = part_loc[r+1] - pos_update
-                        moved_elements = set()
-                        num_elem_mv = 0
-                        for e in part_to_elements[r]:
-                            if elem_centroids[e] > new_pos:
-                                moved_elements.add(e)
-                                num_elem_mv = num_elem_mv + 1
-                        if num_elem_mv < num_to_move:
-                            fine_tuned = True
-                        else:
-                            ovrsht = (num_elem_mv - num_to_move)
-                            rel_ovrsht = ovrsht/float(num_to_move)
-                            if rel_ovrsht > 0.8:
-                                # bisect and try again
-                                portion_needed = portion_needed/2.0
-                            else:
-                                fine_tuned = True
-
-                    # new "right" wall location of shranken part
-                    # and negative num_elements_added for removal
-                    new_loc = new_pos
-                    num_elements_added = -len(moved_elements)
+                        print(f"--Before: {nelem_vpart=}")
+                    nelem_vpart[r] = nelem_vpart[r] + num_elements_added
+                    nelem_vpart[adv_part] = \
+                        nelem_vpart[adv_part] - num_elements_added
                     if debug:
-                        print(f"--Reducing partition size by {portion_needed*100}%"
-                              " [by nelem].")
-                        print(f"--Removing {-num_elements_added} from part({r}).")
+                        print(f"--After: {nelem_vpart=}")
 
-                # Now "moved_elements", "num_elements_added", and "new_loc"
-                # are computed.  Update the partition, and reservoir.
+                    # Compute new nelem_needed and part_imbalance
+                    num_elem_needed = num_elem_needed - num_elements_added
+                    part_imbalance = \
+                        np.abs(num_elem_needed) / float(aver_part_nelem)
+                    niter = niter + 1
+
+                # Summarize the total change and state of the partition
+                # and reservoir
                 if debug:
-                    print(f"--Number of elements to ADD: {num_elements_added}.")
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    print(f"{now} ---------")
+                    print(f"-Vol Part({r}): {total_change=}")
+                    print(f"-Vol Part({r}): {nelem_vpart[r]=}, {part_imbalance=}")
+                    print(f"-Vol Part({adv_part})[Resv]: {nelem_vpart[adv_part]=}")
+                    print(f"-Vol Part({r}) Box: ({part_loc[r]},{part_loc[r+1]})")
+                    print(f"-Vol Part({adv_part})[Resv] Box: ({part_loc[r+1]},"
+                          f"{part_loc[adv_part]})")
 
-                if num_elements_added > 0:
-                    part_to_elements[r].update(moved_elements)
-                    part_to_elements[adv_part].difference_update(
-                        moved_elements)
-                    for e in moved_elements:
-                        elem_to_rank[e] = r
-                else:
-                    part_to_elements[r].difference_update(moved_elements)
-                    part_to_elements[adv_part].update(moved_elements)
-                    for e in moved_elements:
-                        elem_to_rank[e] = adv_part
+                # loop over volume ranks scope
+            # autobalance
+            # Validation: Ensure no elements are lost after processing this volume
+            total_partitioned_elements = sum(len(vpart_to_elements[r])
+                                             for r in range(npart_vol))
 
-                total_change = total_change + num_elements_added
-                part_loc[r+1] = new_loc
-                if debug:
-                    print(f"--Before: {nelem_part=}")
-                nelem_part[r] = nelem_part[r] + num_elements_added
-                nelem_part[adv_part] = nelem_part[adv_part] - num_elements_added
-                if debug:
-                    print(f"--After: {nelem_part=}")
+            if total_partitioned_elements != nelements_vol:
+                raise PartitioningError(f"Auto-Balance Error: Element count mismatch"
+                                        f" after partitioning {vol_id}. "
+                                        f"Expected {nelements_vol}, "
+                                        f"got {total_partitioned_elements}")
 
-                # Compute new nelem_needed and part_imbalance
-                num_elem_needed = num_elem_needed - num_elements_added
-                part_imbalance = \
-                    np.abs(num_elem_needed) / float(aver_part_nelem)
-                niter = niter + 1
+        vparts_to_elements[vol_id] = vpart_to_elements
+        # Loop over volumes
 
-            # Summarize the total change and state of the partition
-            # and reservoir
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"{now} Making global element-to-rank array.")
+    # Initialize the global element-to-rank array
+    elem_to_rank = np.full(global_nelements, -1, dtype=int)  # -1 means unassigned
+    nelem_part = np.full(num_ranks, 0, dtype=int)
+    part_to_elements = {}
+    current_global_rank = 0
+    # Ensure _Vol_0 is processed first
+    sorted_vol_ids = ["_Vol_0"] + [v for v in vparts_to_elements if v != "_Vol_0"]
+    for vol_id in sorted_vol_ids:
+        vpart_map = vparts_to_elements[vol_id]
+        if debug:
+            print(f"Adding Volume({vol_id}) to global partitioning.")
+        for vrank, elements in vpart_map.items():
+            global_rank = current_global_rank + vrank
+            elem_to_rank[np.array(list(elements))] = global_rank
+            part_to_elements[global_rank] = elements
+            nelem_part[global_rank] = len(elements)
             if debug:
-                print(f"-Part({r}): {total_change=}")
-                print(f"-Part({r=}): {nelem_part[r]=}, {part_imbalance=}")
-                print(f"-Part({adv_part}): {nelem_part[adv_part]=}")
+                print(f"{vol_id}({vrank}) with {nelem_part[global_rank]} "
+                      f"elements to global rank ({global_rank}).")
+        current_global_rank += len(vpart_map)
 
     # Validate the partitioning before returning
     total_partitioned_elements = sum([len(part_to_elements[r])
@@ -851,31 +2031,35 @@ def geometric_mesh_partitioner(mesh, num_ranks=None, *, nranks_per_axis=None,
     total_nelem_part = sum([nelem_part[r] for r in range(num_ranks)])
 
     if debug:
-        print("Validating mesh parts.")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print("{now}: Validating mesh parts.")
 
     if total_partitioned_elements != total_nelem_part:
         raise PartitioningError("Validator: parted element counts dont match")
-    if total_partitioned_elements != global_nelements:
-        raise PartitioningError("Validator: global element counts dont match.")
     if len(elem_to_rank) != global_nelements:
         raise PartitioningError("Validator: elem-to-rank wrong size.")
     if np.any(nelem_part) <= 0:
         raise PartitioningError("Validator: empty partitions.")
-
+    part_counts = np.zeros(global_nelements)
+    for part_elements in part_to_elements.values():
+        for element in part_elements:
+            part_counts[element] = part_counts[element] + 1
+    if np.any(part_counts < 1):
+        raise PartitioningError("Validator: orphaned elements")
+    if np.any(part_counts > 1):
+        raise PartitioningError("Validator: degenerate elements")
     for e in range(global_nelements):
         part = elem_to_rank[e]
         if e not in part_to_elements[part]:
             raise PartitioningError("Validator: part/element/part map mismatch.")
 
-    part_counts = np.zeros(global_nelements)
-    for part_elements in part_to_elements.values():
-        for element in part_elements:
-            part_counts[element] = part_counts[element] + 1
+    if total_partitioned_elements != global_nelements:
+        raise PartitioningError("Validator: global element counts dont match."
+                                f"{total_partitioned_elements=},{global_nelements=}")
 
-    if np.any(part_counts > 1):
-        raise PartitioningError("Validator: degenerate elements")
-    if np.any(part_counts < 1):
-        raise PartitioningError("Validator: orphaned elements")
+    if debug:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"{now}: Final partitioning: {nelem_part}")
 
     return elem_to_rank
 
