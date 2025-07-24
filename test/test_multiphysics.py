@@ -152,6 +152,7 @@ def test_independent_volumes(actx_factory, order, visualize=False):
     assert linf_err2 < 1e-9
 
 
+@pytest.mark.slowtest
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall(
