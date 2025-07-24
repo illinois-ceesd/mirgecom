@@ -60,7 +60,7 @@ from grudge.dof_desc import (
     as_dofdesc
 )
 from sympy import cos, acos, symbols, integrate, simplify  # type: ignore
-
+from conftest import conditional_parametrize, conditional_value
 
 sys.path.append(os.path.dirname(__file__))
 import mesh_data  # noqa: E402  # type: ignore  # pylint: disable=import-error
@@ -228,31 +228,44 @@ def central_flux_boundary(actx, dcoll, soln_func, dd_bdry):
     return op.project(dcoll, bnd_tpair.dd, dd_allfaces, flux_weak)
 
 
-#                             (2, "tet_box2_rot", np.array([0, 0, 1]), False),
-#                             (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
-#                             (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
-#                             (2, "hex_box2_rot", np.array([0, 0, 1]), False),
-#                             (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
-#                             (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
-@pytest.mark.parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
+@conditional_parametrize(("dim", "mesh_name", "rot_axis", "wonk"),
+                         [(1, "tet_box1", None, False),
+                          (2, "tet_box2", None, False),
+                          (3, "tet_box3", None, False),
+                          (2, "hex_box2", None, False),
+                          (3, "hex_box3", None, False),
+                          (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+                          (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
+                          ],
+                         [(1, "tet_box1", None, False),
+                          (2, "tet_box2", None, False),
+                          (3, "tet_box3", None, False),
+                          (2, "hex_box2", None, False),
+                          (3, "hex_box3", None, False),
+                          (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
+                          (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
+                          (2, "tet_box2_rot", np.array([0, 0, 1]), False),
+                          (3, "tet_box3_rot1", np.array([0, 0, 1]), False),
+                          (3, "tet_box3_rot2", np.array([0, 1, 1]), False),
+                          (2, "hex_box2_rot", np.array([0, 0, 1]), False),
+                          (3, "hex_box3_rot1", np.array([0, 0, 1]), False),
+                          (3, "hex_box3_rot2", np.array([0, 1, 1]), False),
+                          ])
+@conditional_parametrize("order", [2], [1, 2, 3])
+@conditional_parametrize("sym_test_func_factory",
                          [
-                             (1, "tet_box1", None, False),
-                             (2, "tet_box2", None, False),
-                             (3, "tet_box3", None, False),
-                             (2, "hex_box2", None, False),
-                             (3, "hex_box3", None, False),
-                             (3, "tet_box3_rot3", np.array([1, 1, 1]), False),
-                             (3, "hex_box3_rot3", np.array([1, 1, 1]), False),
-                             ])
-@pytest.mark.parametrize("order", [1, 2, 3])
-@pytest.mark.parametrize("sym_test_func_factory", [
-    partial(_coord_test_func, order=0),
-    partial(_coord_test_func, order=1),
-    lambda dim: 2*_coord_test_func(dim, order=1),
-    partial(_coord_test_func, order=2),
-    _trig_test_func,
-    _cv_test_func
-])
+                             partial(_coord_test_func, order=1),
+                             partial(_coord_test_func, order=2),
+                             _trig_test_func,
+                         ],
+                         [
+                             partial(_coord_test_func, order=0),
+                             partial(_coord_test_func, order=1),
+                             lambda dim: 2*_coord_test_func(dim, order=1),
+                             partial(_coord_test_func, order=2),
+                             _trig_test_func,
+                             _cv_test_func
+                         ])
 @pytest.mark.parametrize("quad", [False, True])
 def test_grad_operator(actx_factory, dim, mesh_name, rot_axis, wonk,
                        order, sym_test_func_factory, quad):
@@ -482,7 +495,8 @@ def test_correctness_of_quadrature(actx_factory, name):
     from pytools.convergence import EOCRecorder
     # Test base and quadrature discretizations with order=[1,8]
     # for incoming geometry and element type
-    for discr_order in range(1, 8):
+    # Test range(1, 8) to create fuller table, (1,3) for CI.
+    for discr_order in range(1, conditional_value(3, 8)):
         ndofs_base = 0
         ndofs_quad = 0
         dofs_per_el_base = 0
@@ -537,7 +551,7 @@ def test_correctness_of_quadrature(actx_factory, name):
                 field_quad = 0
                 exact_integral = 0
                 for i in range(int(dim)):
-                    x_base = nodes_base[i]
+                    x_base = 1.0*nodes_base[i] + 0.
                     # Heh woops! The base nodes aren't in [0,1]!
                     x_base = actx.np.where(x_base > one_base, one_base,
                                            x_base)
