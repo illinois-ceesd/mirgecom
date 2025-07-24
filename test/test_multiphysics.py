@@ -66,7 +66,8 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
 
 
 @pytest.mark.parametrize("order", [1, 2, 3])
-def test_independent_volumes(actx_factory, order, visualize=False):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_independent_volumes(actx_factory, order, tpe, visualize=False):
     """Check multi-volume machinery by setting up two independent volumes."""
     actx = actx_factory()
 
@@ -81,10 +82,12 @@ def test_independent_volumes(actx_factory, order, visualize=False):
         boundary_tag_to_face["+"+str(i+1)] = ["+"+dim_names[i]]
 
     from meshmode.mesh.generation import generate_regular_rect_mesh
-
+    from meshmode.mesh import TensorProductElementGroup
+    grp_cls = TensorProductElementGroup if tpe else None
     mesh = generate_regular_rect_mesh(
         a=(-1,)*dim, b=(1,)*dim,
-        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face)
+        nelements_per_axis=(n,)*dim, boundary_tag_to_face=boundary_tag_to_face,
+        group_cls=grp_cls)
 
     volume_meshes = {
         "vol1": mesh,
@@ -153,9 +156,10 @@ def test_independent_volumes(actx_factory, order, visualize=False):
 
 
 @pytest.mark.parametrize("order", [2, 3])
+@pytest.mark.parametrize("tpe", [False, True])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall(
-        actx_factory, order, use_overintegration, visualize=False):
+        actx_factory, order, use_overintegration, tpe, visualize=False):
     """Check the thermally-coupled fluid/wall interface."""
     try:
         from grudge.discretization import PartID  # noqa: F401
@@ -172,7 +176,8 @@ def test_thermally_coupled_fluid_wall(
     dt = 0.
 
     for n in scales:
-        global_mesh = get_box_mesh(2, -1, 1, n)
+        global_mesh = get_box_mesh(2, -1, 1, n,
+                                   tensor_product_elements=tpe)
 
         mgrp, = global_mesh.groups
         y = global_mesh.vertices[1, mgrp.vertex_indices]
@@ -460,9 +465,10 @@ def test_thermally_coupled_fluid_wall(
 
 
 @pytest.mark.parametrize("order", [1, 3])
+@pytest.mark.parametrize("tpe", [False, True])
 @pytest.mark.parametrize("use_overintegration", [False, True])
 def test_thermally_coupled_fluid_wall_with_radiation(
-        actx_factory, order, use_overintegration, visualize=False):
+        actx_factory, order, use_overintegration, tpe, visualize=False):
     """Check the thermally-coupled fluid/wall interface with radiation.
 
     Analytic solution prescribed as initial condition, then the RHS is assessed
@@ -478,7 +484,8 @@ def test_thermally_coupled_fluid_wall_with_radiation(
     dim = 2
     nelems = 48
 
-    global_mesh = get_box_mesh(dim, -2, 1, nelems)
+    global_mesh = get_box_mesh(dim, -2, 1, nelems,
+                               tensor_product_elements=tpe)
 
     mgrp, = global_mesh.groups
     x = global_mesh.vertices[0, mgrp.vertex_indices]
@@ -569,9 +576,10 @@ def test_thermally_coupled_fluid_wall_with_radiation(
 @pytest.mark.parametrize("use_overintegration", [False, True])
 @pytest.mark.parametrize("use_noslip", [False, True])
 @pytest.mark.parametrize("use_radiation", [False, True])
+@pytest.mark.parametrize("tpe", [False, True])
 def test_orthotropic_flux(
         actx_factory, use_overintegration, use_radiation, use_noslip,
-        visualize=False):
+        tpe, visualize=False):
     """Check the RHS shape for orthotropic kappa cases."""
     try:
         from grudge.discretization import PartID  # noqa: F401
@@ -584,7 +592,8 @@ def test_orthotropic_flux(
     order = 3
     nelems = 48
 
-    global_mesh = get_box_mesh(dim, -2, 1, nelems)
+    global_mesh = get_box_mesh(dim, -2, 1, nelems,
+                               tensor_product_elements=tpe)
 
     mgrp, = global_mesh.groups
     x = global_mesh.vertices[0, mgrp.vertex_indices]
