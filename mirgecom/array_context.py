@@ -45,10 +45,32 @@ logger = logging.getLogger(__name__)
 
 
 def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
-                        profiling: bool, numpy: bool = False) -> Type[ArrayContext]:
+                        profiling: bool, numpy: bool = False,
+                        cupy: bool = False) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
+
+    if numpy and cupy:
+        raise ValueError("Can't specify both numpy and cupy")
+
+    if cupy:
+        if profiling:
+            raise ValueError("Can't specify both cupy and profiling")
+        if lazy:
+            raise ValueError("Can't specify both cupy and lazy")
+
+        from warnings import warn
+        warn("The CupyArrayContext is still under development")
+
+        if distributed:
+            from grudge.array_context import (  # type: ignore[attr-defined] # pylint: disable=no-name-in-module # noqa: E501
+                MPICupyArrayContext)
+            return MPICupyArrayContext
+        else:
+            from grudge.array_context import (  # type: ignore[attr-defined] # pylint: disable=no-name-in-module # noqa: E501
+                CupyArrayContext)
+            return CupyArrayContext
 
     if numpy:
         if profiling:
@@ -98,6 +120,18 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* is numpy-based."""
     from grudge.array_context import NumpyArrayContext
     return issubclass(actx_class, NumpyArrayContext)
+
+
+def actx_class_is_cupy(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is cupy-based."""
+    try:
+        from grudge.array_context import CupyArrayContext  # type: ignore[attr-defined]  # noqa: E501
+        if issubclass(actx_class, CupyArrayContext):
+            return True
+        else:
+            return False
+    except ImportError:
+        return False
 
 
 def actx_class_is_distributed(actx_class: Type[ArrayContext]) -> bool:
@@ -306,13 +340,23 @@ def initialize_actx(
     if comm:
         actx_kwargs["mpi_communicator"] = comm
 
-    if actx_class_is_numpy(actx_class):
-        from grudge.array_context import MPINumpyArrayContext
-        if comm:
-            assert issubclass(actx_class, MPINumpyArrayContext)
+    # Special handling for NumpyArrayContext/CupyArrayContext
+    # since they need no CL context
+    if actx_class_is_numpy(actx_class) or actx_class_is_cupy(actx_class):
+        if actx_class_is_numpy(actx_class):
+            from grudge.array_context import MPINumpyArrayContext
+            if comm:
+                assert issubclass(actx_class, MPINumpyArrayContext)
+            else:
+                assert not issubclass(actx_class, MPINumpyArrayContext)
         else:
-            assert not issubclass(actx_class, MPINumpyArrayContext)
+            from grudge.array_context import MPICupyArrayContext  # type: ignore[attr-defined] # pylint: disable=no-name-in-module  # noqa: E501
+            if comm:
+                assert issubclass(actx_class, MPICupyArrayContext)
+            else:
+                assert not issubclass(actx_class, MPICupyArrayContext)
     else:
+        # PyOpenCL-based actx
         cl_ctx = cl.create_some_context()
         if actx_class_is_profiling(actx_class):
             queue = cl.CommandQueue(cl_ctx,
