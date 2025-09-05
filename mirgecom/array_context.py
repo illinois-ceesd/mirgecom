@@ -239,6 +239,19 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
                      f"Duplicate PCIe IDs: {dup}.")
 
 
+def _check_pocl_version(actx: ArrayContext) -> None:
+    """Checks for pocl version >= 6 and warns about potential performance issue."""
+    from pyopencl.characterize import get_pocl_version
+    dev = actx.queue.device
+    pocl_version = get_pocl_version(dev.platform)
+    if pocl_version[0] >= 6:
+        from warnings import warn
+        warn(
+            "Using pocl version >= 6 may degrade performance on some machines. "
+            "If running performance-critical simulations, consider downgrading "
+            "to version 5.")
+
+
 def log_disk_cache_config(actx: ArrayContext) -> None:
     """Log the disk cache configuration."""
     assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
@@ -354,6 +367,7 @@ def initialize_actx(
     if actx_class_is_pyopencl(actx_class):
         _check_gpu_oversubscription(actx)
         _check_cache_dirs_node(actx)
+        _check_pocl_version(actx)
         log_disk_cache_config(actx)
 
     return actx
