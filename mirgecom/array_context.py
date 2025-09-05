@@ -240,7 +240,7 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
 
 def _check_pocl_version(actx: ArrayContext) -> None:
-    """Checks for pocl version >= 6 and warns about potential performance issue."""
+    """Check for pocl version >= 6 and warn about potential performance issue."""
     from pyopencl.characterize import get_pocl_version
     dev = actx.queue.device
     pocl_version = get_pocl_version(dev.platform)
