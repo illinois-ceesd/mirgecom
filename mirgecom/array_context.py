@@ -241,15 +241,26 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
 def _check_pocl_version(actx: ArrayContext) -> None:
     """Check for pocl version >= 6 and warn about potential performance issue."""
-    from pyopencl.characterize import get_pocl_version
     dev = actx.queue.device
+
+    # Only check GPU devices
+    if not (dev.type & cl.device_type.GPU):
+        return
+
+    # Only check if using NVIDIA
+    from pyopencl.characterize import nv_compute_capability
+    if nv_compute_capability(dev) is None:
+        return
+
+    from pyopencl.characterize import get_pocl_version
     pocl_version = get_pocl_version(dev.platform)
-    if pocl_version[0] >= 6:
+    if pocl_version is not None and pocl_version[0] >= 6:
         from warnings import warn
         warn(
-            "Using pocl version >= 6 may degrade performance on some machines. "
-            "If running performance-critical simulations, consider downgrading "
-            "to version 5.")
+            "Using pocl version >= 6 may degrade performance when running on NVIDIA "
+            "GPUs. If running performance-critical simulations, consider "
+            "downgrading to version 5. See "
+            "https://github.com/illinois-ceesd/mirgecom/pull/1055 for more details.")
 
 
 def log_disk_cache_config(actx: ArrayContext) -> None:
