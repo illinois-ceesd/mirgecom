@@ -241,6 +241,8 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
 
 def _check_pocl_version(actx: ArrayContext) -> None:
     """Check for pocl version >= 6 and warn about potential performance issue."""
+    assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
+
     dev = actx.queue.device
 
     # Only check GPU devices
