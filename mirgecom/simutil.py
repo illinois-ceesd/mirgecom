@@ -500,6 +500,7 @@ def check_naninf_local(dcoll: DiscretizationCollection, dd: str,
                        field: DOFArray) -> bool:
     """Return True if there are any NaNs or Infs in the field."""
     actx = field.array_context
+    assert actx is not None
     s = actx.to_numpy(op.nodal_sum_loc(dcoll, dd, field))
     return not np.isfinite(s)
 

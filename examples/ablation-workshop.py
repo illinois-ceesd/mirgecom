@@ -311,6 +311,7 @@ class GasTabulatedTransport(TransportModel):
             dv: GasDependentVars, eos: GasEOS) -> DOFArray:
         r"""Get the bulk viscosity for the gas, $\mu_{B}$."""
         actx = cv.mass.array_context
+        assert actx is not None
         return actx.np.zeros_like(cv.mass)
 
     def volume_viscosity(self, cv: ConservedVars,  # type: ignore[override]

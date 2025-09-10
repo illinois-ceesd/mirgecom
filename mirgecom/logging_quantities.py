@@ -481,8 +481,7 @@ class DeviceMemoryUsageAMD(PostLogQuantity):
         #     dev.global_free_memory_amd is in KByte,
         #     the actual granularity of the returned values appears to be MByte
         #     (like in CUDA)
-
-        return self.global_mem_size_mbyte - self.dev.global_free_memory_amd[0] / 1024
+        return self.global_mem_size_mbyte - self.dev.global_free_memory_amd / 1024
 
 
 class MempoolMemoryUsage(MultiPostLogQuantity):

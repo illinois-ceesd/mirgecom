@@ -66,7 +66,7 @@ def _check_isl_version() -> None:
     library to determine if we are running with imath-32.
     """
     import ctypes
-    import islpy  # type: ignore[import-untyped]
+    import islpy
 
     try:
         ctypes.cdll.LoadLibrary(islpy._isl.__file__).isl_val_get_num_gmp

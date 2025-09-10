@@ -168,8 +168,10 @@ def main(actx_class, casename="wave",
             fields = restart_fields
 
     if logmgr:
+        assert queue is not None
         logmgr_add_cl_device_info(logmgr, queue)
         logmgr_add_device_memory_usage(logmgr, queue)
+        assert alloc is not None
         logmgr_add_mempool_usage(logmgr, alloc)
 
         logmgr.add_watches(["step.max", "t_step.max", "t_log.max"])
