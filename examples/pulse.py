@@ -341,7 +341,7 @@ if __name__ == "__main__":
     parser.add_argument("--numpy", action="store_true",
         help="use numpy-based eager actx.")
     parser.add_argument("--jax", action="store_true",
-        help="use jax-based eager actx.")
+        help="use jax-based lazy actx.")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
     args = parser.parse_args()

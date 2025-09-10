@@ -56,16 +56,15 @@ def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
             raise ValueError("Can't specify both jax and numpy")
         if profiling:
             raise ValueError("Can't specify both jax and profiling")
-        if lazy:
-            # FIXME: this should be allowed
-            raise ValueError("Can't specify both jax and lazy")
+        if not lazy:
+            raise ValueError("jax needs lazy")
 
         if distributed:
-            from grudge.array_context import MPIEagerJAXArrayContext
-            return MPIEagerJAXArrayContext
+            from grudge.array_context import MPIPytatoJAXArrayContext
+            return MPIPytatoJAXArrayContext
         else:
-            from grudge.array_context import EagerJAXArrayContext
-            return EagerJAXArrayContext
+            from grudge.array_context import PytatoJAXArrayContext
+            return PytatoJAXArrayContext
 
     if numpy:
         if profiling:
