@@ -88,7 +88,7 @@ def get_doublemach_mesh():
     if not os.path.exists(meshfile):
         mesh = generate_gmsh(
             FileSource(geofile), force_ambient_dim=2, dimensions=2, target_unit="M",
-            output_file_name=meshfile)
+            output_file_path=meshfile)
     else:
         mesh = read_gmsh(meshfile, force_ambient_dim=2)
 
