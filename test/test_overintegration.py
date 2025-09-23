@@ -329,8 +329,9 @@ def test_dealiasing_with_overintegration(ctx_factory, tpe, warp):
 
     if q_n == poly_degree:
         pytest.xfail(
-            "doesn't currently work when quadrature discr has same number of DOFs "
-            "as base due to bug in loop fusion.")
+            "Doesn't currently work when quadrature discr has same number of DOFs "
+            "as base due to bug in loop fusion. See "
+            "https://github.com/inducer/meshmode/issues/453.")
 
     l2_error_n = run_agitator(ctx_factory=ctx_factory,
                               use_overintegration=True,
