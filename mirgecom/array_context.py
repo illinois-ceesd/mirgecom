@@ -239,23 +239,27 @@ def _check_gpu_oversubscription(actx: ArrayContext) -> None:
                      f"Duplicate PCIe IDs: {dup}.")
 
 
-def _check_pocl_version(actx: ArrayContext) -> None:
-    """Check for pocl version >= 6 and warn about potential performance issue."""
+def _check_pocl_svm_issue(actx: ArrayContext) -> None:
+    """Check for pocl version >= 6 and warn about SVM performance issue."""
     assert isinstance(actx, (PyOpenCLArrayContext, PytatoPyOpenCLArrayContext))
 
     dev = actx.queue.device
 
-    # Only check GPU devices
-    if not (dev.type & cl.device_type.GPU):
+    # Only check if running on an NVIDIA device, where SVM is required. Otherwise,
+    # just disable SVM in simutil.get_reasonable_memory_pool
+    from pyopencl.characterize import nv_compute_capability
+    if nv_compute_capability(dev) is None:
         return
 
+    # TODO: Check if this is still an issue in pocl7
     from pyopencl.characterize import get_pocl_version
     pocl_version = get_pocl_version(dev.platform)
     if pocl_version is not None and pocl_version[0] >= 6:
         from warnings import warn
         warn(
-            "Using pocl version >= 6 may degrade performance when running on GPUs. "
-            "If running performance-critical simulations, consider "
+            "Performance may be degraded on this device due to an issue with "
+            "shared virtual memory (SVM) in pocl version >= 6. If running "
+            "performance-critical simulations, consider "
             "downgrading to version 5. See "
             "https://github.com/illinois-ceesd/mirgecom/pull/1055 for more details.")
 
@@ -375,7 +379,7 @@ def initialize_actx(
     if actx_class_is_pyopencl(actx_class):
         _check_gpu_oversubscription(actx)
         _check_cache_dirs_node(actx)
-        _check_pocl_version(actx)
+        _check_pocl_svm_issue(actx)
         log_disk_cache_config(actx)
 
     return actx

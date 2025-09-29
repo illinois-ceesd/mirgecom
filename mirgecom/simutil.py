@@ -1859,7 +1859,19 @@ def get_reasonable_memory_pool(ctx: cl.Context, queue: cl.CommandQueue,
     pools over direct allocations.
     """
     import pyopencl.tools as cl_tools
-    from pyopencl.characterize import has_coarse_grain_buffer_svm
+    from pyopencl.characterize import (
+        get_pocl_version,
+        has_coarse_grain_buffer_svm,
+        nv_compute_capability,
+    )
+
+    # Avoid SVM slowdown in pocl6 (except on NVIDIA where SVM is mandatory)
+    # https://github.com/illinois-ceesd/mirgecom/pull/1055
+    # TODO: Check if this is still an issue in pocl7
+    if nv_compute_capability(queue.device) is None:
+        pocl_version = get_pocl_version(queue.device.platform)
+        if pocl_version is not None and pocl_version[0] >= 6:
+            force_buffer = True
 
     if force_buffer and force_non_pool:
         logger.info(f"Using non-pooled CL buffer allocations on {queue.device}.")
