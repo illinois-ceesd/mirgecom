@@ -15,6 +15,7 @@ a.out
 hk
 test/*.pdf
 examples/*.pdf
+examples/doubleMach.msh
 
 *.dot
 

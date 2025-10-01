@@ -79,35 +79,16 @@ def get_doublemach_mesh():
     from meshmode.mesh.io import (
         read_gmsh,
         generate_gmsh,
-        ScriptSource,
+        FileSource,
     )
     import os
+    local_path = os.path.dirname(os.path.abspath(__file__))
+    geofile = os.path.join(local_path, "doubleMach.geo")
     meshfile = "doubleMach.msh"
     if not os.path.exists(meshfile):
         mesh = generate_gmsh(
-            ScriptSource("""
-                x0=1.0/6.0;
-                setsize=0.025;
-                Point(1) = {0, 0, 0, setsize};
-                Point(2) = {x0,0, 0, setsize};
-                Point(3) = {4, 0, 0, setsize};
-                Point(4) = {4, 1, 0, setsize};
-                Point(5) = {0, 1, 0, setsize};
-                Line(1) = {1, 2};
-                Line(2) = {2, 3};
-                Line(5) = {3, 4};
-                Line(6) = {4, 5};
-                Line(7) = {5, 1};
-                Line Loop(8) = {-5, -6, -7, -1, -2};
-                Plane Surface(8) = {8};
-                Physical Surface('domain') = {8};
-                Physical Curve('ic1') = {6};
-                Physical Curve('ic2') = {7};
-                Physical Curve('ic3') = {1};
-                Physical Curve('wall') = {2};
-                Physical Curve('out') = {5};
-        """, "geo"), force_ambient_dim=2, dimensions=2, target_unit="M",
-            output_file_name=meshfile)
+            FileSource(geofile), force_ambient_dim=2, dimensions=2, target_unit="M",
+            output_file_path=meshfile)
     else:
         mesh = read_gmsh(meshfile, force_ambient_dim=2)
 

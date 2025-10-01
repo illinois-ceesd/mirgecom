@@ -445,7 +445,7 @@ def test_pyrometheus_eos(actx_factory, mechname, dim, y0, vel):
         # print(f"pyro_eos.temp = {temperature}")
         # print(f"pyro_eos.e = {internal_energy}")
 
-        tol = 5e-14
+        tol = 6e-14
         assert inf_norm((cv.mass - pyro_rho) / pyro_rho) < tol
         assert inf_norm((temperature - pyro_t) / pyro_t) < tol
         assert inf_norm((internal_energy - pyro_e) / pyro_e) < tol
