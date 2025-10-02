@@ -45,10 +45,26 @@ logger = logging.getLogger(__name__)
 
 
 def get_reasonable_array_context_class(*, lazy: bool, distributed: bool,
-                        profiling: bool, numpy: bool = False) -> Type[ArrayContext]:
+                        profiling: bool, numpy: bool = False,
+                        jax: bool = False) -> Type[ArrayContext]:
     """Return a :class:`~arraycontext.ArrayContext` with the given constraints."""
     if lazy and profiling:
         raise ValueError("Can't specify both lazy and profiling")
+
+    if jax:
+        if numpy:
+            raise ValueError("Can't specify both jax and numpy")
+        if profiling:
+            raise ValueError("Can't specify both jax and profiling")
+        if not lazy:
+            raise ValueError("jax needs lazy")
+
+        if distributed:
+            from grudge.array_context import MPIPytatoJAXArrayContext
+            return MPIPytatoJAXArrayContext
+        else:
+            from grudge.array_context import PytatoJAXArrayContext
+            return PytatoJAXArrayContext
 
     if numpy:
         if profiling:
@@ -98,6 +114,12 @@ def actx_class_is_numpy(actx_class: Type[ArrayContext]) -> bool:
     """Return True if *actx_class* is numpy-based."""
     from grudge.array_context import NumpyArrayContext
     return issubclass(actx_class, NumpyArrayContext)
+
+
+def actx_class_is_jax(actx_class: Type[ArrayContext]) -> bool:
+    """Return True if *actx_class* is jax-based."""
+    from grudge.array_context import EagerJAXArrayContext
+    return issubclass(actx_class, EagerJAXArrayContext)
 
 
 def actx_class_is_distributed(actx_class: Type[ArrayContext]) -> bool:
@@ -331,7 +353,13 @@ def initialize_actx(
     if comm:
         actx_kwargs["mpi_communicator"] = comm
 
-    if actx_class_is_numpy(actx_class):
+    if actx_class_is_jax(actx_class):
+        from grudge.array_context import MPIEagerJAXArrayContext
+        if comm:
+            assert issubclass(actx_class, MPIEagerJAXArrayContext)
+        else:
+            assert not issubclass(actx_class, MPIEagerJAXArrayContext)
+    elif actx_class_is_numpy(actx_class):
         from grudge.array_context import MPINumpyArrayContext
         if comm:
             assert issubclass(actx_class, MPINumpyArrayContext)
