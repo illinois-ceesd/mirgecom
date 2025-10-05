@@ -64,7 +64,12 @@ EulerCoefs = LSRKCoefficients(
 
 def euler_step(state, t, dt, rhs):
     """Take one step using the explicit, 1st-order accurate, Euler method."""
-    return lsrk_step(EulerCoefs, state, t, dt, rhs)
+    # Full-timestepper compilation doesn't like this version; triggers loop
+    # nest error in meshmode array context:
+    #     NotImplementedError: Cannot fit loop nest 'frozenset()' into known
+    #         set of loop-nest patterns.
+    # return lsrk_step(EulerCoefs, state, t, dt, rhs)
+    return state + dt * rhs(t, state)
 
 
 LSRK54CarpenterKennedyCoefs = LSRKCoefficients(
