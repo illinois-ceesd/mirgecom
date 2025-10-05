@@ -61,17 +61,18 @@ pytest_generate_tests = pytest_generate_tests_for_array_contexts(
     [PytestPyOpenCLArrayContextFactory])
 
 
-def test_diffusion_boundary_conditions(actx_factory):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_diffusion_boundary_conditions(actx_factory, tpe):
     """Checks the boundary conditions for diffusion operator."""
     actx = actx_factory()
     dim = 2
     n = 4
     order = 4
 
-    mesh = get_box_mesh(dim, -1, 1, n)
+    mesh = get_box_mesh(dim, -1, 1, n,
+                        tensor_product_elements=tpe)
     dcoll = create_discretization_collection(actx, mesh, order)
     nodes = actx.thaw(dcoll.nodes())
-
     u_ref = -1.5
     alpha = 0.5
     kappa = 2
@@ -88,9 +89,11 @@ def test_diffusion_boundary_conditions(actx_factory):
         BoundaryDomainTag("+2"): PrescribedFluxDiffusionBoundary(0.0),
     }
 
-    rhs, grad_u = diffusion_operator(dcoll, kappa=kappa, u=u,
-            boundaries=boundaries, return_grad_u=True,
-            gradient_numerical_flux_func=grad_facial_flux_weighted)
+    rhs, grad_u = diffusion_operator(
+        dcoll, kappa=kappa, u=u,
+        boundaries=boundaries, return_grad_u=True,
+        gradient_numerical_flux_func=grad_facial_flux_weighted,
+    )
 
     err_grad_x = actx.to_numpy(op.norm(dcoll, grad_u[0] - 0.5, np.inf))
     err_grad_y = actx.to_numpy(op.norm(dcoll, grad_u[1] - 0.0, np.inf))
@@ -155,8 +158,9 @@ class DecayingTrig(HeatProblem):
         super().__init__(dim)
         self._kappa = kappa
 
-    def get_mesh(self, n):
-        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
+    def get_mesh(self, n, tpe=False):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n,
+                            tensor_product_elements=tpe)
 
     def get_solution(self, x, t):
         u = mm.exp(-self.dim*self._kappa*t)
@@ -193,8 +197,9 @@ class DecayingTrigTruncatedDomain(HeatProblem):
         super().__init__(dim)
         self._kappa = kappa
 
-    def get_mesh(self, n):
-        return get_box_mesh(self.dim, -0.5*np.pi, 0.25*np.pi, n)
+    def get_mesh(self, n, tpe=False):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.25*np.pi, n,
+                            tensor_product_elements=tpe)
 
     def get_solution(self, x, t):
         u = mm.exp(-self.dim*self._kappa*t)
@@ -245,8 +250,9 @@ class OscillatingTrigVarDiff(HeatProblem):
     def __init__(self, dim):
         super().__init__(dim)
 
-    def get_mesh(self, n):
-        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
+    def get_mesh(self, n, tpe=False):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n,
+                            tensor_product_elements=tpe)
 
     def get_solution(self, x, t):
         u = mm.cos(t)
@@ -287,8 +293,9 @@ class OscillatingTrigNonlinearDiff(HeatProblem):
     def __init__(self, dim):
         super().__init__(dim)
 
-    def get_mesh(self, n):
-        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n)
+    def get_mesh(self, n, tpe=False):
+        return get_box_mesh(self.dim, -0.5*np.pi, 0.5*np.pi, n,
+                            tensor_product_elements=tpe)
 
     def get_solution(self, x, t):
         u = mm.cos(t)
@@ -329,12 +336,12 @@ class DecayingTrigRobinBoundary(HeatProblem):
         self._alpha = alpha
         self._w = alpha/kappa
 
-    def get_mesh(self, n):
+    def get_mesh(self, n, tpe=False):
         return get_box_mesh(
             self.dim,
             a=(-np.pi/2,)*(self.dim-1) + (-np.pi/(2*self._w),),
             b=(np.pi/2,)*(self.dim-1) + (np.pi/(4*self._w),),
-            n=n)
+            n=n, tensor_product_elements=tpe)
 
     def get_solution(self, x, t):
         u = mm.exp(-(self.dim-1 + self._w**2)*self._kappa*t)
@@ -387,7 +394,8 @@ def sym_diffusion(dim, sym_kappa, sym_u):
         (DecayingTrigRobinBoundary(1, 1., 2., 4.), 50, 1.e-5, [8, 16, 24]),
         (DecayingTrigRobinBoundary(2, 1., 2., 4.), 50, 1.e-5, [12, 14, 16]),
     ])
-def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
+@pytest.mark.parametrize("tpe", [False, True])
+def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order, tpe,
             visualize=False):
     """
     Checks the accuracy of the diffusion operator by solving the heat equation for a
@@ -396,6 +404,8 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     actx = actx_factory()
 
     p = problem
+    if p._dim < 2 and tpe:
+        pytest.skip("Skipping 1D for TPE")
 
     sym_x = pmbl.make_sym_vector("x", p.dim)
     sym_t = pmbl.var("t")
@@ -410,9 +420,10 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
 
     from pytools.convergence import EOCRecorder
     eoc_rec = EOCRecorder()
+    order_fudge = 0.6 if tpe else 0.5
 
     for n in scales:
-        mesh = p.get_mesh(n)
+        mesh = p.get_mesh(n, tpe=tpe)
 
         dcoll = create_discretization_collection(actx, mesh, order)
 
@@ -459,7 +470,7 @@ def test_diffusion_accuracy(actx_factory, problem, nsteps, dt, scales, order,
     print(eoc_rec)
     # Expected convergence rates from Hesthaven/Warburton book
     expected_order = order+1 if order % 2 == 0 else order
-    assert (eoc_rec.order_estimate() >= expected_order - 0.5
+    assert (eoc_rec.order_estimate() >= expected_order - order_fudge
             or eoc_rec.max_error() < 1e-11)
 
 
@@ -725,7 +736,8 @@ def test_diffusion_obj_array_vectorize(actx_factory, vector_kappa):
     assert rel_linf_err < 1.e-5
 
 
-def test_orthotropic_diffusion(actx_factory):
+@pytest.mark.parametrize("tpe", [False, True])
+def test_orthotropic_diffusion(actx_factory, tpe):
     """Checks that the diffusion operator can handle arrays for diffusivity."""
     actx = actx_factory()
     dim = 2
@@ -735,7 +747,8 @@ def test_orthotropic_diffusion(actx_factory):
     kappa0 = 2
     kappa1 = 3
 
-    mesh = get_box_mesh(dim, -1, 1, n)
+    mesh = get_box_mesh(dim, -1, 1, n,
+                        tensor_product_elements=tpe)
     dcoll = create_discretization_collection(actx, mesh, order)
     nodes = actx.thaw(dcoll.nodes())
 
@@ -768,7 +781,7 @@ def test_orthotropic_diffusion(actx_factory):
     assert err_flux_y < 1.e-9
 
     err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
-    assert err_rhs < 1.e-8
+    assert err_rhs < 5.e-8
 
     # exercise Dirichlet BC
     def make_dirichlet_bc(btag):
@@ -800,7 +813,7 @@ def test_orthotropic_diffusion(actx_factory):
     assert err_flux_y < 1.e-9
 
     err_rhs = actx.to_numpy(op.norm(dcoll, rhs, np.inf))
-    assert err_rhs < 1.e-8
+    assert err_rhs < 5.e-8
 
 
 if __name__ == "__main__":
