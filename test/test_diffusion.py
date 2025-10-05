@@ -374,6 +374,7 @@ def sym_diffusion(dim, sym_kappa, sym_u):
 #
 # Working hypothesis: RHS lives in lower order polynomial space and thus doesn't
 # attain full-order convergence.
+@pytest.mark.slowtest
 @pytest.mark.parametrize("order", [2, 3])
 @pytest.mark.parametrize(("problem", "nsteps", "dt", "scales"),
     [
