@@ -333,6 +333,8 @@ if __name__ == "__main__":
         help="turn on logging")
     parser.add_argument("--restart_file", help="root name of restart file")
     parser.add_argument("--casename", help="casename to use for i/o")
+    parser.add_argument("--cupy", action="store_true",
+        help="use cupy-based eager actx.")
     args = parser.parse_args()
 
     from warnings import warn
@@ -345,7 +347,8 @@ if __name__ == "__main__":
 
     from mirgecom.array_context import get_reasonable_array_context_class
     actx_class = get_reasonable_array_context_class(
-        lazy=args.lazy, distributed=True, profiling=args.profiling, numpy=args.numpy)
+        lazy=args.lazy, distributed=True, profiling=args.profiling,
+        numpy=args.numpy, cupy=args.cupy)
 
     logging.basicConfig(format="%(message)s", level=logging.INFO)
     if args.casename:

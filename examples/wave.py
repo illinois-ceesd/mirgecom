@@ -273,6 +273,8 @@ if __name__ == "__main__":
         help="use numpy-based eager actx.")
     parser.add_argument("--mpi", default=True, action=argparse.BooleanOptionalAction,
         help="use MPI")
+    parser.add_argument("--cupy", action="store_true",
+        help="use cupy-based eager actx.")
     args = parser.parse_args()
     casename = args.casename or "wave"
 
@@ -280,7 +282,8 @@ if __name__ == "__main__":
     actx_class = get_reasonable_array_context_class(lazy=args.lazy,
                                                     distributed=args.mpi,
                                                     profiling=args.profiling,
-                                                    numpy=args.numpy)
+                                                    numpy=args.numpy,
+                                                    cupy=args.cupy)
 
     if args.mpi:
         main_func = main
