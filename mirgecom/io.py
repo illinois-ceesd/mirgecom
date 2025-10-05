@@ -38,7 +38,7 @@ from grudge.dof_desc import DD_VOLUME_ALL
 
 def make_init_message(*, dim, order, dt, t_final,
                       nstatus, nviz, cfl, constant_cfl,
-                      initname, eosname, casename,
+                      initname, casename, eosname=None,
                       nelements=0, global_nelements=0,
                       t_initial=0):
     """Create a summary of some general simulation parameters and inputs."""
