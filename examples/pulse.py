@@ -74,12 +74,16 @@ class MyRuntimeError(RuntimeError):
 
 
 @mpi_entry_point
-def main(actx_class, use_esdg=False,
-         use_overintegration=False, use_leap=False,
-         casename=None, rst_filename=None):
+def main(actx_class, use_esdg=False, use_tpe=False, periodic=False,
+         use_overintegration=False, use_leap=False, order=None,
+         casename=None, rst_filename=None, quad_order=None):
     """Drive the example."""
     if casename is None:
         casename = "mirgecom"
+    if order is None:
+        order = 1
+    if quad_order is None:
+        quad_order = order if use_tpe else 2*order + 1
 
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -134,17 +138,21 @@ def main(actx_class, use_esdg=False,
         box_ll = -1
         box_ur = 1
         nel_1d = 16
-        generate_mesh = partial(generate_regular_rect_mesh,
-            a=(box_ll,)*dim, b=(box_ur,)*dim,
-            nelements_per_axis=(nel_1d,)*dim,
-            # periodic=(True,)*dim
-        )
+        from meshmode.mesh import TensorProductElementGroup
+        group_cls = TensorProductElementGroup if use_tpe else None
+        periodic_ax = (periodic,)*dim
+        generate_mesh = \
+            partial(generate_regular_rect_mesh,
+                    a=(box_ll,)*dim, b=(box_ur,)*dim,
+                    nelements_per_axis=(nel_1d,)*dim,
+                    group_cls=group_cls,
+                    periodic=periodic_ax)
 
         local_mesh, global_nelements = distribute_mesh(comm, generate_mesh)
         local_nelements = local_mesh.nelements
 
-    order = 1
-    dcoll = create_discretization_collection(actx, local_mesh, order=order)
+    dcoll = create_discretization_collection(actx, local_mesh, order=order,
+                                             quadrature_order=quad_order)
     nodes = actx.thaw(dcoll.nodes())
     quadrature_tag = DISCR_TAG_QUAD if use_overintegration else None
 
@@ -176,8 +184,9 @@ def main(actx_class, use_esdg=False,
     initializer = Uniform(velocity=velocity, pressure=1.0, rho=1.0)
     uniform_state = initializer(nodes, eos=eos)
 
-    boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
-    # boundaries = {}
+    boundaries = {}
+    if not periodic:
+        boundaries = {BTAG_ALL: AdiabaticSlipBoundary()}
 
     acoustic_pulse = AcousticPulse(dim=dim, amplitude=0.5, width=.1, center=orig)
 
@@ -237,10 +246,15 @@ def main(actx_class, use_esdg=False,
     def my_health_check(pressure):
         health_error = False
         from mirgecom.simutil import check_naninf_local, check_range_local
-        if check_naninf_local(dcoll, "vol", pressure) \
-           or check_range_local(dcoll, "vol", pressure, .8, 1.6):
+
+        if check_naninf_local(dcoll, "vol", pressure):
             health_error = True
             logger.info(f"{rank=}: Invalid pressure data found.")
+
+        if check_range_local(dcoll, "vol", pressure, .8, 1.6):
+            health_error = True
+            logger.info(f"{rank=}: Out of range pressure data found.")
+
         return health_error
 
     def my_pre_step(step, t, dt, state):
@@ -330,10 +344,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=f"MIRGE-Com Example: {casename}")
     parser.add_argument("--overintegration", action="store_true",
         help="use overintegration in the RHS computations")
+    parser.add_argument("--order", type=int,
+                        help="polynomial degree for element basis")
     parser.add_argument("--lazy", action="store_true",
         help="switch to a lazy computation mode")
     parser.add_argument("--profiling", action="store_true",
         help="turn on detailed performance profiling")
+    parser.add_argument("--quad-order", type=int,
+        help="order for QuadratureGroupFactory")
+    parser.add_argument("--tpe", action="store_true",
+        help="use tensor product elements")
+    parser.add_argument("--periodic", action="store_true",
+        help="use periodic domain")
     parser.add_argument("--leap", action="store_true",
         help="use leap timestepper")
     parser.add_argument("--esdg", action="store_true",
@@ -363,9 +385,10 @@ if __name__ == "__main__":
     if args.restart_file:
         rst_filename = args.restart_file
 
-    main(actx_class, use_esdg=args.esdg,
+    main(actx_class, use_esdg=args.esdg, order=args.order,
+         periodic=args.periodic,
          use_overintegration=args.overintegration or args.esdg,
-         use_leap=args.leap,
+         use_leap=args.leap, use_tpe=args.tpe, quad_order=args.quad_order,
          casename=casename, rst_filename=rst_filename)
 
 # vim: foldmethod=marker
