@@ -28,6 +28,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 """
 
+import time
 import numpy as np
 from mirgecom.utils import force_evaluation
 from pytools import memoize_in
@@ -145,10 +146,18 @@ def _advance_state_stepper_func(rhs, timestepper, state, t_final, dt=0,
 
     state = force_evaluation(actx, state)
 
+    t1 = time.time()
+
     if compile_rhs:
         maybe_compiled_rhs = _compile_rhs(actx, rhs)
     else:
         maybe_compiled_rhs = rhs
+
+    timestepper(state=state, t=t, dt=dt, rhs=maybe_compiled_rhs)
+
+    actx.queue.finish()
+    t2 = time.time()
+    print(f"compile time: {t2-t1} s")
 
     while marching_loc < marching_limit:
         if max_steps is not None:

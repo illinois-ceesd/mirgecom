@@ -42,7 +42,8 @@ from mirgecom.euler import euler_operator
 from mirgecom.navierstokes import ns_operator
 from mirgecom.simutil import (
     get_sim_timestep,
-    distribute_mesh
+    distribute_mesh,
+    queue_finish,
 )
 from mirgecom.utils import force_evaluation
 from mirgecom.io import make_init_message
@@ -143,9 +144,9 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     # some i/o frequencies
     nstatus = 1
-    nrestart = 100
-    nviz = 1
-    nhealth = 1
+    nrestart = -1
+    nviz = -1
+    nhealth = -1
 
     rst_path = "restart_data/"
     rst_pattern = (
@@ -690,6 +691,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
     def my_post_step(step, t, dt, state):
         if logmgr:
             set_dt(logmgr, dt)
+            queue_finish(queue)
             logmgr.tick_after()
         return state, dt
 
