@@ -8,6 +8,7 @@
 
 # Uncomment on Tuolumne
 # module load rocm/7.2.0
+# module load cray-mpich-abi
 # export PYOPENCL_TEST=AMD:gfx
 
 export PYTHONHASHSEED=0
