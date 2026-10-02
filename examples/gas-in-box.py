@@ -80,7 +80,7 @@ from mirgecom.logging_quantities import (
     initialize_logmgr,
     # logmgr_add_many_discretization_quantities,
     logmgr_add_cl_device_info,
-    logmgr_add_device_memory_usage
+#     logmgr_add_device_memory_usage
 )
 import cantera
 
@@ -233,7 +233,7 @@ def main(actx_class, use_esdg=False, use_tpe=False,
 
     if logmgr:
         logmgr_add_cl_device_info(logmgr, queue)
-        logmgr_add_device_memory_usage(logmgr, queue)
+#         logmgr_add_device_memory_usage(logmgr, queue)
 
         vis_timer = IntervalTimer("t_vis", "Time spent visualizing")
         logmgr.add_quantity(vis_timer)
