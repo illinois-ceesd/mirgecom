@@ -27,6 +27,13 @@ export LOOPY_NO_CACHE=1
 #   --mixture --flame --iters=2 --limiter \
 #   ) 2>&1 | tee out.txt
 
+# even larger problem for timestep time
+# (cd examples && python -O -m mpi4py gas-in-box.py \
+#   --lazy --dimension=3 --tpe --nsteps=20 --weak-scale=128 \
+#   --navierstokes --artificial-viscosity=3 --boundaries --polynomial-order=3 \
+#   --mixture --flame --iters=2 --limiter \
+#   ) 2>&1 | tee out.txt
+
 # problem for array contraction memory use reduction
 # (cd examples && python -O -m mpi4py gas-in-box.py \
 #   --lazy --dimension=3 --tpe --nsteps=20 --weak-scale=4 \
