@@ -16,7 +16,7 @@ dependencies:
 - nvtop
 - clinfo
 - pudb
-- islpy
+- islpy=2025.2.5
 - oct2py
 - pyopencl
 - pymetis
